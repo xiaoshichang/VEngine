@@ -115,7 +115,3 @@ They can be recreated with:
 ThirdParty\Setup_Windows64.bat
 ```
 
-## Repository Layout Note
-
-The project does not track empty placeholder module directories. New module directories should be added when they contain
-source, CMake files, documentation, tests, or other useful tracked files.
