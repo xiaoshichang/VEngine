@@ -11,6 +11,7 @@ option(VE_BUILD_EDITOR "Build Windows editor" ON)
 option(VE_BUILD_TESTS "Build Windows tests" ON)
 option(VE_BUILD_TOOLS "Build command line tools" ON)
 option(VE_BUILD_IOS_PLAYER "Build iOS player app" OFF)
+option(VE_BUILD_RHI_DEMOS "Build RHI triangle demo programs" ON)
 
 option(VE_ENABLE_D3D11 "Enable D3D11 RHI" ON)
 option(VE_ENABLE_D3D12 "Enable D3D12 RHI" ON)
@@ -18,6 +19,10 @@ option(VE_ENABLE_METAL "Enable Metal RHI" OFF)
 option(VE_ENABLE_SCRIPTING "Enable C# scripting" ON)
 
 set(VE_IOS_BUNDLE_IDENTIFIER "com.vengine.player" CACHE STRING "iOS player bundle identifier")
+
+if(APPLE AND VE_ENABLE_METAL)
+    enable_language(OBJCXX)
+endif()
 
 function(ve_configure_target targetName)
     set_target_properties(${targetName}
@@ -52,9 +57,14 @@ target_sources(VEngine
     PRIVATE
         Engine/Runtime/Core/Application.cpp
         Engine/Runtime/Core/Version.cpp
+        Engine/RHI/Common/RhiTypes.cpp
+        Engine/RHI/Common/RhiUtils.cpp
     PUBLIC
         Engine/Runtime/Core/Application.h
         Engine/Runtime/Core/Version.h
+        Engine/RHI/Common/RhiDevice.h
+        Engine/RHI/Common/RhiTypes.h
+        Engine/RHI/Common/RhiUtils.h
 )
 
 target_include_directories(VEngine
@@ -103,6 +113,54 @@ else()
             VE_PLATFORM_WINDOWS=0
             VE_PLATFORM_IOS=0
             VE_PLATFORM_APPLE=0
+    )
+endif()
+
+if(WIN32 AND VE_ENABLE_D3D11)
+    target_sources(VEngine
+        PRIVATE
+            Engine/RHI/D3D11/D3D11Rhi.cpp
+        PUBLIC
+            Engine/RHI/D3D11/D3D11Rhi.h
+    )
+
+    target_link_libraries(VEngine
+        PUBLIC
+            d3d11
+            dxgi
+            d3dcompiler
+    )
+endif()
+
+if(WIN32 AND VE_ENABLE_D3D12)
+    target_sources(VEngine
+        PRIVATE
+            Engine/RHI/D3D12/D3D12Rhi.cpp
+        PUBLIC
+            Engine/RHI/D3D12/D3D12Rhi.h
+    )
+
+    target_link_libraries(VEngine
+        PUBLIC
+            d3d12
+            dxgi
+            d3dcompiler
+    )
+endif()
+
+if(APPLE AND VE_ENABLE_METAL)
+    target_sources(VEngine
+        PRIVATE
+            Engine/RHI/Metal/MetalRhi.mm
+        PUBLIC
+            Engine/RHI/Metal/MetalRhi.h
+    )
+
+    target_link_libraries(VEngine
+        PUBLIC
+            "-framework Foundation"
+            "-framework Metal"
+            "-framework QuartzCore"
     )
 endif()
 
@@ -163,6 +221,72 @@ if(VE_BUILD_TESTS)
         )
     else()
         message(STATUS "VEngineTests is only built on Windows in the first stage.")
+    endif()
+endif()
+
+if(VE_BUILD_RHI_DEMOS)
+    if(WIN32)
+        if(VE_ENABLE_D3D11)
+            add_executable(VEngineRhiD3D11TriangleDemo
+                Tests/Demos/RHI/Windows/D3D11TriangleDemo.cpp
+                Tests/Demos/RHI/Windows/WindowsTriangleDemo.cpp
+                Tests/Demos/RHI/Windows/WindowsTriangleDemo.h
+            )
+
+            target_link_libraries(VEngineRhiD3D11TriangleDemo
+                PRIVATE
+                    VEngine
+                    user32
+            )
+
+            ve_configure_target(VEngineRhiD3D11TriangleDemo)
+        endif()
+
+        if(VE_ENABLE_D3D12)
+            add_executable(VEngineRhiD3D12TriangleDemo
+                Tests/Demos/RHI/Windows/D3D12TriangleDemo.cpp
+                Tests/Demos/RHI/Windows/WindowsTriangleDemo.cpp
+                Tests/Demos/RHI/Windows/WindowsTriangleDemo.h
+            )
+
+            target_link_libraries(VEngineRhiD3D12TriangleDemo
+                PRIVATE
+                    VEngine
+                    user32
+            )
+
+            ve_configure_target(VEngineRhiD3D12TriangleDemo)
+        endif()
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND VE_ENABLE_METAL)
+        enable_language(OBJCXX)
+
+        find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+        find_library(UIKIT_FRAMEWORK UIKit REQUIRED)
+
+        add_executable(VEngineRhiMetalTriangleDemo MACOSX_BUNDLE
+            Tests/Demos/RHI/iOS/MetalTriangleDemo.mm
+        )
+
+        target_link_libraries(VEngineRhiMetalTriangleDemo
+            PRIVATE
+                VEngine
+                ${FOUNDATION_FRAMEWORK}
+                ${UIKIT_FRAMEWORK}
+                "-framework QuartzCore"
+                "-framework Metal"
+        )
+
+        set_target_properties(VEngineRhiMetalTriangleDemo
+            PROPERTIES
+                MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Tests/Demos/RHI/iOS/Info.plist.in
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.vengine.tests.rhi.metaltriangle"
+                XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+                XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "iphonesimulator iphoneos"
+        )
+
+        ve_configure_target(VEngineRhiMetalTriangleDemo)
     endif()
 endif()
 
