@@ -19,6 +19,18 @@ Canonical docs:
 - iOS output is `VEngineIOSPlayer`; the first iOS target is an iOS Simulator demo.
 - Use namespace `ve` for engine code.
 
+## Build Commands
+
+On Windows, run CMake configure, build, and test commands through `CMake/Scripts/WithMsvc.bat` so the MSVC x64 developer environment is initialized first.
+
+Examples:
+
+```text
+CMake/Scripts/WithMsvc.bat cmake --preset windows-msvc-debug
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-debug
+CMake/Scripts/WithMsvc.bat ctest --preset windows-msvc-tests
+```
+
 ## Coding Style
 
 Follow `Docs/CodingStyle.md` and `.clang-format`.

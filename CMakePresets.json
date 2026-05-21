@@ -1,0 +1,130 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "windows-msvc-debug",
+            "displayName": "Windows MSVC Debug",
+            "generator": "Visual Studio 17 2022",
+            "toolchainFile": "${sourceDir}/CMake/Toolchains/Windows64.cmake",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "binaryDir": "${sourceDir}/Build/windows-msvc-debug",
+            "cacheVariables": {
+                "VE_BUILD_PLAYER": "ON",
+                "VE_BUILD_EDITOR": "ON",
+                "VE_BUILD_TESTS": "ON",
+                "VE_BUILD_TOOLS": "ON",
+                "VE_BUILD_IOS_PLAYER": "OFF",
+                "VE_ENABLE_D3D11": "ON",
+                "VE_ENABLE_D3D12": "ON",
+                "VE_ENABLE_METAL": "OFF",
+                "VE_ENABLE_SCRIPTING": "ON"
+            }
+        },
+        {
+            "name": "windows-msvc-release",
+            "displayName": "Windows MSVC Release",
+            "inherits": "windows-msvc-debug",
+            "binaryDir": "${sourceDir}/Build/windows-msvc-release"
+        },
+        {
+            "name": "windows-msvc-editor",
+            "displayName": "Windows MSVC Editor",
+            "inherits": "windows-msvc-debug",
+            "binaryDir": "${sourceDir}/Build/windows-msvc-editor",
+            "cacheVariables": {
+                "VE_BUILD_PLAYER": "ON",
+                "VE_BUILD_EDITOR": "ON",
+                "VE_BUILD_TESTS": "OFF",
+                "VE_BUILD_TOOLS": "ON"
+            }
+        },
+        {
+            "name": "windows-msvc-tests",
+            "displayName": "Windows MSVC Tests",
+            "inherits": "windows-msvc-debug",
+            "binaryDir": "${sourceDir}/Build/windows-msvc-tests",
+            "cacheVariables": {
+                "VE_BUILD_PLAYER": "OFF",
+                "VE_BUILD_EDITOR": "OFF",
+                "VE_BUILD_TESTS": "ON",
+                "VE_BUILD_TOOLS": "OFF"
+            }
+        },
+        {
+            "name": "ios-simulator-debug",
+            "displayName": "iOS Simulator Debug",
+            "generator": "Xcode",
+            "toolchainFile": "${sourceDir}/CMake/Toolchains/iOS.cmake",
+            "binaryDir": "${sourceDir}/Build/ios-simulator-debug",
+            "cacheVariables": {
+                "VE_IOS_PLATFORM": "SIMULATOR",
+                "VE_IOS_ARCHITECTURES": "arm64",
+                "VE_BUILD_PLAYER": "OFF",
+                "VE_BUILD_EDITOR": "OFF",
+                "VE_BUILD_TESTS": "OFF",
+                "VE_BUILD_TOOLS": "OFF",
+                "VE_BUILD_IOS_PLAYER": "ON",
+                "VE_ENABLE_D3D11": "OFF",
+                "VE_ENABLE_D3D12": "OFF",
+                "VE_ENABLE_METAL": "ON",
+                "VE_ENABLE_SCRIPTING": "OFF"
+            }
+        },
+        {
+            "name": "ios-simulator-release",
+            "displayName": "iOS Simulator Release",
+            "inherits": "ios-simulator-debug",
+            "binaryDir": "${sourceDir}/Build/ios-simulator-release"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "windows-msvc-debug",
+            "configurePreset": "windows-msvc-debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-release",
+            "configurePreset": "windows-msvc-release",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-msvc-editor",
+            "configurePreset": "windows-msvc-editor",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-tests",
+            "configurePreset": "windows-msvc-tests",
+            "configuration": "Debug"
+        },
+        {
+            "name": "ios-simulator-debug",
+            "configurePreset": "ios-simulator-debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "ios-simulator-release",
+            "configurePreset": "ios-simulator-release",
+            "configuration": "Release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "windows-msvc-tests",
+            "configurePreset": "windows-msvc-tests",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

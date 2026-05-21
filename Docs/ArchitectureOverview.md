@@ -182,6 +182,13 @@ VEngine/
   CMakePresets.json
   vcpkg.json
 
+  CMake/
+    Scripts/
+      WithMsvc.bat
+    Toolchains/
+      Windows64.cmake
+      iOS.cmake
+
   Engine/
     Runtime/
       Core/
