@@ -66,7 +66,6 @@ Approved first-stage dependencies:
 - assimp for source model import.
 - Dear ImGui for the Windows Editor only.
 - FreeType for runtime UI font rendering.
-- GoogleTest for Windows tests.
 - DirectXShaderCompiler for HLSL compilation.
 - SPIRV-Cross for SPIR-V to MSL conversion and shader reflection.
 
@@ -194,7 +193,8 @@ iOS C# scripting is not a first-stage requirement. Treat iOS scripting as a futu
 
 ## Testing Policy
 
-Use GoogleTest for Windows unit tests.
+Use CMake/CTest for Windows unit and smoke tests. Test executables may use simple project-owned assertions until a
+dedicated test framework is justified.
 
 Prioritize tests for:
 

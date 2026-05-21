@@ -505,7 +505,7 @@ Example:
 
 ## 20. Tests
 
-Use GoogleTest for C++ tests.
+Use CMake/CTest to register C++ test executables.
 
 Test file names use `PascalCase` with a `Tests` suffix.
 
@@ -515,11 +515,11 @@ ResourceGuidTests.cpp
 SceneSerializationTests.cpp
 ```
 
-Test suites also use `PascalCase`.
+Test case names use `PascalCase`.
 
 ```cpp
-TEST(Vector3Tests, NormalizeReturnsUnitVector)
-TEST(ResourceGuidTests, ParsesValidGuidString)
+NormalizeReturnsUnitVector()
+ParsesValidGuidString()
 ```
 
 Test names should describe observable behavior.

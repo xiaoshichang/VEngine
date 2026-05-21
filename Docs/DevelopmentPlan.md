@@ -103,8 +103,8 @@ VE_LOG_INFO
 - Create `ThirdParty/` dependency wrappers and download scripts.
 - Create `VEngine` static library target.
 - Create `VEnginePlayer`, `VEngineEditor`, and `VEngineTests`.
-- Integrate Boost and GoogleTest.
-- Establish initial folder structure.
+- Integrate Boost and CMake/CTest-based tests.
+- Establish initial folder structure only through files that are needed by current targets.
 - Add basic coding style and build documentation.
 
 ### Milestone 1: Core, Logging, And Platform

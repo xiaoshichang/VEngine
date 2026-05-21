@@ -64,7 +64,6 @@ Allowed dependency style:
 - Utility libraries.
 - Importers.
 - Logging backends.
-- Test frameworks.
 - Font libraries.
 - Shader compilation tools.
 - Editor immediate-mode UI library.
@@ -95,9 +94,6 @@ Dear ImGui
 FreeType
   - Runtime UI font rasterization
 
-GoogleTest
-  - Windows unit tests
-
 DirectXShaderCompiler
   - HLSL compilation
   - DXIL generation
@@ -109,6 +105,9 @@ SPIRV-Cross
 ```
 
 Logging should be implemented on top of `Boost.Log`.
+
+Windows tests should be registered through CMake/CTest. The first stage does not introduce a third-party C++ test
+framework.
 
 ## 4. Third-Party Dependency Management
 
@@ -953,7 +952,7 @@ First-stage iOS target is iOS Simulator demo execution.
 
 ## 18. Testing Strategy
 
-Windows unit tests use GoogleTest.
+Windows unit and smoke tests are registered through CMake/CTest.
 
 Unit test areas:
 
