@@ -112,20 +112,23 @@ Logging should be implemented on top of `Boost.Log`.
 
 ## 4. Third-Party Dependency Management
 
-Dependency management should use a mixed approach:
+Dependency management should use a repository-owned `ThirdParty/` approach:
 
-- Windows: prefer `vcpkg` manifest mode for common third-party dependencies.
-- Cross-platform or patched dependencies: wrap through `ThirdParty/` CMake files.
+- Third-party source archives, source checkouts, prebuilt tool packages, and built libraries live under `ThirdParty/`.
+- CMake wrapper files under `CMake/` locate, download, or build those dependencies.
+- A platform setup script such as `ThirdParty/Setup_Windows64.bat` prepares dependencies after clone.
+- Generated dependency payloads should be ignored by git unless the project explicitly decides to vendor a small file.
 - Platform SDK dependencies: use platform-native SDKs directly.
-- Avoid vendoring large source trees unless a dependency requires patches or stable pinning.
+- Avoid committing large source trees or binary packages unless a dependency requires patches or stable pinning.
 
 Recommended files:
 
 ```text
-vcpkg.json
 CMakePresets.json
-ThirdParty/CMake/
-ThirdParty/Patches/
+CMake/Setup<Dependency>.cmake
+ThirdParty/Setup_<Platform>.bat
+ThirdParty/<Dependency>/.gitignore
+ThirdParty/<Dependency>/README.md
 ```
 
 The project should keep dependency policy explicit. Dependencies should be introduced only when they are independent enough and do not take ownership of the engine's architecture.
@@ -180,7 +183,6 @@ VEngineIOSPlayer.app
 VEngine/
   CMakeLists.txt
   CMakePresets.json
-  vcpkg.json
 
   CMake/
     Scripts/

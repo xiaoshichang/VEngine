@@ -100,7 +100,7 @@ VE_LOG_INFO
 
 - Create CMake root project.
 - Create `CMakePresets.json`.
-- Create `vcpkg.json`.
+- Create `ThirdParty/` dependency wrappers and download scripts.
 - Create `VEngine` static library target.
 - Create `VEnginePlayer`, `VEngineEditor`, and `VEngineTests`.
 - Integrate Boost and GoogleTest.

@@ -10,6 +10,7 @@ option(VE_BUILD_PLAYER "Build Windows player" ON)
 option(VE_BUILD_EDITOR "Build Windows editor" ON)
 option(VE_BUILD_TESTS "Build Windows tests" ON)
 option(VE_BUILD_TOOLS "Build command line tools" ON)
+option(VE_BUILD_SHADER_TESTS "Build shader pipeline smoke tests" ON)
 option(VE_BUILD_IOS_PLAYER "Build iOS player app" OFF)
 option(VE_BUILD_RHI_DEMOS "Build RHI triangle demo programs" ON)
 
@@ -21,6 +22,8 @@ option(VE_ENABLE_SCRIPTING "Enable C# scripting" ON)
 set(VE_IOS_BUNDLE_IDENTIFIER "com.vengine.player" CACHE STRING "iOS player bundle identifier")
 
 include(CMake/SetupBoostLibrary.cmake)
+include(CMake/SetupDirectXShaderCompiler.cmake)
+include(CMake/SetupSpirvCross.cmake)
 
 if(APPLE AND VE_ENABLE_METAL)
     enable_language(OBJCXX)
@@ -51,6 +54,30 @@ function(ve_configure_target targetName)
                 -Wpedantic
         )
     endif()
+endfunction()
+
+function(ve_add_shader_tool)
+    if(TARGET VEngineShaderTool)
+        return()
+    endif()
+
+    ve_setup_directx_shader_compiler()
+    ve_setup_spirv_cross()
+
+    add_executable(VEngineShaderTool
+        Tools/ShaderTool/ShaderTool.cpp
+    )
+
+    target_link_libraries(VEngineShaderTool
+        PRIVATE
+            VEngine
+    )
+
+    if(VE_SPIRV_CROSS_TARGET)
+        add_dependencies(VEngineShaderTool ${VE_SPIRV_CROSS_TARGET})
+    endif()
+
+    ve_configure_target(VEngineShaderTool)
 endfunction()
 
 add_library(VEngine STATIC)
@@ -223,6 +250,66 @@ if(VE_BUILD_TESTS)
             NAME VEngineTests
             COMMAND VEngineTests
         )
+
+        if(VE_BUILD_SHADER_TESTS)
+            ve_add_shader_tool()
+
+            set(veShaderTestOutputDirectory "${CMAKE_BINARY_DIR}/Generated/ShaderTests/$<CONFIG>")
+
+            add_test(
+                NAME VEngineShaderToolHelp
+                COMMAND $<TARGET_FILE:VEngineShaderTool> --help
+            )
+
+            add_test(
+                NAME VEngineShaderToolCompileBasicTriangle
+                COMMAND
+                    $<TARGET_FILE:VEngineShaderTool>
+                    compile
+                    --source ${CMAKE_CURRENT_SOURCE_DIR}/Tests/Shaders/HLSL/BasicTriangle.hlsl
+                    --output ${veShaderTestOutputDirectory}/BasicTriangle
+                    --name BasicTriangle
+                    --dxc ${VE_DXC_EXECUTABLE}
+                    --fxc ${VE_FXC_EXECUTABLE}
+                    --spirv-cross ${VE_SPIRV_CROSS_EXECUTABLE}
+            )
+
+            add_test(
+                NAME VEngineShaderToolValidateBasicTriangle
+                COMMAND
+                    ${CMAKE_COMMAND}
+                    -DVE_SHADER_TEST_OUTPUT_DIR=${veShaderTestOutputDirectory}/BasicTriangle
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/Shaders/ValidateShaderArtifacts.cmake
+            )
+
+            add_test(
+                NAME VEngineShaderToolRejectsMissingRegister
+                COMMAND
+                    $<TARGET_FILE:VEngineShaderTool>
+                    compile
+                    --source ${CMAKE_CURRENT_SOURCE_DIR}/Tests/Shaders/HLSL/MissingRegister.hlsl
+                    --output ${veShaderTestOutputDirectory}/MissingRegister
+                    --name MissingRegister
+                    --dxc ${VE_DXC_EXECUTABLE}
+                    --fxc ${VE_FXC_EXECUTABLE}
+                    --spirv-cross ${VE_SPIRV_CROSS_EXECUTABLE}
+            )
+
+            set_tests_properties(VEngineShaderToolCompileBasicTriangle
+                PROPERTIES
+                    FIXTURES_SETUP VEngineShaderArtifacts
+            )
+
+            set_tests_properties(VEngineShaderToolValidateBasicTriangle
+                PROPERTIES
+                    FIXTURES_REQUIRED VEngineShaderArtifacts
+            )
+
+            set_tests_properties(VEngineShaderToolRejectsMissingRegister
+                PROPERTIES
+                    WILL_FAIL TRUE
+            )
+        endif()
     else()
         message(STATUS "VEngineTests is only built on Windows in the first stage.")
     endif()
@@ -306,16 +393,7 @@ if(VE_BUILD_TOOLS)
 
     ve_configure_target(VEngineAssetTool)
 
-    add_executable(VEngineShaderTool
-        Tools/ShaderTool/ShaderTool.cpp
-    )
-
-    target_link_libraries(VEngineShaderTool
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineShaderTool)
+    ve_add_shader_tool()
 endif()
 
 if(VE_BUILD_IOS_PLAYER)
