@@ -1,6 +1,8 @@
 #include "Engine/Runtime/Core/Application.h"
 #include "Engine/Runtime/Core/Version.h"
 
+#include <boost/json.hpp>
+
 #include <iostream>
 #include <string_view>
 
@@ -29,6 +31,10 @@ int main()
 
     const ve::BuildInfo buildInfo = ve::GetBuildInfo();
     passed &= Expect(std::string_view(buildInfo.projectName) == "VEngine", "Project name should be VEngine");
+
+    boost::json::object boostJsonSmokeValue;
+    boostJsonSmokeValue["project"] = buildInfo.projectName;
+    passed &= Expect(boostJsonSmokeValue.at("project").as_string() == "VEngine", "Boost.JSON should be available");
 
     if (passed)
     {

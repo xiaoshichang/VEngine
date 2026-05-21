@@ -20,6 +20,8 @@ option(VE_ENABLE_SCRIPTING "Enable C# scripting" ON)
 
 set(VE_IOS_BUNDLE_IDENTIFIER "com.vengine.player" CACHE STRING "iOS player bundle identifier")
 
+include(CMake/SetupBoostLibrary.cmake)
+
 if(APPLE AND VE_ENABLE_METAL)
     enable_language(OBJCXX)
 endif()
@@ -115,6 +117,8 @@ else()
             VE_PLATFORM_APPLE=0
     )
 endif()
+
+ve_setup_boost_library(VEngine)
 
 if(WIN32 AND VE_ENABLE_D3D11)
     target_sources(VEngine

@@ -1,0 +1,265 @@
+#!/usr/local/bin/python3
+import os
+import subprocess
+import sys
+import shutil
+import zipfile
+import wget
+import ssl
+
+
+script_file_path = sys.argv[0]
+print("script_file_path: %s" % script_file_path)
+
+boost_version = sys.argv[1]
+print("boost_version: %s" % boost_version)
+
+target_platform = sys.argv[2]
+print("target_platform: %s" % target_platform)
+
+script_file_dir = os.path.abspath(os.path.dirname(script_file_path))
+print("script_file_dir: %s" % script_file_dir)
+
+current_dir = os.path.abspath(os.curdir)
+print("current_dir: %s" % current_dir)
+
+required_boost_components = [
+    "--with-json",
+    "--with-log",
+    "--with-system",
+]
+
+ios_min_version = "13.0"
+print("ios_min_version: %s" % ios_min_version)
+
+ios_architectures ={
+    "device":
+        {
+            "arch": "arm64",
+            "sdk": "iphoneos",
+            "install_path": "device"
+        },
+    "simulator":
+        {
+            "arch": "arm64",
+            "sdk": "iphonesimulator",
+            "install_path": "simulator"
+        },
+}
+
+if target_platform == "Windows64":
+    boost_zip_file = "boost_%s.zip" % boost_version.replace(".", "_")
+elif target_platform == "IOS":
+    boost_zip_file = "boost_%s.tar.bz2" % boost_version.replace(".", "_")
+else:
+    raise Exception("Unknown target platform: %s" % target_platform)
+
+boost_url = "https://archives.boost.io/release/%s/source/%s" % (boost_version, boost_zip_file)
+print("boost_url: %s" % boost_url)
+
+boost_zip_file_path = os.path.join(current_dir, boost_zip_file)
+print("boost_zip_file_path: %s" % boost_zip_file_path)
+
+boost_root_dir = os.path.join(current_dir, ("boost_%s" % boost_version).replace(".", "_"))
+print("boost_root_dir: %s" % boost_root_dir)
+
+boost_install_path = os.path.join(current_dir, "Bin")
+boost_install_path = os.path.join(boost_install_path, target_platform)
+print("boost_install_path: %s" % boost_install_path)
+
+def print_step(step_name):
+    sep = "*" * 80
+    space_count = int((80 - len(step_name) - 10) / 2)
+    step = "*" * 5 + " " * space_count + step_name + " " * space_count + "*" * 5
+    print(sep)
+    print(step)
+    print(sep)
+
+
+def check_root_dir():
+    print("current path: %s" % current_dir)
+    if script_file_dir != current_dir:
+        print("current_path should be %s" % script_file_dir)
+        exit(1)
+
+
+def download_from_url():
+    if os.path.exists(boost_zip_file):
+        print("%s exist." % boost_zip_file)
+        return
+
+    print_step("download")
+    print("download_from_url: %s" % boost_url)
+    ssl._create_default_https_context = ssl._create_unverified_context
+    wget.download(boost_url)
+    print("")
+
+
+def unzip_files_windows64():
+    print_step("unzip files")
+    if not os.path.exists(boost_zip_file):
+        raise Exception("boost_zip_file not exist: %s" % boost_zip_file)
+
+    boost = zipfile.ZipFile(boost_zip_file_path)
+    for f in boost.namelist():
+        print("extracting %s" % f)
+        boost.extract(f)
+
+def unzip_files_mac():
+    print_step("unzip files")
+    if not os.path.exists(boost_zip_file):
+        raise Exception("boost_zip_file not exist: %s" % boost_zip_file)
+    subprocess.run(["tar", "xjf", boost_zip_file, "--verbose"], check=True)
+
+
+def build_boost_windows64():
+    print_step("build_boost_windows64")
+    os.chdir(boost_root_dir)
+    boost_bootstrap_path = os.path.join(boost_root_dir, "bootstrap.bat")
+    boost_b2_path = os.path.join(boost_root_dir, "b2.exe")
+
+    ret = os.system(boost_bootstrap_path)
+    if ret != 0:
+        print("run %s with ret code %d" % (boost_bootstrap_path, ret))
+        exit(1)
+
+    if not os.path.exists(boost_b2_path):
+        print("%s should exist!" % boost_b2_path)
+        exit(1)
+
+    # https://www.boost.org/doc/libs/1_85_0/more/getting_started/windows.html
+    cmd = [
+        "./b2",
+        "install",
+        "link=static",
+        "threading=multi",
+        "target-os=windows",
+        f"--prefix={boost_install_path}",
+        *required_boost_components,
+    ]
+    print("cmd: %s" % cmd)
+    subprocess.run(cmd, check=True)
+    #os.system("%s install link=static --prefix=%s " % (boost_b2_path, boost_install_path))
+
+
+def build_ios_b2():
+    print_step("build_ios_b2")
+    os.chdir(boost_root_dir)
+    if not os.path.exists("b2"):
+        subprocess.run(["./bootstrap.sh"], check=True)
+    else:
+        print("b2 exist!")
+
+
+def get_ios_sdk_path(config):
+    try:
+        return subprocess.check_output([
+            "xcodebuild",
+            "-version",
+            "-sdk",
+            config["sdk"],
+            "Path"
+        ], text=True).strip()
+    except subprocess.CalledProcessError:
+        raise Exception("find sdk failed")
+
+def build_boost_ios_lib(config):
+    print_step("build_boost_ios_lib")
+    sdk_path = get_ios_sdk_path(config)
+
+    if config["sdk"] == "iphoneos":
+        target = "arm64-apple-ios"
+        version = f"-miphoneos-version-min={ios_min_version}"
+    else:
+        target = "arm64-apple-ios-simulator"
+        version = f"-miphonesimulator-version-min={ios_min_version}"
+
+    cxxflags = [
+        f"-target {target}",
+        f"-arch {config['arch']}",
+        f"-isysroot {sdk_path}",
+        f"-fvisibility=hidden", # to avoid boost log weak symbols warning
+        f"-fvisibility-inlines-hidden", # to avoid boost log weak symbols warning
+        version,
+    ]
+
+    cmd = [
+        "./b2",
+        "install",
+        "link=static",
+        "target-os=iphone",
+        "architecture=arm",
+        "threading=multi",
+        f"--prefix={os.path.join(boost_install_path, config['install_path'])}",
+        f"toolset=clang",
+        f"cxxflags={' '.join(cxxflags)}",
+        f"linkflags=-arch arm64",
+        f"--sysroot={sdk_path}",
+        *required_boost_components,
+    ]
+    print("cmd: %s" % cmd)
+    subprocess.run(cmd, check=True)
+
+
+def merge_libs_to_universal():
+    print_step("merge_libs_to_universal")
+    libs_dir = {}
+    for key, val in ios_architectures.items():
+        lib_dir = os.path.join(boost_install_path, val['install_path'])
+        lib_dir = os.path.join(lib_dir, "lib")
+        libs_dir[key] = [f for f in os.listdir(lib_dir) if f.endswith(".a")]
+
+    base_set = set(libs_dir["device"])
+    if not all(set(v) == base_set for v in libs_dir.values()):
+        raise Exception()
+
+    universal_dir = os.path.join(boost_install_path, "universal")
+    os.makedirs(universal_dir, exist_ok=True)
+
+
+    for lib in base_set:
+        device_dir = os.path.join(boost_install_path, ios_architectures["device"]['install_path'])
+        device_dir = os.path.join(device_dir, "lib")
+        device_lib = os.path.join(device_dir, lib)
+        simulator_dir = os.path.join(boost_install_path, ios_architectures["simulator"]['install_path'])
+        simulator_dir = os.path.join(simulator_dir, "lib")
+        simulator_lib = os.path.join(simulator_dir, lib)
+
+        universal_lib_dir = os.path.join(universal_dir, "lib")
+        os.makedirs(universal_lib_dir, exist_ok=True)
+        output_lib = os.path.join(universal_lib_dir, lib)
+        try:
+            subprocess.run(["lipo", "-create", device_lib, simulator_lib, "-output", output_lib], check=True)
+        except subprocess.CalledProcessError:
+            sys.exit(f"lipo create {lib} failed.")
+
+
+
+
+
+def main():
+    check_root_dir()
+    shutil.rmtree(boost_root_dir, ignore_errors=True)
+    shutil.rmtree(boost_install_path, ignore_errors=True)
+    download_from_url()
+
+    if target_platform == "Windows64":
+        unzip_files_windows64()
+        build_boost_windows64()
+    elif target_platform == "IOS":
+        os.chdir(script_file_dir)
+        unzip_files_mac()
+        build_ios_b2()
+        build_boost_ios_lib(ios_architectures["device"])
+
+        # boost will cache last build, so remove root here.
+        os.chdir(script_file_dir)
+        shutil.rmtree(boost_root_dir, ignore_errors=True)
+        unzip_files_mac()
+        build_ios_b2()
+        build_boost_ios_lib(ios_architectures["simulator"])
+
+
+
+if __name__ == "__main__":
+    main()
