@@ -1,0 +1,126 @@
+include_guard(GLOBAL)
+
+function(ve_add_engine)
+    if(TARGET VEngine)
+        return()
+    endif()
+
+    add_library(VEngine STATIC)
+
+    target_sources(VEngine
+        PRIVATE
+            Engine/Runtime/Core/Application.cpp
+            Engine/Runtime/Core/Version.cpp
+            Engine/RHI/Common/RhiTypes.cpp
+            Engine/RHI/Common/RhiUtils.cpp
+        PUBLIC
+            Engine/Runtime/Core/Application.h
+            Engine/Runtime/Core/Version.h
+            Engine/RHI/Common/RhiDevice.h
+            Engine/RHI/Common/RhiTypes.h
+            Engine/RHI/Common/RhiUtils.h
+    )
+
+    target_include_directories(VEngine
+        PUBLIC
+            ${PROJECT_SOURCE_DIR}
+    )
+
+    target_compile_features(VEngine
+        PUBLIC
+            cxx_std_20
+    )
+
+    target_compile_definitions(VEngine
+        PUBLIC
+            VE_VERSION_STRING="${PROJECT_VERSION}"
+            VE_ENABLE_D3D11=$<BOOL:${VE_ENABLE_D3D11}>
+            VE_ENABLE_D3D12=$<BOOL:${VE_ENABLE_D3D12}>
+            VE_ENABLE_METAL=$<BOOL:${VE_ENABLE_METAL}>
+            VE_ENABLE_SCRIPTING=$<BOOL:${VE_ENABLE_SCRIPTING}>
+    )
+
+    if(WIN32)
+        target_compile_definitions(VEngine
+            PUBLIC
+                VE_PLATFORM_WINDOWS=1
+                VE_PLATFORM_IOS=0
+                VE_PLATFORM_APPLE=0
+        )
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        target_compile_definitions(VEngine
+            PUBLIC
+                VE_PLATFORM_WINDOWS=0
+                VE_PLATFORM_IOS=1
+                VE_PLATFORM_APPLE=1
+        )
+    elseif(APPLE)
+        target_compile_definitions(VEngine
+            PUBLIC
+                VE_PLATFORM_WINDOWS=0
+                VE_PLATFORM_IOS=0
+                VE_PLATFORM_APPLE=1
+        )
+    else()
+        target_compile_definitions(VEngine
+            PUBLIC
+                VE_PLATFORM_WINDOWS=0
+                VE_PLATFORM_IOS=0
+                VE_PLATFORM_APPLE=0
+        )
+    endif()
+
+    ve_setup_boost_library(VEngine)
+
+    if(WIN32 AND VE_ENABLE_D3D11)
+        target_sources(VEngine
+            PRIVATE
+                Engine/RHI/D3D11/D3D11Rhi.cpp
+            PUBLIC
+                Engine/RHI/D3D11/D3D11Rhi.h
+        )
+
+        target_link_libraries(VEngine
+            PUBLIC
+                d3d11
+                dxgi
+                d3dcompiler
+        )
+    endif()
+
+    if(WIN32 AND VE_ENABLE_D3D12)
+        target_sources(VEngine
+            PRIVATE
+                Engine/RHI/D3D12/D3D12Rhi.cpp
+            PUBLIC
+                Engine/RHI/D3D12/D3D12Rhi.h
+        )
+
+        target_link_libraries(VEngine
+            PUBLIC
+                d3d12
+                dxgi
+                d3dcompiler
+        )
+    endif()
+
+    if(APPLE AND VE_ENABLE_METAL)
+        enable_language(OBJCXX)
+
+        target_sources(VEngine
+            PRIVATE
+                Engine/RHI/Metal/MetalRhi.mm
+            PUBLIC
+                Engine/RHI/Metal/MetalRhi.h
+        )
+
+        target_link_libraries(VEngine
+            PUBLIC
+                "-framework Foundation"
+                "-framework Metal"
+                "-framework QuartzCore"
+        )
+    endif()
+
+    ve_configure_target(VEngine)
+endfunction()
