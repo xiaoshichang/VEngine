@@ -261,14 +261,15 @@ VEngine/
 
 - Basic type aliases.
 - Assertions.
-- Error codes.
-- Time utilities.
-- Application lifecycle interfaces.
+- Error and result utilities.
+- Source location utilities.
 - Build configuration.
 - Platform feature macros.
-- Non-copyable and non-movable utility base types.
+- Small standalone utility types such as non-copyable, scope-exit, and enum flag helpers.
 
 `Core` should avoid depending on higher-level modules.
+
+Detailed Core boundaries, first-stage APIs, and implementation scope are defined in `Docs/CoreModuleDesign.md`.
 
 ### 7.2 Platform
 
