@@ -2,6 +2,10 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 
+#if VE_PLATFORM_WINDOWS
+#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
+#endif
+
 #include <boost/log/core.hpp>
 #include <boost/log/sources/logger.hpp>
 #include <boost/log/sources/record_ostream.hpp>
@@ -20,6 +24,9 @@
 #if VE_PLATFORM_WINDOWS
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
 #include <Windows.h>
 #endif
@@ -102,18 +109,23 @@ std::string MakeFileName(const ve::SourceLocation& location)
 std::string FormatLogLine(const ve::LogRecord& record)
 {
     const char* category = record.category != nullptr ? record.category : "General";
-    const char* functionName = record.location.function_name() != nullptr ? record.location.function_name() : "<unknown>";
 
-    return std::format(
-        "[{}][{}][{}][Thread {}] {} ({}:{} {})",
+    std::string line = std::format(
+        "[{}][{}][{}][Thread {}] {}",
         MakeTimestamp(),
         ve::ToString(record.severity),
         category,
         MakeThreadIdString(),
-        record.message,
-        MakeFileName(record.location),
-        record.location.line(),
-        functionName);
+        record.message);
+
+    if (IsAtLeastSeverity(record.severity, ve::LogSeverity::Error))
+    {
+        const char* functionName =
+            record.location.function_name() != nullptr ? record.location.function_name() : "<unknown>";
+        line += std::format(" ({}:{} {})", MakeFileName(record.location), record.location.line(), functionName);
+    }
+
+    return line;
 }
 
 void WriteDebuggerOutput(std::string_view line)
@@ -127,10 +139,19 @@ void WriteDebuggerOutput(std::string_view line)
 #endif
 }
 
-void WriteFallbackOutput(ve::LogSeverity severity, std::string_view line)
+void WriteConsoleOutput(ve::LogSeverity severity, std::string_view line)
 {
+#if VE_PLATFORM_WINDOWS
+    ve::WriteWin32DebugConsoleLog(severity, line);
+#else
     std::ostream& stream = IsAtLeastSeverity(severity, ve::LogSeverity::Warn) ? std::cerr : std::clog;
     stream << line << '\n';
+#endif
+}
+
+void WriteFallbackOutput(ve::LogSeverity severity, std::string_view line)
+{
+    WriteConsoleOutput(severity, line);
 }
 
 void AssertionLogHandler(const ve::AssertionInfo& info)
@@ -186,7 +207,7 @@ Result<void> InitializeLogging(const LoggingConfig& config)
     {
         boost::log::core::get()->remove_all_sinks();
 
-        if (config.enableConsole)
+        if (config.enableConsole && VE_PLATFORM_WINDOWS == 0)
         {
             boost::log::add_console_log(
                 std::clog,
@@ -286,6 +307,7 @@ void LogMessage(LogSeverity severity, const char* category, std::string_view mes
 {
     LogCallback callback = nullptr;
     bool initialized = false;
+    bool enableConsole = false;
     bool enableDebuggerOutput = false;
 
     {
@@ -298,6 +320,7 @@ void LogMessage(LogSeverity severity, const char* category, std::string_view mes
 
         callback = gLoggingState.callback;
         initialized = gLoggingState.initialized;
+        enableConsole = config.enableConsole;
         enableDebuggerOutput = config.enableDebuggerOutput;
     }
 
@@ -313,6 +336,15 @@ void LogMessage(LogSeverity severity, const char* category, std::string_view mes
     if (initialized)
     {
         BOOST_LOG(GetBoostLogger()) << line;
+
+#if VE_PLATFORM_WINDOWS
+        if (enableConsole)
+        {
+            WriteConsoleOutput(severity, line);
+        }
+#else
+        (void)enableConsole;
+#endif
     }
     else
     {

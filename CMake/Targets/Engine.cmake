@@ -31,6 +31,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Types.h
             Engine/Runtime/Core/Version.h
             Engine/Runtime/Logging/Log.h
+            Engine/Runtime/Platform/Window.h
             Engine/RHI/Common/RhiDevice.h
             Engine/RHI/Common/RhiTypes.h
             Engine/RHI/Common/RhiUtils.h
@@ -86,6 +87,24 @@ function(ve_add_engine)
     endif()
 
     ve_setup_boost_library(VEngine)
+
+    if(WIN32)
+        target_sources(VEngine
+            PRIVATE
+                Engine/Runtime/Platform/Windows/Win32DebugConsole.cpp
+                Engine/Runtime/Platform/Windows/Win32MessageLoop.cpp
+                Engine/Runtime/Platform/Windows/Win32Window.cpp
+            PUBLIC
+                Engine/Runtime/Platform/Windows/Win32DebugConsole.h
+                Engine/Runtime/Platform/Windows/Win32MessageLoop.h
+                Engine/Runtime/Platform/Windows/Win32Window.h
+        )
+
+        target_link_libraries(VEngine
+            PUBLIC
+                user32
+        )
+    endif()
 
     if(WIN32 AND VE_ENABLE_D3D11)
         target_sources(VEngine

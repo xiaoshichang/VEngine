@@ -123,15 +123,39 @@ bool TestFileOutputAndFormatting()
 
     VE_LOG_INFO("Hello {}", 42);
     VE_LOG_WARN_CATEGORY("Resource", "Missing {}", std::string("Texture"));
+    VE_LOG_ERROR_CATEGORY("Resource", "Failed {}", std::string("Shader"));
 
     ve::ShutdownLogging();
 
     const std::string logText = ReadTextFile(logPath);
+    const auto getLineContaining = [&logText](std::string_view text)
+    {
+        const size_t position = logText.find(text);
+        if (position == std::string::npos)
+        {
+            return std::string();
+        }
+
+        const size_t lineStart = logText.rfind('\n', position);
+        const size_t lineEnd = logText.find('\n', position);
+        const size_t start = lineStart == std::string::npos ? 0 : lineStart + 1;
+        const size_t count = lineEnd == std::string::npos ? std::string::npos : lineEnd - start;
+        return logText.substr(start, count);
+    };
+
+    const std::string infoLine = getLineContaining("Hello 42");
+    const std::string warnLine = getLineContaining("Missing Texture");
+    const std::string errorLine = getLineContaining("Failed Shader");
+
     passed &= Expect(logText.find("[Info][General]") != std::string::npos, "Default category should be General");
     passed &= Expect(logText.find("Hello 42") != std::string::npos, "std::format message should be written");
     passed &= Expect(logText.find("[Warn][Resource]") != std::string::npos, "Explicit category should be written");
     passed &= Expect(logText.find("Missing Texture") != std::string::npos, "Formatted category message should be written");
-    passed &= Expect(logText.find("LoggingTests.cpp") != std::string::npos, "Source file should be written");
+    passed &= Expect(logText.find("[Error][Resource]") != std::string::npos, "Error category should be written");
+    passed &= Expect(logText.find("Failed Shader") != std::string::npos, "Error message should be written");
+    passed &= Expect(infoLine.find("LoggingTests.cpp") == std::string::npos, "Info logs should omit source location");
+    passed &= Expect(warnLine.find("LoggingTests.cpp") == std::string::npos, "Warn logs should omit source location");
+    passed &= Expect(errorLine.find("LoggingTests.cpp") != std::string::npos, "Error logs should include source file");
 
     return passed;
 }

@@ -78,11 +78,17 @@ bool TestApplicationAndVersion()
 {
     bool passed = true;
 
-    ve::Application application("VEngineTests");
-    application.RunOnce();
+    ve::ApplicationDesc desc;
+    desc.name = "VEngineTests";
+    desc.mainWindow.title = "VEngine Tests";
+    desc.mainWindow.width = 640;
+    desc.mainWindow.height = 480;
+    desc.mainWindow.visible = false;
+
+    ve::Application application(desc);
 
     passed &= Expect(application.GetName() == "VEngineTests", "Application name should match constructor input");
-    passed &= Expect(application.GetExitCode() == 0, "Application exit code should default to success after RunOnce");
+    passed &= Expect(application.GetExitCode() == 0, "Application exit code should default to success");
 
     const ve::BuildInfo buildInfo = ve::GetBuildInfo();
     passed &= Expect(std::string_view(buildInfo.projectName) == "VEngine", "Project name should be VEngine");

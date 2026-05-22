@@ -6,7 +6,7 @@ function(ve_add_windows_player)
     endif()
 
     if(WIN32)
-        add_executable(VEnginePlayer
+        add_executable(VEnginePlayer WIN32
             Player/Windows/WindowsPlayer.cpp
         )
 
@@ -27,7 +27,7 @@ function(ve_add_windows_editor)
     endif()
 
     if(WIN32)
-        add_executable(VEngineEditor
+        add_executable(VEngineEditor WIN32
             Editor/Windows/WindowsEditor.cpp
         )
 

@@ -1,16 +1,34 @@
 #include "Engine/Runtime/Application/Application.h"
-#include "Engine/Runtime/Core/Version.h"
+#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 
-#include <iostream>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 
-int main()
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <Windows.h>
+
+#include <utility>
+
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR commandLine, int showCommand)
 {
-    ve::Application application("VEngineEditor");
-    application.RunOnce();
+    (void)instance;
+    (void)previousInstance;
+    (void)commandLine;
+    (void)showCommand;
 
-    const ve::BuildInfo buildInfo = ve::GetBuildInfo();
-    std::cout << application.GetName() << " ready (" << buildInfo.projectName << " " << buildInfo.version << ", "
-              << buildInfo.platform << ")" << '\n';
+    ve::InitializeWin32DebugConsole();
 
-    return application.GetExitCode();
+    ve::ApplicationDesc desc;
+    desc.name = "VEngineEditor";
+    desc.mainWindow.title = "VEngine Editor";
+    desc.mainWindow.width = 1600;
+    desc.mainWindow.height = 900;
+    desc.mainWindow.visible = true;
+
+    ve::Application application(std::move(desc));
+    return application.Run();
 }
