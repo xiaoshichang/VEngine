@@ -68,13 +68,14 @@ C++20 standard library
 Boost.Log
 Boost.Core / Boost.System dependencies required by Boost.Log
 Core
+Narrow Windows debug console bridge for colored console output and command input
 ```
 
 Forbidden dependencies for the first implementation:
 
 ```text
 RHI
-Platform module
+Broad Platform services outside the explicit Windows debug console bridge
 Memory module
 Threading module
 Reflection module
@@ -85,8 +86,9 @@ Player code
 Tools code
 ```
 
-The first implementation may use small platform-specific preprocessor branches inside `Logging` when needed, such as
-Windows debugger output, but it should not depend on a future Platform module.
+The Windows console sink currently uses the engine-owned Win32 debug console bridge. Keep this dependency narrow: Logging
+may write formatted log lines to that bridge, but it should not grow into a general dependency on windowing, input,
+dynamic libraries, RHI, or other broad Platform services.
 
 ## 6. Planned File Layout
 
@@ -241,9 +243,11 @@ Console sink is enabled by default on Windows and iOS.
 Expected behavior:
 
 - Writes formatted single-line records.
-- The current Boost.Log console sink writes to `std::clog`.
-- The pre-initialization fallback writes `Trace`, `Debug`, and `Info` to `std::clog`, and `Warn`, `Error`, and `Fatal` to
-  `std::cerr`.
+- On Windows, writes through the Win32 debug console bridge so the engine-owned console can keep colored log output and
+  a bottom command input prompt.
+- On non-Windows platforms, the Boost.Log console sink writes to `std::clog`.
+- The pre-initialization fallback writes through the same console path. On non-Windows platforms it writes `Trace`,
+  `Debug`, and `Info` to `std::clog`, and `Warn`, `Error`, and `Fatal` to `std::cerr`.
 
 ### 10.2 File Sink
 
@@ -271,7 +275,7 @@ enabled
 Expected behavior:
 
 - Writes to debugger output through a Windows-specific sink or small Windows-specific backend branch.
-- Does not require a future Platform module.
+- Does not require broad Platform services beyond the narrow Windows-specific branch.
 - Non-Windows builds ignore this option.
 
 ### 10.4 Callback Sink
@@ -291,7 +295,8 @@ Rules:
 Formatted sink output should be a single line:
 
 ```text
-[2026-05-22 14:30:01.123][Info][Render][Thread 1234] message (File.cpp:42 Function)
+[2026-05-22 14:30:01.123][Info][Render][Thread 1234] message
+[2026-05-22 14:30:01.123][Error][Render][Thread 1234] message (File.cpp:42 Function)
 ```
 
 Fields:
@@ -301,9 +306,10 @@ Fields:
 - Category.
 - Thread id.
 - Message.
-- Source file.
-- Source line.
-- Source function.
+- Source file, source line, and source function for `Error` and `Fatal` records only.
+
+`Trace`, `Debug`, `Info`, and `Warn` records intentionally omit source location from formatted sink output to keep normal
+logs compact. The callback still receives the structured `SourceLocation` in `LogRecord`.
 
 The callback receives structured fields through `LogRecord`; it does not need to parse the formatted line.
 
@@ -413,6 +419,8 @@ Testing notes:
 - `Engine/Runtime/Logging/Log.h` and `Log.cpp` exist and are part of `VEngine`.
 - Ordinary project code can log through `VE_LOG_*` macros without including Boost.Log.
 - Windows default logging writes to console, file, and debugger output.
+- Windows console output uses the Win32 debug console bridge while keeping the dependency narrow.
+- Normal formatted output omits source location below `Error`, and includes source location for `Error` and `Fatal`.
 - Callback sink works.
 - Repeated initialization returns `ErrorCode::InvalidState`.
 - Assertion logging is available through explicit installation.

@@ -54,14 +54,17 @@ namespace ve::Time
     void Advance(float rawDeltaSeconds) noexcept;
 
     TimeSnapshot GetSnapshot() noexcept;
-    float GetDeltaSeconds() noexcept;
-    float GetRawDeltaSeconds() noexcept;
-    double GetTotalSeconds() noexcept;
     uint64_t GetFrameIndex() noexcept;
+    double GetTotalSeconds() noexcept;
+    double GetFixedAccumulatorSeconds() noexcept;
+    float GetRawDeltaSeconds() noexcept;
+    float GetDeltaSeconds() noexcept;
+    float GetMaxDeltaSeconds() noexcept;
+    float GetFixedDeltaSeconds() noexcept;
+    uint32_t GetFixedStepCount() noexcept;
 
     bool SetMaxDeltaSeconds(float maxDeltaSeconds) noexcept;
     bool SetFixedDeltaSeconds(float fixedDeltaSeconds) noexcept;
-    uint32_t GetFixedStepCount() noexcept;
     bool HasFixedStep() noexcept;
 }
 ```

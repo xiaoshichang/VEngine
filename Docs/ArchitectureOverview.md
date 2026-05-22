@@ -147,10 +147,10 @@ VEngineEditor
   Windows editor executable.
 
 VEngineIOSPlayer
-  iOS player app target.
+  Planned iOS player app target for Milestone 10.
 
 VEngineAssetTool
-  Command line asset import and cook tool.
+  Planned command line asset import and cook tool. The current target may exist as a placeholder before Milestone 6.
 
 VEngineShaderTool
   Command line shader compile, reflection, and cross-compile tool.
@@ -169,13 +169,19 @@ VEngineShaderTool.exe
 Windows unit and smoke test executables are registered through CTest. Individual test target names are intentionally kept
 out of this high-level target list so new module tests can be added without changing the architecture overview.
 
-iOS first-stage outputs:
+Planned iOS first-stage outputs:
 
 ```text
 VEngineIOSPlayer.app
 ```
 
+The current application backend is Windows-only. The iOS player target and simulator demo are tracked as Milestone 10
+work.
+
 ## 6. Recommended Directory Layout
+
+This is the target repository shape. Some directories and documents are introduced only when their owning milestone
+starts, so this layout is not expected to exactly match the current working tree at every point in development.
 
 ```text
 VEngine/
@@ -274,18 +280,23 @@ Detailed Core boundaries, first-stage APIs, and implementation scope are defined
 
 `Platform` isolates operating system differences.
 
-Windows responsibilities:
+Current Windows first-stage implementation:
 
 - Win32 window creation.
 - Win32 message loop.
+- Native window handle access for early RHI and demo integration.
+- Debug console integration for log output and GM command input.
+- Empty Player and Editor shell window creation.
+
+Future Windows responsibilities:
+
 - Keyboard and mouse input.
 - High precision timer.
 - Dynamic library loading.
 - File path conversion.
 - D3D11 and D3D12 surface / swapchain integration.
-- Editor and Player window creation.
 
-iOS responsibilities:
+Milestone 10 iOS responsibilities:
 
 - Objective-C++ bridge.
 - UIKit application lifecycle.
@@ -294,6 +305,9 @@ iOS responsibilities:
 - Touch input.
 - App pause / resume / termination handling.
 - Metal drawable management.
+
+The current `Application::Run()` backend is Windows-only. iOS application lifecycle support should land with the iOS
+Simulator milestone instead of being implied by the Milestone 1 platform work.
 
 The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar framework-style platform abstractions are not used.
 
@@ -935,15 +949,16 @@ Windows platform layer:
 
 - Owns Win32 window creation.
 - Owns Win32 message loop.
-- Produces input events.
-- Creates D3D-compatible native window handles.
+- Exposes native window handles.
 - Supports Player and Editor shells.
-- Supports dynamic library loading for scripting.
-- Provides platform file path utilities.
+- Owns debug console output and command input in debug builds.
+- Later produces input events.
+- Later supports dynamic library loading for scripting.
+- Later provides platform file path utilities.
 
 ### 17.2 iOS
 
-iOS platform layer:
+Milestone 10 iOS platform layer:
 
 - Uses Objective-C++ for native bridge files.
 - Owns UIKit lifecycle integration.
@@ -952,13 +967,17 @@ iOS platform layer:
 - Coordinates pause and resume.
 - Provides Metal drawable and surface access to `MetalRHI`.
 
-First-stage iOS target is iOS Simulator demo execution.
+The first iOS goal is an iOS Simulator demo. The current Milestone 1 runtime does not yet provide an iOS
+`Application::Run()` backend.
 
 ## 18. Testing Strategy
 
 Windows unit and smoke tests are registered through CMake/CTest.
 
-Unit test areas:
+Current Milestone 1 coverage includes Core, Logging, Time, and FileSystem tests. Additional test areas are added as
+their owning modules land.
+
+Planned unit test areas:
 
 ```text
 Core
@@ -971,7 +990,7 @@ Resource metadata
 FileSystem path behavior
 ```
 
-Integration test areas:
+Planned integration test areas:
 
 ```text
 Asset import smoke test
@@ -981,7 +1000,7 @@ D3D12 RHI smoke test
 C# script host smoke test
 ```
 
-Manual/sample tests:
+Manual/sample checks:
 
 ```text
 Windows Player demo
