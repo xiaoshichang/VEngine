@@ -17,6 +17,8 @@ function(ve_add_engine)
             Engine/Runtime/FileSystem/Path.cpp
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
+            Engine/Runtime/Threading/Synchronization.cpp
+            Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
             Engine/RHI/Common/RhiTypes.cpp
             Engine/RHI/Common/RhiUtils.cpp
@@ -39,6 +41,10 @@ function(ve_add_engine)
             Engine/Runtime/Logging/Log.h
             Engine/Runtime/Memory/PoolAllocator.h
             Engine/Runtime/Platform/Window.h
+            Engine/Runtime/Threading/Atomic.h
+            Engine/Runtime/Threading/LockFreeSpscQueue.h
+            Engine/Runtime/Threading/Synchronization.h
+            Engine/Runtime/Threading/Thread.h
             Engine/Runtime/Time/Time.h
             Engine/RHI/Common/RhiDevice.h
             Engine/RHI/Common/RhiTypes.h

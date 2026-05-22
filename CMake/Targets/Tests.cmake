@@ -90,6 +90,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineMemoryTests>
     )
 
+    add_executable(VEngineThreadingTests
+        Tests/Unit/ThreadingTests.cpp
+    )
+
+    target_link_libraries(VEngineThreadingTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineThreadingTests)
+
+    add_test(
+        NAME VEngineThreadingTests
+        COMMAND $<TARGET_FILE:VEngineThreadingTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 

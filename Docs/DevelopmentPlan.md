@@ -122,7 +122,7 @@ VE_LOG_INFO
 ### Milestone 2: Memory, Math, And Threading
 
 - Implement `PoolAllocator`.
-- Implement cross-platform thread wrapper.
+- Implement cross-platform thread wrapper, synchronization primitives, and first lock-free utilities.
 - Implement math primitives.
 - Implement Job System first version.
 - Implement IO Thread.

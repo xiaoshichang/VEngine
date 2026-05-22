@@ -393,6 +393,9 @@ Allocator usage guidelines:
 
 Boost may be used for selected utilities such as lock-free queues, but the engine should keep its own threading facade.
 
+Detailed first-stage thread wrapper, synchronization primitive, and lock-free utility rules are defined in
+`Docs/ThreadingDesign.md`.
+
 ### 7.7 Math
 
 `Math` is self-owned and exposes VEngine math types:
