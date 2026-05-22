@@ -14,6 +14,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Error.cpp
             Engine/Runtime/Core/Version.cpp
             Engine/Runtime/Logging/Log.cpp
+            Engine/Runtime/Time/Time.cpp
             Engine/RHI/Common/RhiTypes.cpp
             Engine/RHI/Common/RhiUtils.cpp
         PUBLIC
@@ -32,6 +33,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Version.h
             Engine/Runtime/Logging/Log.h
             Engine/Runtime/Platform/Window.h
+            Engine/Runtime/Time/Time.h
             Engine/RHI/Common/RhiDevice.h
             Engine/RHI/Common/RhiTypes.h
             Engine/RHI/Common/RhiUtils.h

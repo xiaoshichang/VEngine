@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Application/Application.h"
 
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Time/Time.h"
 
 #if VE_PLATFORM_WINDOWS
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
@@ -104,6 +105,7 @@ int Application::Run()
 
     std::unique_ptr<Win32Window> mainWindow = windowResult.MoveValue();
     Win32MessageLoop messageLoop;
+    Time::Reset();
 
     while (!mainWindow->ShouldClose())
     {
@@ -113,6 +115,8 @@ int Application::Run()
         {
             break;
         }
+
+        Time::Tick();
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
