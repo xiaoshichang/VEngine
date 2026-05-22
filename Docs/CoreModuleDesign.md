@@ -18,8 +18,8 @@ The first-stage `Core` design follows these decisions:
   Editor, Player, or tools.
 - `Core` first-stage implementation should use the C++20 standard library directly and avoid Boost unless a later design
   explicitly justifies it.
-- Runtime application lifecycle code does not belong in `Core`. The current skeleton `Application` class should be moved
-  out of `Engine/Runtime/Core` during the first `Core` cleanup.
+- Runtime application lifecycle code does not belong in `Core`. The skeleton `Application` class lives in
+  `Engine/Runtime/Application`.
 - Math primitives, allocators, thread wrappers, jobs, file systems, and timers are separate modules.
 - Public macros use the `VE_` prefix.
 - Recoverable failures use `Error` and `Result<T>` instead of C++ exceptions.
@@ -109,22 +109,14 @@ Engine/Runtime/Core/
   EnumFlags.h
 ```
 
-The current skeleton files:
-
-```text
-Engine/Runtime/Core/Application.h
-Engine/Runtime/Core/Application.cpp
-```
-
-should be moved out of `Core` when the first `Core` implementation lands. A reasonable destination is a runtime
-application module such as:
+The skeleton application wrapper lives outside `Core`:
 
 ```text
 Engine/Runtime/Application/Application.h
 Engine/Runtime/Application/Application.cpp
 ```
 
-The exact destination can be adjusted to match the application/platform split at implementation time.
+This keeps runtime application lifecycle code separate from the lowest-level shared utilities.
 
 ## 7. Build, Compiler, And Platform Helpers
 
@@ -476,7 +468,7 @@ The first `Core` implementation should do the following:
 4. Add `Error.h` and `Error.cpp`.
 5. Add `Result.h`.
 6. Add `NonCopyable.h`, `ScopeExit.h`, and `EnumFlags.h`.
-7. Move the current skeleton `Application` class out of `Engine/Runtime/Core`.
+7. Keep the skeleton `Application` class outside `Engine/Runtime/Core`.
 8. Update CMake target sources for `VEngine`.
 9. Extend `VEngineTests` with CTest-registered coverage for the new Core APIs.
 
@@ -532,7 +524,7 @@ assertion handler and using non-breaking code paths where practical.
 `Core` first implementation is complete when:
 
 - The planned files exist and are part of the `VEngine` target.
-- `Application` is no longer under `Engine/Runtime/Core`.
+- `Application` remains outside `Engine/Runtime/Core`.
 - No Core file depends on higher-level VEngine modules.
 - Windows `windows-msvc-tests` configure, build, and CTest pass.
 - Public APIs have concise comments where behavior is not obvious.

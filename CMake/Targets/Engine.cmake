@@ -9,12 +9,25 @@ function(ve_add_engine)
 
     target_sources(VEngine
         PRIVATE
-            Engine/Runtime/Core/Application.cpp
+            Engine/Runtime/Application/Application.cpp
+            Engine/Runtime/Core/Assert.cpp
+            Engine/Runtime/Core/Error.cpp
             Engine/Runtime/Core/Version.cpp
             Engine/RHI/Common/RhiTypes.cpp
             Engine/RHI/Common/RhiUtils.cpp
         PUBLIC
-            Engine/Runtime/Core/Application.h
+            Engine/Runtime/Application/Application.h
+            Engine/Runtime/Core/Assert.h
+            Engine/Runtime/Core/BuildConfig.h
+            Engine/Runtime/Core/Compiler.h
+            Engine/Runtime/Core/EnumFlags.h
+            Engine/Runtime/Core/Error.h
+            Engine/Runtime/Core/NonCopyable.h
+            Engine/Runtime/Core/Platform.h
+            Engine/Runtime/Core/Result.h
+            Engine/Runtime/Core/ScopeExit.h
+            Engine/Runtime/Core/SourceLocation.h
+            Engine/Runtime/Core/Types.h
             Engine/Runtime/Core/Version.h
             Engine/RHI/Common/RhiDevice.h
             Engine/RHI/Common/RhiTypes.h

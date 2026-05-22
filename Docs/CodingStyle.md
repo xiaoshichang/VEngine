@@ -162,8 +162,10 @@ D3D12RenderDevice.cpp
 Use direct module folders in the first stage:
 
 ```text
-Engine/Runtime/Core/Application.h
-Engine/Runtime/Core/Application.cpp
+Engine/Runtime/Core/Error.h
+Engine/Runtime/Core/Error.cpp
+Engine/Runtime/Application/Application.h
+Engine/Runtime/Application/Application.cpp
 Engine/Runtime/Render/Renderer.h
 Engine/Runtime/Render/Renderer.cpp
 ```
@@ -541,9 +543,9 @@ add_library(VEngine STATIC)
 
 target_sources(VEngine
     PRIVATE
-        Engine/Runtime/Core/Application.cpp
+        Engine/Runtime/Core/Error.cpp
     PUBLIC
-        Engine/Runtime/Core/Application.h
+        Engine/Runtime/Core/Error.h
 )
 
 target_compile_features(VEngine
