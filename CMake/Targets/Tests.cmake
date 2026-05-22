@@ -74,6 +74,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineFileSystemTests>
     )
 
+    add_executable(VEngineMemoryTests
+        Tests/Unit/MemoryTests.cpp
+    )
+
+    target_link_libraries(VEngineMemoryTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineMemoryTests)
+
+    add_test(
+        NAME VEngineMemoryTests
+        COMMAND $<TARGET_FILE:VEngineMemoryTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 

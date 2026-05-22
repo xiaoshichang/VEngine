@@ -355,27 +355,32 @@ Detailed Logging facade APIs, initialization rules, sinks, formatting, assertion
 
 ### 7.5 Memory
 
-The first-stage memory system should implement the standard version:
+The first-stage memory system should stay small and implement only allocator work needed by current modules:
 
-- `LinearAllocator`.
 - `PoolAllocator`.
-- `FrameAllocator`.
 - Tagged allocation.
 - Basic allocation statistics.
 - Leak detection in debug builds.
 
+Deferred allocator work:
+
+- `LinearAllocator` is not a first-stage Milestone 2 deliverable.
+- `FrameAllocator` is not a first-stage Milestone 2 deliverable.
+- Add deferred allocators later when loading, import, frame-local, or render-command lifetimes are clear enough to justify
+  them.
+
 Allocator usage guidelines:
 
-- Frame-local temporary data uses `FrameAllocator`.
 - Fixed-size object pools use `PoolAllocator`.
-- Sequential transient loading or import tasks use `LinearAllocator`.
 - General engine objects may use default allocation first, then migrate to custom allocators once patterns are stable.
+- Future frame-local temporary data may use `FrameAllocator` after the frame lifetime model is stable.
+- Future sequential transient loading or import tasks may use `LinearAllocator` after those pipelines are stable.
 
 ### 7.6 Threading
 
 `Threading` contains:
 
-- Thread wrapper.
+- Cross-platform thread wrapper.
 - Thread naming.
 - Mutex.
 - Semaphore.
