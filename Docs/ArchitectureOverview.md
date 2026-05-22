@@ -146,12 +146,6 @@ VEnginePlayer
 VEngineEditor
   Windows editor executable.
 
-VEngineTests
-  Windows core unit test executable.
-
-VEngineLoggingTests
-  Windows logging unit test executable.
-
 VEngineIOSPlayer
   iOS player app target.
 
@@ -168,11 +162,12 @@ Windows first-stage outputs:
 VEngine.lib
 VEnginePlayer.exe
 VEngineEditor.exe
-VEngineTests.exe
-VEngineLoggingTests.exe
 VEngineAssetTool.exe
 VEngineShaderTool.exe
 ```
+
+Windows unit and smoke test executables are registered through CTest. Individual test target names are intentionally kept
+out of this high-level target list so new module tests can be added without changing the architecture overview.
 
 iOS first-stage outputs:
 
@@ -307,14 +302,16 @@ The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar frame
 `FileSystem` provides a unified file access layer:
 
 - Path normalization.
-- Virtual mount points.
 - Synchronous file reads and writes.
-- Asynchronous file requests.
-- Read-only packaged resource access.
-- Editor project directory access.
-- Platform-specific user data paths.
+- Basic directory creation, removal, queries, and non-recursive listing.
+- Explicit project root resolution.
+- UTF-8 engine-facing paths with UTF-16 conversion at Windows API boundaries.
 
 Runtime should not directly use raw platform file APIs outside this module.
+
+Detailed first-stage FileSystem behavior is defined in `Docs/FileSystemDesign.md`. Virtual mount points, asynchronous file
+requests, read-only packaged resource access, and platform-specific user data paths are future layers over the same
+path conventions.
 
 ### 7.4 Logging
 

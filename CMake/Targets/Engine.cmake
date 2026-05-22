@@ -13,6 +13,8 @@ function(ve_add_engine)
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
             Engine/Runtime/Core/Version.cpp
+            Engine/Runtime/FileSystem/FileSystem.cpp
+            Engine/Runtime/FileSystem/Path.cpp
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Time/Time.cpp
             Engine/RHI/Common/RhiTypes.cpp
@@ -31,6 +33,8 @@ function(ve_add_engine)
             Engine/Runtime/Core/SourceLocation.h
             Engine/Runtime/Core/Types.h
             Engine/Runtime/Core/Version.h
+            Engine/Runtime/FileSystem/FileSystem.h
+            Engine/Runtime/FileSystem/Path.h
             Engine/Runtime/Logging/Log.h
             Engine/Runtime/Platform/Window.h
             Engine/Runtime/Time/Time.h
