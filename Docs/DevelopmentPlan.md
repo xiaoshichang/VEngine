@@ -82,7 +82,7 @@ iOS app
 
 Goal:
 
-- Confirm the engine logging facade can route logs to console, file, and Editor console.
+- Confirm the engine logging facade can route logs to console, file, and the Editor Console callback path.
 
 Prototype:
 
@@ -91,7 +91,7 @@ VE_LOG_INFO
   -> Boost.Log core
   -> Console sink
   -> File sink
-  -> Editor sink
+  -> Editor callback sink
 ```
 
 ## 3. Development Roadmap
@@ -102,7 +102,7 @@ VE_LOG_INFO
 - Create `CMakePresets.json`.
 - Create `ThirdParty/` dependency wrappers and download scripts.
 - Create `VEngine` static library target.
-- Create `VEnginePlayer`, `VEngineEditor`, and `VEngineTests`.
+- Create `VEnginePlayer`, `VEngineEditor`, and CTest-registered unit test executables.
 - Integrate Boost and CMake/CTest-based tests.
 - Establish initial folder structure only through files that are needed by current targets.
 - Add basic coding style and build documentation.

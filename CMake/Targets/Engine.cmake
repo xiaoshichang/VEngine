@@ -13,6 +13,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
             Engine/Runtime/Core/Version.cpp
+            Engine/Runtime/Logging/Log.cpp
             Engine/RHI/Common/RhiTypes.cpp
             Engine/RHI/Common/RhiUtils.cpp
         PUBLIC
@@ -29,6 +30,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/SourceLocation.h
             Engine/Runtime/Core/Types.h
             Engine/Runtime/Core/Version.h
+            Engine/Runtime/Logging/Log.h
             Engine/RHI/Common/RhiDevice.h
             Engine/RHI/Common/RhiTypes.h
             Engine/RHI/Common/RhiUtils.h

@@ -25,6 +25,10 @@ ve_add_windows_player()
 ve_add_windows_editor()
 ve_add_ios_player()
 
+if(VE_BUILD_TESTS)
+    enable_testing()
+endif()
+
 ve_add_tests()
 ve_add_rhi_demos()
 ve_add_tools()

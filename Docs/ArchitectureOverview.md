@@ -147,7 +147,10 @@ VEngineEditor
   Windows editor executable.
 
 VEngineTests
-  Windows unit test executable.
+  Windows core unit test executable.
+
+VEngineLoggingTests
+  Windows logging unit test executable.
 
 VEngineIOSPlayer
   iOS player app target.
@@ -166,6 +169,7 @@ VEngine.lib
 VEnginePlayer.exe
 VEngineEditor.exe
 VEngineTests.exe
+VEngineLoggingTests.exe
 VEngineAssetTool.exe
 VEngineShaderTool.exe
 ```
@@ -331,10 +335,12 @@ Recommended sinks:
 
 - Console sink.
 - File sink.
-- Editor console sink.
+- Editor console callback sink.
 - Optional debugger output sink on Windows.
 
 The public engine code should not depend directly on `Boost.Log` APIs everywhere. Most code should go through the VEngine logging facade so the backend remains replaceable if needed.
+
+Detailed Logging facade APIs, initialization rules, sinks, formatting, assertion integration, and tests are defined in `Docs/LoggingFacadeDesign.md`.
 
 ### 7.5 Memory
 
@@ -893,7 +899,7 @@ Editor principles:
 - Editor edits scene through public Scene and Reflection APIs.
 - Editor imports assets through AssetDatabase and AssetImporter.
 - Editor Viewport renders through the engine Render and RHI layers.
-- Editor Console receives logs through the VEngine `Boost.Log` facade.
+- Editor Console receives logs through the VEngine logging facade callback path.
 
 First-stage Editor workflow:
 

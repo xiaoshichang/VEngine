@@ -436,9 +436,11 @@ Use assertions for programmer errors and invariants. Use error returns for expec
 All logs should go through the VEngine logging facade.
 
 ```cpp
-VE_LOG_INFO("Loaded scene '{}'", sceneName);
-VE_LOG_ERROR("Failed to load asset '{}'", assetPath);
+VE_LOG_INFO("Loaded scene {}", sceneName);
+VE_LOG_ERROR("Failed to load asset {}", assetPath);
 ```
+
+Log macros use C++20 `std::format` placeholders.
 
 Rules:
 

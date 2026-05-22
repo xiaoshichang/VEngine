@@ -80,11 +80,8 @@ The first-stage Windows presets can produce:
 - `VEngine.lib`
 - `VEnginePlayer.exe`
 - `VEngineEditor.exe`
-- `VEngineTests.exe`
 - `VEngineAssetTool.exe`
 - `VEngineShaderTool.exe`
-- `VEngineRhiD3D11TriangleDemo.exe`
-- `VEngineRhiD3D12TriangleDemo.exe`
 
 Build outputs are generated under `Build/`, for example:
 

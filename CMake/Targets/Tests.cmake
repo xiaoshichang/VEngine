@@ -6,11 +6,9 @@ function(ve_add_tests)
     endif()
 
     if(NOT WIN32)
-        message(STATUS "VEngineTests is only built on Windows in the first stage.")
+        message(STATUS "VEngine unit tests are only built on Windows in the first stage.")
         return()
     endif()
-
-    enable_testing()
 
     add_executable(VEngineTests
         Tests/Unit/CoreTests.cpp
@@ -26,6 +24,22 @@ function(ve_add_tests)
     add_test(
         NAME VEngineTests
         COMMAND $<TARGET_FILE:VEngineTests>
+    )
+
+    add_executable(VEngineLoggingTests
+        Tests/Unit/LoggingTests.cpp
+    )
+
+    target_link_libraries(VEngineLoggingTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineLoggingTests)
+
+    add_test(
+        NAME VEngineLoggingTests
+        COMMAND $<TARGET_FILE:VEngineLoggingTests>
     )
 
     if(VE_BUILD_SHADER_TESTS)
