@@ -6,7 +6,7 @@ The `Threading` module provides VEngine-owned cross-platform wrappers for thread
 small set of lock-free utilities.
 
 The first-stage goal is not to build a full task runtime. The goal is to establish a clear, documented foundation that
-the later Job System, IO Thread, Render Thread, Resource system, and tests can use without exposing platform APIs or
+the later JobSystem, IOSystem, Render Thread, Resource system, and tests can use without exposing platform APIs or
 standard-library threading types throughout engine code.
 
 ## 2. Design Decisions
@@ -62,10 +62,10 @@ The first-stage implementation does not include:
 - MPSC or MPMC lock-free queues.
 - Lock-free stacks or intrusive lock-free lists.
 - Hazard pointers, epochs, or custom lock-free memory reclamation.
-- A Job System implementation.
-- An IO Thread implementation.
+- A JobSystem implementation.
+- An IOSystem implementation.
 
-Job System and IO Thread work should build on this module later.
+JobSystem and IOSystem work should build on this module later.
 
 ## 5. Module Boundaries
 
@@ -594,8 +594,8 @@ Future extensions may include:
 - MPSC queues.
 - MPMC queues.
 - Boost.Lockfree-backed wrappers where appropriate.
-- Job System.
-- IO Thread.
+- JobSystem.
+- IOSystem.
 - Thread profiling integration.
 
 Priority and affinity should be added through `ThreadDesc` and hidden platform helpers. They should not require normal

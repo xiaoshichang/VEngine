@@ -29,6 +29,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     desc.mainWindow.height = 900;
     desc.mainWindow.visible = true;
     desc.runtime.jobSystem.workerThreadNamePrefix = "VEngineEditorJobWorker";
+    desc.runtime.ioSystem.threadName = "VEngineEditorIOThread";
 
     ve::Application application(std::move(desc));
     return application.Run();

@@ -31,9 +31,17 @@ Result<void> EngineRuntime::Initialize(const EngineRuntimeDesc& desc)
         return jobSystemResult;
     }
 
+    Result<void> ioSystemResult = ioSystem_.Initialize(desc.ioSystem);
+    if (!ioSystemResult)
+    {
+        jobSystem_.Shutdown();
+        return ioSystemResult;
+    }
+
     initialized_ = true;
     hasInitialized_ = true;
     VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
+    VE_LOG_INFO("IOSystem initialized.");
     return Result<void>::Success();
 }
 
@@ -44,6 +52,7 @@ void EngineRuntime::Shutdown() noexcept
         return;
     }
 
+    ioSystem_.Shutdown();
     jobSystem_.Shutdown();
     initialized_ = false;
 }
@@ -68,5 +77,17 @@ const JobSystem& EngineRuntime::GetJobSystem() const noexcept
 {
     VE_ASSERT_MESSAGE(initialized_, "EngineRuntime::GetJobSystem requires an initialized runtime.");
     return jobSystem_;
+}
+
+IOSystem& EngineRuntime::GetIOSystem() noexcept
+{
+    VE_ASSERT_MESSAGE(initialized_, "EngineRuntime::GetIOSystem requires an initialized runtime.");
+    return ioSystem_;
+}
+
+const IOSystem& EngineRuntime::GetIOSystem() const noexcept
+{
+    VE_ASSERT_MESSAGE(initialized_, "EngineRuntime::GetIOSystem requires an initialized runtime.");
+    return ioSystem_;
 }
 }

@@ -246,7 +246,7 @@ rules used by `ve::Path`.
 
 Async IO is not part of this milestone.
 
-Future work should route async reads through the planned IO Thread and return request handles or futures owned by the
+Future work should route async reads through IOSystem and return request handles or futures owned by the
 Threading/Resource layer. The synchronous APIs in this document remain useful for tests, tools, startup paths, and small
 metadata files.
 

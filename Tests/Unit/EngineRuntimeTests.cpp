@@ -1,8 +1,12 @@
 #include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/Core/Error.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 
+#include <filesystem>
 #include <iostream>
+#include <system_error>
 
 namespace
 {
@@ -52,11 +56,37 @@ bool ExpectJobHandleResult(const ve::Result<ve::JobHandle>& result, const char* 
     return false;
 }
 
+template <typename T>
+bool ExpectResultOk(const ve::Result<T>& result, const char* message)
+{
+    if (result)
+    {
+        return true;
+    }
+
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
+
+    if (!result.GetError().GetMessage().empty())
+    {
+        std::cerr << ": " << result.GetError().GetMessage();
+    }
+
+    std::cerr << '\n';
+    return false;
+}
+
+void RemoveTestRoot()
+{
+    std::error_code error;
+    std::filesystem::remove_all(std::filesystem::path("Generated") / "EngineRuntimeTests", error);
+}
+
 ve::EngineRuntimeDesc MakeRuntimeDesc()
 {
     ve::EngineRuntimeDesc desc;
     desc.jobSystem.workerThreadCount = 1;
     desc.jobSystem.workerThreadNamePrefix = "EngineRuntimeTestJobWorker";
+    desc.ioSystem.threadName = "EngineRuntimeTestIOThread";
     return desc;
 }
 
@@ -72,6 +102,7 @@ bool TestInitializeAndShutdown()
     passed &= Expect(runtime.IsInitialized(), "Initialized runtime should report initialized");
     passed &= Expect(runtime.HasInitialized(), "Initialized runtime should report completed lifecycle");
     passed &= Expect(runtime.GetJobSystem().IsInitialized(), "Runtime-owned JobSystem should be initialized");
+    passed &= Expect(runtime.GetIOSystem().IsInitialized(), "Runtime-owned IOSystem should be initialized");
 
     runtime.Shutdown();
     passed &= Expect(!runtime.IsInitialized(), "Shutdown runtime should report uninitialized");
@@ -148,16 +179,51 @@ bool TestCanScheduleJobThroughRuntime()
     runtime.Shutdown();
     return passed;
 }
+
+bool TestCanReadThroughRuntimeIOSystem()
+{
+    bool passed = true;
+
+    const ve::Path path = ve::FileSystem::GetCurrentWorkingDirectory() / "Generated/EngineRuntimeTests/IOSystem.bin";
+    passed &= ExpectOk(ve::FileSystem::WriteTextFile(path, "runtime io"), "Runtime IO test file should be written");
+
+    ve::EngineRuntime runtime;
+    passed &= ExpectOk(runtime.Initialize(MakeRuntimeDesc()), "EngineRuntime should initialize for IO access test");
+
+    ve::IOReadRequestDesc desc;
+    desc.path = path;
+    desc.debugName = "RuntimeIOSystemRead";
+
+    ve::Result<ve::IORequestHandle> request = runtime.GetIOSystem().ReadBinaryFile(desc);
+    passed &= ExpectResultOk(request, "Runtime-owned IOSystem should schedule reads");
+
+    if (request)
+    {
+        runtime.GetIOSystem().Wait(request.GetValue());
+    }
+
+    ve::IOReadResult result;
+    passed &= Expect(runtime.GetIOSystem().TryPopCompletedRead(result), "Runtime-owned IOSystem should return completion");
+    passed &= Expect(result.IsOk(), "Runtime-owned IOSystem read should succeed");
+
+    runtime.Shutdown();
+    return passed;
+}
 } // namespace
 
 int main()
 {
+    RemoveTestRoot();
+
     bool passed = true;
 
     passed &= TestInitializeAndShutdown();
     passed &= TestRepeatedInitializeWhileRunningFails();
     passed &= TestRepeatedLifecycleFails();
     passed &= TestCanScheduleJobThroughRuntime();
+    passed &= TestCanReadThroughRuntimeIOSystem();
+
+    RemoveTestRoot();
 
     if (passed)
     {

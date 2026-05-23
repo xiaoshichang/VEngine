@@ -154,6 +154,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineRuntimeTests>
     )
 
+    add_executable(VEngineIOSystemTests
+        Tests/Unit/IOSystemTests.cpp
+    )
+
+    target_link_libraries(VEngineIOSystemTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineIOSystemTests)
+
+    add_test(
+        NAME VEngineIOSystemTests
+        COMMAND $<TARGET_FILE:VEngineIOSystemTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 

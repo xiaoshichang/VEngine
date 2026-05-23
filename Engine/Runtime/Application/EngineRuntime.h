@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 
 namespace ve
@@ -14,13 +15,16 @@ struct EngineRuntimeDesc
 {
     /// Configuration for the worker-thread Job System service.
     JobSystemDesc jobSystem;
+
+    /// Configuration for the dedicated file IO system service.
+    IOSystemDesc ioSystem;
 };
 
 /// Owns the shared runtime service lifecycle for Player, Editor, and tools.
 ///
 /// EngineRuntime sits below Application's platform loop and above individual runtime modules. It initializes and shuts
 /// down long-lived services in a deterministic order, and exposes references to those services without using a global
-/// singleton. The first version owns only JobSystem; IO Thread, Render, Scene, Resource, Input, Script, UI, and Physics
+/// singleton. The first version owns JobSystem and IOSystem; Render, Scene, Resource, Input, Script, UI, and Physics
 /// can connect through this layer as those modules land.
 class EngineRuntime : public NonMovable
 {
@@ -57,8 +61,19 @@ public:
     /// The runtime must be initialized before callers use the returned service.
     [[nodiscard]] const JobSystem& GetJobSystem() const noexcept;
 
+    /// Returns the runtime-owned IO System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] IOSystem& GetIOSystem() noexcept;
+
+    /// Returns the runtime-owned IO System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] const IOSystem& GetIOSystem() const noexcept;
+
 private:
     JobSystem jobSystem_;
+    IOSystem ioSystem_;
     bool initialized_ = false;
     bool hasInitialized_ = false;
 };

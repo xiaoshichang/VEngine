@@ -207,6 +207,8 @@ VEngine/
       Logging/
       Memory/
       Threading/
+      Jobs/
+      IO/
       Math/
       Reflection/
       Scene/
@@ -321,7 +323,7 @@ The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar frame
 this application-level flow instead of duplicating service initialization in each executable entry point.
 
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
-explicit service access without introducing global singletons. The first runtime services are Job System and IO Thread;
+explicit service access without introducing global singletons. The first runtime services are JobSystem and IOSystem;
 Render, Scene, Resource, Input, Script, UI, and Physics should connect through this layer as their modules land.
 
 ### 7.4 FileSystem
@@ -391,7 +393,7 @@ Allocator usage guidelines:
 
 ### 7.7 Threading
 
-`Threading` contains:
+`Threading` contains low-level threading building blocks:
 
 - Cross-platform thread wrapper.
 - Thread naming.
@@ -400,14 +402,15 @@ Allocator usage guidelines:
 - Condition variable.
 - Atomic utilities.
 - Lock-free queues where appropriate.
-- Job System.
-- IO Thread.
 - Thread fences and task counters.
 
 Boost may be used for selected utilities such as lock-free queues, but the engine should keep its own threading facade.
 
 Detailed first-stage thread wrapper, synchronization primitive, and lock-free utility rules are defined in
 `Docs/ThreadingDesign.md`.
+
+`JobSystem` and `IOSystem` are higher-level runtime systems built on the Threading and FileSystem foundations. They are
+owned by `EngineRuntime` rather than by the low-level Threading module.
 
 ### 7.8 Math
 

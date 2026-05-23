@@ -128,7 +128,7 @@ VE_LOG_INFO
 - Implement math primitives.
 - Implement Job System first version.
 - Add `EngineRuntime` as the shared runtime service lifecycle layer for Player and Editor.
-- Implement IO Thread.
+- Implement IOSystem first version.
 - Add unit tests for Memory, Math, and Threading.
 
 ### Milestone 3: RHI Foundation
@@ -175,7 +175,7 @@ VE_LOG_INFO
 - Create `VEngineAssetTool`.
 - Add command line import path.
 - Add Editor-triggered import path.
-- Route asset import and runtime loading work through Resource, IO Thread, and Job System services owned by
+- Route asset import and runtime loading work through Resource, IOSystem, and Job System services owned by
   `EngineRuntime`.
 
 ### Milestone 7: Editor MVP
@@ -234,7 +234,7 @@ CMake skeleton
   -> Core / Boost.Log / FileSystem
   -> Windows Platform
   -> Memory / Math / Threading
-  -> EngineRuntime / Job System / IO Thread
+  -> EngineRuntime / Job System / IOSystem
   -> RHI common design
   -> D3D11 and D3D12 minimum rendering
   -> Shader pipeline
@@ -257,7 +257,7 @@ the lifecycle of long-lived engine services and provides explicit access to them
 Initial services:
 
 - Job System.
-- IO Thread.
+- IOSystem.
 
 Later services should connect through this layer as their modules land:
 
