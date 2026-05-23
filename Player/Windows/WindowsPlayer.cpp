@@ -38,6 +38,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     desc.runtime.jobSystem.workerThreadNamePrefix = "VEnginePlayerJobWorker";
     desc.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
     desc.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
+    desc.runtime.gameThreadSystem.threadName = "VEnginePlayerGameThread";
 
     ve::Application application(std::move(desc));
     const int exitCode = application.Run();

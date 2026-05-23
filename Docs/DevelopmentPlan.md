@@ -162,8 +162,7 @@ Implementation order:
 
 - Add `GameThreadSystem` as the owner of the Game Thread execution context, frame counter, tick phases, and scene
   mutation rule.
-- Route the first Player frame loop through `EngineRuntime::TickGameFrame()` while Main Thread and Game Thread still
-  share one physical thread.
+- Start the first Player Game Thread in continuous mode so it owns its frame loop independently from the Main Thread.
 - Define the first Game Thread tick phases: begin frame, lifecycle dispatch, update, late update, transform update,
   render extraction, and end frame.
 - Connect `GameThreadSystem` lifecycle through `EngineRuntime` after JobSystem, IOSystem, ResourceManager, and

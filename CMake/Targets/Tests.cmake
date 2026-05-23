@@ -186,6 +186,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineRenderSystemTests>
     )
 
+    add_executable(VEngineGameThreadSystemTests
+        Tests/Unit/GameThreadSystemTests.cpp
+    )
+
+    target_link_libraries(VEngineGameThreadSystemTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineGameThreadSystemTests)
+
+    add_test(
+        NAME VEngineGameThreadSystemTests
+        COMMAND $<TARGET_FILE:VEngineGameThreadSystemTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 

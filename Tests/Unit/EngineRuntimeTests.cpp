@@ -82,6 +82,7 @@ ve::EngineRuntimeDesc MakeRuntimeDesc()
     desc.jobSystem.workerThreadNamePrefix = "EngineRuntimeTestJobWorker";
     desc.ioSystem.threadName = "EngineRuntimeTestIOThread";
     desc.renderSystem.threadName = "EngineRuntimeTestRenderThread";
+    desc.gameThreadSystem.threadName = "EngineRuntimeTestGameThread";
     return desc;
 }
 
@@ -99,6 +100,12 @@ bool TestInitializeAndShutdown()
     passed &= Expect(runtime.GetJobSystem().IsInitialized(), "Runtime-owned JobSystem should be initialized");
     passed &= Expect(runtime.GetIOSystem().IsInitialized(), "Runtime-owned IOSystem should be initialized");
     passed &= Expect(runtime.GetRenderSystem().IsInitialized(), "Runtime-owned RenderSystem should be initialized");
+    passed &= Expect(
+        runtime.GetGameThreadSystem().IsInitialized(),
+        "Runtime-owned GameThreadSystem should be initialized");
+    passed &= Expect(
+        runtime.GetGameThreadSystem().GetGameThreadId().IsValid(),
+        "Runtime-owned GameThreadSystem should expose a Game Thread id");
 
     runtime.Shutdown();
     passed &= Expect(!runtime.IsInitialized(), "Shutdown runtime should report uninitialized");

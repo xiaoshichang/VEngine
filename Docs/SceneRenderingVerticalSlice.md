@@ -56,19 +56,22 @@ EngineRuntime
 `GameThreadSystem` owns the Game Thread execution context, frame counter, tick phases, and the rule that live scene
 mutation happens on the Game Thread. It does not own the platform message pump and it does not own RHI state.
 
-`Application` continues to own platform startup, logging setup, the main window, and platform message pumping. In the
-first implementation, the Main Thread and Game Thread may be the same physical thread:
+`Application` continues to own platform startup, logging setup, the main window, and platform message pumping. The first
+Milestone 5 implementation creates a dedicated physical Game Thread owned by `GameThreadSystem`:
 
 ```text
 Application::Run()
   Pump platform messages
   Build input snapshot
-  EngineRuntime::TickGameFrame()
+  Publish input/lifecycle commands
+
+GameThreadSystem dedicated thread
+  Run frame loop
 ```
 
-Even when both conceptual threads share one physical thread, code should still route scene update work through
-`GameThreadSystem`. Later, `GameThreadSystem` may start a dedicated physical thread and receive platform input,
-lifecycle, and Editor commands through thread-safe queues.
+`Application` and Main Thread code should still communicate with scene update work through `GameThreadSystem`. Input,
+lifecycle, and Editor commands should cross this boundary through explicit frame data or thread-safe queues rather than
+directly mutating live scene state.
 
 `RenderSystem` owns the Render Thread, render command consumption, render-side resource state, RHI device/swapchain
 lifecycle, and render-side in-flight frame slots.
@@ -142,31 +145,32 @@ It is not responsible for:
 The first version should keep the frame shape explicit and easy to inspect:
 
 ```text
-GameThreadSystem::TickFrame()
-  BeginFrame
-    Update frame id and time data
-    Consume input snapshot
-    Drain completed IO/resource work
+GameThreadSystem::RunLoop()
+  while running:
+    BeginFrame
+      Update frame id and time data
+      Consume input snapshot
+      Drain completed IO/resource work
 
-  SceneLifecycle
-    Dispatch pending OnCreate / OnDestroy
-    Dispatch pending OnEnable / OnDisable
+    SceneLifecycle
+      Dispatch pending OnCreate / OnDestroy
+      Dispatch pending OnEnable / OnDisable
 
-  Update
-    Call OnUpdate on enabled components
+    Update
+      Call OnUpdate on enabled components
 
-  LateUpdate
-    Call OnLateUpdate on enabled components
+    LateUpdate
+      Call OnLateUpdate on enabled components
 
-  TransformUpdate
-    Resolve dirty TransformComponent hierarchy
+    TransformUpdate
+      Resolve dirty TransformComponent hierarchy
 
-  RenderExtraction
-    Build SceneRenderSnapshot
-    Submit snapshot to RenderSystem
+    RenderExtraction
+      Build SceneRenderSnapshot
+      Submit snapshot to RenderSystem
 
-  EndFrame
-    Retire released transient game-frame data
+    EndFrame
+      Retire released transient game-frame data
 ```
 
 The exact function names may change during implementation, but the phase order should stay documented and covered by
@@ -176,16 +180,16 @@ tests where practical.
 
 The Main Thread owns platform events. The Game Thread owns scene mutation.
 
-When Main Thread and Game Thread are the same physical thread, this is mostly a naming and API boundary. The important
-rule is that platform code should still hand data to the game update through explicit snapshots or commands:
+The first Milestone 5 implementation uses a dedicated physical Game Thread. The important rule is that platform code
+hands data to the game update through explicit snapshots or commands:
 
 ```text
 Platform input events
   -> InputSnapshot
-  -> GameThreadSystem::TickFrame(inputSnapshot)
+  -> GameThreadSystem command/input boundary
 ```
 
-When Main Thread and Game Thread are separated later, the same boundary becomes a real queue:
+The same boundary becomes a real command queue as input, lifecycle, and Editor work are added:
 
 ```text
 Main Thread

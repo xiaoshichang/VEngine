@@ -53,10 +53,17 @@ ErrorCode EngineRuntime::Initialize(const EngineRuntimeDesc& desc)
         TerminateRuntimeInitialization("RenderSystem", renderSystemResult);
     }
 
+    ErrorCode gameThreadSystemResult = gameThreadSystem_.Initialize(desc.gameThreadSystem);
+    if (gameThreadSystemResult != ErrorCode::None)
+    {
+        TerminateRuntimeInitialization("GameThreadSystem", gameThreadSystemResult);
+    }
+
     state_ = EngineRuntimeState::Initialized;
     VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
     VE_LOG_INFO("IOSystem initialized.");
     VE_LOG_INFO("RenderSystem initialized.");
+    VE_LOG_INFO("GameThreadSystem initialized.");
     return ErrorCode::None;
 }
 
@@ -67,6 +74,7 @@ void EngineRuntime::Shutdown() noexcept
         return;
     }
 
+    gameThreadSystem_.Shutdown();
     renderSystem_.Shutdown();
     ioSystem_.Shutdown();
     jobSystem_.Shutdown();
@@ -117,5 +125,17 @@ const RenderSystem& EngineRuntime::GetRenderSystem() const noexcept
 {
     VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetRenderSystem requires an initialized runtime.");
     return renderSystem_;
+}
+
+GameThreadSystem& EngineRuntime::GetGameThreadSystem() noexcept
+{
+    VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetGameThreadSystem requires an initialized runtime.");
+    return gameThreadSystem_;
+}
+
+const GameThreadSystem& EngineRuntime::GetGameThreadSystem() const noexcept
+{
+    VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetGameThreadSystem requires an initialized runtime.");
+    return gameThreadSystem_;
 }
 }

@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Error.h"
+#include "Engine/Runtime/GameThread/GameThreadSystem.h"
 #include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
@@ -29,14 +30,17 @@ struct EngineRuntimeDesc
 
     /// Configuration for the Render Thread and render command queue service.
     RenderSystemDesc renderSystem;
+
+    /// Configuration for the dedicated Game Thread and frame tick service.
+    GameThreadSystemDesc gameThreadSystem;
 };
 
 /// Owns the shared runtime service lifecycle for Player, Editor, and tools.
 ///
 /// EngineRuntime sits below Application's platform loop and above individual runtime modules. It initializes and shuts
 /// down long-lived services in a deterministic order, and exposes references to those services without using a global
-/// singleton. The first version owns JobSystem, IOSystem, and RenderSystem; Scene, Resource, Input, Script, UI, and
-/// Physics can connect through this layer as those modules land.
+/// singleton. The first version owns JobSystem, IOSystem, RenderSystem, and GameThreadSystem; Scene, Resource, Input,
+/// Script, UI, and Physics can connect through this layer as those modules land.
 class EngineRuntime : public NonMovable
 {
 public:
@@ -93,10 +97,21 @@ public:
     /// The runtime must be initialized before callers use the returned service.
     [[nodiscard]] const RenderSystem& GetRenderSystem() const noexcept;
 
+    /// Returns the runtime-owned Game Thread System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] GameThreadSystem& GetGameThreadSystem() noexcept;
+
+    /// Returns the runtime-owned Game Thread System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] const GameThreadSystem& GetGameThreadSystem() const noexcept;
+
 private:
     JobSystem jobSystem_;
     IOSystem ioSystem_;
     RenderSystem renderSystem_;
+    GameThreadSystem gameThreadSystem_;
     EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;
 };
 }

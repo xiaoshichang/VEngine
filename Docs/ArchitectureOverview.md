@@ -624,7 +624,8 @@ GPU Queue
   D3D12 / Metal explicit GPU queues, with D3D11 internally adapted.
 ```
 
-The design should follow Unreal-style separation between Main Thread and Game Thread at the conceptual level. In the first implementation, Main Thread and Game Thread may run on the same physical thread to reduce complexity. The architecture should still avoid assuming they are always the same thread.
+The design follows Unreal-style separation between Main Thread and Game Thread at the conceptual level. Milestone 5
+creates a dedicated physical Game Thread owned by `GameThreadSystem`.
 
 `GameThreadSystem` owns the Game Thread execution context, frame counter, tick phases, and the rule that live scene
 mutation happens only on the Game Thread. `Application` still owns the platform message pump. `RenderSystem` owns the

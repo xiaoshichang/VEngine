@@ -16,6 +16,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Version.cpp
             Engine/Runtime/FileSystem/FileSystem.cpp
             Engine/Runtime/FileSystem/Path.cpp
+            Engine/Runtime/GameThread/GameThreadSystem.cpp
             Engine/Runtime/IO/IOSystem.cpp
             Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
@@ -45,6 +46,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Version.h
             Engine/Runtime/FileSystem/FileSystem.h
             Engine/Runtime/FileSystem/Path.h
+            Engine/Runtime/GameThread/GameThreadSystem.h
             Engine/Runtime/IO/IOSystem.h
             Engine/Runtime/Jobs/JobSystem.h
             Engine/Runtime/Logging/Log.h
