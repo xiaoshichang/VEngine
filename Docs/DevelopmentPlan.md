@@ -125,11 +125,11 @@ VE_LOG_INFO
 
 - Implement `PoolAllocator`.
 - Implement cross-platform thread wrapper, synchronization primitives, and first lock-free utilities.
-- Implement math primitives.
+- Implement core math primitives: `Vector2`, `Vector3`, `Vector4`, `Matrix44`, and `Quaternion`.
 - Implement Job System first version.
 - Add `EngineRuntime` as the shared runtime service lifecycle layer for Player and Editor.
 - Implement IOSystem first version.
-- Add unit tests for Memory, Math, and Threading.
+- Add unit tests for Memory, Math, Threading, Job System, EngineRuntime, and IOSystem.
 
 ### Milestone 3: RHI Foundation
 
@@ -210,7 +210,7 @@ VE_LOG_INFO
 - Implement Label with FreeType.
 - Implement Button.
 - Implement UI event routing.
-- Implement AABB, Sphere, and Raycast.
+- Implement AABB, Sphere, and Raycast for picking and lightweight physics.
 - Implement ColliderComponent.
 - Add simple UI and picking demo.
 

@@ -334,13 +334,13 @@ Rules:
 
 ## 13. Threading And Global State
 
-The first implementation may use standard-library synchronization primitives because the Threading module does not exist
-yet.
+The logging facade may use standard-library synchronization primitives internally to avoid introducing a low-level
+dependency cycle between Logging and the Threading facade.
 
 Guidelines:
 
 - Protect global logging state with `std::mutex`.
-- Avoid depending on the future Threading module.
+- Avoid depending on higher-level runtime systems or Threading APIs from the logging facade.
 - Keep callback state simple.
 - Avoid static destruction surprises by making `ShutdownLogging()` responsible for removing sinks and clearing callback
   state where practical.

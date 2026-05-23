@@ -244,11 +244,12 @@ rules used by `ve::Path`.
 
 ## 12. Future Async IO
 
-Async IO is not part of this milestone.
+FileSystem remains the synchronous file access foundation.
 
-Future work should route async reads through IOSystem and return request handles or futures owned by the
-Threading/Resource layer. The synchronous APIs in this document remain useful for tests, tools, startup paths, and small
-metadata files.
+Async reads should route through IOSystem, which returns `IORequestHandle` values and exposes completed results through
+its completion queue. Future ResourceSystem code should decide where those results are consumed and how they are handed
+back to Game Thread or asset-loading state. The synchronous APIs in this document remain useful for tests, tools,
+startup paths, and small metadata files.
 
 ## 13. Testing
 

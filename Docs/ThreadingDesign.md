@@ -441,11 +441,15 @@ This queue is intended for simple cross-thread pipes where ownership is clear:
 
 ```text
 Game Thread -> Render Thread command pipe
-IO Thread -> Game Thread completion pipe
+IOSystem-owned IO Thread -> ResourceSystem or Game Thread completion pipe
 Producer test thread -> Consumer test thread
 ```
 
 It is not an MPSC or MPMC queue. Using multiple producer threads or multiple consumer threads is invalid.
+
+The current IOSystem first version exposes a global completion queue that is polled by whichever thread owns result
+handling. A dedicated Game Thread completion pipe is a future ResourceSystem or scheduling-layer policy, not a guarantee
+made by low-level Threading or IOSystem.
 
 ### 10.2 Required Behavior
 

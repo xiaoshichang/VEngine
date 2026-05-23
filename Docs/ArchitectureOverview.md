@@ -373,14 +373,15 @@ Detailed Logging facade APIs, initialization rules, sinks, formatting, assertion
 The first-stage memory system should stay small and implement only allocator work needed by current modules:
 
 - `PoolAllocator`.
-- Tagged allocation.
-- Basic allocation statistics.
-- Leak detection in debug builds.
+- Per-pool allocation statistics exposed by `PoolAllocator`.
 
 Deferred allocator work:
 
 - `LinearAllocator` is not a first-stage Milestone 2 deliverable.
 - `FrameAllocator` is not a first-stage Milestone 2 deliverable.
+- Tagged allocation is not a first-stage Milestone 2 deliverable.
+- Engine-wide allocation statistics are not a first-stage Milestone 2 deliverable.
+- Leak detection in debug builds is not a first-stage Milestone 2 deliverable.
 - Add deferred allocators later when loading, import, frame-local, or render-command lifetimes are clear enough to justify
   them.
 
@@ -402,7 +403,6 @@ Allocator usage guidelines:
 - Condition variable.
 - Atomic utilities.
 - Lock-free queues where appropriate.
-- Thread fences and task counters.
 
 Boost may be used for selected utilities such as lock-free queues, but the engine should keep its own threading facade.
 
@@ -411,6 +411,9 @@ Detailed first-stage thread wrapper, synchronization primitive, and lock-free ut
 
 `JobSystem` and `IOSystem` are higher-level runtime systems built on the Threading and FileSystem foundations. They are
 owned by `EngineRuntime` rather than by the low-level Threading module.
+
+Thread fences, task counters, and other cross-system coordination primitives should be added later when Render,
+Resource, and Scene lifetimes expose stable requirements.
 
 ### 7.8 Math
 
@@ -421,6 +424,9 @@ owned by `EngineRuntime` rather than by the low-level Threading module.
 - `Vector4`.
 - `Matrix44`.
 - `Quaternion`.
+
+Geometry math types should be added with the systems that first need them:
+
 - `AABB`.
 - `Sphere`.
 - `Ray`.
