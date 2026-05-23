@@ -137,7 +137,6 @@ VE_LOG_INFO
 - Implement D3D11RHI minimum path.
 - Implement D3D12RHI minimum path.
 - Add swapchain, buffer, texture, shader, pipeline, command list, and fence concepts.
-- Add D3D11 and D3D12 triangle smoke tests.
 - Build initial RenderSystem with Render Thread and lock-free Render Command Queue.
 - Connect RenderSystem lifecycle through `EngineRuntime`.
 - Connect RHI device and swapchain lifecycle through RenderSystem after the service boundary is stable.

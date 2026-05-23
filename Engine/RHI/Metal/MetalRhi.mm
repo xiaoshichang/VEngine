@@ -27,6 +27,24 @@ MTLPixelFormat ToMetalPixelFormat(RhiFormat format)
     }
 }
 
+MTLTextureUsage ToMetalTextureUsage(RhiTextureUsage usage)
+{
+    MTLTextureUsage metalUsage = MTLTextureUsageUnknown;
+    const auto usageValue = static_cast<uint32_t>(usage);
+
+    if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Sampled)) != 0)
+    {
+        metalUsage |= MTLTextureUsageShaderRead;
+    }
+
+    if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
+    {
+        metalUsage |= MTLTextureUsageRenderTarget;
+    }
+
+    return metalUsage;
+}
+
 MTLVertexFormat ToMetalVertexFormat(RhiFormat format)
 {
     switch (format)
@@ -83,6 +101,80 @@ public:
 private:
     id<MTLBuffer> buffer_ = nil;
     uint64_t size_ = 0;
+};
+
+class MetalTexture final : public RhiTexture
+{
+public:
+    MetalTexture(id<MTLTexture> texture, RhiTextureDesc desc)
+        : texture_(texture)
+        , desc_(desc)
+    {
+    }
+
+    [[nodiscard]] RhiTextureDimension GetDimension() const noexcept override
+    {
+        return desc_.dimension;
+    }
+
+    [[nodiscard]] uint32_t GetWidth() const noexcept override
+    {
+        return desc_.width;
+    }
+
+    [[nodiscard]] uint32_t GetHeight() const noexcept override
+    {
+        return desc_.height;
+    }
+
+    [[nodiscard]] RhiFormat GetFormat() const noexcept override
+    {
+        return desc_.format;
+    }
+
+    [[nodiscard]] id<MTLTexture> GetNativeTexture() const noexcept
+    {
+        return texture_;
+    }
+
+private:
+    id<MTLTexture> texture_ = nil;
+    RhiTextureDesc desc_ = {};
+};
+
+class MetalFence final : public RhiFence
+{
+public:
+    explicit MetalFence(uint64_t initialValue)
+        : completedValue_(initialValue)
+    {
+    }
+
+    void Signal(uint64_t value) noexcept
+    {
+        if (value > completedValue_)
+        {
+            completedValue_ = value;
+        }
+    }
+
+    [[nodiscard]] bool IsComplete(uint64_t value) const noexcept override
+    {
+        return completedValue_ >= value;
+    }
+
+    [[nodiscard]] bool Wait(uint64_t value) override
+    {
+        return IsComplete(value);
+    }
+
+    [[nodiscard]] uint64_t GetCompletedValue() const noexcept override
+    {
+        return completedValue_;
+    }
+
+private:
+    uint64_t completedValue_ = 0;
 };
 
 class MetalShaderModule final : public RhiShaderModule
@@ -394,6 +486,42 @@ public:
         return std::make_unique<MetalBuffer>(buffer, desc.size);
     }
 
+    [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
+    {
+        if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
+        {
+            SetLastError("Metal texture requires a non-empty 2D descriptor.");
+            return nullptr;
+        }
+
+        MTLTextureDescriptor* textureDescriptor = [[MTLTextureDescriptor alloc] init];
+        textureDescriptor.textureType = MTLTextureType2D;
+        textureDescriptor.pixelFormat = ToMetalPixelFormat(desc.format);
+        textureDescriptor.width = desc.width;
+        textureDescriptor.height = desc.height;
+        textureDescriptor.depth = desc.depth;
+        textureDescriptor.mipmapLevelCount = desc.mipLevelCount;
+        textureDescriptor.usage = ToMetalTextureUsage(desc.usage);
+        textureDescriptor.storageMode = MTLStorageModePrivate;
+
+        id<MTLTexture> texture = [device_ newTextureWithDescriptor:textureDescriptor];
+        [textureDescriptor release];
+
+        if (texture == nil)
+        {
+            SetLastError("MTLDevice newTextureWithDescriptor failed.");
+            return nullptr;
+        }
+
+        if (desc.initialData != nullptr && desc.initialDataSize > 0)
+        {
+            SetLastError("Metal texture initial data upload is not implemented in the minimum RHI path.");
+            return nullptr;
+        }
+
+        return std::make_unique<MetalTexture>(texture, desc);
+    }
+
     [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
     {
         if (desc.source == nullptr || desc.entryPoint == nullptr)
@@ -475,6 +603,24 @@ public:
     [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override
     {
         return std::make_unique<MetalCommandList>(commandQueue_);
+    }
+
+    [[nodiscard]] std::unique_ptr<RhiFence> CreateFence(uint64_t initialValue = 0) override
+    {
+        return std::make_unique<MetalFence>(initialValue);
+    }
+
+    [[nodiscard]] bool SignalFence(RhiFence& fence, uint64_t value) override
+    {
+        auto* metalFence = dynamic_cast<MetalFence*>(&fence);
+        if (metalFence == nullptr)
+        {
+            SetLastError("Metal device can only signal Metal fences.");
+            return false;
+        }
+
+        metalFence->Signal(value);
+        return true;
     }
 
     [[nodiscard]] bool Submit(RhiCommandList& commandList) override

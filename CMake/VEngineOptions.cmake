@@ -6,7 +6,6 @@ option(VE_BUILD_TESTS "Build Windows tests" ON)
 option(VE_BUILD_TOOLS "Build command line tools" ON)
 option(VE_BUILD_SHADER_TESTS "Build shader pipeline smoke tests" ON)
 option(VE_BUILD_IOS_PLAYER "Build iOS player app" OFF)
-option(VE_BUILD_RHI_DEMOS "Build RHI triangle demo programs" ON)
 
 option(VE_ENABLE_D3D11 "Enable D3D11 RHI" ON)
 option(VE_ENABLE_D3D12 "Enable D3D12 RHI" ON)

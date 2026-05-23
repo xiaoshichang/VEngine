@@ -34,6 +34,12 @@ enum class RhiFormat
     Rgb32Float,
 };
 
+/// Describes the dimensionality of an RHI texture resource.
+enum class RhiTextureDimension
+{
+    Texture2D,
+};
+
 /// Describes how a render target should be loaded at render-pass begin.
 enum class RhiLoadAction
 {
@@ -52,6 +58,13 @@ enum class RhiStoreAction
 enum class RhiBufferUsage : uint32_t
 {
     Vertex = 1 << 0,
+};
+
+/// Describes intended usage for a texture.
+enum class RhiTextureUsage : uint32_t
+{
+    Sampled = 1 << 0,
+    RenderTarget = 1 << 1,
 };
 
 /// Stores a two-dimensional unsigned extent.
@@ -116,6 +129,22 @@ struct RhiBufferDesc
     uint64_t size = 0;
     RhiBufferUsage usage = RhiBufferUsage::Vertex;
     const void* initialData = nullptr;
+    const char* debugName = nullptr;
+};
+
+/// Describes a texture resource.
+struct RhiTextureDesc
+{
+    RhiTextureDimension dimension = RhiTextureDimension::Texture2D;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t depth = 1;
+    uint32_t mipLevelCount = 1;
+    RhiFormat format = RhiFormat::Rgba8Unorm;
+    RhiTextureUsage usage = RhiTextureUsage::Sampled;
+    const void* initialData = nullptr;
+    uint64_t initialDataSize = 0;
+    uint32_t initialDataRowPitch = 0;
     const char* debugName = nullptr;
 };
 

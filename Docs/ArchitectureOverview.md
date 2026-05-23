@@ -1029,8 +1029,6 @@ Planned integration test areas:
 ```text
 Asset import smoke test
 Shader compile smoke test
-D3D11 RHI smoke test
-D3D12 RHI smoke test
 C# script host smoke test
 ```
 
@@ -1042,14 +1040,12 @@ Windows Editor demo
 iOS Simulator demo
 ```
 
-RHI smoke tests should start simple:
+RHI validation should stay focused on RenderSystem-owned runtime paths:
 
-- Create device.
-- Create swapchain.
-- Create buffer.
-- Create texture.
-- Compile shader.
-- Draw triangle.
+- Create device through RenderSystem.
+- Create the main swapchain through RenderSystem.
+- Exercise the minimal RenderFrame path.
+- Keep standalone D3D11/D3D12 triangle demo programs out of the normal milestone flow.
 
 ## 19. CMake Build Plan
 

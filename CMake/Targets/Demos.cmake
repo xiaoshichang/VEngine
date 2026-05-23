@@ -1,44 +1,6 @@
 include_guard(GLOBAL)
 
 function(ve_add_rhi_demos)
-    if(NOT VE_BUILD_RHI_DEMOS)
-        return()
-    endif()
-
-    if(WIN32)
-        if(VE_ENABLE_D3D11)
-            add_executable(VEngineRhiD3D11TriangleDemo
-                Tests/Demos/RHI/Windows/D3D11TriangleDemo.cpp
-                Tests/Demos/RHI/Windows/WindowsTriangleDemo.cpp
-                Tests/Demos/RHI/Windows/WindowsTriangleDemo.h
-            )
-
-            target_link_libraries(VEngineRhiD3D11TriangleDemo
-                PRIVATE
-                    VEngine
-                    user32
-            )
-
-            ve_configure_target(VEngineRhiD3D11TriangleDemo)
-        endif()
-
-        if(VE_ENABLE_D3D12)
-            add_executable(VEngineRhiD3D12TriangleDemo
-                Tests/Demos/RHI/Windows/D3D12TriangleDemo.cpp
-                Tests/Demos/RHI/Windows/WindowsTriangleDemo.cpp
-                Tests/Demos/RHI/Windows/WindowsTriangleDemo.h
-            )
-
-            target_link_libraries(VEngineRhiD3D12TriangleDemo
-                PRIVATE
-                    VEngine
-                    user32
-            )
-
-            ve_configure_target(VEngineRhiD3D12TriangleDemo)
-        endif()
-    endif()
-
     if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND VE_ENABLE_METAL)
         enable_language(OBJCXX)
 

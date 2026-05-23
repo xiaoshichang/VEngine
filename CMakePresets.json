@@ -26,7 +26,6 @@
                 "VE_BUILD_TESTS": "ON",
                 "VE_BUILD_TOOLS": "ON",
                 "VE_BUILD_IOS_PLAYER": "OFF",
-                "VE_BUILD_RHI_DEMOS": "ON",
                 "VE_ENABLE_D3D11": "ON",
                 "VE_ENABLE_D3D12": "ON",
                 "VE_ENABLE_METAL": "OFF",
@@ -48,8 +47,7 @@
                 "VE_BUILD_PLAYER": "ON",
                 "VE_BUILD_EDITOR": "ON",
                 "VE_BUILD_TESTS": "OFF",
-                "VE_BUILD_TOOLS": "ON",
-                "VE_BUILD_RHI_DEMOS": "ON"
+                "VE_BUILD_TOOLS": "ON"
             }
         },
         {
@@ -61,8 +59,7 @@
                 "VE_BUILD_PLAYER": "OFF",
                 "VE_BUILD_EDITOR": "OFF",
                 "VE_BUILD_TESTS": "ON",
-                "VE_BUILD_TOOLS": "OFF",
-                "VE_BUILD_RHI_DEMOS": "ON"
+                "VE_BUILD_TOOLS": "OFF"
             }
         },
         {
@@ -79,7 +76,6 @@
                 "VE_BUILD_TESTS": "OFF",
                 "VE_BUILD_TOOLS": "OFF",
                 "VE_BUILD_IOS_PLAYER": "ON",
-                "VE_BUILD_RHI_DEMOS": "ON",
                 "VE_ENABLE_D3D11": "OFF",
                 "VE_ENABLE_D3D12": "OFF",
                 "VE_ENABLE_METAL": "ON",

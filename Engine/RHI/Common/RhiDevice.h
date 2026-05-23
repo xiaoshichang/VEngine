@@ -27,6 +27,37 @@ public:
     [[nodiscard]] virtual uint64_t GetSize() const noexcept = 0;
 };
 
+/// Owns a backend texture resource.
+class RhiTexture : public RhiObject
+{
+public:
+    /// Returns the texture dimensionality.
+    [[nodiscard]] virtual RhiTextureDimension GetDimension() const noexcept = 0;
+
+    /// Returns the texture width in pixels.
+    [[nodiscard]] virtual uint32_t GetWidth() const noexcept = 0;
+
+    /// Returns the texture height in pixels.
+    [[nodiscard]] virtual uint32_t GetHeight() const noexcept = 0;
+
+    /// Returns the texture format.
+    [[nodiscard]] virtual RhiFormat GetFormat() const noexcept = 0;
+};
+
+/// Represents a graphics queue synchronization point.
+class RhiFence : public RhiObject
+{
+public:
+    /// Returns true when the fence has reached or passed the requested value.
+    [[nodiscard]] virtual bool IsComplete(uint64_t value) const noexcept = 0;
+
+    /// Blocks until the fence reaches or passes the requested value.
+    [[nodiscard]] virtual bool Wait(uint64_t value) = 0;
+
+    /// Returns the latest value known to be completed by the backend.
+    [[nodiscard]] virtual uint64_t GetCompletedValue() const noexcept = 0;
+};
+
 /// Owns a compiled backend shader object.
 class RhiShaderModule : public RhiObject
 {
@@ -105,6 +136,9 @@ public:
     /// Creates a GPU buffer and optionally uploads initial data.
     [[nodiscard]] virtual std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) = 0;
 
+    /// Creates a texture resource and optionally uploads initial data.
+    [[nodiscard]] virtual std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) = 0;
+
     /// Compiles or loads a shader module for this backend.
     [[nodiscard]] virtual std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) = 0;
 
@@ -114,6 +148,12 @@ public:
 
     /// Creates a command list object compatible with this device.
     [[nodiscard]] virtual std::unique_ptr<RhiCommandList> CreateCommandList() = 0;
+
+    /// Creates a fence object compatible with this device's graphics queue.
+    [[nodiscard]] virtual std::unique_ptr<RhiFence> CreateFence(uint64_t initialValue = 0) = 0;
+
+    /// Signals a fence from this device's graphics queue.
+    [[nodiscard]] virtual bool SignalFence(RhiFence& fence, uint64_t value) = 0;
 
     /// Submits a recorded command list to the graphics queue.
     [[nodiscard]] virtual bool Submit(RhiCommandList& commandList) = 0;

@@ -64,6 +64,19 @@ D3D_PRIMITIVE_TOPOLOGY ToD3DTopology(RhiPrimitiveTopology topology)
     }
 }
 
+D3D12_RESOURCE_FLAGS ToD3D12TextureFlags(RhiTextureUsage usage)
+{
+    D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
+    const auto usageValue = static_cast<uint32_t>(usage);
+
+    if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
+    {
+        flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    }
+
+    return flags;
+}
+
 std::string MakeHResultError(const char* operation, HRESULT result)
 {
     char buffer[128] = {};
@@ -93,6 +106,91 @@ public:
 private:
     ComPtr<ID3D12Resource> resource_;
     uint64_t size_ = 0;
+};
+
+class D3D12Texture final : public RhiTexture
+{
+public:
+    D3D12Texture(ComPtr<ID3D12Resource> resource, RhiTextureDesc desc)
+        : resource_(std::move(resource))
+        , desc_(desc)
+    {
+    }
+
+    [[nodiscard]] RhiTextureDimension GetDimension() const noexcept override
+    {
+        return desc_.dimension;
+    }
+
+    [[nodiscard]] uint32_t GetWidth() const noexcept override
+    {
+        return desc_.width;
+    }
+
+    [[nodiscard]] uint32_t GetHeight() const noexcept override
+    {
+        return desc_.height;
+    }
+
+    [[nodiscard]] RhiFormat GetFormat() const noexcept override
+    {
+        return desc_.format;
+    }
+
+    [[nodiscard]] ID3D12Resource* GetNativeResource() const noexcept
+    {
+        return resource_.Get();
+    }
+
+private:
+    ComPtr<ID3D12Resource> resource_;
+    RhiTextureDesc desc_ = {};
+};
+
+class D3D12FenceObject final : public RhiFence
+{
+public:
+    D3D12FenceObject(ComPtr<ID3D12Fence> fence, HANDLE fenceEvent)
+        : fence_(std::move(fence))
+        , fenceEvent_(fenceEvent)
+    {
+    }
+
+    [[nodiscard]] ID3D12Fence* GetNativeFence() const noexcept
+    {
+        return fence_.Get();
+    }
+
+    [[nodiscard]] bool IsComplete(uint64_t value) const noexcept override
+    {
+        return GetCompletedValue() >= value;
+    }
+
+    [[nodiscard]] bool Wait(uint64_t value) override
+    {
+        if (IsComplete(value))
+        {
+            return true;
+        }
+
+        HRESULT result = fence_->SetEventOnCompletion(value, fenceEvent_);
+        if (FAILED(result))
+        {
+            return false;
+        }
+
+        WaitForSingleObject(fenceEvent_, INFINITE);
+        return true;
+    }
+
+    [[nodiscard]] uint64_t GetCompletedValue() const noexcept override
+    {
+        return fence_->GetCompletedValue();
+    }
+
+private:
+    ComPtr<ID3D12Fence> fence_;
+    HANDLE fenceEvent_ = nullptr;
 };
 
 class D3D12ShaderModule final : public RhiShaderModule
@@ -613,6 +711,54 @@ public:
         return std::make_unique<D3D12Buffer>(resource, desc.size);
     }
 
+    [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
+    {
+        if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
+        {
+            SetLastError("D3D12 texture requires a non-empty 2D descriptor.");
+            return nullptr;
+        }
+
+        D3D12_HEAP_PROPERTIES heapProperties = {};
+        heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        heapProperties.CreationNodeMask = 1;
+        heapProperties.VisibleNodeMask = 1;
+
+        D3D12_RESOURCE_DESC resourceDesc = {};
+        resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        resourceDesc.Width = desc.width;
+        resourceDesc.Height = desc.height;
+        resourceDesc.DepthOrArraySize = 1;
+        resourceDesc.MipLevels = static_cast<UINT16>(desc.mipLevelCount);
+        resourceDesc.Format = ToDxgiFormat(desc.format);
+        resourceDesc.SampleDesc.Count = 1;
+        resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        resourceDesc.Flags = ToD3D12TextureFlags(desc.usage);
+
+        ComPtr<ID3D12Resource> resource;
+        HRESULT result = device_->CreateCommittedResource(
+            &heapProperties,
+            D3D12_HEAP_FLAG_NONE,
+            &resourceDesc,
+            D3D12_RESOURCE_STATE_COMMON,
+            nullptr,
+            IID_PPV_ARGS(&resource));
+
+        if (FAILED(result))
+        {
+            SetLastError(MakeHResultError("ID3D12Device::CreateCommittedResource texture", result));
+            return nullptr;
+        }
+
+        if (desc.initialData != nullptr && desc.initialDataSize > 0)
+        {
+            SetLastError("D3D12 texture initial data upload is not implemented in the minimum RHI path.");
+            return nullptr;
+        }
+
+        return std::make_unique<D3D12Texture>(resource, desc);
+    }
+
     [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
     {
         if (desc.source == nullptr || desc.entryPoint == nullptr)
@@ -800,6 +946,39 @@ public:
 
         commandList->Close();
         return std::make_unique<D3D12CommandList>(device_, commandAllocator, commandList);
+    }
+
+    [[nodiscard]] std::unique_ptr<RhiFence> CreateFence(uint64_t initialValue = 0) override
+    {
+        ComPtr<ID3D12Fence> fence;
+        HRESULT result = device_->CreateFence(initialValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+
+        if (FAILED(result))
+        {
+            SetLastError(MakeHResultError("ID3D12Device::CreateFence", result));
+            return nullptr;
+        }
+
+        return std::make_unique<D3D12FenceObject>(fence, fenceEvent_);
+    }
+
+    [[nodiscard]] bool SignalFence(RhiFence& fence, uint64_t value) override
+    {
+        auto* d3dFence = dynamic_cast<D3D12FenceObject*>(&fence);
+        if (d3dFence == nullptr)
+        {
+            SetLastError("D3D12 device can only signal D3D12 fences.");
+            return false;
+        }
+
+        HRESULT result = queue_->Signal(d3dFence->GetNativeFence(), value);
+        if (FAILED(result))
+        {
+            SetLastError(MakeHResultError("ID3D12CommandQueue::Signal external fence", result));
+            return false;
+        }
+
+        return true;
     }
 
     [[nodiscard]] bool Submit(RhiCommandList& commandList) override

@@ -52,6 +52,24 @@ D3D11_PRIMITIVE_TOPOLOGY ToD3D11Topology(RhiPrimitiveTopology topology)
     }
 }
 
+UINT ToD3D11TextureBindFlags(RhiTextureUsage usage)
+{
+    UINT flags = 0;
+    const auto usageValue = static_cast<uint32_t>(usage);
+
+    if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Sampled)) != 0)
+    {
+        flags |= D3D11_BIND_SHADER_RESOURCE;
+    }
+
+    if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
+    {
+        flags |= D3D11_BIND_RENDER_TARGET;
+    }
+
+    return flags;
+}
+
 std::string MakeHResultError(const char* operation, HRESULT result)
 {
     char buffer[128] = {};
@@ -81,6 +99,121 @@ public:
 private:
     ComPtr<ID3D11Buffer> buffer_;
     uint64_t size_ = 0;
+};
+
+class D3D11Texture final : public RhiTexture
+{
+public:
+    D3D11Texture(ComPtr<ID3D11Texture2D> texture, RhiTextureDesc desc)
+        : texture_(std::move(texture))
+        , desc_(desc)
+    {
+    }
+
+    [[nodiscard]] RhiTextureDimension GetDimension() const noexcept override
+    {
+        return desc_.dimension;
+    }
+
+    [[nodiscard]] uint32_t GetWidth() const noexcept override
+    {
+        return desc_.width;
+    }
+
+    [[nodiscard]] uint32_t GetHeight() const noexcept override
+    {
+        return desc_.height;
+    }
+
+    [[nodiscard]] RhiFormat GetFormat() const noexcept override
+    {
+        return desc_.format;
+    }
+
+    [[nodiscard]] ID3D11Texture2D* GetNativeTexture() const noexcept
+    {
+        return texture_.Get();
+    }
+
+private:
+    ComPtr<ID3D11Texture2D> texture_;
+    RhiTextureDesc desc_ = {};
+};
+
+class D3D11Fence final : public RhiFence
+{
+public:
+    D3D11Fence(ComPtr<ID3D11Device> device, ComPtr<ID3D11DeviceContext> context, uint64_t initialValue)
+        : device_(std::move(device))
+        , context_(std::move(context))
+        , signaledValue_(initialValue)
+        , completedValue_(initialValue)
+    {
+    }
+
+    [[nodiscard]] bool Signal(uint64_t value)
+    {
+        D3D11_QUERY_DESC queryDesc = {};
+        queryDesc.Query = D3D11_QUERY_EVENT;
+
+        ComPtr<ID3D11Query> query;
+        HRESULT result = device_->CreateQuery(&queryDesc, &query);
+
+        if (FAILED(result))
+        {
+            return false;
+        }
+
+        context_->End(query.Get());
+        query_ = std::move(query);
+        signaledValue_ = value;
+        return true;
+    }
+
+    [[nodiscard]] bool IsComplete(uint64_t value) const noexcept override
+    {
+        if (value <= completedValue_)
+        {
+            return true;
+        }
+
+        if (value > signaledValue_ || query_ == nullptr || context_ == nullptr)
+        {
+            return false;
+        }
+
+        const HRESULT result = context_->GetData(query_.Get(), nullptr, 0, 0);
+        if (result == S_OK)
+        {
+            completedValue_ = signaledValue_;
+            return value <= completedValue_;
+        }
+
+        return false;
+    }
+
+    [[nodiscard]] bool Wait(uint64_t value) override
+    {
+        while (!IsComplete(value))
+        {
+            Sleep(0);
+        }
+
+        return true;
+    }
+
+    [[nodiscard]] uint64_t GetCompletedValue() const noexcept override
+    {
+        static_cast<void>(IsComplete(signaledValue_));
+        return completedValue_;
+    }
+
+private:
+    ComPtr<ID3D11Device> device_;
+    ComPtr<ID3D11DeviceContext> context_;
+    ComPtr<ID3D11Query> query_;
+    uint64_t signaledValue_ = 0;
+    mutable uint64_t completedValue_ = 0;
 };
 
 class D3D11ShaderModule final : public RhiShaderModule
@@ -481,6 +614,43 @@ public:
         return std::make_unique<D3D11Buffer>(buffer, desc.size);
     }
 
+    [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
+    {
+        if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
+        {
+            SetLastError("D3D11 texture requires a non-empty 2D descriptor.");
+            return nullptr;
+        }
+
+        D3D11_TEXTURE2D_DESC textureDesc = {};
+        textureDesc.Width = desc.width;
+        textureDesc.Height = desc.height;
+        textureDesc.MipLevels = desc.mipLevelCount;
+        textureDesc.ArraySize = 1;
+        textureDesc.Format = ToDxgiFormat(desc.format);
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.Usage = D3D11_USAGE_DEFAULT;
+        textureDesc.BindFlags = ToD3D11TextureBindFlags(desc.usage);
+
+        D3D11_SUBRESOURCE_DATA initialData = {};
+        initialData.pSysMem = desc.initialData;
+        initialData.SysMemPitch = desc.initialDataRowPitch;
+
+        ComPtr<ID3D11Texture2D> texture;
+        HRESULT result = device_->CreateTexture2D(
+            &textureDesc,
+            desc.initialData != nullptr ? &initialData : nullptr,
+            &texture);
+
+        if (FAILED(result))
+        {
+            SetLastError(MakeHResultError("ID3D11Device::CreateTexture2D", result));
+            return nullptr;
+        }
+
+        return std::make_unique<D3D11Texture>(texture, desc);
+    }
+
     [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
     {
         if (desc.source == nullptr || desc.entryPoint == nullptr)
@@ -603,6 +773,42 @@ public:
     [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override
     {
         return std::make_unique<D3D11CommandList>(context_);
+    }
+
+    [[nodiscard]] std::unique_ptr<RhiFence> CreateFence(uint64_t initialValue = 0) override
+    {
+        D3D11_QUERY_DESC queryDesc = {};
+        queryDesc.Query = D3D11_QUERY_EVENT;
+
+        ComPtr<ID3D11Query> query;
+        HRESULT result = device_->CreateQuery(&queryDesc, &query);
+
+        if (FAILED(result))
+        {
+            SetLastError(MakeHResultError("ID3D11Device::CreateQuery fence", result));
+            return nullptr;
+        }
+
+        context_->End(query.Get());
+        return std::make_unique<D3D11Fence>(device_, context_, initialValue);
+    }
+
+    [[nodiscard]] bool SignalFence(RhiFence& fence, uint64_t value) override
+    {
+        auto* d3dFence = dynamic_cast<D3D11Fence*>(&fence);
+        if (d3dFence == nullptr)
+        {
+            SetLastError("D3D11 device can only signal D3D11 fences.");
+            return false;
+        }
+
+        if (!d3dFence->Signal(value))
+        {
+            SetLastError("D3D11 fence signal failed.");
+            return false;
+        }
+
+        return true;
     }
 
     [[nodiscard]] bool Submit(RhiCommandList& commandList) override
