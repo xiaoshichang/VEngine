@@ -73,6 +73,26 @@ int Application::Run()
         VE_LOG_DEBUG("Assertion log handler was not installed: {}", assertionLogResult.GetError().GetMessage());
     }
 
+    Result<void> runtimeResult = runtime_.Initialize(desc_.runtime);
+
+    if (!runtimeResult)
+    {
+        VE_LOG_ERROR("Failed to initialize engine runtime: {}", runtimeResult.GetError().GetMessage());
+        exitCode_ = 1;
+
+        if (assertionLogInstalled && !ownsLogging)
+        {
+            UninstallAssertionLogHandler();
+        }
+
+        if (ownsLogging)
+        {
+            ShutdownLogging();
+        }
+
+        return exitCode_;
+    }
+
 #if VE_PLATFORM_WINDOWS
     VE_LOG_INFO("{} starting", desc_.name);
 
@@ -87,6 +107,8 @@ int Application::Run()
     {
         VE_LOG_ERROR("Failed to create main window: {}", windowResult.GetError().GetMessage());
         exitCode_ = 1;
+
+        runtime_.Shutdown();
 
         if (assertionLogInstalled && !ownsLogging)
         {
@@ -132,6 +154,8 @@ int Application::Run()
     exitCode_ = 1;
 #endif
 
+    runtime_.Shutdown();
+
     if (assertionLogInstalled && !ownsLogging)
     {
         UninstallAssertionLogHandler();
@@ -153,5 +177,15 @@ const std::string& Application::GetName() const noexcept
 int Application::GetExitCode() const noexcept
 {
     return exitCode_;
+}
+
+EngineRuntime& Application::GetRuntime() noexcept
+{
+    return runtime_;
+}
+
+const EngineRuntime& Application::GetRuntime() const noexcept
+{
+    return runtime_;
 }
 }

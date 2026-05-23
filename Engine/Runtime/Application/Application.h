@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/Platform/Window.h"
 
 #include <string>
@@ -10,6 +11,7 @@ struct ApplicationDesc
 {
     std::string name = "VEngine";
     WindowDesc mainWindow;
+    EngineRuntimeDesc runtime;
 };
 
 class Application
@@ -23,9 +25,12 @@ public:
 
     [[nodiscard]] const std::string& GetName() const noexcept;
     [[nodiscard]] int GetExitCode() const noexcept;
+    [[nodiscard]] EngineRuntime& GetRuntime() noexcept;
+    [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
 
 private:
     ApplicationDesc desc_;
+    EngineRuntime runtime_;
     int exitCode_ = 0;
 };
 }

@@ -10,11 +10,13 @@ function(ve_add_engine)
     target_sources(VEngine
         PRIVATE
             Engine/Runtime/Application/Application.cpp
+            Engine/Runtime/Application/EngineRuntime.cpp
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
             Engine/Runtime/Core/Version.cpp
             Engine/Runtime/FileSystem/FileSystem.cpp
             Engine/Runtime/FileSystem/Path.cpp
+            Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Threading/Synchronization.cpp
@@ -24,6 +26,7 @@ function(ve_add_engine)
             Engine/RHI/Common/RhiUtils.cpp
         PUBLIC
             Engine/Runtime/Application/Application.h
+            Engine/Runtime/Application/EngineRuntime.h
             Engine/Runtime/Core/Assert.h
             Engine/Runtime/Core/BuildConfig.h
             Engine/Runtime/Core/Compiler.h
@@ -38,6 +41,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Version.h
             Engine/Runtime/FileSystem/FileSystem.h
             Engine/Runtime/FileSystem/Path.h
+            Engine/Runtime/Jobs/JobSystem.h
             Engine/Runtime/Logging/Log.h
             Engine/Runtime/Math/Math.h
             Engine/Runtime/Math/Matrix44.h

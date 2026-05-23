@@ -315,7 +315,16 @@ Simulator milestone instead of being implied by the Milestone 1 platform work.
 
 The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar framework-style platform abstractions are not used.
 
-### 7.3 FileSystem
+### 7.3 Application And EngineRuntime
+
+`Application` owns platform startup, logging setup, the main window, and the main loop. Player and Editor should share
+this application-level flow instead of duplicating service initialization in each executable entry point.
+
+`EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
+explicit service access without introducing global singletons. The first runtime services are Job System and IO Thread;
+Render, Scene, Resource, Input, Script, UI, and Physics should connect through this layer as their modules land.
+
+### 7.4 FileSystem
 
 `FileSystem` provides a unified file access layer:
 
@@ -331,7 +340,7 @@ Detailed first-stage FileSystem behavior is defined in `Docs/FileSystemDesign.md
 requests, read-only packaged resource access, and platform-specific user data paths are future layers over the same
 path conventions.
 
-### 7.4 Logging
+### 7.5 Logging
 
 `Logging` is implemented with `Boost.Log`.
 
@@ -357,7 +366,7 @@ The public engine code should not depend directly on `Boost.Log` APIs everywhere
 
 Detailed Logging facade APIs, initialization rules, sinks, formatting, assertion integration, and tests are defined in `Docs/LoggingFacadeDesign.md`.
 
-### 7.5 Memory
+### 7.6 Memory
 
 The first-stage memory system should stay small and implement only allocator work needed by current modules:
 
@@ -380,7 +389,7 @@ Allocator usage guidelines:
 - Future frame-local temporary data may use `FrameAllocator` after the frame lifetime model is stable.
 - Future sequential transient loading or import tasks may use `LinearAllocator` after those pipelines are stable.
 
-### 7.6 Threading
+### 7.7 Threading
 
 `Threading` contains:
 
@@ -400,7 +409,7 @@ Boost may be used for selected utilities such as lock-free queues, but the engin
 Detailed first-stage thread wrapper, synchronization primitive, and lock-free utility rules are defined in
 `Docs/ThreadingDesign.md`.
 
-### 7.7 Math
+### 7.8 Math
 
 `Math` is self-owned and exposes VEngine math types:
 
@@ -417,7 +426,7 @@ Detailed first-stage thread wrapper, synchronization primitive, and lock-free ut
 
 The public API should not expose DirectXMath or platform-native math types. Windows-specific SIMD optimization can be added internally later.
 
-### 7.8 Reflection
+### 7.9 Reflection
 
 `Reflection` supports editor inspection, serialization, component creation, and script binding.
 
@@ -434,7 +443,7 @@ First-stage capabilities:
 
 The first implementation can use explicit registration functions or macros. A metadata/code-generation tool can be introduced later.
 
-### 7.9 Scene
+### 7.10 Scene
 
 `Scene` uses a traditional `GameObject + Component` model.
 
@@ -458,7 +467,7 @@ OnLateUpdate
 
 `Scene` owns hierarchy, component storage, lifecycle dispatch, and serialization. Rendering, physics, UI, and script systems should observe or consume scene data through clear interfaces instead of freely coupling to scene internals.
 
-### 7.10 Resource
+### 7.11 Resource
 
 `Resource` manages runtime resources and editor asset metadata.
 
@@ -474,7 +483,7 @@ Responsibilities:
 
 Runtime should load processed engine assets rather than arbitrary source files. Editor and tools handle source import.
 
-### 7.11 Render
+### 7.12 Render
 
 `Render` is the high-level rendering layer above RHI.
 
@@ -491,7 +500,7 @@ Responsibilities:
 
 The render layer should avoid directly depending on GameObject instances on the Render Thread. It should consume render proxies, snapshots, or render commands produced by the Game Thread.
 
-### 7.12 RHI
+### 7.13 RHI
 
 `RHI` is the graphics backend abstraction layer.
 
@@ -503,7 +512,7 @@ Backends:
 
 The common RHI should be designed closer to D3D12 and Metal than D3D11. D3D11 is implemented as a compatibility backend that internally maps modern concepts to D3D11's immediate/deferred context model.
 
-### 7.13 Input
+### 7.14 Input
 
 `Input` abstracts user input:
 
@@ -523,7 +532,7 @@ iOS first stage:
 
 Input should be collected by the platform layer and consumed by the Game Thread through a stable input snapshot.
 
-### 7.14 Runtime UI
+### 7.15 Runtime UI
 
 Runtime UI is separate from Dear ImGui.
 
@@ -541,7 +550,7 @@ First-stage features:
 
 Dear ImGui is used only for Editor and debug UI, not as the game runtime UI system.
 
-### 7.15 Script
+### 7.16 Script
 
 `Script` hosts C# scripts on Windows.
 
@@ -563,7 +572,7 @@ First-stage iOS scope:
 
 The iOS C# path should be treated as a separate research milestone because iOS has stricter runtime and dynamic-code constraints than Windows.
 
-### 7.16 Physics
+### 7.17 Physics
 
 First-stage physics is intentionally lightweight.
 

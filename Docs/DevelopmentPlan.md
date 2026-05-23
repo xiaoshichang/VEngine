@@ -127,6 +127,7 @@ VE_LOG_INFO
 - Implement cross-platform thread wrapper, synchronization primitives, and first lock-free utilities.
 - Implement math primitives.
 - Implement Job System first version.
+- Add `EngineRuntime` as the shared runtime service lifecycle layer for Player and Editor.
 - Implement IO Thread.
 - Add unit tests for Memory, Math, and Threading.
 
@@ -138,6 +139,7 @@ VE_LOG_INFO
 - Add swapchain, buffer, texture, shader, pipeline, command list, and fence concepts.
 - Add D3D11 and D3D12 triangle smoke tests.
 - Build initial Render Thread and Render Command Queue.
+- Connect RHI and Render Thread lifecycle through `EngineRuntime`.
 
 ### Milestone 4: Shader Pipeline
 
@@ -161,6 +163,7 @@ VE_LOG_INFO
 - Implement Scene serialization.
 - Implement simple ResourceManager.
 - Render a static mesh with forward rendering.
+- Connect Scene, Resource, and Render systems through the `EngineRuntime` runtime context.
 
 ### Milestone 6: Asset Pipeline
 
@@ -172,6 +175,8 @@ VE_LOG_INFO
 - Create `VEngineAssetTool`.
 - Add command line import path.
 - Add Editor-triggered import path.
+- Route asset import and runtime loading work through Resource, IO Thread, and Job System services owned by
+  `EngineRuntime`.
 
 ### Milestone 7: Editor MVP
 
@@ -229,6 +234,7 @@ CMake skeleton
   -> Core / Boost.Log / FileSystem
   -> Windows Platform
   -> Memory / Math / Threading
+  -> EngineRuntime / Job System / IO Thread
   -> RHI common design
   -> D3D11 and D3D12 minimum rendering
   -> Shader pipeline
@@ -242,3 +248,24 @@ CMake skeleton
 D3D11, D3D12, and Metal should be considered together during RHI design. However, each backend should be implemented through small smoke-tested vertical slices instead of attempting a complete renderer immediately.
 
 The most important first-stage deliverable is a working engine loop that can open a window, run a multithread-aware frame, render a static mesh, load a simple scene, and be inspected through the Editor.
+
+## 5. EngineRuntime Integration
+
+`EngineRuntime` is the shared runtime service layer used by Player, Editor, tools, and future platform backends. It owns
+the lifecycle of long-lived engine services and provides explicit access to them without requiring global singletons.
+
+Initial services:
+
+- Job System.
+- IO Thread.
+
+Later services should connect through this layer as their modules land:
+
+- Render and RHI runtime state.
+- Scene runtime state.
+- ResourceManager and asset loading.
+- Input, scripting, runtime UI, and lightweight physics.
+
+`Application` remains responsible for platform startup, logging setup, the main window, and the main loop. Runtime
+modules should be initialized and shut down through `EngineRuntime`, so Player and Editor share the same service
+lifecycle model.

@@ -122,6 +122,38 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineThreadingTests>
     )
 
+    add_executable(VEngineJobSystemTests
+        Tests/Unit/JobSystemTests.cpp
+    )
+
+    target_link_libraries(VEngineJobSystemTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineJobSystemTests)
+
+    add_test(
+        NAME VEngineJobSystemTests
+        COMMAND $<TARGET_FILE:VEngineJobSystemTests>
+    )
+
+    add_executable(VEngineRuntimeTests
+        Tests/Unit/EngineRuntimeTests.cpp
+    )
+
+    target_link_libraries(VEngineRuntimeTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineRuntimeTests)
+
+    add_test(
+        NAME VEngineRuntimeTests
+        COMMAND $<TARGET_FILE:VEngineRuntimeTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 

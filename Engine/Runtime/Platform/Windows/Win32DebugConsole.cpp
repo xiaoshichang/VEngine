@@ -31,6 +31,10 @@ namespace
 constexpr std::wstring_view PromptText = L"GM> ";
 constexpr size_t MaxRetainedLogLines = 2000;
 constexpr int MouseWheelLinesPerStep = 3;
+constexpr std::wstring_view WelcomeLines[] = {
+    L"VEngine Debug Console",
+    L"Type GM commands at the prompt. Logs appear above this line.",
+};
 
 struct DebugConsoleLogLine
 {
@@ -429,6 +433,17 @@ void WriteStructuredConsoleLogLocked(DebugConsoleState& state, ve::LogSeverity s
     DrawPromptLocked(state);
 }
 
+void AppendWelcomeLocked(DebugConsoleState& state)
+{
+    for (std::wstring_view line : WelcomeLines)
+    {
+        AppendLogSegmentLocked(state, ve::LogSeverity::Info, std::wstring(line));
+    }
+
+    DrawLogViewportLocked(state);
+    DrawPromptLocked(state);
+}
+
 void WriteSimpleConsoleLog(ve::LogSeverity severity, std::string_view line)
 {
     std::ostream& stream = severity >= ve::LogSeverity::Warn ? std::cerr : std::clog;
@@ -653,7 +668,14 @@ void InitializeWin32DebugConsole()
             cursorInfo.dwSize = 20;
             cursorInfo.bVisible = TRUE;
             SetConsoleCursorInfo(state.outputHandle, &cursorInfo);
-            DrawPromptLocked(state);
+            if (!state.layoutInitialized && state.retainedLogLines.empty())
+            {
+                AppendWelcomeLocked(state);
+            }
+            else
+            {
+                DrawPromptLocked(state);
+            }
         }
     }
 
