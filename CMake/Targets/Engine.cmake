@@ -20,6 +20,7 @@ function(ve_add_engine)
             Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
+            Engine/Runtime/Platform/Window.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderSystem.cpp
             Engine/Runtime/Threading/Synchronization.cpp

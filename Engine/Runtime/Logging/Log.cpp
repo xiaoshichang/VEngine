@@ -1,7 +1,5 @@
 #include "Engine/Runtime/Logging/Log.h"
 
-#include "Engine/Runtime/Core/Assert.h"
-
 #if VE_PLATFORM_WINDOWS
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 #endif
@@ -36,10 +34,8 @@ namespace
 struct LoggingState
 {
     bool initialized = false;
-    bool assertionHandlerInstalled = false;
     ve::LoggingConfig config;
     ve::LogCallback callback = nullptr;
-    ve::AssertionHandler previousAssertionHandler = nullptr;
 };
 
 std::mutex gLoggingMutex;
@@ -154,25 +150,6 @@ void WriteFallbackOutput(ve::LogSeverity severity, std::string_view line)
     WriteConsoleOutput(severity, line);
 }
 
-void AssertionLogHandler(const ve::AssertionInfo& info)
-{
-    const char* expression = info.expression != nullptr ? info.expression : "<unknown>";
-    const char* message = info.message != nullptr ? info.message : "<none>";
-    const char* file = info.file != nullptr ? info.file : "<unknown>";
-    const char* function = info.function != nullptr ? info.function : "<unknown>";
-
-    ve::LogMessage(
-        ve::LogSeverity::Fatal,
-        "Assert",
-        std::format(
-            "Assertion failed: {}. Message: {}. Location: {}:{} {}",
-            expression,
-            message,
-            file,
-            info.line,
-            function),
-        ve::SourceLocation::current());
-}
 }
 
 namespace ve
@@ -257,13 +234,6 @@ Result<void> InitializeLogging(const LoggingConfig& config)
 void ShutdownLogging() noexcept
 {
     std::lock_guard lock(gLoggingMutex);
-
-    if (gLoggingState.assertionHandlerInstalled)
-    {
-        SetAssertionHandler(gLoggingState.previousAssertionHandler);
-        gLoggingState.assertionHandlerInstalled = false;
-        gLoggingState.previousAssertionHandler = nullptr;
-    }
 
     gLoggingState.initialized = false;
     gLoggingState.callback = nullptr;
@@ -376,41 +346,6 @@ const char* ToString(LogSeverity severity) noexcept
     }
 
     return "Unknown";
-}
-
-Result<void> InstallAssertionLogHandler()
-{
-    std::lock_guard lock(gLoggingMutex);
-
-    if (!gLoggingState.initialized)
-    {
-        return Result<void>::Failure(Error(ErrorCode::InvalidState, "Logging must be initialized before assertion logging."));
-    }
-
-    if (gLoggingState.assertionHandlerInstalled)
-    {
-        return Result<void>::Failure(Error(ErrorCode::InvalidState, "Assertion logging is already installed."));
-    }
-
-    gLoggingState.previousAssertionHandler = GetAssertionHandler();
-    SetAssertionHandler(AssertionLogHandler);
-    gLoggingState.assertionHandlerInstalled = true;
-
-    return Result<void>::Success();
-}
-
-void UninstallAssertionLogHandler() noexcept
-{
-    std::lock_guard lock(gLoggingMutex);
-
-    if (!gLoggingState.assertionHandlerInstalled)
-    {
-        return;
-    }
-
-    SetAssertionHandler(gLoggingState.previousAssertionHandler);
-    gLoggingState.previousAssertionHandler = nullptr;
-    gLoggingState.assertionHandlerInstalled = false;
 }
 
 namespace detail

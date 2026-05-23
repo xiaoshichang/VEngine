@@ -1,15 +1,67 @@
 #include "Engine/Runtime/Render/RenderSystem.h"
 
+#if VE_PLATFORM_WINDOWS && VE_ENABLE_D3D11
+#include "Engine/RHI/D3D11/D3D11Rhi.h"
+#endif
+#if VE_PLATFORM_WINDOWS && VE_ENABLE_D3D12
+#include "Engine/RHI/D3D12/D3D12Rhi.h"
+#endif
+#if VE_ENABLE_METAL
+#include "Engine/RHI/Metal/MetalRhi.h"
+#endif
+
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/ScopeExit.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 
 #include <exception>
+#include <optional>
 
 namespace ve
 {
+namespace
+{
+struct TriangleVertex
+{
+    Float32 position[3] = {};
+};
+
+constexpr TriangleVertex TriangleVertices[] = {
+    TriangleVertex{{0.0f, 0.5f, 0.0f}},
+    TriangleVertex{{0.5f, -0.5f, 0.0f}},
+    TriangleVertex{{-0.5f, -0.5f, 0.0f}},
+};
+
+const char* TriangleShaderSource = R"(
+struct VSInput
+{
+    float3 position : POSITION;
+};
+
+struct VSOutput
+{
+    float4 position : SV_POSITION;
+    float3 color : COLOR0;
+};
+
+VSOutput VSMain(VSInput input)
+{
+    VSOutput output;
+    output.position = float4(input.position, 1.0f);
+    output.color = float3(input.position.x + 0.5f, input.position.y + 0.5f, 1.0f);
+    return output;
+}
+
+float4 PSMain(VSOutput input) : SV_TARGET
+{
+    return float4(input.color, 1.0f);
+}
+)";
+}
+
 struct RenderSystemImpl
 {
     Thread thread;
@@ -20,10 +72,236 @@ struct RenderSystemImpl
     AtomicBool stopRequested{false};
     AtomicBool initialized{false};
     AtomicSize activeSubmitCount{0};
+    AtomicBool hasDevice{false};
+    AtomicBool hasMainSwapchain{false};
+    Atomic<int> backendValue{-1};
+    std::unique_ptr<rhi::RhiDevice> device;
+    std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
+    std::unique_ptr<rhi::RhiBuffer> triangleVertexBuffer;
+    std::unique_ptr<rhi::RhiShaderModule> triangleVertexShader;
+    std::unique_ptr<rhi::RhiShaderModule> triangleFragmentShader;
+    std::unique_ptr<rhi::RhiPipelineState> trianglePipelineState;
+    std::unique_ptr<rhi::RhiCommandList> frameCommandList;
 };
 
 namespace
 {
+[[nodiscard]] const char* ToString(RenderBackend backend) noexcept
+{
+    switch (backend)
+    {
+    case RenderBackend::D3D11:
+        return "D3D11";
+    case RenderBackend::D3D12:
+        return "D3D12";
+    case RenderBackend::Metal:
+        return "Metal";
+    }
+
+    return "Unknown";
+}
+
+[[nodiscard]] Result<void> ValidateSurfaceDesc(const RenderSurfaceDesc& desc)
+{
+    if (desc.width == 0 || desc.height == 0)
+    {
+        return Result<void>::Failure(Error(ErrorCode::InvalidArgument, "Render surface size must be non-zero."));
+    }
+
+    if (desc.bufferCount == 0)
+    {
+        return Result<void>::Failure(Error(ErrorCode::InvalidArgument, "Render surface bufferCount must be non-zero."));
+    }
+
+    if (desc.nativeWindow == nullptr && desc.nativeLayer == nullptr)
+    {
+        return Result<void>::Failure(
+            Error(ErrorCode::InvalidArgument, "Render surface requires a native window or native layer."));
+    }
+
+    return Result<void>::Success();
+}
+
+[[nodiscard]] rhi::RhiSwapchainDesc ToRhiSwapchainDesc(const RenderSurfaceDesc& desc)
+{
+    rhi::RhiSwapchainDesc rhiDesc = {};
+    rhiDesc.nativeWindow = desc.nativeWindow;
+    rhiDesc.nativeLayer = desc.nativeLayer;
+    rhiDesc.width = desc.width;
+    rhiDesc.height = desc.height;
+    rhiDesc.colorFormat = desc.colorFormat;
+    rhiDesc.bufferCount = desc.bufferCount;
+    rhiDesc.debugName = "VEngineMainSwapchain";
+    return rhiDesc;
+}
+
+[[nodiscard]] std::unique_ptr<rhi::RhiDevice> CreateRhiDevice(const RenderDeviceDesc& desc)
+{
+    switch (desc.backend)
+    {
+    case RenderBackend::D3D11:
+#if VE_PLATFORM_WINDOWS && VE_ENABLE_D3D11
+        return rhi::CreateD3D11Device(desc.enableDebugDevice);
+#else
+        return nullptr;
+#endif
+
+    case RenderBackend::D3D12:
+#if VE_PLATFORM_WINDOWS && VE_ENABLE_D3D12
+        return rhi::CreateD3D12Device(desc.enableDebugDevice);
+#else
+        return nullptr;
+#endif
+
+    case RenderBackend::Metal:
+#if VE_ENABLE_METAL
+        return rhi::CreateMetalDevice(desc.enableDebugDevice);
+#else
+        return nullptr;
+#endif
+    }
+
+    return nullptr;
+}
+
+void DestroyTriangleResources(RenderSystemImpl& impl)
+{
+    impl.frameCommandList.reset();
+    impl.trianglePipelineState.reset();
+    impl.triangleFragmentShader.reset();
+    impl.triangleVertexShader.reset();
+    impl.triangleVertexBuffer.reset();
+}
+
+[[nodiscard]] Result<void> CreateTriangleResources(RenderSystemImpl& impl)
+{
+    VE_ASSERT_MESSAGE(impl.device != nullptr, "CreateTriangleResources requires an initialized RHI device.");
+    VE_ASSERT_MESSAGE(impl.mainSwapchain != nullptr, "CreateTriangleResources requires an initialized main swapchain.");
+
+    rhi::RhiBufferDesc vertexBufferDesc = {};
+    vertexBufferDesc.size = sizeof(TriangleVertices);
+    vertexBufferDesc.usage = rhi::RhiBufferUsage::Vertex;
+    vertexBufferDesc.initialData = TriangleVertices;
+    vertexBufferDesc.debugName = "RenderSystemTriangleVertexBuffer";
+
+    impl.triangleVertexBuffer = impl.device->CreateBuffer(vertexBufferDesc);
+    if (impl.triangleVertexBuffer == nullptr)
+    {
+        return Result<void>::Failure(Error(
+            ErrorCode::PlatformError,
+            std::string("Failed to create triangle vertex buffer: ") + impl.device->GetLastErrorMessage()));
+    }
+
+    rhi::RhiShaderModuleDesc vertexShaderDesc = {};
+    vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
+    vertexShaderDesc.source = TriangleShaderSource;
+    vertexShaderDesc.entryPoint = "VSMain";
+    vertexShaderDesc.debugName = "RenderSystemTriangleVertexShader";
+
+    impl.triangleVertexShader = impl.device->CreateShaderModule(vertexShaderDesc);
+    if (impl.triangleVertexShader == nullptr)
+    {
+        DestroyTriangleResources(impl);
+        return Result<void>::Failure(Error(
+            ErrorCode::PlatformError,
+            std::string("Failed to create triangle vertex shader: ") + impl.device->GetLastErrorMessage()));
+    }
+
+    rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
+    fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = TriangleShaderSource;
+    fragmentShaderDesc.entryPoint = "PSMain";
+    fragmentShaderDesc.debugName = "RenderSystemTriangleFragmentShader";
+
+    impl.triangleFragmentShader = impl.device->CreateShaderModule(fragmentShaderDesc);
+    if (impl.triangleFragmentShader == nullptr)
+    {
+        DestroyTriangleResources(impl);
+        return Result<void>::Failure(Error(
+            ErrorCode::PlatformError,
+            std::string("Failed to create triangle fragment shader: ") + impl.device->GetLastErrorMessage()));
+    }
+
+    rhi::RhiVertexAttributeDesc positionAttribute = {};
+    positionAttribute.semanticName = "POSITION";
+    positionAttribute.semanticIndex = 0;
+    positionAttribute.format = rhi::RhiFormat::Rgb32Float;
+    positionAttribute.offset = 0;
+
+    rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
+    pipelineDesc.vertexShader = impl.triangleVertexShader.get();
+    pipelineDesc.fragmentShader = impl.triangleFragmentShader.get();
+    pipelineDesc.vertexLayout.attributes = &positionAttribute;
+    pipelineDesc.vertexLayout.attributeCount = 1;
+    pipelineDesc.vertexLayout.stride = sizeof(TriangleVertex);
+    pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.colorFormat = impl.mainSwapchain->GetColorFormat();
+    pipelineDesc.debugName = "RenderSystemTrianglePipeline";
+
+    impl.trianglePipelineState = impl.device->CreateGraphicsPipeline(pipelineDesc);
+    if (impl.trianglePipelineState == nullptr)
+    {
+        DestroyTriangleResources(impl);
+        return Result<void>::Failure(Error(
+            ErrorCode::PlatformError,
+            std::string("Failed to create triangle pipeline: ") + impl.device->GetLastErrorMessage()));
+    }
+
+    impl.frameCommandList = impl.device->CreateCommandList();
+    if (impl.frameCommandList == nullptr)
+    {
+        DestroyTriangleResources(impl);
+        return Result<void>::Failure(Error(
+            ErrorCode::PlatformError,
+            std::string("Failed to create frame command list: ") + impl.device->GetLastErrorMessage()));
+    }
+
+    return Result<void>::Success();
+}
+
+[[nodiscard]] Result<void> RenderTriangleFrame(RenderSystemImpl& impl)
+{
+    if (impl.device == nullptr || impl.mainSwapchain == nullptr)
+    {
+        return Result<void>::Failure(
+            Error(ErrorCode::InvalidState, "RenderSystem requires an RHI device and main swapchain to render a frame."));
+    }
+
+    if (impl.triangleVertexBuffer == nullptr || impl.trianglePipelineState == nullptr || impl.frameCommandList == nullptr)
+    {
+        return Result<void>::Failure(Error(ErrorCode::InvalidState, "RenderSystem triangle resources are not ready."));
+    }
+
+    rhi::RhiRenderPassDesc renderPassDesc = {};
+    renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
+    renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
+    renderPassDesc.clearColor = {0.05f, 0.07f, 0.10f, 1.0f};
+
+    const rhi::RhiExtent2D extent = impl.mainSwapchain->GetExtent();
+
+    if (!impl.frameCommandList->Begin() || !impl.frameCommandList->BeginRenderPass(*impl.mainSwapchain, renderPassDesc))
+    {
+        return Result<void>::Failure(Error(ErrorCode::PlatformError, "Failed to begin RHI frame command list."));
+    }
+
+    impl.frameCommandList->SetViewport(
+        rhi::RhiViewport{0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
+    impl.frameCommandList->SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
+    impl.frameCommandList->SetPipeline(*impl.trianglePipelineState);
+    impl.frameCommandList->SetVertexBuffer(0, *impl.triangleVertexBuffer, sizeof(TriangleVertex), 0);
+    impl.frameCommandList->Draw(3, 0);
+    impl.frameCommandList->EndRenderPass();
+
+    if (!impl.frameCommandList->End() || !impl.device->Submit(*impl.frameCommandList) || !impl.mainSwapchain->Present())
+    {
+        return Result<void>::Failure(Error(
+            ErrorCode::PlatformError,
+            std::string("Failed to submit or present frame: ") + impl.device->GetLastErrorMessage()));
+    }
+
+    return Result<void>::Success();
+}
+
 void ExecuteCommand(RenderThreadContext& context, RenderCommand& command) noexcept
 {
     try
@@ -68,6 +346,33 @@ void RenderThreadLoop(RenderSystemImpl& impl)
     }
 }
 
+void DestroyRhiStateOnRenderThread(RenderSystemImpl& impl)
+{
+    if (impl.device != nullptr)
+    {
+        impl.device->WaitIdle();
+    }
+
+    impl.hasMainSwapchain.store(false, std::memory_order_release);
+    DestroyTriangleResources(impl);
+    impl.mainSwapchain.reset();
+
+    if (impl.device != nullptr)
+    {
+        impl.hasDevice.store(false, std::memory_order_release);
+        impl.device.reset();
+    }
+
+    impl.backendValue.store(-1, std::memory_order_release);
+}
+
+void EnqueueInternalCommand(RenderSystemImpl& impl, RenderCommand command) noexcept
+{
+    Result<void> pushResult = impl.commandQueue.Push(std::move(command));
+    VE_ASSERT_MESSAGE(pushResult, "RenderSystem failed to enqueue an internal render command.");
+    impl.commandSemaphore.Release();
+}
+
 void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
 {
     impl.acceptingCommands.store(false, std::memory_order_release);
@@ -76,6 +381,18 @@ void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
     {
         YieldThread();
     }
+
+    auto rhiDestroyed = std::make_shared<ManualResetEvent>(false);
+    EnqueueInternalCommand(
+        impl,
+        RenderCommand{
+            "RenderSystemDestroyRhiState",
+            [&impl, rhiDestroyed](RenderThreadContext&)
+            {
+                DestroyRhiStateOnRenderThread(impl);
+                rhiDestroyed->Set();
+            }});
+    rhiDestroyed->Wait();
 
     impl.stopRequested.store(true, std::memory_order_release);
     impl.commandSemaphore.Release();
@@ -162,6 +479,147 @@ ThreadId RenderSystem::GetRenderThreadId() const noexcept
     return ThreadId{impl_->renderThreadIdValue.load(std::memory_order_acquire)};
 }
 
+Result<void> RenderSystem::InitializeDevice(const RenderDeviceDesc& desc)
+{
+    return ExecuteSynchronous(
+        "RenderSystemInitializeDevice",
+        [this, desc](RenderThreadContext&)
+        {
+            if (impl_->device != nullptr)
+            {
+                return Result<void>::Failure(Error(ErrorCode::InvalidState, "RenderSystem RHI device already exists."));
+            }
+
+            std::unique_ptr<rhi::RhiDevice> device = CreateRhiDevice(desc);
+            if (device == nullptr)
+            {
+                return Result<void>::Failure(
+                    Error(ErrorCode::Unsupported, std::string("RHI backend is unavailable: ") + ToString(desc.backend)));
+            }
+
+            impl_->device = std::move(device);
+            impl_->backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
+            impl_->hasDevice.store(true, std::memory_order_release);
+            VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
+            return Result<void>::Success();
+        });
+}
+
+void RenderSystem::ShutdownDevice() noexcept
+{
+    if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+    {
+        return;
+    }
+
+    Result<void> result = ExecuteSynchronous(
+        "RenderSystemShutdownDevice",
+        [this](RenderThreadContext&)
+        {
+            DestroyRhiStateOnRenderThread(*impl_);
+            return Result<void>::Success();
+        });
+
+    VE_ASSERT_MESSAGE(result, "RenderSystem failed to shut down its RHI device.");
+}
+
+bool RenderSystem::HasDevice() const noexcept
+{
+    return impl_->hasDevice.load(std::memory_order_acquire);
+}
+
+RenderBackend RenderSystem::GetDeviceBackend() const noexcept
+{
+    const int backendValue = impl_->backendValue.load(std::memory_order_acquire);
+    VE_ASSERT_MESSAGE(backendValue >= 0, "RenderSystem::GetDeviceBackend requires an initialized RHI device.");
+    return static_cast<RenderBackend>(backendValue);
+}
+
+Result<void> RenderSystem::CreateMainSwapchain(const RenderSurfaceDesc& desc)
+{
+    Result<void> validateResult = ValidateSurfaceDesc(desc);
+    if (!validateResult)
+    {
+        return validateResult;
+    }
+
+    return ExecuteSynchronous(
+        "RenderSystemCreateMainSwapchain",
+        [this, desc](RenderThreadContext&)
+        {
+            if (impl_->device == nullptr)
+            {
+                return Result<void>::Failure(
+                    Error(ErrorCode::InvalidState, "RenderSystem RHI device is not initialized."));
+            }
+
+            if (impl_->mainSwapchain != nullptr)
+            {
+                return Result<void>::Failure(
+                    Error(ErrorCode::InvalidState, "RenderSystem main swapchain already exists."));
+            }
+
+            std::unique_ptr<rhi::RhiSwapchain> swapchain = impl_->device->CreateSwapchain(ToRhiSwapchainDesc(desc));
+            if (swapchain == nullptr)
+            {
+                return Result<void>::Failure(Error(
+                    ErrorCode::PlatformError,
+                    std::string("Failed to create main swapchain: ") + impl_->device->GetLastErrorMessage()));
+            }
+
+            impl_->mainSwapchain = std::move(swapchain);
+            Result<void> triangleResult = CreateTriangleResources(*impl_);
+            if (!triangleResult)
+            {
+                impl_->mainSwapchain.reset();
+                return triangleResult;
+            }
+
+            impl_->hasMainSwapchain.store(true, std::memory_order_release);
+            return Result<void>::Success();
+        });
+}
+
+void RenderSystem::DestroyMainSwapchain() noexcept
+{
+    if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+    {
+        return;
+    }
+
+    Result<void> result = ExecuteSynchronous(
+        "RenderSystemDestroyMainSwapchain",
+        [this](RenderThreadContext&)
+        {
+            if (impl_->device != nullptr)
+            {
+                impl_->device->WaitIdle();
+            }
+
+            impl_->hasMainSwapchain.store(false, std::memory_order_release);
+            DestroyTriangleResources(*impl_);
+            impl_->mainSwapchain.reset();
+            return Result<void>::Success();
+        });
+
+    VE_ASSERT_MESSAGE(result, "RenderSystem failed to destroy its main swapchain.");
+}
+
+bool RenderSystem::HasMainSwapchain() const noexcept
+{
+    return impl_->hasMainSwapchain.load(std::memory_order_acquire);
+}
+
+Result<void> RenderSystem::RenderFrame()
+{
+    return ExecuteSynchronous(
+        "RenderSystemRenderFrame",
+        [this](RenderThreadContext&)
+        {
+            return RenderTriangleFrame(*impl_);
+        });
+}
+
 Result<void> RenderSystem::Submit(RenderCommand command)
 {
     return SubmitFunction(std::move(command.debugName), std::move(command.function));
@@ -189,6 +647,39 @@ Result<void> RenderSystem::Flush()
 
     completed->Wait();
     return Result<void>::Success();
+}
+
+Result<void> RenderSystem::ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function)
+{
+    if (!function)
+    {
+        return Result<void>::Failure(
+            Error(ErrorCode::InvalidArgument, "Synchronous render operation requires a callable function."));
+    }
+
+    if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+    {
+        return Result<void>::Failure(Error(ErrorCode::InvalidState, "RenderSystem is not accepting commands."));
+    }
+
+    auto completed = std::make_shared<ManualResetEvent>(false);
+    auto operationResult = std::make_shared<Result<void>>(Result<void>::Success());
+
+    Result<void> submitResult = SubmitFunction(
+        std::move(debugName),
+        [completed, operationResult, function = std::move(function)](RenderThreadContext& context)
+        {
+            *operationResult = function(context);
+            completed->Set();
+        });
+
+    if (!submitResult)
+    {
+        return submitResult;
+    }
+
+    completed->Wait();
+    return *operationResult;
 }
 
 Result<void> RenderSystem::SubmitFunction(std::string debugName, RenderCommandFunction function)

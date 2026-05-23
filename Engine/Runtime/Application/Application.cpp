@@ -3,18 +3,21 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Time/Time.h"
 
-#if VE_PLATFORM_WINDOWS
-#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
-#include "Engine/Runtime/Platform/Windows/Win32MessageLoop.h"
-#include "Engine/Runtime/Platform/Windows/Win32Window.h"
-#endif
-
 #include <chrono>
+#include <cstdio>
 #include <thread>
 #include <utility>
 
 namespace ve
 {
+namespace
+{
+void ShutdownEngineRuntime(EngineRuntime& runtime)
+{
+    runtime.Shutdown();
+}
+}
+
 Application::Application(std::string name)
     : desc_()
 {
@@ -46,127 +49,153 @@ Application::~Application() = default;
 
 int Application::Run()
 {
-    bool ownsLogging = false;
-    bool assertionLogInstalled = false;
+    exitCode_ = RunApplication();
+    return exitCode_;
+}
 
-    if (!IsLoggingInitialized())
-    {
-        Result<void> loggingResult = InitializeLogging();
-
-        if (!loggingResult)
-        {
-            exitCode_ = 1;
-            return exitCode_;
-        }
-
-        ownsLogging = true;
-    }
-
-    Result<void> assertionLogResult = InstallAssertionLogHandler();
-
-    if (assertionLogResult)
-    {
-        assertionLogInstalled = true;
-    }
-    else
-    {
-        VE_LOG_DEBUG("Assertion log handler was not installed: {}", assertionLogResult.GetError().GetMessage());
-    }
-
-    Result<void> runtimeResult = runtime_.Initialize(desc_.runtime);
+Result<void> Application::InitializeEngineRuntime()
+{
+    Result<void> runtimeResult = engineRuntime_.Initialize(desc_.runtime);
 
     if (!runtimeResult)
     {
         VE_LOG_ERROR("Failed to initialize engine runtime: {}", runtimeResult.GetError().GetMessage());
-        exitCode_ = 1;
-
-        if (assertionLogInstalled && !ownsLogging)
-        {
-            UninstallAssertionLogHandler();
-        }
-
-        if (ownsLogging)
-        {
-            ShutdownLogging();
-        }
-
-        return exitCode_;
     }
 
-#if VE_PLATFORM_WINDOWS
-    VE_LOG_INFO("{} starting", desc_.name);
+    return runtimeResult;
+}
 
-    SetWin32DebugConsoleCommandHandler([](std::string_view command)
-    {
-        VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command);
-    });
-
-    Result<std::unique_ptr<Win32Window>> windowResult = Win32Window::Create(desc_.mainWindow);
+Result<std::unique_ptr<Window>> Application::CreateMainWindow()
+{
+    Result<std::unique_ptr<Window>> windowResult = Window::Create(desc_.mainWindow);
 
     if (!windowResult)
     {
         VE_LOG_ERROR("Failed to create main window: {}", windowResult.GetError().GetMessage());
-        exitCode_ = 1;
-
-        runtime_.Shutdown();
-
-        if (assertionLogInstalled && !ownsLogging)
-        {
-            UninstallAssertionLogHandler();
-        }
-
-        SetWin32DebugConsoleCommandHandler({});
-
-        if (ownsLogging)
-        {
-            ShutdownLogging();
-        }
-
-        return exitCode_;
     }
 
-    std::unique_ptr<Win32Window> mainWindow = windowResult.MoveValue();
-    Win32MessageLoop messageLoop;
-    Time::Reset();
+    return windowResult;
+}
 
-    while (!mainWindow->ShouldClose())
+Result<void> Application::InitializeRendering(Window& mainWindow)
+{
+    RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
+
+    Result<void> deviceResult = renderSystem.InitializeDevice(desc_.runtime.renderSystem.device);
+    if (!deviceResult)
     {
-        PumpWin32DebugConsoleCommands();
+        VE_LOG_ERROR("Failed to initialize render device: {}", deviceResult.GetError().GetMessage());
+        return deviceResult;
+    }
 
-        if (messageLoop.PumpPendingMessages() == Win32MessageLoop::PumpResult::Quit)
+    const WindowExtent extent = mainWindow.GetClientExtent();
+    RenderSurfaceDesc surfaceDesc;
+    surfaceDesc.nativeWindow = mainWindow.GetNativeHandle();
+    surfaceDesc.nativeLayer = mainWindow.GetNativeLayer();
+    surfaceDesc.width = extent.width;
+    surfaceDesc.height = extent.height;
+
+    Result<void> swapchainResult = renderSystem.CreateMainSwapchain(surfaceDesc);
+    if (!swapchainResult)
+    {
+        VE_LOG_ERROR("Failed to create main render swapchain: {}", swapchainResult.GetError().GetMessage());
+        renderSystem.ShutdownDevice();
+        return swapchainResult;
+    }
+
+    return Result<void>::Success();
+}
+
+void Application::ShutdownRendering() noexcept
+{
+    RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
+    renderSystem.DestroyMainSwapchain();
+    renderSystem.ShutdownDevice();
+}
+
+int Application::RunMainLoop(Window& mainWindow)
+{
+    RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
+    Time::Reset();
+    int exitCode = 0;
+
+    while (!mainWindow.ShouldClose())
+    {
+        mainWindow.PumpCommands();
+
+        const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
+        if (pumpStatus.result == WindowPumpResult::Quit)
         {
+            exitCode = pumpStatus.exitCode;
             break;
         }
 
         Time::Tick();
 
+        Result<void> renderResult = renderSystem.RenderFrame();
+        if (!renderResult)
+        {
+            VE_LOG_ERROR("RenderFrame failed: {}", renderResult.GetError().GetMessage());
+            return 1;
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    exitCode_ = messageLoop.GetQuitExitCode();
-    PumpWin32DebugConsoleCommands();
-    SetWin32DebugConsoleCommandHandler({});
-    mainWindow.reset();
+    return exitCode;
+}
 
-    VE_LOG_INFO("{} stopped with exit code {}", desc_.name, exitCode_);
-#else
-    VE_LOG_ERROR("{} cannot run because this platform does not have an Application backend yet.", desc_.name);
-    exitCode_ = 1;
-#endif
+int Application::RunApplication()
+{
+    VE_LOG_INFO("{} starting", desc_.name);
 
-    runtime_.Shutdown();
-
-    if (assertionLogInstalled && !ownsLogging)
+    auto cleanup = [this](std::unique_ptr<Window>& window)
     {
-        UninstallAssertionLogHandler();
+        if (window != nullptr)
+        {
+            window->PumpCommands();
+            window->SetCommandHandler({});
+        }
+
+        window.reset();
+        ShutdownEngineRuntime(engineRuntime_);
+    };
+
+    Result<void> runtimeResult = InitializeEngineRuntime();
+    if (!runtimeResult)
+    {
+        std::unique_ptr<Window> emptyWindow;
+        cleanup(emptyWindow);
+        return 1;
     }
 
-    if (ownsLogging)
+    Result<std::unique_ptr<Window>> windowResult = CreateMainWindow();
+    if (!windowResult)
     {
-        ShutdownLogging();
+        std::unique_ptr<Window> emptyWindow;
+        cleanup(emptyWindow);
+        return 1;
     }
 
-    return exitCode_;
+    std::unique_ptr<Window> mainWindow = windowResult.MoveValue();
+    mainWindow->SetCommandHandler([](std::string_view command)
+    {
+        VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command);
+    });
+
+    Result<void> renderResult = InitializeRendering(*mainWindow);
+    if (!renderResult)
+    {
+        cleanup(mainWindow);
+        return 1;
+    }
+
+    const int result = RunMainLoop(*mainWindow);
+    ShutdownRendering();
+    cleanup(mainWindow);
+
+    VE_LOG_INFO("{} stopped with exit code {}", desc_.name, result);
+    return result;
 }
 
 const std::string& Application::GetName() const noexcept
@@ -181,11 +210,11 @@ int Application::GetExitCode() const noexcept
 
 EngineRuntime& Application::GetRuntime() noexcept
 {
-    return runtime_;
+    return engineRuntime_;
 }
 
 const EngineRuntime& Application::GetRuntime() const noexcept
 {
-    return runtime_;
+    return engineRuntime_;
 }
 }

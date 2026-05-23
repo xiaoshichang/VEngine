@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Application/Application.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -22,6 +23,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
 
     ve::InitializeWin32DebugConsole();
 
+    ve::Result<void> loggingResult = ve::InitializeLogging();
+    if (!loggingResult)
+    {
+        return 1;
+    }
+
     ve::ApplicationDesc desc;
     desc.name = "VEnginePlayer";
     desc.mainWindow.title = "VEngine Player";
@@ -30,7 +37,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     desc.mainWindow.visible = true;
     desc.runtime.jobSystem.workerThreadNamePrefix = "VEnginePlayerJobWorker";
     desc.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
+    desc.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
 
     ve::Application application(std::move(desc));
-    return application.Run();
+    const int exitCode = application.Run();
+    ve::ShutdownLogging();
+    return exitCode;
 }

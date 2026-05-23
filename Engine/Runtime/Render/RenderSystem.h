@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
@@ -15,11 +16,54 @@ namespace ve
 {
 struct RenderSystemImpl;
 
+/// Selects the graphics backend owned by RenderSystem.
+enum class RenderBackend
+{
+    D3D11,
+    D3D12,
+    Metal,
+};
+
+/// Describes RHI device creation owned by RenderSystem.
+struct RenderDeviceDesc
+{
+    /// Backend used for the RHI device.
+    RenderBackend backend = RenderBackend::D3D12;
+
+    /// Enables backend debug validation where supported.
+    bool enableDebugDevice = false;
+};
+
+/// Describes the main presentation surface used by Player or first-stage tests.
+struct RenderSurfaceDesc
+{
+    /// Native platform window, such as HWND on Windows.
+    void* nativeWindow = nullptr;
+
+    /// Native presentation layer, such as CAMetalLayer on Apple platforms.
+    void* nativeLayer = nullptr;
+
+    /// Surface width in pixels.
+    UInt32 width = 0;
+
+    /// Surface height in pixels.
+    UInt32 height = 0;
+
+    /// Preferred color format for the main swapchain.
+    rhi::RhiFormat colorFormat = rhi::RhiFormat::Bgra8Unorm;
+
+    /// Preferred back-buffer count.
+    UInt32 bufferCount = 2;
+};
+
 /// Describes the Render Thread created by RenderSystem::Initialize().
 struct RenderSystemDesc
 {
     /// Diagnostic name copied into the owned Render Thread.
     std::string threadName = "VEngineRenderThread";
+
+    /// RHI device creation options used by Application after the Render Thread starts.
+    RenderDeviceDesc device;
 };
 
 /// Context passed to commands executing on the Render Thread.
@@ -42,6 +86,9 @@ private:
 /// Callable payload executed on the Render Thread.
 using RenderCommandFunction = std::function<void(RenderThreadContext&)>;
 
+/// Callable payload used by RenderSystem for synchronous lifecycle operations on the Render Thread.
+using RenderSynchronousFunction = std::function<Result<void>(RenderThreadContext&)>;
+
 /// One command submitted to the Render Thread.
 ///
 /// debugName is diagnostic and may be empty. function must be callable as `void(RenderThreadContext&)`. Captured
@@ -55,8 +102,8 @@ struct RenderCommand
 
 /// Owns the Render Thread and lock-free render command queue.
 ///
-/// RenderSystem is a runtime service managed by EngineRuntime. The first version does not own an RHI device or
-/// swapchain; it establishes the long-lived thread and command execution boundary used by later renderer work.
+/// RenderSystem is a runtime service managed by EngineRuntime. It owns the long-lived Render Thread, the command
+/// execution boundary, and first-stage RHI device/swapchain lifecycle for Player and Editor entry points.
 class RenderSystem : public NonMovable
 {
 public:
@@ -81,6 +128,41 @@ public:
     /// Returns the last known id of the owned Render Thread.
     [[nodiscard]] ThreadId GetRenderThreadId() const noexcept;
 
+    /// Creates the RHI device on the Render Thread.
+    ///
+    /// This is an explicit lifecycle API. It internally schedules synchronous render-thread work rather than requiring
+    /// callers to submit ad hoc render commands that mutate RHI lifetime.
+    [[nodiscard]] Result<void> InitializeDevice(const RenderDeviceDesc& desc);
+
+    /// Destroys the RHI device and any main swapchain owned by this RenderSystem on the Render Thread.
+    void ShutdownDevice() noexcept;
+
+    /// Returns true when an RHI device has been created and has not been shut down.
+    [[nodiscard]] bool HasDevice() const noexcept;
+
+    /// Returns the backend of the initialized RHI device.
+    ///
+    /// Calling this before HasDevice() is true is API misuse.
+    [[nodiscard]] RenderBackend GetDeviceBackend() const noexcept;
+
+    /// Creates the main swapchain on the Render Thread.
+    ///
+    /// The RHI device must already be initialized. The surface descriptor must carry the native handle required by the
+    /// selected backend. The first implementation also creates the minimal triangle resources used by RenderFrame().
+    [[nodiscard]] Result<void> CreateMainSwapchain(const RenderSurfaceDesc& desc);
+
+    /// Destroys the main swapchain on the Render Thread if one exists.
+    void DestroyMainSwapchain() noexcept;
+
+    /// Returns true when the main swapchain exists.
+    [[nodiscard]] bool HasMainSwapchain() const noexcept;
+
+    /// Renders one first-stage frame to the main swapchain.
+    ///
+    /// The current implementation clears the back buffer, draws a simple triangle, submits the command list, and
+    /// presents. This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
+    [[nodiscard]] Result<void> RenderFrame();
+
     /// Submits a command to execute on the Render Thread.
     ///
     /// Returns InvalidState before initialization, during shutdown, or after shutdown. Returns InvalidArgument when the
@@ -94,6 +176,7 @@ public:
     [[nodiscard]] Result<void> Flush();
 
 private:
+    [[nodiscard]] Result<void> ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);
     [[nodiscard]] Result<void> SubmitFunction(std::string debugName, RenderCommandFunction function);
 
     std::unique_ptr<RenderSystemImpl> impl_;

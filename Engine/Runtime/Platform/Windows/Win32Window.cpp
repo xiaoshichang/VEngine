@@ -1,5 +1,7 @@
 #include "Engine/Runtime/Platform/Windows/Win32Window.h"
 
+#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
+
 #include <algorithm>
 #include <format>
 #include <system_error>
@@ -95,6 +97,18 @@ Result<std::unique_ptr<Win32Window>> Win32Window::Create(const WindowDesc& desc)
     return Result<std::unique_ptr<Win32Window>>::Success(std::move(window));
 }
 
+Result<std::unique_ptr<Window>> Win32Window::CreatePlatformWindow(const WindowDesc& desc)
+{
+    Result<std::unique_ptr<Win32Window>> windowResult = Create(desc);
+
+    if (!windowResult)
+    {
+        return Result<std::unique_ptr<Window>>::Failure(windowResult.GetError());
+    }
+
+    return Result<std::unique_ptr<Window>>::Success(windowResult.MoveValue());
+}
+
 void Win32Window::Show()
 {
     if (windowHandle_ == nullptr)
@@ -116,6 +130,29 @@ void Win32Window::Close()
 
     shouldClose_ = true;
     DestroyWindow(static_cast<HWND>(windowHandle_));
+}
+
+WindowPumpStatus Win32Window::PumpEvents()
+{
+    const Win32MessageLoop::PumpResult result = messageLoop_.PumpPendingMessages();
+
+    if (result == Win32MessageLoop::PumpResult::Quit)
+    {
+        shouldClose_ = true;
+        return WindowPumpStatus{WindowPumpResult::Quit, messageLoop_.GetQuitExitCode()};
+    }
+
+    return WindowPumpStatus{};
+}
+
+void Win32Window::SetCommandHandler(WindowCommandHandler handler)
+{
+    SetWin32DebugConsoleCommandHandler(std::move(handler));
+}
+
+void Win32Window::PumpCommands()
+{
+    PumpWin32DebugConsoleCommands();
 }
 
 bool Win32Window::ShouldClose() const noexcept
@@ -151,6 +188,11 @@ const std::string& Win32Window::GetTitle() const noexcept
 void* Win32Window::GetNativeHandle() const noexcept
 {
     return windowHandle_;
+}
+
+void* Win32Window::GetNativeLayer() const noexcept
+{
+    return nullptr;
 }
 
 HWND Win32Window::GetWin32Handle() const noexcept

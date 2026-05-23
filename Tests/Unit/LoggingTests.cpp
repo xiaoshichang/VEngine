@@ -1,4 +1,3 @@
-#include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Logging/Log.h"
 
@@ -40,11 +39,6 @@ void CaptureLog(const ve::LogRecord& record)
     capturedLog.function = record.location.function_name() != nullptr ? record.location.function_name() : "";
     capturedLog.line = record.location.line();
     gCapturedLogs->push_back(std::move(capturedLog));
-}
-
-void IgnoreAssertion(const ve::AssertionInfo& info)
-{
-    (void)info;
 }
 
 bool Expect(bool condition, const char* message)
@@ -200,69 +194,6 @@ bool TestSeverityFilterAndCallback()
     return passed;
 }
 
-bool TestAssertionIntegration()
-{
-    bool passed = true;
-
-    ve::ShutdownLogging();
-
-    const ve::Result<void> installBeforeInitResult = ve::InstallAssertionLogHandler();
-    passed &= Expect(!installBeforeInitResult.IsOk(), "Assertion logging install should require initialized logging");
-    passed &= Expect(installBeforeInitResult.GetError().GetCode() == ve::ErrorCode::InvalidState,
-                     "Assertion logging install before init should return InvalidState");
-
-    std::vector<CapturedLog> capturedLogs;
-    gCapturedLogs = &capturedLogs;
-
-    ve::AssertionHandler previousAssertionHandler = ve::GetAssertionHandler();
-    ve::SetAssertionHandler(IgnoreAssertion);
-
-    const ve::Result<void> initializeResult = ve::InitializeLogging(MakeQuietConfig());
-    passed &= Expect(initializeResult.IsOk(), "InitializeLogging should succeed for assertion integration");
-
-    ve::SetLogCallback(CaptureLog);
-
-    const ve::Result<void> installResult = ve::InstallAssertionLogHandler();
-    passed &= Expect(installResult.IsOk(), "Assertion logging install should succeed after logging initialization");
-
-    const ve::Result<void> repeatedInstallResult = ve::InstallAssertionLogHandler();
-    passed &= Expect(!repeatedInstallResult.IsOk(), "Repeated assertion logging install should fail");
-    passed &= Expect(repeatedInstallResult.GetError().GetCode() == ve::ErrorCode::InvalidState,
-                     "Repeated assertion logging install should return InvalidState");
-
-    const ve::AssertionInfo assertionInfo{
-        "value != nullptr",
-        "value should exist",
-        "LoggingTests.cpp",
-        "TestAssertionIntegration",
-        123,
-    };
-    ve::ReportAssertionFailure(assertionInfo);
-
-    passed &= Expect(capturedLogs.size() == 1, "Assertion failure should be routed to logging callback");
-    if (capturedLogs.size() == 1)
-    {
-        passed &= Expect(capturedLogs[0].severity == ve::LogSeverity::Fatal, "Assertion log should use Fatal severity");
-        passed &= Expect(capturedLogs[0].category == "Assert", "Assertion log should use Assert category");
-        passed &= Expect(capturedLogs[0].message.find("value != nullptr") != std::string::npos,
-                         "Assertion log should include expression");
-        passed &= Expect(capturedLogs[0].message.find("LoggingTests.cpp:123") != std::string::npos,
-                         "Assertion log should include assertion location");
-    }
-
-    ve::UninstallAssertionLogHandler();
-
-    capturedLogs.clear();
-    ve::ReportAssertionFailure(assertionInfo);
-    passed &= Expect(capturedLogs.empty(), "UninstallAssertionLogHandler should restore previous handler");
-
-    ve::SetLogCallback(nullptr);
-    gCapturedLogs = nullptr;
-    ve::SetAssertionHandler(previousAssertionHandler);
-    ve::ShutdownLogging();
-
-    return passed;
-}
 }
 
 int main()
@@ -272,7 +203,6 @@ int main()
     passed &= TestInitialization();
     passed &= TestFileOutputAndFormatting();
     passed &= TestSeverityFilterAndCallback();
-    passed &= TestAssertionIntegration();
 
     ve::ShutdownLogging();
 

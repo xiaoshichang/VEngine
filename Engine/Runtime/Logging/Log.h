@@ -77,12 +77,6 @@ void LogMessage(
 
 [[nodiscard]] const char* ToString(LogSeverity severity) noexcept;
 
-/// Routes Core assertion failures through the logging facade until uninstalled.
-[[nodiscard]] Result<void> InstallAssertionLogHandler();
-
-/// Restores the assertion handler that was active before InstallAssertionLogHandler().
-void UninstallAssertionLogHandler() noexcept;
-
 namespace detail
 {
 template <typename... TArgs>

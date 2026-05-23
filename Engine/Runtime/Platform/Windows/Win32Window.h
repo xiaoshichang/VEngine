@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Platform/Window.h"
+#include "Engine/Runtime/Platform/Windows/Win32MessageLoop.h"
 
 #include <memory>
 #include <string>
@@ -28,9 +29,13 @@ public:
     ~Win32Window() override;
 
     [[nodiscard]] static Result<std::unique_ptr<Win32Window>> Create(const WindowDesc& desc);
+    [[nodiscard]] static Result<std::unique_ptr<Window>> CreatePlatformWindow(const WindowDesc& desc);
 
     void Show() override;
     void Close() override;
+    [[nodiscard]] WindowPumpStatus PumpEvents() override;
+    void SetCommandHandler(WindowCommandHandler handler) override;
+    void PumpCommands() override;
 
     [[nodiscard]] bool ShouldClose() const noexcept override;
     [[nodiscard]] bool IsVisible() const noexcept override;
@@ -39,6 +44,7 @@ public:
     [[nodiscard]] WindowExtent GetClientExtent() const noexcept override;
     [[nodiscard]] const std::string& GetTitle() const noexcept override;
     [[nodiscard]] void* GetNativeHandle() const noexcept override;
+    [[nodiscard]] void* GetNativeLayer() const noexcept override;
     [[nodiscard]] HWND GetWin32Handle() const noexcept;
 
 private:
@@ -55,6 +61,7 @@ private:
     HWND windowHandle_ = nullptr;
     std::string title_;
     WindowExtent clientExtent_ = {};
+    Win32MessageLoop messageLoop_;
     bool visible_ = false;
     bool focused_ = false;
     bool minimized_ = false;

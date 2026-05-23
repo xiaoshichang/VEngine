@@ -211,6 +211,168 @@ bool TestCommandExecutesOnRenderThread()
     return passed;
 }
 
+bool TestDeviceLifecycle()
+{
+    bool passed = true;
+
+    ve::RenderSystem renderSystem;
+    passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for device test");
+    passed &= Expect(!renderSystem.HasDevice(), "RenderSystem should start without an RHI device");
+
+    ve::RenderDeviceDesc deviceDesc;
+    deviceDesc.backend = ve::RenderBackend::D3D11;
+    deviceDesc.enableDebugDevice = false;
+
+    passed &= ExpectOk(renderSystem.InitializeDevice(deviceDesc), "RenderSystem should create a D3D11 device");
+    passed &= Expect(renderSystem.HasDevice(), "RenderSystem should report an initialized RHI device");
+    passed &= Expect(
+        renderSystem.GetDeviceBackend() == ve::RenderBackend::D3D11,
+        "RenderSystem should report the initialized backend");
+
+    const ve::Result<void> repeatedDevice = renderSystem.InitializeDevice(deviceDesc);
+    passed &= Expect(!repeatedDevice, "Repeated RHI device initialization should fail");
+    if (!repeatedDevice)
+    {
+        passed &= Expect(
+            repeatedDevice.GetError().GetCode() == ve::ErrorCode::InvalidState,
+            "Repeated RHI device initialization should report InvalidState");
+    }
+
+    renderSystem.ShutdownDevice();
+    passed &= Expect(!renderSystem.HasDevice(), "RenderSystem should report no RHI device after ShutdownDevice");
+    passed &= Expect(!renderSystem.HasMainSwapchain(), "ShutdownDevice should also clear the main swapchain state");
+
+    renderSystem.Shutdown();
+    return passed;
+}
+
+bool TestShutdownDestroysDevice()
+{
+    bool passed = true;
+
+    ve::RenderSystem renderSystem;
+    passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for shutdown device test");
+
+    ve::RenderDeviceDesc deviceDesc;
+    deviceDesc.backend = ve::RenderBackend::D3D11;
+    deviceDesc.enableDebugDevice = false;
+
+    passed &= ExpectOk(renderSystem.InitializeDevice(deviceDesc), "RenderSystem should create a device before shutdown");
+    passed &= Expect(renderSystem.HasDevice(), "RenderSystem should report device before shutdown");
+
+    renderSystem.Shutdown();
+    passed &= Expect(!renderSystem.IsInitialized(), "RenderSystem should shut down");
+    passed &= Expect(!renderSystem.HasDevice(), "RenderSystem shutdown should destroy the RHI device");
+    passed &= Expect(!renderSystem.HasMainSwapchain(), "RenderSystem shutdown should destroy the main swapchain");
+
+    return passed;
+}
+
+bool TestUnsupportedDeviceBackendFails()
+{
+    bool passed = true;
+
+    ve::RenderSystem renderSystem;
+    passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for backend test");
+
+    ve::RenderDeviceDesc deviceDesc;
+    deviceDesc.backend = ve::RenderBackend::Metal;
+    deviceDesc.enableDebugDevice = false;
+
+    const ve::Result<void> result = renderSystem.InitializeDevice(deviceDesc);
+    passed &= Expect(!result, "Unavailable Metal backend should fail on this Windows test preset");
+    if (!result)
+    {
+        passed &= Expect(
+            result.GetError().GetCode() == ve::ErrorCode::Unsupported,
+            "Unavailable backend should report Unsupported");
+    }
+
+    renderSystem.Shutdown();
+    return passed;
+}
+
+bool TestCreateMainSwapchainRequiresDevice()
+{
+    bool passed = true;
+
+    ve::RenderSystem renderSystem;
+    passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for swapchain test");
+
+    ve::RenderSurfaceDesc surfaceDesc;
+    surfaceDesc.nativeWindow = reinterpret_cast<void*>(0x1);
+    surfaceDesc.width = 640;
+    surfaceDesc.height = 480;
+
+    const ve::Result<void> result = renderSystem.CreateMainSwapchain(surfaceDesc);
+    passed &= Expect(!result, "Creating swapchain before RHI device should fail");
+    if (!result)
+    {
+        passed &= Expect(
+            result.GetError().GetCode() == ve::ErrorCode::InvalidState,
+            "Creating swapchain before RHI device should report InvalidState");
+    }
+
+    renderSystem.Shutdown();
+    return passed;
+}
+
+bool TestCreateMainSwapchainRejectsInvalidSurface()
+{
+    bool passed = true;
+
+    ve::RenderSystem renderSystem;
+    passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for surface test");
+
+    ve::RenderSurfaceDesc missingHandle;
+    missingHandle.width = 640;
+    missingHandle.height = 480;
+
+    const ve::Result<void> missingHandleResult = renderSystem.CreateMainSwapchain(missingHandle);
+    passed &= Expect(!missingHandleResult, "Creating swapchain without native surface should fail");
+    if (!missingHandleResult)
+    {
+        passed &= Expect(
+            missingHandleResult.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
+            "Missing native surface should report InvalidArgument");
+    }
+
+    ve::RenderSurfaceDesc zeroSize;
+    zeroSize.nativeWindow = reinterpret_cast<void*>(0x1);
+
+    const ve::Result<void> zeroSizeResult = renderSystem.CreateMainSwapchain(zeroSize);
+    passed &= Expect(!zeroSizeResult, "Creating swapchain with zero size should fail");
+    if (!zeroSizeResult)
+    {
+        passed &= Expect(
+            zeroSizeResult.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
+            "Zero-sized surface should report InvalidArgument");
+    }
+
+    renderSystem.Shutdown();
+    return passed;
+}
+
+bool TestRenderFrameRequiresSwapchain()
+{
+    bool passed = true;
+
+    ve::RenderSystem renderSystem;
+    passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for RenderFrame test");
+
+    const ve::Result<void> result = renderSystem.RenderFrame();
+    passed &= Expect(!result, "RenderFrame without a swapchain should fail");
+    if (!result)
+    {
+        passed &= Expect(
+            result.GetError().GetCode() == ve::ErrorCode::InvalidState,
+            "RenderFrame without a swapchain should report InvalidState");
+    }
+
+    renderSystem.Shutdown();
+    return passed;
+}
+
 bool TestFlushWaitsForAcceptedCommands()
 {
     bool passed = true;
@@ -358,6 +520,12 @@ int main()
     passed &= TestSubmitBeforeInitializeAndAfterShutdownFails();
     passed &= TestEmptyCommandFails();
     passed &= TestCommandExecutesOnRenderThread();
+    passed &= TestDeviceLifecycle();
+    passed &= TestShutdownDestroysDevice();
+    passed &= TestUnsupportedDeviceBackendFails();
+    passed &= TestCreateMainSwapchainRequiresDevice();
+    passed &= TestCreateMainSwapchainRejectsInvalidSurface();
+    passed &= TestRenderFrameRequiresSwapchain();
     passed &= TestFlushWaitsForAcceptedCommands();
     passed &= TestShutdownDrainsAcceptedCommands();
     passed &= TestMultipleProducerThreadsSubmitCommands();

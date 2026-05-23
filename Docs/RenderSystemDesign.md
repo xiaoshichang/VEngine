@@ -2,16 +2,20 @@
 
 ## 1. Purpose
 
-`RenderSystem` is the runtime service that owns render-thread lifecycle and render command execution. It is managed by
-`EngineRuntime` alongside `JobSystem` and `IOSystem`.
+`RenderSystem` is the runtime service that owns render-thread lifecycle, render command execution, and first-stage RHI
+device/swapchain lifecycle. It is managed by `EngineRuntime` alongside `JobSystem` and `IOSystem`.
 
-The first version intentionally focuses on the runtime boundary:
+The first version intentionally keeps the renderer narrow while making the runtime boundary real:
 
 - Start and stop the Render Thread.
 - Accept commands from Game Thread, ResourceSystem, jobs, and tests.
 - Execute commands on the Render Thread.
 - Provide CPU-side flushing for submitted render commands.
-- Leave RHI device, swapchain, render resources, and frame rendering integration for later RHI-focused work.
+- Initialize and shut down the selected RHI device on the Render Thread.
+- Create and destroy the main swapchain from the platform window surface.
+- Render a minimal triangle frame as the first Player/Editor rendering smoke path.
+- Leave RenderWorld, render-resource registries, upload scheduling, frame graph/pass orchestration, and viewport
+  registration for later renderer work.
 
 ## 2. Relationship To RHI
 
@@ -24,6 +28,7 @@ The first version intentionally focuses on the runtime boundary:
 - Render command queue semantics.
 - CPU-side command flushing and shutdown draining.
 - How higher-level modules submit work to the Render Thread.
+- How Application connects a platform surface to the main RHI swapchain.
 
 RHI documents define:
 
@@ -32,8 +37,9 @@ RHI documents define:
 - D3D11, D3D12, Metal, and future backend mapping.
 - GPU submission and resource-state behavior.
 
-This separation keeps the first `RenderSystem` useful before the renderer owns a real swapchain. Later work should attach
-RHI device and swapchain ownership to `RenderSystem` without changing the basic service and command-queue contract.
+This separation keeps `RenderSystem` focused on service, thread, and lifecycle orchestration. The RHI remains focused on
+backend object behavior; `RenderSystem` decides when those objects are created, used for the main frame smoke path, and
+destroyed.
 
 ## 3. Naming And Ownership
 
@@ -78,6 +84,9 @@ The first version includes:
 - `Submit()` for render commands.
 - `Flush()` for CPU-side command completion.
 - Integration into `EngineRuntime`.
+- RHI device lifecycle APIs.
+- Main swapchain lifecycle APIs.
+- A minimal `RenderFrame()` path that clears, draws one triangle, submits, and presents.
 - Unit tests for lifecycle, command execution, flushing, shutdown draining, and runtime access.
 
 The first version does not create or own:
@@ -173,27 +182,144 @@ Repeated `RenderSystem::Initialize()` while running returns `ErrorCode::InvalidS
 
 Submitting an empty command function returns `ErrorCode::InvalidArgument`.
 
-## 9. Future RHI Integration
+## 9. RHI Device And Swapchain Lifecycle
 
-The next RHI-facing step should extend `RenderSystemDesc` with backend and device options:
+### 9.1 Reference Direction
 
-```text
-RenderBackend backend
-bool enableDebugDevice
+Unreal and Unity both separate long-lived graphics lifecycle ownership from ordinary per-frame rendering commands.
+
+Unreal exposes render-thread enqueue APIs and has a deeper Render Thread / RHI Thread / RHI command-list stack. The
+important pattern for VEngine is not the exact internal queue implementation, but the ownership split: high-level engine
+code does not directly mutate live render/RHI state; rendering work is handed to the render-side owner.
+
+Unity exposes graphics-device lifecycle callbacks to native rendering plugins and requires render-thread events for
+render-thread work. The useful pattern is similar: device lifecycle is a graphics-system concern, while actual
+render-thread execution is scheduled into the render side rather than performed directly from arbitrary caller threads.
+
+VEngine should follow this split:
+
+- `RenderSystem` owns the lifecycle API and public state transitions.
+- RHI objects are created, used, and destroyed on the Render Thread.
+- Ordinary external callers should not create or destroy RHI devices by submitting ad hoc `RenderCommand` lambdas.
+- `RenderSystem` may implement its own lifecycle APIs internally by enqueueing synchronous render-thread operations.
+
+### 9.2 Public Lifecycle API
+
+RHI device and swapchain lifecycle should be explicit `RenderSystem` API, not an unstructured render command submitted
+by arbitrary callers.
+
+First RHI-facing API shape:
+
+```cpp
+enum class RenderBackend
+{
+    D3D11,
+    D3D12,
+    Metal,
+};
+
+struct RenderDeviceDesc
+{
+    RenderBackend backend = RenderBackend::D3D12;
+    bool enableDebugDevice = false;
+};
+
+struct RenderSystemDesc
+{
+    std::string threadName = "VEngineRenderThread";
+    RenderDeviceDesc device;
+};
+
+struct RenderSurfaceDesc
+{
+    void* nativeWindow = nullptr;
+    void* nativeLayer = nullptr;
+    UInt32 width = 0;
+    UInt32 height = 0;
+    rhi::RhiFormat colorFormat = rhi::RhiFormat::Bgra8Unorm;
+    UInt32 bufferCount = 2;
+};
+
+Result<void> InitializeDevice(const RenderDeviceDesc& desc);
+Result<void> CreateMainSwapchain(const RenderSurfaceDesc& desc);
+void DestroyMainSwapchain() noexcept;
+void ShutdownDevice() noexcept;
+bool HasDevice() const noexcept;
+RenderBackend GetDeviceBackend() const noexcept;
+bool HasMainSwapchain() const noexcept;
+Result<void> RenderFrame();
 ```
 
-Window and swapchain ownership should be connected after Application and platform-window boundaries are explicit:
+`Application` obtains native surface information through the `Window` base interface instead of branching on a platform
+macro itself. Platform-specific subclasses such as `Win32Window` and future `iOSWindow` own native window creation,
+event pumping, command-console pumping, and native surface handles. `RenderSystem` owns the transition from platform
+surface to RHI swapchain. RHI backend headers stay responsible for backend-specific creation details.
+
+The first-stage startup path initializes `EngineRuntime`, creates the main `Window`, then calls
+`RenderSystem::InitializeDevice()` and `RenderSystem::CreateMainSwapchain()` before entering the main loop. Each loop
+iteration pumps the `Window`, calls `RenderSystem::RenderFrame()` to clear, draw the first-stage triangle, submit, and
+present. Shutdown destroys the main swapchain and RHI device before `EngineRuntime::Shutdown()`.
+
+### 9.3 Threading Rule
+
+RHI lifecycle work should execute on the Render Thread.
+
+Public `RenderSystem` lifecycle methods may be called from Main Thread during startup or shutdown. Internally they
+should:
+
+1. Validate public state on the caller thread.
+2. Submit a private lifecycle command to the Render Thread.
+3. Wait for that command to finish.
+4. Return success or failure to the caller.
+
+This keeps startup code straightforward while preserving render-thread ownership of live RHI state.
+
+Ordinary `Submit(RenderCommand)` remains available for render work, resource uploads, and future render-resource
+updates. It should not be the primary public API for device or swapchain lifecycle.
+
+### 9.4 State Ownership
+
+`RenderSystem` should track render lifecycle state separately from `EngineRuntime` service state:
 
 ```text
-Application / Platform Window
-  -> RenderSystem surface registration
-    -> RHI swapchain
+RenderSystem service state:
+  Uninitialized / Initialized / ShuttingDown
+
+RHI device state:
+  NoDevice / DeviceReady
+
+Main swapchain state:
+  NoSwapchain / SwapchainReady
 ```
 
-Editor viewport support should allow more than one render target or swapchain-like output, so the first RHI integration
-should avoid hard-coding a single global viewport into the core `RenderSystem` contract.
+First RHI integration may support one main swapchain for Player. Editor viewport work should avoid assuming there will
+only ever be one surface; future Editor support may register additional viewport surfaces or render targets.
 
-## 10. Testing Plan
+### 9.5 Shutdown Order
+
+When RHI ownership is added, `RenderSystem::Shutdown()` should drain normal commands and then perform render-side
+teardown in this order:
+
+```text
+Stop accepting public commands
+Drain accepted commands
+Destroy swapchain / viewport surfaces on Render Thread
+Flush or wait-idle RHI device as needed
+Destroy RHI device on Render Thread
+Join Render Thread
+```
+
+GPU fences and frame latency should remain RHI concepts. `RenderSystem` coordinates when to call them during lifecycle
+transitions, but should not turn CPU command `Flush()` into a GPU-idle operation.
+
+## 10. Future Render Work
+
+After RHI device and main swapchain lifecycle are connected, later RenderSystem work should add render-resource
+registries, upload scheduling, frame begin/end commands, viewport registration, and RenderWorld/RenderScene ownership.
+Those features should build on the explicit lifecycle APIs above instead of bypassing them with ad hoc public render
+commands.
+
+## 11. Testing Plan
 
 Required tests:
 

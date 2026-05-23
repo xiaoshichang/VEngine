@@ -118,9 +118,7 @@ void StoreReadResult(
         }
 
         state->status = IORequestStatus::Complete;
-        state->complete = true;
     }
-    state->completionCondition.notify_all();
 
     {
         std::lock_guard<std::mutex> lock(impl.mutex);
@@ -131,6 +129,12 @@ void StoreReadResult(
     }
 
     impl.condition.notify_all();
+
+    {
+        std::lock_guard<std::mutex> completionLock(state->completionMutex);
+        state->complete = true;
+    }
+    state->completionCondition.notify_all();
 }
 
 void IOThreadLoop(IOSystemImpl& impl)

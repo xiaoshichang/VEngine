@@ -1,8 +1,10 @@
 #pragma once
 
 #include "Engine/Runtime/Application/EngineRuntime.h"
+#include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Platform/Window.h"
 
+#include <memory>
 #include <string>
 
 namespace ve
@@ -29,8 +31,15 @@ public:
     [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
 
 private:
+    [[nodiscard]] Result<void> InitializeEngineRuntime();
+    [[nodiscard]] Result<std::unique_ptr<Window>> CreateMainWindow();
+    [[nodiscard]] Result<void> InitializeRendering(Window& mainWindow);
+    void ShutdownRendering() noexcept;
+    [[nodiscard]] int RunMainLoop(Window& mainWindow);
+    [[nodiscard]] int RunApplication();
+
     ApplicationDesc desc_;
-    EngineRuntime runtime_;
+    EngineRuntime engineRuntime_;
     int exitCode_ = 0;
 };
 }
