@@ -407,9 +407,8 @@ Detailed first-stage thread wrapper, synchronization primitive, and lock-free ut
 - `Vector2`.
 - `Vector3`.
 - `Vector4`.
-- `Matrix4`.
+- `Matrix44`.
 - `Quaternion`.
-- `Transform`.
 - `AABB`.
 - `Sphere`.
 - `Ray`.

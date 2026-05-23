@@ -39,6 +39,12 @@ function(ve_add_engine)
             Engine/Runtime/FileSystem/FileSystem.h
             Engine/Runtime/FileSystem/Path.h
             Engine/Runtime/Logging/Log.h
+            Engine/Runtime/Math/Math.h
+            Engine/Runtime/Math/Matrix44.h
+            Engine/Runtime/Math/Quaternion.h
+            Engine/Runtime/Math/Vector2.h
+            Engine/Runtime/Math/Vector3.h
+            Engine/Runtime/Math/Vector4.h
             Engine/Runtime/Memory/PoolAllocator.h
             Engine/Runtime/Platform/Window.h
             Engine/Runtime/Threading/Atomic.h

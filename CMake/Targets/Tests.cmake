@@ -90,6 +90,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineMemoryTests>
     )
 
+    add_executable(VEngineMathTests
+        Tests/Unit/MathTests.cpp
+    )
+
+    target_link_libraries(VEngineMathTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineMathTests)
+
+    add_test(
+        NAME VEngineMathTests
+        COMMAND $<TARGET_FILE:VEngineMathTests>
+    )
+
     add_executable(VEngineThreadingTests
         Tests/Unit/ThreadingTests.cpp
     )
