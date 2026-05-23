@@ -323,8 +323,8 @@ The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar frame
 this application-level flow instead of duplicating service initialization in each executable entry point.
 
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
-explicit service access without introducing global singletons. The first runtime services are JobSystem and IOSystem;
-Render, Scene, Resource, Input, Script, UI, and Physics should connect through this layer as their modules land.
+explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem, and
+RenderSystem; Scene, Resource, Input, Script, UI, and Physics should connect through this layer as their modules land.
 
 ### 7.4 FileSystem
 
@@ -509,6 +509,10 @@ Responsibilities:
 
 The render layer should avoid directly depending on GameObject instances on the Render Thread. It should consume render proxies, snapshots, or render commands produced by the Game Thread.
 
+`RenderSystem` owns Render Thread lifecycle and the render command queue. Detailed first-stage service, thread, and
+command queue rules are defined in `Docs/RenderSystemDesign.md`. RHI documents remain focused on backend graphics
+objects such as devices, swapchains, resources, command lists, pipelines, bindings, and GPU synchronization.
+
 ### 7.13 RHI
 
 `RHI` is the graphics backend abstraction layer.
@@ -630,7 +634,8 @@ Important rules:
 - Parallel jobs do not directly mutate GameObject hierarchy unless explicitly synchronized.
 - Render Thread does not directly access live GameObject data.
 
-Game Thread and Render Thread communicate through a double-buffered or triple-buffered render command queue.
+Game Thread and Render Thread communicate through the `RenderSystem` render command queue. Later render snapshots or
+render world state may use double or triple buffering when scene-to-render synchronization needs a stable frame boundary.
 
 Recommended frame flow:
 

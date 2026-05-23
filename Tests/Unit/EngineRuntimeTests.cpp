@@ -2,6 +2,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/IO/IOSystem.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 
 #include <filesystem>
@@ -87,6 +88,7 @@ ve::EngineRuntimeDesc MakeRuntimeDesc()
     desc.jobSystem.workerThreadCount = 1;
     desc.jobSystem.workerThreadNamePrefix = "EngineRuntimeTestJobWorker";
     desc.ioSystem.threadName = "EngineRuntimeTestIOThread";
+    desc.renderSystem.threadName = "EngineRuntimeTestRenderThread";
     return desc;
 }
 
@@ -103,6 +105,7 @@ bool TestInitializeAndShutdown()
     passed &= Expect(runtime.HasInitialized(), "Initialized runtime should report completed lifecycle");
     passed &= Expect(runtime.GetJobSystem().IsInitialized(), "Runtime-owned JobSystem should be initialized");
     passed &= Expect(runtime.GetIOSystem().IsInitialized(), "Runtime-owned IOSystem should be initialized");
+    passed &= Expect(runtime.GetRenderSystem().IsInitialized(), "Runtime-owned RenderSystem should be initialized");
 
     runtime.Shutdown();
     passed &= Expect(!runtime.IsInitialized(), "Shutdown runtime should report uninitialized");
@@ -209,6 +212,33 @@ bool TestCanReadThroughRuntimeIOSystem()
     runtime.Shutdown();
     return passed;
 }
+
+bool TestCanSubmitThroughRuntimeRenderSystem()
+{
+    bool passed = true;
+
+    ve::EngineRuntime runtime;
+    passed &= ExpectOk(runtime.Initialize(MakeRuntimeDesc()), "EngineRuntime should initialize for render access test");
+
+    ve::AtomicInt32 value{0};
+    ve::ThreadId executedThreadId;
+
+    ve::RenderCommand command;
+    command.debugName = "RuntimeRenderCommand";
+    command.function = [&](ve::RenderThreadContext& context)
+    {
+        executedThreadId = context.GetRenderThreadId();
+        value.store(29, std::memory_order_release);
+    };
+
+    passed &= ExpectOk(runtime.GetRenderSystem().Submit(std::move(command)), "Runtime-owned RenderSystem should accept commands");
+    passed &= ExpectOk(runtime.GetRenderSystem().Flush(), "Runtime-owned RenderSystem should flush commands");
+    passed &= Expect(value.load(std::memory_order_acquire) == 29, "Runtime-owned RenderSystem command should execute");
+    passed &= Expect(executedThreadId.IsValid(), "Runtime-owned RenderSystem command should see a Render Thread id");
+
+    runtime.Shutdown();
+    return passed;
+}
 } // namespace
 
 int main()
@@ -222,6 +252,7 @@ int main()
     passed &= TestRepeatedLifecycleFails();
     passed &= TestCanScheduleJobThroughRuntime();
     passed &= TestCanReadThroughRuntimeIOSystem();
+    passed &= TestCanSubmitThroughRuntimeRenderSystem();
 
     RemoveTestRoot();
 

@@ -138,8 +138,9 @@ VE_LOG_INFO
 - Implement D3D12RHI minimum path.
 - Add swapchain, buffer, texture, shader, pipeline, command list, and fence concepts.
 - Add D3D11 and D3D12 triangle smoke tests.
-- Build initial Render Thread and Render Command Queue.
-- Connect RHI and Render Thread lifecycle through `EngineRuntime`.
+- Build initial RenderSystem with Render Thread and lock-free Render Command Queue.
+- Connect RenderSystem lifecycle through `EngineRuntime`.
+- Connect RHI device and swapchain lifecycle through RenderSystem after the service boundary is stable.
 
 ### Milestone 4: Shader Pipeline
 
@@ -234,7 +235,7 @@ CMake skeleton
   -> Core / Boost.Log / FileSystem
   -> Windows Platform
   -> Memory / Math / Threading
-  -> EngineRuntime / Job System / IOSystem
+  -> EngineRuntime / Job System / IOSystem / RenderSystem
   -> RHI common design
   -> D3D11 and D3D12 minimum rendering
   -> Shader pipeline
@@ -258,14 +259,18 @@ Initial services:
 
 - Job System.
 - IOSystem.
+- RenderSystem.
 
 Later services should connect through this layer as their modules land:
 
-- Render and RHI runtime state.
 - Scene runtime state.
 - ResourceManager and asset loading.
 - Input, scripting, runtime UI, and lightweight physics.
 
+Later RenderSystem work should attach RHI device, swapchain, render resource, and viewport state to the existing runtime
+service boundary.
+
 `Application` remains responsible for platform startup, logging setup, the main window, and the main loop. Runtime
 modules should be initialized and shut down through `EngineRuntime`, so Player and Editor share the same service
-lifecycle model.
+lifecycle model. Service initialization failures inside `EngineRuntime` are unrecoverable startup failures: they should
+be logged as fatal errors and terminate startup rather than returning partially initialized runtime state.

@@ -20,6 +20,8 @@ function(ve_add_engine)
             Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
+            Engine/Runtime/Render/RenderCommandQueue.cpp
+            Engine/Runtime/Render/RenderSystem.cpp
             Engine/Runtime/Threading/Synchronization.cpp
             Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
@@ -53,7 +55,10 @@ function(ve_add_engine)
             Engine/Runtime/Math/Vector4.h
             Engine/Runtime/Memory/PoolAllocator.h
             Engine/Runtime/Platform/Window.h
+            Engine/Runtime/Render/RenderCommandQueue.h
+            Engine/Runtime/Render/RenderSystem.h
             Engine/Runtime/Threading/Atomic.h
+            Engine/Runtime/Threading/LockFreeMpscQueue.h
             Engine/Runtime/Threading/LockFreeSpscQueue.h
             Engine/Runtime/Threading/Synchronization.h
             Engine/Runtime/Threading/Thread.h

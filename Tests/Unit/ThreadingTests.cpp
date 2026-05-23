@@ -1,10 +1,12 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Threading/Atomic.h"
+#include "Engine/Runtime/Threading/LockFreeMpscQueue.h"
 #include "Engine/Runtime/Threading/LockFreeSpscQueue.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Threading/Thread.h"
 
 #include <iostream>
+#include <optional>
 #include <string_view>
 
 namespace
@@ -400,6 +402,88 @@ bool TestLockFreeSpscQueueCrossThread()
 
     return passed;
 }
+
+bool TestLockFreeMpscQueueSingleThread()
+{
+    bool passed = true;
+
+    ve::LockFreeMpscQueue<int> queue;
+    passed &= Expect(!queue.TryPop().has_value(), "New MPSC queue should be empty");
+
+    passed &= ExpectOk(queue.Push(1), "MPSC queue should accept first value");
+    passed &= ExpectOk(queue.Push(2), "MPSC queue should accept second value");
+    passed &= ExpectOk(queue.Push(3), "MPSC queue should accept third value");
+
+    std::optional<int> first = queue.TryPop();
+    std::optional<int> second = queue.TryPop();
+    std::optional<int> third = queue.TryPop();
+    std::optional<int> empty = queue.TryPop();
+
+    passed &= Expect(first.has_value() && *first == 1, "MPSC queue should pop first value FIFO");
+    passed &= Expect(second.has_value() && *second == 2, "MPSC queue should pop second value FIFO");
+    passed &= Expect(third.has_value() && *third == 3, "MPSC queue should pop third value FIFO");
+    passed &= Expect(!empty.has_value(), "MPSC queue should be empty after popping all values");
+
+    return passed;
+}
+
+bool TestLockFreeMpscQueueMultipleProducers()
+{
+    bool passed = true;
+
+    constexpr int ProducerCount = 4;
+    constexpr int ValuesPerProducer = 128;
+    constexpr int ExpectedCount = ProducerCount * ValuesPerProducer;
+
+    ve::LockFreeMpscQueue<int> queue;
+    ve::Thread producers[ProducerCount];
+    ve::AtomicInt32 producerFailures{0};
+
+    for (int producerIndex = 0; producerIndex < ProducerCount; ++producerIndex)
+    {
+        const int baseValue = producerIndex * ValuesPerProducer;
+        passed &= ExpectOk(
+            producers[producerIndex].Start(ve::ThreadDesc{"MpscProducer"}, [&, baseValue]()
+            {
+                for (int valueIndex = 0; valueIndex < ValuesPerProducer; ++valueIndex)
+                {
+                    const ve::Result<void> pushResult = queue.Push(baseValue + valueIndex);
+                    if (!pushResult)
+                    {
+                        producerFailures.fetch_add(1, std::memory_order_acq_rel);
+                    }
+                }
+            }),
+            "MPSC producer should start");
+    }
+
+    for (ve::Thread& producer : producers)
+    {
+        passed &= Expect(producer.Join(), "MPSC producer should join");
+    }
+
+    bool seen[ExpectedCount] = {};
+    int poppedCount = 0;
+    while (std::optional<int> value = queue.TryPop())
+    {
+        if (*value >= 0 && *value < ExpectedCount)
+        {
+            seen[*value] = true;
+        }
+
+        ++poppedCount;
+    }
+
+    passed &= Expect(producerFailures.load(std::memory_order_acquire) == 0, "MPSC producers should not fail pushes");
+    passed &= Expect(poppedCount == ExpectedCount, "MPSC queue should pop every producer value");
+
+    for (bool wasSeen : seen)
+    {
+        passed &= Expect(wasSeen, "MPSC queue should preserve every submitted value");
+    }
+
+    return passed;
+}
 }
 
 int main()
@@ -417,6 +501,8 @@ int main()
     passed &= TestAutoResetEvent();
     passed &= TestLockFreeSpscQueueSingleThread();
     passed &= TestLockFreeSpscQueueCrossThread();
+    passed &= TestLockFreeMpscQueueSingleThread();
+    passed &= TestLockFreeMpscQueueMultipleProducers();
 
     if (passed)
     {

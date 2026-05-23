@@ -4,9 +4,17 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 
 namespace ve
 {
+enum class EngineRuntimeState
+{
+    NotInitialized,
+    Initialized,
+    Shutdown,
+};
+
 /// Describes long-lived runtime services owned by EngineRuntime.
 ///
 /// Player, Editor, tools, and future platform backends pass this descriptor into EngineRuntime so service configuration
@@ -18,14 +26,17 @@ struct EngineRuntimeDesc
 
     /// Configuration for the dedicated file IO system service.
     IOSystemDesc ioSystem;
+
+    /// Configuration for the Render Thread and render command queue service.
+    RenderSystemDesc renderSystem;
 };
 
 /// Owns the shared runtime service lifecycle for Player, Editor, and tools.
 ///
 /// EngineRuntime sits below Application's platform loop and above individual runtime modules. It initializes and shuts
 /// down long-lived services in a deterministic order, and exposes references to those services without using a global
-/// singleton. The first version owns JobSystem and IOSystem; Render, Scene, Resource, Input, Script, UI, and Physics
-/// can connect through this layer as those modules land.
+/// singleton. The first version owns JobSystem, IOSystem, and RenderSystem; Scene, Resource, Input, Script, UI, and
+/// Physics can connect through this layer as those modules land.
 class EngineRuntime : public NonMovable
 {
 public:
@@ -36,7 +47,8 @@ public:
     ///
     /// Returns InvalidState when this runtime is already initialized or when it has completed a previous successful
     /// lifecycle. A single EngineRuntime object is intentionally one-shot so Player and Editor startup/shutdown order
-    /// stays simple and visible.
+    /// stays simple and visible. Service initialization failures are treated as unrecoverable startup failures: they are
+    /// logged as fatal errors and terminate the process rather than returning partial runtime state to the caller.
     [[nodiscard]] Result<void> Initialize(const EngineRuntimeDesc& desc);
 
     /// Shuts down initialized services in reverse ownership order.
@@ -71,10 +83,20 @@ public:
     /// The runtime must be initialized before callers use the returned service.
     [[nodiscard]] const IOSystem& GetIOSystem() const noexcept;
 
+    /// Returns the runtime-owned Render System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
+
+    /// Returns the runtime-owned Render System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] const RenderSystem& GetRenderSystem() const noexcept;
+
 private:
     JobSystem jobSystem_;
     IOSystem ioSystem_;
-    bool initialized_ = false;
-    bool hasInitialized_ = false;
+    RenderSystem renderSystem_;
+    EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;
 };
 }
