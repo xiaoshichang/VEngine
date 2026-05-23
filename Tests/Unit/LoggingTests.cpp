@@ -79,14 +79,17 @@ bool TestInitialization()
     ve::ShutdownLogging();
     passed &= Expect(!ve::IsLoggingInitialized(), "Logging should start uninitialized");
 
-    const ve::Result<void> initializeResult = ve::InitializeLogging(MakeQuietConfig());
-    passed &= Expect(initializeResult.IsOk(), "InitializeLogging should succeed with a quiet config");
+    const ve::ErrorCode initializeResult = ve::InitializeLogging(MakeQuietConfig());
+    passed &= Expect(
+        initializeResult == ve::ErrorCode::None,
+        "InitializeLogging should succeed with a quiet config");
     passed &= Expect(ve::IsLoggingInitialized(), "Logging should be initialized after InitializeLogging");
 
-    const ve::Result<void> duplicateInitializeResult = ve::InitializeLogging(MakeQuietConfig());
-    passed &= Expect(!duplicateInitializeResult.IsOk(), "Repeated InitializeLogging should fail");
-    passed &= Expect(duplicateInitializeResult.GetError().GetCode() == ve::ErrorCode::InvalidState,
-                     "Repeated InitializeLogging should return InvalidState");
+    const ve::ErrorCode duplicateInitializeResult = ve::InitializeLogging(MakeQuietConfig());
+    passed &= Expect(duplicateInitializeResult != ve::ErrorCode::None, "Repeated InitializeLogging should fail");
+    passed &= Expect(
+        duplicateInitializeResult == ve::ErrorCode::InvalidState,
+        "Repeated InitializeLogging should return InvalidState");
 
     ve::ShutdownLogging();
     passed &= Expect(!ve::IsLoggingInitialized(), "ShutdownLogging should clear initialization state");
@@ -112,8 +115,8 @@ bool TestFileOutputAndFormatting()
     config.enableFile = true;
     config.filePath = logPath;
 
-    const ve::Result<void> initializeResult = ve::InitializeLogging(config);
-    passed &= Expect(initializeResult.IsOk(), "InitializeLogging should succeed for file output");
+    const ve::ErrorCode initializeResult = ve::InitializeLogging(config);
+    passed &= Expect(initializeResult == ve::ErrorCode::None, "InitializeLogging should succeed for file output");
 
     VE_LOG_INFO("Hello {}", 42);
     VE_LOG_WARN_CATEGORY("Resource", "Missing {}", std::string("Texture"));
@@ -166,8 +169,8 @@ bool TestSeverityFilterAndCallback()
     ve::LoggingConfig config = MakeQuietConfig();
     config.minimumSeverity = ve::LogSeverity::Warn;
 
-    const ve::Result<void> initializeResult = ve::InitializeLogging(config);
-    passed &= Expect(initializeResult.IsOk(), "InitializeLogging should succeed for callback test");
+    const ve::ErrorCode initializeResult = ve::InitializeLogging(config);
+    passed &= Expect(initializeResult == ve::ErrorCode::None, "InitializeLogging should succeed for callback test");
 
     ve::SetLogCallback(CaptureLog);
 

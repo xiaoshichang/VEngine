@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 
@@ -26,16 +27,16 @@ struct DirectoryEntry
 
 [[nodiscard]] Result<std::string> ReadTextFile(const Path& path);
 [[nodiscard]] Result<std::vector<std::byte>> ReadBinaryFile(const Path& path);
-[[nodiscard]] Result<void> WriteTextFile(const Path& path, std::string_view text);
-[[nodiscard]] Result<void> WriteBinaryFile(const Path& path, const void* data, size_t size);
-[[nodiscard]] Result<void> WriteBinaryFile(const Path& path, const std::vector<std::byte>& data);
+[[nodiscard]] ErrorCode WriteTextFile(const Path& path, std::string_view text);
+[[nodiscard]] ErrorCode WriteBinaryFile(const Path& path, const void* data, size_t size);
+[[nodiscard]] ErrorCode WriteBinaryFile(const Path& path, const std::vector<std::byte>& data);
 
 [[nodiscard]] bool Exists(const Path& path);
 [[nodiscard]] bool IsFile(const Path& path);
 [[nodiscard]] bool IsDirectory(const Path& path);
 
-[[nodiscard]] Result<void> CreateDirectories(const Path& path);
-[[nodiscard]] Result<void> RemoveFile(const Path& path);
+[[nodiscard]] ErrorCode CreateDirectories(const Path& path);
+[[nodiscard]] ErrorCode RemoveFile(const Path& path);
 [[nodiscard]] Result<std::vector<DirectoryEntry>> ListDirectory(const Path& path);
 
 [[nodiscard]] Path GetCurrentWorkingDirectory();

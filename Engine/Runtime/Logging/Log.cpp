@@ -171,13 +171,13 @@ LoggingConfig MakeDefaultLoggingConfig()
     return config;
 }
 
-Result<void> InitializeLogging(const LoggingConfig& config)
+ErrorCode InitializeLogging(const LoggingConfig& config)
 {
     std::lock_guard lock(gLoggingMutex);
 
     if (gLoggingState.initialized)
     {
-        return Result<void>::Failure(Error(ErrorCode::InvalidState, "Logging is already initialized."));
+        return ErrorCode::InvalidState;
     }
 
     try
@@ -214,21 +214,23 @@ Result<void> InitializeLogging(const LoggingConfig& config)
     }
     catch (const std::filesystem::filesystem_error& error)
     {
+        (void)error;
         boost::log::core::get()->remove_all_sinks();
-        return Result<void>::Failure(Error(ErrorCode::IOError, error.what()));
+        return ErrorCode::IOError;
     }
     catch (const std::exception& error)
     {
+        (void)error;
         boost::log::core::get()->remove_all_sinks();
-        return Result<void>::Failure(Error(ErrorCode::Unknown, error.what()));
+        return ErrorCode::Unknown;
     }
     catch (...)
     {
         boost::log::core::get()->remove_all_sinks();
-        return Result<void>::Failure(Error(ErrorCode::Unknown, "Unknown logging initialization failure."));
+        return ErrorCode::Unknown;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 void ShutdownLogging() noexcept

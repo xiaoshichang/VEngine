@@ -247,7 +247,7 @@ JobSystem::~JobSystem()
     Shutdown();
 }
 
-Result<void> JobSystem::Initialize(const JobSystemDesc& desc)
+ErrorCode JobSystem::Initialize(const JobSystemDesc& desc)
 {
     const SizeT workerThreadCount = ResolveWorkerThreadCount(desc.workerThreadCount);
 
@@ -255,7 +255,7 @@ Result<void> JobSystem::Initialize(const JobSystemDesc& desc)
         std::lock_guard<std::mutex> lock(impl_->schedulerMutex);
         if (impl_->initialized)
         {
-            return Result<void>::Failure(Error(ErrorCode::InvalidState, "JobSystem is already initialized."));
+            return ErrorCode::InvalidState;
         }
 
         impl_->initialized = true;
@@ -272,7 +272,7 @@ Result<void> JobSystem::Initialize(const JobSystemDesc& desc)
     catch (const std::bad_alloc&)
     {
         Shutdown();
-        return Result<void>::Failure(Error(ErrorCode::OutOfMemory, "JobSystem worker storage allocation failed."));
+        return ErrorCode::OutOfMemory;
     }
 
     try
@@ -283,12 +283,12 @@ Result<void> JobSystem::Initialize(const JobSystemDesc& desc)
             ThreadDesc threadDesc;
             threadDesc.name = desc.workerThreadNamePrefix + std::to_string(workerIndex);
 
-            Result<void> startResult = worker->Start(threadDesc, [impl = impl_.get()]()
+            ErrorCode startResult = worker->Start(threadDesc, [impl = impl_.get()]()
             {
                 WorkerLoop(*impl);
             });
 
-            if (!startResult)
+            if (startResult != ErrorCode::None)
             {
                 Shutdown();
                 return startResult;
@@ -300,10 +300,10 @@ Result<void> JobSystem::Initialize(const JobSystemDesc& desc)
     catch (const std::bad_alloc&)
     {
         Shutdown();
-        return Result<void>::Failure(Error(ErrorCode::OutOfMemory, "JobSystem worker allocation failed."));
+        return ErrorCode::OutOfMemory;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 void JobSystem::Shutdown() noexcept

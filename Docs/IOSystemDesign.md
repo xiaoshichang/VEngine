@@ -164,7 +164,7 @@ struct IOReadResult
 class IOSystem : public NonMovable
 {
 public:
-    [[nodiscard]] Result<void> Initialize(const IOSystemDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const IOSystemDesc& desc);
     void Shutdown() noexcept;
 
     [[nodiscard]] bool IsInitialized() const noexcept;

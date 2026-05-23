@@ -16,21 +16,14 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
-bool ExpectOk(const ve::Result<void>& result, const char* message)
+bool ExpectOk(ve::ErrorCode result, const char* message)
 {
-    if (result)
+    if (result == ve::ErrorCode::None)
     {
         return true;
     }
 
-    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
-
-    if (!result.GetError().GetMessage().empty())
-    {
-        std::cerr << ": " << result.GetError().GetMessage();
-    }
-
-    std::cerr << '\n';
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result) << '\n';
     return false;
 }
 
@@ -126,23 +119,17 @@ bool TestInvalidInputsAndFrees()
 
     ve::PoolAllocator allocator;
 
-    const ve::Result<void> zeroBlockSize = allocator.Initialize(ve::PoolAllocatorDesc{0, 1, 8});
-    passed &= Expect(!zeroBlockSize, "Zero block size should fail");
-    passed &= Expect(
-        zeroBlockSize.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
-        "Zero block size should return InvalidArgument");
+    const ve::ErrorCode zeroBlockSize = allocator.Initialize(ve::PoolAllocatorDesc{0, 1, 8});
+    passed &= Expect(zeroBlockSize != ve::ErrorCode::None, "Zero block size should fail");
+    passed &= Expect(zeroBlockSize == ve::ErrorCode::InvalidArgument, "Zero block size should return InvalidArgument");
 
-    const ve::Result<void> zeroBlockCount = allocator.Initialize(ve::PoolAllocatorDesc{8, 0, 8});
-    passed &= Expect(!zeroBlockCount, "Zero block count should fail");
-    passed &= Expect(
-        zeroBlockCount.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
-        "Zero block count should return InvalidArgument");
+    const ve::ErrorCode zeroBlockCount = allocator.Initialize(ve::PoolAllocatorDesc{8, 0, 8});
+    passed &= Expect(zeroBlockCount != ve::ErrorCode::None, "Zero block count should fail");
+    passed &= Expect(zeroBlockCount == ve::ErrorCode::InvalidArgument, "Zero block count should return InvalidArgument");
 
-    const ve::Result<void> badAlignment = allocator.Initialize(ve::PoolAllocatorDesc{8, 1, 3});
-    passed &= Expect(!badAlignment, "Non-power-of-two alignment should fail");
-    passed &= Expect(
-        badAlignment.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
-        "Bad alignment should return InvalidArgument");
+    const ve::ErrorCode badAlignment = allocator.Initialize(ve::PoolAllocatorDesc{8, 1, 3});
+    passed &= Expect(badAlignment != ve::ErrorCode::None, "Non-power-of-two alignment should fail");
+    passed &= Expect(badAlignment == ve::ErrorCode::InvalidArgument, "Bad alignment should return InvalidArgument");
 
     passed &= ExpectOk(
         allocator.Initialize(ve::PoolAllocatorDesc{16, 1, 8}),

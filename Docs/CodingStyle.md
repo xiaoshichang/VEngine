@@ -414,11 +414,15 @@ Do not rely on implicit integer conversions from enums.
 
 Runtime code should not use C++ exceptions as normal control flow.
 
-Use `Result<T>`, `ErrorCode`, or clear boolean returns depending on API size:
+Use `Result<T>`, `ErrorCode`, or clear boolean returns depending on API shape:
 
-- Use `Result<T>` for cross-module APIs and operations with useful error detail.
+- Use `Result<T>` for fallible APIs that return a useful value on success.
+- Use `ErrorCode` for fallible APIs that do not return a value. `ErrorCode::None` means success; any non-`None` value is
+  a concrete failure.
 - Use `bool` for small local checks where the caller can recover simply.
 - Use logs to provide context on failure paths.
+- Do not use `Result<void>`. If callers need a string form for a no-value failure, define stable text alongside the
+  `ErrorCode` value and expose it through `ToString(ErrorCode)` or a module-specific error string helper.
 
 Preferred assertion macros:
 

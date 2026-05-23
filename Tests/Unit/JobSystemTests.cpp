@@ -23,21 +23,14 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
-bool ExpectOk(const ve::Result<void>& result, const char* message)
+bool ExpectOk(ve::ErrorCode result, const char* message)
 {
-    if (result)
+    if (result == ve::ErrorCode::None)
     {
         return true;
     }
 
-    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
-
-    if (!result.GetError().GetMessage().empty())
-    {
-        std::cerr << ": " << result.GetError().GetMessage();
-    }
-
-    std::cerr << '\n';
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result) << '\n';
     return false;
 }
 
@@ -91,14 +84,9 @@ bool TestRepeatedInitializeFails()
     ve::JobSystem jobs;
     passed &= ExpectOk(jobs.Initialize(OneWorkerDesc()), "Initial Initialize should succeed");
 
-    const ve::Result<void> repeatedInitialize = jobs.Initialize(OneWorkerDesc());
-    passed &= Expect(!repeatedInitialize, "Repeated Initialize should fail");
-    if (!repeatedInitialize)
-    {
-        passed &= Expect(
-            repeatedInitialize.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Repeated Initialize should report InvalidState");
-    }
+    const ve::ErrorCode repeatedInitialize = jobs.Initialize(OneWorkerDesc());
+    passed &= Expect(repeatedInitialize != ve::ErrorCode::None, "Repeated Initialize should fail");
+    passed &= Expect(repeatedInitialize == ve::ErrorCode::InvalidState, "Repeated Initialize should report InvalidState");
 
     jobs.Shutdown();
     return passed;

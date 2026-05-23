@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Engine/RHI/Common/RhiTypes.h"
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Threading/Thread.h"
 
@@ -87,7 +87,7 @@ private:
 using RenderCommandFunction = std::function<void(RenderThreadContext&)>;
 
 /// Callable payload used by RenderSystem for synchronous lifecycle operations on the Render Thread.
-using RenderSynchronousFunction = std::function<Result<void>(RenderThreadContext&)>;
+using RenderSynchronousFunction = std::function<ErrorCode(RenderThreadContext&)>;
 
 /// One command submitted to the Render Thread.
 ///
@@ -114,7 +114,7 @@ public:
     ///
     /// Returns InvalidState when called while already initialized. A standalone RenderSystem object may be initialized
     /// again after Shutdown() completes.
-    [[nodiscard]] Result<void> Initialize(const RenderSystemDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const RenderSystemDesc& desc);
 
     /// Stops accepting commands, drains accepted work, wakes the Render Thread, and joins it.
     ///
@@ -132,7 +132,7 @@ public:
     ///
     /// This is an explicit lifecycle API. It internally schedules synchronous render-thread work rather than requiring
     /// callers to submit ad hoc render commands that mutate RHI lifetime.
-    [[nodiscard]] Result<void> InitializeDevice(const RenderDeviceDesc& desc);
+    [[nodiscard]] ErrorCode InitializeDevice(const RenderDeviceDesc& desc);
 
     /// Destroys the RHI device and any main swapchain owned by this RenderSystem on the Render Thread.
     void ShutdownDevice() noexcept;
@@ -149,7 +149,7 @@ public:
     ///
     /// The RHI device must already be initialized. The surface descriptor must carry the native handle required by the
     /// selected backend. The first implementation also creates the minimal triangle resources used by RenderFrame().
-    [[nodiscard]] Result<void> CreateMainSwapchain(const RenderSurfaceDesc& desc);
+    [[nodiscard]] ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
 
     /// Destroys the main swapchain on the Render Thread if one exists.
     void DestroyMainSwapchain() noexcept;
@@ -161,23 +161,23 @@ public:
     ///
     /// The current implementation clears the back buffer, draws a simple triangle, submits the command list, and
     /// presents. This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
-    [[nodiscard]] Result<void> RenderFrame();
+    [[nodiscard]] ErrorCode RenderFrame();
 
     /// Submits a command to execute on the Render Thread.
     ///
     /// Returns InvalidState before initialization, during shutdown, or after shutdown. Returns InvalidArgument when the
     /// command has no callable function. A successful return means the command was accepted and will run before a later
     /// successful Flush() completes or before Shutdown() returns.
-    [[nodiscard]] Result<void> Submit(RenderCommand command);
+    [[nodiscard]] ErrorCode Submit(RenderCommand command);
 
     /// Blocks until every command accepted before this call has executed on the Render Thread.
     ///
     /// Flush() is a CPU render command queue fence. It does not wait for GPU idle or future RHI queue completion.
-    [[nodiscard]] Result<void> Flush();
+    [[nodiscard]] ErrorCode Flush();
 
 private:
-    [[nodiscard]] Result<void> ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);
-    [[nodiscard]] Result<void> SubmitFunction(std::string debugName, RenderCommandFunction function);
+    [[nodiscard]] ErrorCode ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);
+    [[nodiscard]] ErrorCode SubmitFunction(std::string debugName, RenderCommandFunction function);
 
     std::unique_ptr<RenderSystemImpl> impl_;
 };

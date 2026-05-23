@@ -34,29 +34,26 @@ PoolAllocator::~PoolAllocator()
     Shutdown();
 }
 
-Result<void> PoolAllocator::Initialize(const PoolAllocatorDesc& desc)
+ErrorCode PoolAllocator::Initialize(const PoolAllocatorDesc& desc)
 {
     if (IsInitialized())
     {
-        return Result<void>::Failure(Error(ErrorCode::InvalidState, "PoolAllocator is already initialized."));
+        return ErrorCode::InvalidState;
     }
 
     if (desc.blockSize == 0)
     {
-        return Result<void>::Failure(
-            Error(ErrorCode::InvalidArgument, "PoolAllocator blockSize must be greater than 0."));
+        return ErrorCode::InvalidArgument;
     }
 
     if (desc.blockCount == 0)
     {
-        return Result<void>::Failure(
-            Error(ErrorCode::InvalidArgument, "PoolAllocator blockCount must be greater than 0."));
+        return ErrorCode::InvalidArgument;
     }
 
     if (!IsPowerOfTwo(desc.alignment))
     {
-        return Result<void>::Failure(
-            Error(ErrorCode::InvalidArgument, "PoolAllocator alignment must be a non-zero power of two."));
+        return ErrorCode::InvalidArgument;
     }
 
     const SizeT actualAlignment = std::max(desc.alignment, alignof(FreeBlock));
@@ -65,12 +62,12 @@ Result<void> PoolAllocator::Initialize(const PoolAllocatorDesc& desc)
     SizeT blockStride = 0;
     if (!TryAlignUp(minimumBlockSize, actualAlignment, blockStride))
     {
-        return Result<void>::Failure(Error(ErrorCode::InvalidArgument, "PoolAllocator block stride overflow."));
+        return ErrorCode::InvalidArgument;
     }
 
     if (desc.blockCount > std::numeric_limits<SizeT>::max() / blockStride)
     {
-        return Result<void>::Failure(Error(ErrorCode::InvalidArgument, "PoolAllocator total byte size overflow."));
+        return ErrorCode::InvalidArgument;
     }
 
     const SizeT totalBytes = blockStride * desc.blockCount;
@@ -82,13 +79,13 @@ Result<void> PoolAllocator::Initialize(const PoolAllocatorDesc& desc)
     }
     catch (const std::exception&)
     {
-        return Result<void>::Failure(Error(ErrorCode::OutOfMemory, "PoolAllocator allocation state failed."));
+        return ErrorCode::OutOfMemory;
     }
 
     void* memory = ::operator new(totalBytes, std::align_val_t(actualAlignment), std::nothrow);
     if (memory == nullptr)
     {
-        return Result<void>::Failure(Error(ErrorCode::OutOfMemory, "PoolAllocator memory allocation failed."));
+        return ErrorCode::OutOfMemory;
     }
 
     memory_ = static_cast<std::byte*>(memory);
@@ -102,7 +99,7 @@ Result<void> PoolAllocator::Initialize(const PoolAllocatorDesc& desc)
     totalBytes_ = totalBytes;
 
     BuildFreeList();
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 void PoolAllocator::Shutdown() noexcept

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Platform/Windows/Win32MessageLoop.h"
@@ -50,7 +51,7 @@ public:
 private:
     Win32Window() = default;
 
-    [[nodiscard]] Result<void> Initialize(const WindowDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const WindowDesc& desc);
 
     static LRESULT CALLBACK WindowProc(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam);

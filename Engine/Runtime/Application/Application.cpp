@@ -53,13 +53,13 @@ int Application::Run()
     return exitCode_;
 }
 
-Result<void> Application::InitializeEngineRuntime()
+ErrorCode Application::InitializeEngineRuntime()
 {
-    Result<void> runtimeResult = engineRuntime_.Initialize(desc_.runtime);
+    ErrorCode runtimeResult = engineRuntime_.Initialize(desc_.runtime);
 
-    if (!runtimeResult)
+    if (runtimeResult != ErrorCode::None)
     {
-        VE_LOG_ERROR("Failed to initialize engine runtime: {}", runtimeResult.GetError().GetMessage());
+        VE_LOG_ERROR("Failed to initialize engine runtime: {}", ToString(runtimeResult));
     }
 
     return runtimeResult;
@@ -77,14 +77,14 @@ Result<std::unique_ptr<Window>> Application::CreateMainWindow()
     return windowResult;
 }
 
-Result<void> Application::InitializeRendering(Window& mainWindow)
+ErrorCode Application::InitializeRendering(Window& mainWindow)
 {
     RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
 
-    Result<void> deviceResult = renderSystem.InitializeDevice(desc_.runtime.renderSystem.device);
-    if (!deviceResult)
+    ErrorCode deviceResult = renderSystem.InitializeDevice(desc_.runtime.renderSystem.device);
+    if (deviceResult != ErrorCode::None)
     {
-        VE_LOG_ERROR("Failed to initialize render device: {}", deviceResult.GetError().GetMessage());
+        VE_LOG_ERROR("Failed to initialize render device: {}", ToString(deviceResult));
         return deviceResult;
     }
 
@@ -95,15 +95,15 @@ Result<void> Application::InitializeRendering(Window& mainWindow)
     surfaceDesc.width = extent.width;
     surfaceDesc.height = extent.height;
 
-    Result<void> swapchainResult = renderSystem.CreateMainSwapchain(surfaceDesc);
-    if (!swapchainResult)
+    ErrorCode swapchainResult = renderSystem.CreateMainSwapchain(surfaceDesc);
+    if (swapchainResult != ErrorCode::None)
     {
-        VE_LOG_ERROR("Failed to create main render swapchain: {}", swapchainResult.GetError().GetMessage());
+        VE_LOG_ERROR("Failed to create main render swapchain: {}", ToString(swapchainResult));
         renderSystem.ShutdownDevice();
         return swapchainResult;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 void Application::ShutdownRendering() noexcept
@@ -132,10 +132,10 @@ int Application::RunMainLoop(Window& mainWindow)
 
         Time::Tick();
 
-        Result<void> renderResult = renderSystem.RenderFrame();
-        if (!renderResult)
+        ErrorCode renderResult = renderSystem.RenderFrame();
+        if (renderResult != ErrorCode::None)
         {
-            VE_LOG_ERROR("RenderFrame failed: {}", renderResult.GetError().GetMessage());
+            VE_LOG_ERROR("RenderFrame failed: {}", ToString(renderResult));
             return 1;
         }
 
@@ -161,8 +161,8 @@ int Application::RunApplication()
         ShutdownEngineRuntime(engineRuntime_);
     };
 
-    Result<void> runtimeResult = InitializeEngineRuntime();
-    if (!runtimeResult)
+    ErrorCode runtimeResult = InitializeEngineRuntime();
+    if (runtimeResult != ErrorCode::None)
     {
         std::unique_ptr<Window> emptyWindow;
         cleanup(emptyWindow);
@@ -183,8 +183,8 @@ int Application::RunApplication()
         VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command);
     });
 
-    Result<void> renderResult = InitializeRendering(*mainWindow);
-    if (!renderResult)
+    ErrorCode renderResult = InitializeRendering(*mainWindow);
+    if (renderResult != ErrorCode::None)
     {
         cleanup(mainWindow);
         return 1;

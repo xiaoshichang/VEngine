@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
@@ -49,7 +49,7 @@ public:
     /// lifecycle. A single EngineRuntime object is intentionally one-shot so Player and Editor startup/shutdown order
     /// stays simple and visible. Service initialization failures are treated as unrecoverable startup failures: they are
     /// logged as fatal errors and terminate the process rather than returning partial runtime state to the caller.
-    [[nodiscard]] Result<void> Initialize(const EngineRuntimeDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const EngineRuntimeDesc& desc);
 
     /// Shuts down initialized services in reverse ownership order.
     ///

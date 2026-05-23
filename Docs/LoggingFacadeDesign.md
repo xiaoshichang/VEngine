@@ -143,7 +143,7 @@ namespace ve
 {
 [[nodiscard]] LoggingConfig MakeDefaultLoggingConfig();
 
-[[nodiscard]] Result<void> InitializeLogging(const LoggingConfig& config = MakeDefaultLoggingConfig());
+[[nodiscard]] ErrorCode InitializeLogging(const LoggingConfig& config = MakeDefaultLoggingConfig());
 void ShutdownLogging() noexcept;
 [[nodiscard]] bool IsLoggingInitialized() noexcept;
 
@@ -163,8 +163,7 @@ void LogMessage(
 Rules:
 
 - `InitializeLogging()` must be called before normal logging.
-- Calling `InitializeLogging()` when logging is already initialized returns `Result<void>::Failure` with
-  `ErrorCode::InvalidState`.
+- Calling `InitializeLogging()` when logging is already initialized returns `ErrorCode::InvalidState`.
 - `ShutdownLogging()` is safe to call when logging is not initialized.
 - `LogMessage()` should tolerate being called before initialization by using a minimal fallback path or by dropping the
   message without crashing. The first implementation should prefer a minimal fallback to standard error or debugger output

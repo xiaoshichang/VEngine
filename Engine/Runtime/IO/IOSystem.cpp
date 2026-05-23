@@ -221,13 +221,13 @@ IOSystem::~IOSystem()
     Shutdown();
 }
 
-Result<void> IOSystem::Initialize(const IOSystemDesc& desc)
+ErrorCode IOSystem::Initialize(const IOSystemDesc& desc)
 {
     {
         std::lock_guard<std::mutex> lock(impl_->mutex);
         if (impl_->initialized)
         {
-            return Result<void>::Failure(Error(ErrorCode::InvalidState, "IOSystem is already initialized."));
+            return ErrorCode::InvalidState;
         }
 
         impl_->initialized = true;
@@ -236,18 +236,18 @@ Result<void> IOSystem::Initialize(const IOSystemDesc& desc)
         impl_->incompleteRequestCount = 0;
     }
 
-    Result<void> startResult = impl_->thread.Start(ThreadDesc{desc.threadName}, [impl = impl_.get()]()
+    ErrorCode startResult = impl_->thread.Start(ThreadDesc{desc.threadName}, [impl = impl_.get()]()
     {
         IOThreadLoop(*impl);
     });
 
-    if (!startResult)
+    if (startResult != ErrorCode::None)
     {
         Shutdown();
         return startResult;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 void IOSystem::Shutdown() noexcept

@@ -22,21 +22,14 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
-bool ExpectOk(const ve::Result<void>& result, const char* message)
+bool ExpectOk(ve::ErrorCode result, const char* message)
 {
-    if (result)
+    if (result == ve::ErrorCode::None)
     {
         return true;
     }
 
-    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
-
-    if (!result.GetError().GetMessage().empty())
-    {
-        std::cerr << ": " << result.GetError().GetMessage();
-    }
-
-    std::cerr << '\n';
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result) << '\n';
     return false;
 }
 
@@ -122,14 +115,11 @@ bool TestRepeatedInitializeWhileRunningFails()
     ve::IOSystem ioSystem;
     passed &= ExpectOk(ioSystem.Initialize(MakeIOSystemDesc()), "Initial IOSystem Initialize should succeed");
 
-    const ve::Result<void> repeatedInitialize = ioSystem.Initialize(MakeIOSystemDesc());
-    passed &= Expect(!repeatedInitialize, "Repeated IOSystem Initialize while running should fail");
-    if (!repeatedInitialize)
-    {
-        passed &= Expect(
-            repeatedInitialize.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Repeated IOSystem Initialize should report InvalidState");
-    }
+    const ve::ErrorCode repeatedInitialize = ioSystem.Initialize(MakeIOSystemDesc());
+    passed &= Expect(repeatedInitialize != ve::ErrorCode::None, "Repeated IOSystem Initialize while running should fail");
+    passed &= Expect(
+        repeatedInitialize == ve::ErrorCode::InvalidState,
+        "Repeated IOSystem Initialize should report InvalidState");
 
     ioSystem.Shutdown();
     return passed;

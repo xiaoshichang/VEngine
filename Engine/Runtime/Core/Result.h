@@ -14,7 +14,7 @@ namespace ve
 template <typename T>
 class Result
 {
-    static_assert(!std::is_void_v<T>, "Use Result<void> for void results.");
+    static_assert(!std::is_void_v<T>, "Use ErrorCode for fallible APIs that do not return a value.");
     static_assert(!std::is_reference_v<T>, "Result<T> does not support reference value types.");
 
 public:
@@ -94,50 +94,4 @@ private:
     std::variant<T, Error> storage_;
 };
 
-/// Represents either success without a value or a recoverable Error.
-template <>
-class Result<void>
-{
-public:
-    [[nodiscard]] static Result Success()
-    {
-        return Result();
-    }
-
-    /// Creates a failed result. The supplied error is expected to be non-success.
-    [[nodiscard]] static Result Failure(Error error)
-    {
-        VE_ASSERT_MESSAGE(!error.IsOk(), "Failure results must carry a non-success error code.");
-        return Result(std::move(error));
-    }
-
-    [[nodiscard]] bool IsOk() const noexcept
-    {
-        return ok_;
-    }
-
-    [[nodiscard]] explicit operator bool() const noexcept
-    {
-        return IsOk();
-    }
-
-    /// Returns the stored error. Calling this on a successful result is an API misuse.
-    [[nodiscard]] const Error& GetError() const
-    {
-        VE_ASSERT_MESSAGE(!IsOk(), "Result<void>::GetError called on a successful result.");
-        return error_;
-    }
-
-private:
-    Result() noexcept = default;
-
-    explicit Result(Error error)
-        : ok_(false)
-        , error_(std::move(error))
-    {
-    }
-
-    bool ok_ = true;
-    Error error_;
-};
 }

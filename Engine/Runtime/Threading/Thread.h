@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
 
 #include <chrono>
@@ -58,7 +58,7 @@ public:
     /// Returns InvalidState when this Thread already owns a joinable thread. Returns InvalidArgument when the callable
     /// cannot be stored as a valid entry point. Returns PlatformError when the platform thread cannot be created.
     template <typename Callable>
-    [[nodiscard]] Result<void> Start(const ThreadDesc& desc, Callable&& callable)
+    [[nodiscard]] ErrorCode Start(const ThreadDesc& desc, Callable&& callable)
     {
         try
         {
@@ -67,7 +67,7 @@ public:
         }
         catch (const std::bad_alloc&)
         {
-            return Result<void>::Failure(Error(ErrorCode::OutOfMemory, "Thread entry allocation failed."));
+            return ErrorCode::OutOfMemory;
         }
     }
 
@@ -95,7 +95,7 @@ public:
 private:
     using ThreadFunction = std::function<void()>;
 
-    [[nodiscard]] Result<void> StartFunction(const ThreadDesc& desc, ThreadFunction function);
+    [[nodiscard]] ErrorCode StartFunction(const ThreadDesc& desc, ThreadFunction function);
 
 private:
     struct State;

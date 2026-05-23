@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Types.h"
 
 #include <cstddef>
@@ -59,8 +59,8 @@ struct PoolAllocatorStats
 /// Usage:
 /// ```cpp
 /// PoolAllocator allocator;
-/// Result<void> result = allocator.Initialize(PoolAllocatorDesc{sizeof(MyObject), 128, alignof(MyObject)});
-/// if (!result)
+/// ErrorCode result = allocator.Initialize(PoolAllocatorDesc{sizeof(MyObject), 128, alignof(MyObject)});
+/// if (result != ErrorCode::None)
 /// {
 ///     return result;
 /// }
@@ -85,7 +85,7 @@ public:
     ///
     /// Returns InvalidState when the allocator is already initialized, InvalidArgument for invalid or overflowing
     /// descriptors, and OutOfMemory when backing storage or bookkeeping allocation fails.
-    [[nodiscard]] Result<void> Initialize(const PoolAllocatorDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const PoolAllocatorDesc& desc);
 
     /// Releases all backing storage and clears statistics.
     ///

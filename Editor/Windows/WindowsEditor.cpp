@@ -23,8 +23,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
 
     ve::InitializeWin32DebugConsole();
 
-    ve::Result<void> loggingResult = ve::InitializeLogging();
-    if (!loggingResult)
+    ve::ErrorCode loggingResult = ve::InitializeLogging();
+    if (loggingResult != ve::ErrorCode::None)
     {
         return 1;
     }

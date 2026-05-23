@@ -59,16 +59,16 @@ namespace ve::FileSystem
 {
     Result<std::string> ReadTextFile(const Path& path);
     Result<std::vector<std::byte>> ReadBinaryFile(const Path& path);
-    Result<void> WriteTextFile(const Path& path, std::string_view text);
-    Result<void> WriteBinaryFile(const Path& path, const void* data, size_t size);
-    Result<void> WriteBinaryFile(const Path& path, const std::vector<std::byte>& data);
+    ErrorCode WriteTextFile(const Path& path, std::string_view text);
+    ErrorCode WriteBinaryFile(const Path& path, const void* data, size_t size);
+    ErrorCode WriteBinaryFile(const Path& path, const std::vector<std::byte>& data);
 
     bool Exists(const Path& path);
     bool IsFile(const Path& path);
     bool IsDirectory(const Path& path);
 
-    Result<void> CreateDirectories(const Path& path);
-    Result<void> RemoveFile(const Path& path);
+    ErrorCode CreateDirectories(const Path& path);
+    ErrorCode RemoveFile(const Path& path);
     Result<std::vector<DirectoryEntry>> ListDirectory(const Path& path);
 
     Path GetCurrentWorkingDirectory();
@@ -116,13 +116,14 @@ and `/` conventions.
 
 ## 5. Error Handling
 
-File operations that can fail return `Result<T>`.
+File operations that return data use `Result<T>`. File operations that only report success or failure return
+`ErrorCode`.
 
 Examples:
 
 ```cpp
 Result<std::string> text = FileSystem::ReadTextFile(path);
-Result<void> writeResult = FileSystem::WriteBinaryFile(path, data, size);
+ErrorCode writeResult = FileSystem::WriteBinaryFile(path, data, size);
 ```
 
 Simple queries return `bool`:

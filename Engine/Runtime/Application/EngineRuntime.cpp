@@ -9,14 +9,9 @@ namespace ve
 {
 namespace
 {
-[[noreturn]] void TerminateRuntimeInitialization(const char* systemName, const Error& error)
+[[noreturn]] void TerminateRuntimeInitialization(const char* systemName, ErrorCode errorCode)
 {
-    VE_LOG_FATAL(
-        "{} initialization failed: {}{}{}",
-        systemName,
-        ToString(error.GetCode()),
-        error.GetMessage().empty() ? "" : ": ",
-        error.GetMessage());
+    VE_LOG_FATAL("{} initialization failed: {}", systemName, ToString(errorCode));
     std::terminate();
 }
 }
@@ -28,42 +23,41 @@ EngineRuntime::~EngineRuntime()
     Shutdown();
 }
 
-Result<void> EngineRuntime::Initialize(const EngineRuntimeDesc& desc)
+ErrorCode EngineRuntime::Initialize(const EngineRuntimeDesc& desc)
 {
     if (state_ == EngineRuntimeState::Initialized)
     {
-        return Result<void>::Failure(Error(ErrorCode::InvalidState, "EngineRuntime is already initialized."));
+        return ErrorCode::InvalidState;
     }
 
     if (state_ == EngineRuntimeState::Shutdown)
     {
-        return Result<void>::Failure(
-            Error(ErrorCode::InvalidState, "EngineRuntime does not support repeated lifecycles."));
+        return ErrorCode::InvalidState;
     }
 
-    Result<void> jobSystemResult = jobSystem_.Initialize(desc.jobSystem);
-    if (!jobSystemResult)
+    ErrorCode jobSystemResult = jobSystem_.Initialize(desc.jobSystem);
+    if (jobSystemResult != ErrorCode::None)
     {
-        TerminateRuntimeInitialization("JobSystem", jobSystemResult.GetError());
+        TerminateRuntimeInitialization("JobSystem", jobSystemResult);
     }
 
-    Result<void> ioSystemResult = ioSystem_.Initialize(desc.ioSystem);
-    if (!ioSystemResult)
+    ErrorCode ioSystemResult = ioSystem_.Initialize(desc.ioSystem);
+    if (ioSystemResult != ErrorCode::None)
     {
-        TerminateRuntimeInitialization("IOSystem", ioSystemResult.GetError());
+        TerminateRuntimeInitialization("IOSystem", ioSystemResult);
     }
 
-    Result<void> renderSystemResult = renderSystem_.Initialize(desc.renderSystem);
-    if (!renderSystemResult)
+    ErrorCode renderSystemResult = renderSystem_.Initialize(desc.renderSystem);
+    if (renderSystemResult != ErrorCode::None)
     {
-        TerminateRuntimeInitialization("RenderSystem", renderSystemResult.GetError());
+        TerminateRuntimeInitialization("RenderSystem", renderSystemResult);
     }
 
     state_ = EngineRuntimeState::Initialized;
     VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
     VE_LOG_INFO("IOSystem initialized.");
     VE_LOG_INFO("RenderSystem initialized.");
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 void EngineRuntime::Shutdown() noexcept

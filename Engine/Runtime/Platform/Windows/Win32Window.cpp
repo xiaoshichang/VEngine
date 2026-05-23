@@ -3,20 +3,12 @@
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 
 #include <algorithm>
-#include <format>
-#include <system_error>
 
 namespace ve
 {
 namespace
 {
 constexpr wchar_t WindowClassName[] = L"VEngineWin32Window";
-
-std::string MakeWin32ErrorMessage(const char* operation, DWORD errorCode)
-{
-    const std::error_code error(static_cast<int>(errorCode), std::system_category());
-    return std::format("{} failed with Win32 error {}: {}", operation, errorCode, error.message());
-}
 
 std::wstring Utf8ToWide(std::string_view text)
 {
@@ -50,7 +42,7 @@ std::wstring Utf8ToWide(std::string_view text)
     return wideText;
 }
 
-Result<void> RegisterWindowClass(WNDPROC windowProc)
+ErrorCode RegisterWindowClass(WNDPROC windowProc)
 {
     HINSTANCE instance = GetModuleHandleW(nullptr);
 
@@ -71,11 +63,11 @@ Result<void> RegisterWindowClass(WNDPROC windowProc)
 
         if (errorCode != ERROR_CLASS_ALREADY_EXISTS)
         {
-            return Result<void>::Failure(Error(ErrorCode::PlatformError, MakeWin32ErrorMessage("RegisterClassExW", errorCode)));
+            return ErrorCode::PlatformError;
         }
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 }
 
@@ -87,11 +79,11 @@ Win32Window::~Win32Window()
 Result<std::unique_ptr<Win32Window>> Win32Window::Create(const WindowDesc& desc)
 {
     auto window = std::unique_ptr<Win32Window>(new Win32Window());
-    Result<void> result = window->Initialize(desc);
+    ErrorCode result = window->Initialize(desc);
 
-    if (!result)
+    if (result != ErrorCode::None)
     {
-        return Result<std::unique_ptr<Win32Window>>::Failure(result.GetError());
+        return Result<std::unique_ptr<Win32Window>>::Failure(Error(result));
     }
 
     return Result<std::unique_ptr<Win32Window>>::Success(std::move(window));
@@ -200,11 +192,11 @@ HWND Win32Window::GetWin32Handle() const noexcept
     return windowHandle_;
 }
 
-Result<void> Win32Window::Initialize(const WindowDesc& desc)
+ErrorCode Win32Window::Initialize(const WindowDesc& desc)
 {
-    Result<void> registerResult = RegisterWindowClass(&Win32Window::WindowProc);
+    ErrorCode registerResult = RegisterWindowClass(&Win32Window::WindowProc);
 
-    if (!registerResult)
+    if (registerResult != ErrorCode::None)
     {
         return registerResult;
     }
@@ -224,8 +216,7 @@ Result<void> Win32Window::Initialize(const WindowDesc& desc)
 
     if (AdjustWindowRectEx(&windowRect, style, FALSE, extendedStyle) == 0)
     {
-        return Result<void>::Failure(
-            Error(ErrorCode::PlatformError, MakeWin32ErrorMessage("AdjustWindowRectEx", GetLastError())));
+        return ErrorCode::PlatformError;
     }
 
     const std::wstring wideTitle = Utf8ToWide(title_);
@@ -245,8 +236,7 @@ Result<void> Win32Window::Initialize(const WindowDesc& desc)
 
     if (windowHandle_ == nullptr)
     {
-        return Result<void>::Failure(
-            Error(ErrorCode::PlatformError, MakeWin32ErrorMessage("CreateWindowExW", GetLastError())));
+        return ErrorCode::PlatformError;
     }
 
     UpdateClientExtent();
@@ -256,7 +246,7 @@ Result<void> Win32Window::Initialize(const WindowDesc& desc)
         Show();
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 LRESULT CALLBACK Win32Window::WindowProc(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam)

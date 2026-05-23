@@ -155,13 +155,13 @@ Path gProjectRoot;
     return DirectoryEntryType::Other;
 }
 
-[[nodiscard]] Result<void> EnsureParentDirectoryExists(const Path& path)
+[[nodiscard]] ErrorCode EnsureParentDirectoryExists(const Path& path)
 {
     const Path parentPath = path.GetParentPath();
 
     if (parentPath.IsEmpty())
     {
-        return Result<void>::Success();
+        return ErrorCode::None;
     }
 
     return CreateDirectories(parentPath);
@@ -254,26 +254,26 @@ Result<std::vector<std::byte>> ReadBinaryFile(const Path& path)
     return ReadBinaryFileUnchecked(path);
 }
 
-Result<void> WriteTextFile(const Path& path, std::string_view text)
+ErrorCode WriteTextFile(const Path& path, std::string_view text)
 {
     return WriteBinaryFile(path, text.data(), text.size());
 }
 
-Result<void> WriteBinaryFile(const Path& path, const void* data, size_t size)
+ErrorCode WriteBinaryFile(const Path& path, const void* data, size_t size)
 {
     if (path.IsEmpty())
     {
-        return Result<void>::Failure(MakeInvalidArgumentError("WriteBinaryFile requires a non-empty path."));
+        return ErrorCode::InvalidArgument;
     }
 
     if (data == nullptr && size > 0)
     {
-        return Result<void>::Failure(MakeInvalidArgumentError("WriteBinaryFile requires data when size is non-zero."));
+        return ErrorCode::InvalidArgument;
     }
 
-    Result<void> directoryResult = EnsureParentDirectoryExists(path);
+    ErrorCode directoryResult = EnsureParentDirectoryExists(path);
 
-    if (!directoryResult)
+    if (directoryResult != ErrorCode::None)
     {
         return directoryResult;
     }
@@ -282,7 +282,7 @@ Result<void> WriteBinaryFile(const Path& path, const void* data, size_t size)
 
     if (!file)
     {
-        return Result<void>::Failure(MakeIOError("Open", path, std::make_error_code(std::errc::io_error)));
+        return ErrorCode::IOError;
     }
 
     if (size > 0)
@@ -292,13 +292,13 @@ Result<void> WriteBinaryFile(const Path& path, const void* data, size_t size)
 
     if (!file)
     {
-        return Result<void>::Failure(MakeIOError("Write", path, std::make_error_code(std::errc::io_error)));
+        return ErrorCode::IOError;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
-Result<void> WriteBinaryFile(const Path& path, const std::vector<std::byte>& data)
+ErrorCode WriteBinaryFile(const Path& path, const std::vector<std::byte>& data)
 {
     return WriteBinaryFile(path, data.data(), data.size());
 }
@@ -321,11 +321,11 @@ bool IsDirectory(const Path& path)
     return std::filesystem::is_directory(ToNativePath(path), error);
 }
 
-Result<void> CreateDirectories(const Path& path)
+ErrorCode CreateDirectories(const Path& path)
 {
     if (path.IsEmpty())
     {
-        return Result<void>::Success();
+        return ErrorCode::None;
     }
 
     std::error_code error;
@@ -333,17 +333,17 @@ Result<void> CreateDirectories(const Path& path)
 
     if (error)
     {
-        return Result<void>::Failure(MakeIOError("Create directories", path, error));
+        return ErrorCode::IOError;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
-Result<void> RemoveFile(const Path& path)
+ErrorCode RemoveFile(const Path& path)
 {
     if (path.IsEmpty())
     {
-        return Result<void>::Failure(MakeInvalidArgumentError("RemoveFile requires a non-empty path."));
+        return ErrorCode::InvalidArgument;
     }
 
     std::error_code error;
@@ -351,15 +351,15 @@ Result<void> RemoveFile(const Path& path)
 
     if (error)
     {
-        return Result<void>::Failure(MakeIOError("Remove file", path, error));
+        return ErrorCode::IOError;
     }
 
     if (!removed)
     {
-        return Result<void>::Failure(MakeNotFoundError(path));
+        return ErrorCode::NotFound;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 Result<std::vector<DirectoryEntry>> ListDirectory(const Path& path)

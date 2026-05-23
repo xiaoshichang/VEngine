@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 
@@ -46,7 +46,7 @@ public:
     /// Appends a value to the queue.
     ///
     /// This function is safe to call from multiple producer threads. Returns OutOfMemory when node allocation fails.
-    [[nodiscard]] Result<void> Push(T value)
+    [[nodiscard]] ErrorCode Push(T value)
     {
         std::unique_ptr<Node> node;
         try
@@ -55,7 +55,7 @@ public:
         }
         catch (const std::bad_alloc&)
         {
-            return Result<void>::Failure(Error(ErrorCode::OutOfMemory, "MPSC queue node allocation failed."));
+            return ErrorCode::OutOfMemory;
         }
 
         Node* rawNode = node.get();
@@ -63,7 +63,7 @@ public:
         node.release();
 
         previous->next.store(rawNode, std::memory_order_release);
-        return Result<void>::Success();
+        return ErrorCode::None;
     }
 
     /// Attempts to pop the oldest value.

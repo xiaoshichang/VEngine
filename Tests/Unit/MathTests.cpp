@@ -22,19 +22,14 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
-bool ExpectOk(const ve::Result<void>& result, const char* message)
+bool ExpectOk(ve::ErrorCode result, const char* message)
 {
-    if (result)
+    if (result == ve::ErrorCode::None)
     {
         return true;
     }
 
-    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
-    if (!result.GetError().GetMessage().empty())
-    {
-        std::cerr << ": " << result.GetError().GetMessage();
-    }
-    std::cerr << '\n';
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result) << '\n';
     return false;
 }
 

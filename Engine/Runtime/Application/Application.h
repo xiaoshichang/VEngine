@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Application/EngineRuntime.h"
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Platform/Window.h"
 
@@ -31,9 +32,9 @@ public:
     [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
 
 private:
-    [[nodiscard]] Result<void> InitializeEngineRuntime();
+    [[nodiscard]] ErrorCode InitializeEngineRuntime();
     [[nodiscard]] Result<std::unique_ptr<Window>> CreateMainWindow();
-    [[nodiscard]] Result<void> InitializeRendering(Window& mainWindow);
+    [[nodiscard]] ErrorCode InitializeRendering(Window& mainWindow);
     void ShutdownRendering() noexcept;
     [[nodiscard]] int RunMainLoop(Window& mainWindow);
     [[nodiscard]] int RunApplication();

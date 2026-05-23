@@ -19,21 +19,14 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
-bool ExpectOk(const ve::Result<void>& result, const char* message)
+bool ExpectOk(ve::ErrorCode result, const char* message)
 {
-    if (result)
+    if (result == ve::ErrorCode::None)
     {
         return true;
     }
 
-    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
-
-    if (!result.GetError().GetMessage().empty())
-    {
-        std::cerr << ": " << result.GetError().GetMessage();
-    }
-
-    std::cerr << '\n';
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result) << '\n';
     return false;
 }
 
@@ -87,14 +80,13 @@ bool TestRepeatedInitializeWhileRunningFails()
     ve::RenderSystem renderSystem;
     passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "Initial RenderSystem Initialize should succeed");
 
-    const ve::Result<void> repeatedInitialize = renderSystem.Initialize(MakeRenderSystemDesc());
-    passed &= Expect(!repeatedInitialize, "Repeated RenderSystem Initialize while running should fail");
-    if (!repeatedInitialize)
-    {
-        passed &= Expect(
-            repeatedInitialize.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Repeated RenderSystem Initialize should report InvalidState");
-    }
+    const ve::ErrorCode repeatedInitialize = renderSystem.Initialize(MakeRenderSystemDesc());
+    passed &= Expect(
+        repeatedInitialize != ve::ErrorCode::None,
+        "Repeated RenderSystem Initialize while running should fail");
+    passed &= Expect(
+        repeatedInitialize == ve::ErrorCode::InvalidState,
+        "Repeated RenderSystem Initialize should report InvalidState");
 
     renderSystem.Shutdown();
     return passed;
@@ -124,14 +116,11 @@ bool TestSubmitBeforeInitializeAndAfterShutdownFails()
     {
     };
 
-    ve::Result<void> beforeInitialize = renderSystem.Submit(std::move(command));
-    passed &= Expect(!beforeInitialize, "Submit before Initialize should fail");
-    if (!beforeInitialize)
-    {
-        passed &= Expect(
-            beforeInitialize.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Submit before Initialize should report InvalidState");
-    }
+    ve::ErrorCode beforeInitialize = renderSystem.Submit(std::move(command));
+    passed &= Expect(beforeInitialize != ve::ErrorCode::None, "Submit before Initialize should fail");
+    passed &= Expect(
+        beforeInitialize == ve::ErrorCode::InvalidState,
+        "Submit before Initialize should report InvalidState");
 
     passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize");
     renderSystem.Shutdown();
@@ -142,14 +131,9 @@ bool TestSubmitBeforeInitializeAndAfterShutdownFails()
     {
     };
 
-    ve::Result<void> afterShutdown = renderSystem.Submit(std::move(afterShutdownCommand));
-    passed &= Expect(!afterShutdown, "Submit after Shutdown should fail until reinitialized");
-    if (!afterShutdown)
-    {
-        passed &= Expect(
-            afterShutdown.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Submit after Shutdown should report InvalidState");
-    }
+    ve::ErrorCode afterShutdown = renderSystem.Submit(std::move(afterShutdownCommand));
+    passed &= Expect(afterShutdown != ve::ErrorCode::None, "Submit after Shutdown should fail until reinitialized");
+    passed &= Expect(afterShutdown == ve::ErrorCode::InvalidState, "Submit after Shutdown should report InvalidState");
 
     return passed;
 }
@@ -164,14 +148,9 @@ bool TestEmptyCommandFails()
     ve::RenderCommand command;
     command.debugName = "EmptyCommand";
 
-    const ve::Result<void> result = renderSystem.Submit(std::move(command));
-    passed &= Expect(!result, "Submitting an empty render command should fail");
-    if (!result)
-    {
-        passed &= Expect(
-            result.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
-            "Empty render command should report InvalidArgument");
-    }
+    const ve::ErrorCode result = renderSystem.Submit(std::move(command));
+    passed &= Expect(result != ve::ErrorCode::None, "Submitting an empty render command should fail");
+    passed &= Expect(result == ve::ErrorCode::InvalidArgument, "Empty render command should report InvalidArgument");
 
     renderSystem.Shutdown();
     return passed;
@@ -229,14 +208,11 @@ bool TestDeviceLifecycle()
         renderSystem.GetDeviceBackend() == ve::RenderBackend::D3D11,
         "RenderSystem should report the initialized backend");
 
-    const ve::Result<void> repeatedDevice = renderSystem.InitializeDevice(deviceDesc);
-    passed &= Expect(!repeatedDevice, "Repeated RHI device initialization should fail");
-    if (!repeatedDevice)
-    {
-        passed &= Expect(
-            repeatedDevice.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Repeated RHI device initialization should report InvalidState");
-    }
+    const ve::ErrorCode repeatedDevice = renderSystem.InitializeDevice(deviceDesc);
+    passed &= Expect(repeatedDevice != ve::ErrorCode::None, "Repeated RHI device initialization should fail");
+    passed &= Expect(
+        repeatedDevice == ve::ErrorCode::InvalidState,
+        "Repeated RHI device initialization should report InvalidState");
 
     renderSystem.ShutdownDevice();
     passed &= Expect(!renderSystem.HasDevice(), "RenderSystem should report no RHI device after ShutdownDevice");
@@ -279,14 +255,9 @@ bool TestUnsupportedDeviceBackendFails()
     deviceDesc.backend = ve::RenderBackend::Metal;
     deviceDesc.enableDebugDevice = false;
 
-    const ve::Result<void> result = renderSystem.InitializeDevice(deviceDesc);
-    passed &= Expect(!result, "Unavailable Metal backend should fail on this Windows test preset");
-    if (!result)
-    {
-        passed &= Expect(
-            result.GetError().GetCode() == ve::ErrorCode::Unsupported,
-            "Unavailable backend should report Unsupported");
-    }
+    const ve::ErrorCode result = renderSystem.InitializeDevice(deviceDesc);
+    passed &= Expect(result != ve::ErrorCode::None, "Unavailable Metal backend should fail on this Windows test preset");
+    passed &= Expect(result == ve::ErrorCode::Unsupported, "Unavailable backend should report Unsupported");
 
     renderSystem.Shutdown();
     return passed;
@@ -304,14 +275,11 @@ bool TestCreateMainSwapchainRequiresDevice()
     surfaceDesc.width = 640;
     surfaceDesc.height = 480;
 
-    const ve::Result<void> result = renderSystem.CreateMainSwapchain(surfaceDesc);
-    passed &= Expect(!result, "Creating swapchain before RHI device should fail");
-    if (!result)
-    {
-        passed &= Expect(
-            result.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Creating swapchain before RHI device should report InvalidState");
-    }
+    const ve::ErrorCode result = renderSystem.CreateMainSwapchain(surfaceDesc);
+    passed &= Expect(result != ve::ErrorCode::None, "Creating swapchain before RHI device should fail");
+    passed &= Expect(
+        result == ve::ErrorCode::InvalidState,
+        "Creating swapchain before RHI device should report InvalidState");
 
     renderSystem.Shutdown();
     return passed;
@@ -328,26 +296,18 @@ bool TestCreateMainSwapchainRejectsInvalidSurface()
     missingHandle.width = 640;
     missingHandle.height = 480;
 
-    const ve::Result<void> missingHandleResult = renderSystem.CreateMainSwapchain(missingHandle);
-    passed &= Expect(!missingHandleResult, "Creating swapchain without native surface should fail");
-    if (!missingHandleResult)
-    {
-        passed &= Expect(
-            missingHandleResult.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
-            "Missing native surface should report InvalidArgument");
-    }
+    const ve::ErrorCode missingHandleResult = renderSystem.CreateMainSwapchain(missingHandle);
+    passed &= Expect(missingHandleResult != ve::ErrorCode::None, "Creating swapchain without native surface should fail");
+    passed &= Expect(
+        missingHandleResult == ve::ErrorCode::InvalidArgument,
+        "Missing native surface should report InvalidArgument");
 
     ve::RenderSurfaceDesc zeroSize;
     zeroSize.nativeWindow = reinterpret_cast<void*>(0x1);
 
-    const ve::Result<void> zeroSizeResult = renderSystem.CreateMainSwapchain(zeroSize);
-    passed &= Expect(!zeroSizeResult, "Creating swapchain with zero size should fail");
-    if (!zeroSizeResult)
-    {
-        passed &= Expect(
-            zeroSizeResult.GetError().GetCode() == ve::ErrorCode::InvalidArgument,
-            "Zero-sized surface should report InvalidArgument");
-    }
+    const ve::ErrorCode zeroSizeResult = renderSystem.CreateMainSwapchain(zeroSize);
+    passed &= Expect(zeroSizeResult != ve::ErrorCode::None, "Creating swapchain with zero size should fail");
+    passed &= Expect(zeroSizeResult == ve::ErrorCode::InvalidArgument, "Zero-sized surface should report InvalidArgument");
 
     renderSystem.Shutdown();
     return passed;
@@ -360,14 +320,9 @@ bool TestRenderFrameRequiresSwapchain()
     ve::RenderSystem renderSystem;
     passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for RenderFrame test");
 
-    const ve::Result<void> result = renderSystem.RenderFrame();
-    passed &= Expect(!result, "RenderFrame without a swapchain should fail");
-    if (!result)
-    {
-        passed &= Expect(
-            result.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "RenderFrame without a swapchain should report InvalidState");
-    }
+    const ve::ErrorCode result = renderSystem.RenderFrame();
+    passed &= Expect(result != ve::ErrorCode::None, "RenderFrame without a swapchain should fail");
+    passed &= Expect(result == ve::ErrorCode::InvalidState, "RenderFrame without a swapchain should report InvalidState");
 
     renderSystem.Shutdown();
     return passed;
@@ -485,8 +440,8 @@ bool TestMultipleProducerThreadsSubmitCommands()
                         counter.fetch_add(1, std::memory_order_acq_rel);
                     };
 
-                    const ve::Result<void> submitResult = renderSystem.Submit(std::move(command));
-                    if (!submitResult)
+                    const ve::ErrorCode submitResult = renderSystem.Submit(std::move(command));
+                    if (submitResult != ve::ErrorCode::None)
                     {
                         counter.fetch_add(-100000, std::memory_order_acq_rel);
                     }

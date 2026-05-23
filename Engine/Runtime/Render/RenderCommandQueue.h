@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Threading/LockFreeMpscQueue.h"
 
@@ -17,7 +17,7 @@ class RenderCommandQueue
 {
 public:
     /// Appends one command for later Render Thread execution.
-    [[nodiscard]] Result<void> Push(RenderCommand command);
+    [[nodiscard]] ErrorCode Push(RenderCommand command);
 
     /// Attempts to pop one command on the Render Thread.
     [[nodiscard]] std::optional<RenderCommand> TryPop();

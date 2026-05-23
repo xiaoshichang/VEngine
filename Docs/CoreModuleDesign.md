@@ -36,7 +36,7 @@ The first-stage `Core` design follows these decisions:
 - Source location abstraction based on C++20.
 - Assertion reporting and assertion macros.
 - Recoverable error representation.
-- `Result<T>` and `Result<void>`.
+- `Result<T>` for fallible value-returning APIs.
 - Small standalone utility types such as `NonCopyable`, `ScopeExit`, and enum flag helpers.
 
 ## 4. Non-Responsibilities
@@ -343,7 +343,8 @@ Rules:
 
 ## 12. Result
 
-`Result<T>` represents either a successful value or an `Error`.
+`Result<T>` represents either a successful value or an `Error`. It is only used when success returns a value.
+Fallible APIs that do not return a value return `ErrorCode` directly.
 
 Expected public API shape:
 
@@ -367,18 +368,6 @@ public:
     [[nodiscard]] const Error& GetError() const;
 };
 
-template <>
-class Result<void>
-{
-public:
-    static Result Success();
-    static Result Failure(Error error);
-
-    [[nodiscard]] bool IsOk() const noexcept;
-    [[nodiscard]] explicit operator bool() const noexcept;
-
-    [[nodiscard]] const Error& GetError() const;
-};
 }
 ```
 
@@ -387,8 +376,8 @@ Requirements:
 - `Result<T>` must support move-only value types such as `std::unique_ptr<T>`.
 - `operator bool()` is equivalent to `IsOk()`.
 - Calling `GetValue()` on a failure is an API misuse and should be guarded by `VE_ASSERT`.
-- Calling `GetError()` on a success is an API misuse and should be guarded by `VE_ASSERT`, except `Result<void>` may use a
-  static success error object internally if needed.
+- Calling `GetError()` on a success is an API misuse and should be guarded by `VE_ASSERT`.
+- `Result<void>` is not part of the API. Use `ErrorCode` for no-value success/failure reporting.
 - `Result<T>` should not throw exceptions as part of normal use.
 
 Implementation notes:
@@ -503,7 +492,6 @@ Core Result
   - Result<T> success stores a value.
   - Result<T> failure stores an error.
   - Result<T> supports move-only values.
-  - Result<void> success and failure work.
 
 Core Assert
   - Custom assertion handler receives expression, message, file, function, and line.

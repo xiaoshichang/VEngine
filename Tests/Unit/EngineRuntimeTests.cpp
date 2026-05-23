@@ -21,21 +21,14 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
-bool ExpectOk(const ve::Result<void>& result, const char* message)
+bool ExpectOk(ve::ErrorCode result, const char* message)
 {
-    if (result)
+    if (result == ve::ErrorCode::None)
     {
         return true;
     }
 
-    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
-
-    if (!result.GetError().GetMessage().empty())
-    {
-        std::cerr << ": " << result.GetError().GetMessage();
-    }
-
-    std::cerr << '\n';
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result) << '\n';
     return false;
 }
 
@@ -124,14 +117,11 @@ bool TestRepeatedInitializeWhileRunningFails()
     ve::EngineRuntime runtime;
     passed &= ExpectOk(runtime.Initialize(MakeRuntimeDesc()), "Initial EngineRuntime Initialize should succeed");
 
-    const ve::Result<void> repeatedInitialize = runtime.Initialize(MakeRuntimeDesc());
-    passed &= Expect(!repeatedInitialize, "Repeated Initialize while running should fail");
-    if (!repeatedInitialize)
-    {
-        passed &= Expect(
-            repeatedInitialize.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Repeated Initialize while running should report InvalidState");
-    }
+    const ve::ErrorCode repeatedInitialize = runtime.Initialize(MakeRuntimeDesc());
+    passed &= Expect(repeatedInitialize != ve::ErrorCode::None, "Repeated Initialize while running should fail");
+    passed &= Expect(
+        repeatedInitialize == ve::ErrorCode::InvalidState,
+        "Repeated Initialize while running should report InvalidState");
 
     runtime.Shutdown();
     return passed;
@@ -145,14 +135,11 @@ bool TestRepeatedLifecycleFails()
     passed &= ExpectOk(runtime.Initialize(MakeRuntimeDesc()), "Initial EngineRuntime lifecycle should initialize");
     runtime.Shutdown();
 
-    const ve::Result<void> secondLifecycle = runtime.Initialize(MakeRuntimeDesc());
-    passed &= Expect(!secondLifecycle, "EngineRuntime should reject Initialize after Shutdown");
-    if (!secondLifecycle)
-    {
-        passed &= Expect(
-            secondLifecycle.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "EngineRuntime second lifecycle should report InvalidState");
-    }
+    const ve::ErrorCode secondLifecycle = runtime.Initialize(MakeRuntimeDesc());
+    passed &= Expect(secondLifecycle != ve::ErrorCode::None, "EngineRuntime should reject Initialize after Shutdown");
+    passed &= Expect(
+        secondLifecycle == ve::ErrorCode::InvalidState,
+        "EngineRuntime second lifecycle should report InvalidState");
 
     return passed;
 }

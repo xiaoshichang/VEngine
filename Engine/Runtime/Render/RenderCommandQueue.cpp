@@ -2,7 +2,7 @@
 
 namespace ve
 {
-Result<void> RenderCommandQueue::Push(RenderCommand command)
+ErrorCode RenderCommandQueue::Push(RenderCommand command)
 {
     return queue_.Push(std::move(command));
 }

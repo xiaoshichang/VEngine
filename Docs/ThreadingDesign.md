@@ -157,7 +157,7 @@ The name is copied by `Thread::Start()` so callers do not need to keep the sourc
 
 Required behavior:
 
-- `Start()` returns `Result<void>`.
+- `Start()` returns `ErrorCode`.
 - Starting an already-started or still-joinable thread returns `ErrorCode::InvalidState`.
 - Starting with an invalid callable returns `ErrorCode::InvalidArgument` when the API can detect it.
 - Platform creation failure returns `ErrorCode::PlatformError`.

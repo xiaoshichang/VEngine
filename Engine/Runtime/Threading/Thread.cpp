@@ -123,16 +123,16 @@ Thread::~Thread()
     }
 }
 
-Result<void> Thread::StartFunction(const ThreadDesc& desc, ThreadFunction function)
+ErrorCode Thread::StartFunction(const ThreadDesc& desc, ThreadFunction function)
 {
     if (IsJoinable())
     {
-        return Result<void>::Failure(Error(ErrorCode::InvalidState, "Thread is already joinable."));
+        return ErrorCode::InvalidState;
     }
 
     if (!function)
     {
-        return Result<void>::Failure(Error(ErrorCode::InvalidArgument, "Thread entry point is empty."));
+        return ErrorCode::InvalidArgument;
     }
 
     state_->name = desc.name;
@@ -149,18 +149,19 @@ Result<void> Thread::StartFunction(const ThreadDesc& desc, ThreadFunction functi
     }
     catch (const std::system_error& error)
     {
+        (void)error;
         state_->id = {};
         state_->name.clear();
-        return Result<void>::Failure(Error(ErrorCode::PlatformError, error.what()));
+        return ErrorCode::PlatformError;
     }
     catch (const std::bad_alloc&)
     {
         state_->id = {};
         state_->name.clear();
-        return Result<void>::Failure(Error(ErrorCode::OutOfMemory, "Thread creation allocation failed."));
+        return ErrorCode::OutOfMemory;
     }
 
-    return Result<void>::Success();
+    return ErrorCode::None;
 }
 
 bool Thread::Join()

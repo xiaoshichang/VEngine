@@ -240,14 +240,14 @@ struct RenderSurfaceDesc
     UInt32 bufferCount = 2;
 };
 
-Result<void> InitializeDevice(const RenderDeviceDesc& desc);
-Result<void> CreateMainSwapchain(const RenderSurfaceDesc& desc);
+ErrorCode InitializeDevice(const RenderDeviceDesc& desc);
+ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
 void DestroyMainSwapchain() noexcept;
 void ShutdownDevice() noexcept;
 bool HasDevice() const noexcept;
 RenderBackend GetDeviceBackend() const noexcept;
 bool HasMainSwapchain() const noexcept;
-Result<void> RenderFrame();
+ErrorCode RenderFrame();
 ```
 
 `Application` obtains native surface information through the `Window` base interface instead of branching on a platform

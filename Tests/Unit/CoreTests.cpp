@@ -171,14 +171,6 @@ bool TestResult()
     passed &= Expect(movedValue != nullptr, "Result<T> should support move-only values");
     passed &= Expect(*movedValue == 7, "Result<T> should move out the stored value");
 
-    const auto voidSuccess = ve::Result<void>::Success();
-    passed &= Expect(voidSuccess.IsOk(), "Result<void> success should be ok");
-
-    const auto voidFailure = ve::Result<void>::Failure(ve::Error(ve::ErrorCode::Unsupported, "unsupported"));
-    passed &= Expect(!voidFailure.IsOk(), "Result<void> failure should not be ok");
-    passed &= Expect(voidFailure.GetError().GetCode() == ve::ErrorCode::Unsupported,
-                     "Result<void> should preserve error code");
-
     return passed;
 }
 

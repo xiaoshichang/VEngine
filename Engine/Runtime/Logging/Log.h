@@ -3,7 +3,6 @@
 #include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Platform.h"
-#include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/SourceLocation.h"
 
 #include <filesystem>
@@ -55,7 +54,7 @@ using LogCallback = void (*)(const LogRecord& record);
 [[nodiscard]] LoggingConfig MakeDefaultLoggingConfig();
 
 /// Initializes Boost.Log sinks. Returns InvalidState if logging is already initialized.
-[[nodiscard]] Result<void> InitializeLogging(const LoggingConfig& config = MakeDefaultLoggingConfig());
+[[nodiscard]] ErrorCode InitializeLogging(const LoggingConfig& config = MakeDefaultLoggingConfig());
 
 /// Removes logging sinks and clears logging-owned global state.
 void ShutdownLogging() noexcept;

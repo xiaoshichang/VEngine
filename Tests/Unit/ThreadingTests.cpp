@@ -21,21 +21,14 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
-bool ExpectOk(const ve::Result<void>& result, const char* message)
+bool ExpectOk(ve::ErrorCode result, const char* message)
 {
-    if (result)
+    if (result == ve::ErrorCode::None)
     {
         return true;
     }
 
-    std::cerr << "FAILED: " << message << ": " << ve::ToString(result.GetError().GetCode());
-
-    if (!result.GetError().GetMessage().empty())
-    {
-        std::cerr << ": " << result.GetError().GetMessage();
-    }
-
-    std::cerr << '\n';
+    std::cerr << "FAILED: " << message << ": " << ve::ToString(result) << '\n';
     return false;
 }
 
@@ -50,7 +43,7 @@ bool TestThreadStartJoinAndName()
     int sharedValue = 0;
 
     ve::Thread thread;
-    const ve::Result<void> startResult = thread.Start(ve::ThreadDesc{"ThreadingTestWorker"}, [&]()
+    const ve::ErrorCode startResult = thread.Start(ve::ThreadDesc{"ThreadingTestWorker"}, [&]()
     {
         {
             ve::LockGuard lock(mutex);
@@ -95,17 +88,12 @@ bool TestThreadRejectsRepeatedStart()
         }),
         "Initial thread start should succeed");
 
-    const ve::Result<void> repeatedStart = thread.Start(ve::ThreadDesc{"ShouldFail"}, []()
+    const ve::ErrorCode repeatedStart = thread.Start(ve::ThreadDesc{"ShouldFail"}, []()
     {
     });
 
-    passed &= Expect(!repeatedStart, "Repeated Start should fail while the thread is joinable");
-    if (!repeatedStart)
-    {
-        passed &= Expect(
-            repeatedStart.GetError().GetCode() == ve::ErrorCode::InvalidState,
-            "Repeated Start should report InvalidState");
-    }
+    passed &= Expect(repeatedStart != ve::ErrorCode::None, "Repeated Start should fail while the thread is joinable");
+    passed &= Expect(repeatedStart == ve::ErrorCode::InvalidState, "Repeated Start should report InvalidState");
 
     releaseWorker.Set();
     passed &= Expect(thread.Join(), "Join should succeed after repeated Start failure");
@@ -447,8 +435,8 @@ bool TestLockFreeMpscQueueMultipleProducers()
             {
                 for (int valueIndex = 0; valueIndex < ValuesPerProducer; ++valueIndex)
                 {
-                    const ve::Result<void> pushResult = queue.Push(baseValue + valueIndex);
-                    if (!pushResult)
+                    const ve::ErrorCode pushResult = queue.Push(baseValue + valueIndex);
+                    if (pushResult != ve::ErrorCode::None)
                     {
                         producerFailures.fetch_add(1, std::memory_order_acq_rel);
                     }

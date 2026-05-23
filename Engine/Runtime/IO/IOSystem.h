@@ -104,7 +104,7 @@ public:
     ///
     /// Returns InvalidState when called while already initialized. A standalone IOSystem object may be initialized
     /// again after Shutdown() completes.
-    [[nodiscard]] Result<void> Initialize(const IOSystemDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const IOSystemDesc& desc);
 
     /// Stops accepting requests, drains queued/running reads, wakes the IO Thread, and joins it.
     ///
