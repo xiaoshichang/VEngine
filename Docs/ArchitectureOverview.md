@@ -325,6 +325,7 @@ this application-level flow instead of duplicating service initialization in eac
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
 explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem, and
 RenderSystem; Scene, Resource, Input, Script, UI, and Physics should connect through this layer as their modules land.
+Milestone 5 introduces `GameThreadSystem` as the owner of the Game Thread execution context and frame tick contract.
 
 ### 7.4 FileSystem
 
@@ -625,6 +626,10 @@ GPU Queue
 
 The design should follow Unreal-style separation between Main Thread and Game Thread at the conceptual level. In the first implementation, Main Thread and Game Thread may run on the same physical thread to reduce complexity. The architecture should still avoid assuming they are always the same thread.
 
+`GameThreadSystem` owns the Game Thread execution context, frame counter, tick phases, and the rule that live scene
+mutation happens only on the Game Thread. `Application` still owns the platform message pump. `RenderSystem` owns the
+Render Thread, render-side state, RHI submission, and render-side frame lifetime.
+
 Important rules:
 
 - Platform lifecycle events are owned by Main Thread.
@@ -636,6 +641,13 @@ Important rules:
 
 Game Thread and Render Thread communicate through the `RenderSystem` render command queue. Later render snapshots or
 render world state may use double or triple buffering when scene-to-render synchronization needs a stable frame boundary.
+Milestone 5 defines the first concrete version of this boundary in `Docs/SceneRenderingVerticalSlice.md`: Game Thread
+extracts immutable scene render snapshots, Render Thread consumes them, and RenderSystem applies a small queued-frame
+backpressure limit.
+
+Render Thread frames in flight are separate from queued Game Thread snapshots. Queued snapshots protect CPU ownership
+between Game Thread and Render Thread. Render frame slots and RHI fences protect transient render resources between
+Render Thread and GPU execution.
 
 Recommended frame flow:
 

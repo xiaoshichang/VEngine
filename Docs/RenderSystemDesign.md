@@ -100,6 +100,9 @@ The first version does not create or own:
 - Frame graph.
 - Mesh, material, texture, or UI rendering.
 
+Milestone 5 expands this scope with scene frame submission, render-safe snapshots, render-side frame slots, and
+frames-in-flight lifetime tracking. That vertical slice is described in `Docs/SceneRenderingVerticalSlice.md`.
+
 ## 5. Command Queue Model
 
 The command queue is a lock-free MPSC queue:
@@ -312,14 +315,101 @@ Join Render Thread
 GPU fences and frame latency should remain RHI concepts. `RenderSystem` coordinates when to call them during lifecycle
 transitions, but should not turn CPU command `Flush()` into a GPU-idle operation.
 
-## 10. Future Render Work
+## 10. Scene Frame Submission
+
+Milestone 5 should add a higher-level submission boundary for scene rendering:
+
+```text
+RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
+```
+
+The exact C++ type names may change, but the boundary should preserve these rules:
+
+- Game Thread submits immutable render-safe frame packets.
+- Frame packets do not contain live `Scene`, `GameObject`, or `Component` pointers.
+- Render Thread owns conversion from submitted frame packets into render-side state and RHI commands.
+- `SubmitFrame()` should communicate whether the frame was accepted, blocked, or rejected because the render system is
+  shutting down.
+
+Ordinary `Submit(RenderCommand)` remains useful for lifecycle commands, uploads, tests, and special render work.
+Scene rendering should prefer the frame-level API so the engine can reason about queued frames and backpressure.
+
+## 11. Queued Game Frames And Backpressure
+
+Game Thread must not run unbounded frames ahead of Render Thread. Milestone 5 should define a small CPU-side queue
+limit:
+
+```text
+MaxQueuedGameFrames = 2
+```
+
+When the queue is full, Player should block at the next render submission boundary until Render Thread consumes at
+least one submitted frame packet. This keeps scene snapshots, referenced resource handles, and transient frame data from
+growing without bound.
+
+This queue is a CPU ownership boundary:
+
+- Game Thread owns live Scene mutation.
+- Queued frame packets own immutable extracted scene data.
+- Render Thread owns packet consumption and render-side state updates.
+
+This is not the same as GPU frame latency. GPU completion is tracked by render-side frame slots and RHI fences.
+
+## 12. Render Frames In Flight
+
+Milestone 5 should introduce render-side frame slots before dynamic resources, streaming uploads, or Editor viewport
+rendering make lifetime bugs harder to diagnose.
+
+Recommended first value:
+
+```text
+MaxRenderFramesInFlight = 2
+```
+
+`RenderSystem` owns a fixed set of render frame states:
+
+```text
+RenderFrameState[MaxRenderFramesInFlight]
+  frameId
+  frameSlot
+  backend command allocator or equivalent
+  transient constant/upload allocation state
+  transient descriptor/bind-group allocation state
+  deferred render-resource releases
+  RHI fence or backend completion value
+```
+
+Before Render Thread reuses a frame slot, it must ensure GPU work that references that slot has completed. Backend
+mapping belongs to RHI:
+
+```text
+D3D12
+  ID3D12Fence value per submitted frame.
+
+Metal
+  MTLCommandBuffer completion handler or shared event when needed.
+
+D3D11
+  DXGI frame latency object, query, or CPU-side compatibility fence adapter.
+```
+
+D3D11 may initially use a conservative compatibility path, but the common render-side lifetime model should still expose
+frame slots and completion points so D3D12 and Metal do not require a redesign.
+
+Keep the three frame concepts distinct:
+
+- Queued Game Thread snapshots protect CPU ownership between Game Thread and Render Thread.
+- Render frame slots protect transient render resources between Render Thread and GPU.
+- RHI fences protect GPU completion and frame-slot reuse.
+
+## 13. Future Render Work
 
 After RHI device and main swapchain lifecycle are connected, later RenderSystem work should add render-resource
 registries, upload scheduling, frame begin/end commands, viewport registration, and RenderWorld/RenderScene ownership.
 Those features should build on the explicit lifecycle APIs above instead of bypassing them with ad hoc public render
 commands.
 
-## 11. Testing Plan
+## 14. Testing Plan
 
 Required tests:
 
@@ -332,3 +422,6 @@ Required tests:
 - `Flush()` waits for commands accepted before the flush call.
 - `Shutdown()` drains accepted commands before joining the thread.
 - Runtime-owned `RenderSystem` initializes and can execute commands through `EngineRuntime`.
+- Milestone 5 frame submission accepts render-safe snapshots without live scene pointers.
+- Queued frame backpressure prevents Game Thread submission from running unbounded ahead of Render Thread.
+- Render frame slots are not reused until their backend completion point allows reuse.

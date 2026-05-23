@@ -154,16 +154,58 @@ VE_LOG_INFO
 
 ### Milestone 5: Scene And Rendering Vertical Slice
 
-- Implement GameObject and Component base model.
-- Implement TransformComponent.
-- Implement CameraComponent.
-- Implement MeshRendererComponent.
-- Implement LightComponent.
-- Implement basic reflection registration.
-- Implement Scene serialization.
-- Implement simple ResourceManager.
-- Render a static mesh with forward rendering.
-- Connect Scene, Resource, and Render systems through the `EngineRuntime` runtime context.
+Detailed design:
+
+- See [Scene And Rendering Vertical Slice](SceneRenderingVerticalSlice.md).
+
+Implementation order:
+
+- Add `GameThreadSystem` as the owner of the Game Thread execution context, frame counter, tick phases, and scene
+  mutation rule.
+- Route the first Player frame loop through `EngineRuntime::TickGameFrame()` while Main Thread and Game Thread still
+  share one physical thread.
+- Define the first Game Thread tick phases: begin frame, lifecycle dispatch, update, late update, transform update,
+  render extraction, and end frame.
+- Connect `GameThreadSystem` lifecycle through `EngineRuntime` after JobSystem, IOSystem, ResourceManager, and
+  RenderSystem are available.
+- Implement `Scene`, `GameObject`, and `Component` base types with stable object identifiers, names, active/enabled
+  state, hierarchy ownership, component storage, and lifecycle hooks.
+- Implement `TransformComponent` with local transform, world transform, parent-child dirty propagation, and matrix
+  extraction.
+- Add debug validation or assertions for Game Thread-owned scene mutation APIs.
+- Add first lifecycle and hierarchy tests before render-facing components are layered on top.
+- Implement a minimal Reflection registry for type metadata, component factories, serializable properties, default
+  values, editor visibility flags, and enum metadata.
+- Register `TransformComponent` through Reflection and use reflected properties in tests.
+- Implement `CameraComponent`, `MeshRendererComponent`, and directional `LightComponent` as render-facing scene
+  components.
+- Register render-facing components through Reflection.
+- Define the first `.vescene` structure for scene metadata, GameObjects, hierarchy, components, and reflected property
+  values.
+- Implement scene serialization and deserialization, including graceful skip and warning behavior for unknown component
+  types.
+- Add a scene serialization round-trip test that covers Transform, Camera, MeshRenderer, and Light components.
+- Add typed resource handles and a first `ResourceManager` for mesh, material, texture, and shader resources needed by
+  the sample scene.
+- Add built-in fallback resources: cube or triangle mesh, default material, default shader references, and placeholder
+  texture if the first RHI path requires one.
+- Route first-stage resource loading through FileSystem and IOSystem boundaries where practical, while allowing
+  synchronous loading for the first vertical slice.
+- Define `SceneRenderSnapshot` or an equivalent render-safe frame packet containing camera, light, draw item, transform,
+  and referenced resource data.
+- Add Game Thread scene extraction that builds render snapshots without live `Scene`, `GameObject`, or `Component`
+  pointers.
+- Add `RenderSystem::SubmitFrame()` or an equivalent frame-level submission API for scene snapshots.
+- Add CPU-side queued frame backpressure with an initial `MaxQueuedGameFrames` value of 2.
+- Add render-side frame slots with an initial `MaxRenderFramesInFlight` value of 2 and backend completion tracking for
+  safe frame-slot reuse.
+- Add render-resource creation paths for static mesh vertex/index buffers, basic material state, shader pipeline state,
+  and depth buffer resources.
+- Implement the first forward rendering path with one active camera, one directional light, one main viewport, one
+  default material path, and static mesh draw calls.
+- Load or construct the sample scene in `VEnginePlayer` and render it through the existing RenderSystem and RHI path.
+- Add RenderSystem tests for frame submission, queued-frame backpressure, and frame-slot completion/reuse behavior.
+- Add a Windows Player smoke check that opens the sample scene, renders a lit static mesh, and exits cleanly.
 
 ### Milestone 6: Asset Pipeline
 
