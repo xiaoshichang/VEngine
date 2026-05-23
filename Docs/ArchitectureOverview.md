@@ -116,6 +116,10 @@ Dependency management should use a repository-owned `ThirdParty/` approach:
 - Third-party source archives, source checkouts, prebuilt tool packages, and built libraries live under `ThirdParty/`.
 - CMake wrapper files under `CMake/` locate, download, or build those dependencies.
 - A platform setup script such as `ThirdParty/Setup_Windows64.bat` prepares dependencies after clone.
+- The first Windows dependency and build baseline is Visual Studio 2022 Build Tools, or Visual Studio 2022, with MSVC
+  v143 x64/x86 build tools. The `windows-msvc-*` presets use the `Visual Studio 17 2022` generator and explicitly request
+  `v143`; newer Visual Studio installations are not a replacement unless a new preset and dependency baseline are
+  introduced.
 - Generated dependency payloads should be ignored by git unless the project explicitly decides to vendor a small file.
 - Platform SDK dependencies: use platform-native SDKs directly.
 - Avoid committing large source trees or binary packages unless a dependency requires patches or stable pinning.
@@ -1052,6 +1056,9 @@ windows-msvc-tests
 ios-simulator-debug
 ios-simulator-release
 ```
+
+The Windows presets are the Visual Studio 2022/v143 lane. If the project adds a Visual Studio 2026 or later lane, keep it
+as an explicit new preset and rebuild or revalidate the third-party payloads against that compiler baseline.
 
 iOS may be generated through CMake/Xcode, while keeping a small amount of iOS-specific template content such as `Info.plist`, app delegate, view controller, and entitlement files.
 

@@ -15,13 +15,22 @@ if not exist "%VSWHERE%" (
     exit /b 1
 )
 
-for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -version [17.0^,18.0^) -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
     set "VSINSTALL=%%I"
 )
 
 if not defined VSINSTALL (
-    echo Visual Studio C++ x64 tools were not found.
-    echo Install Desktop development with C++ and MSVC v143 x64/x86 build tools.
+    echo Visual Studio 2022 C++ x64 tools were not found.
+    echo Install Visual Studio 2022 Build Tools or Visual Studio 2022 with Desktop development with C++.
+    echo Required component: MSVC v143 x64/x86 build tools.
+    exit /b 1
+)
+
+set "VE_V143_TOOLSET=%VSINSTALL%\MSBuild\Microsoft\VC\v170\Platforms\x64\PlatformToolsets\v143"
+
+if not exist "%VE_V143_TOOLSET%" (
+    echo MSVC v143 platform toolset was not found at "%VE_V143_TOOLSET%".
+    echo Install the MSVC v143 x64/x86 build tools in the Visual Studio 2022 or Build Tools 2022 installation.
     exit /b 1
 )
 

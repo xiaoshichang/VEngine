@@ -104,6 +104,8 @@ VE_LOG_INFO
 - Create `VEngine` static library target.
 - Create `VEnginePlayer`, `VEngineEditor`, and CTest-registered unit test executables.
 - Integrate Boost and CMake/CTest-based tests.
+- Document and enforce Visual Studio 2022 Build Tools/MSVC v143 as the first Windows compiler baseline for
+  `windows-msvc-*` presets and repository-owned third-party dependency payloads.
 - Establish initial folder structure only through files that are needed by current targets.
 - Add basic coding style and build documentation.
 

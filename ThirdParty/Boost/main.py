@@ -118,10 +118,9 @@ def build_boost_windows64():
     boost_bootstrap_path = os.path.join(boost_root_dir, "bootstrap.bat")
     boost_b2_path = os.path.join(boost_root_dir, "b2.exe")
 
-    ret = os.system(boost_bootstrap_path)
-    if ret != 0:
-        print("run %s with ret code %d" % (boost_bootstrap_path, ret))
-        exit(1)
+    bootstrap_cmd = [boost_bootstrap_path, "vc143"]
+    print("bootstrap_cmd: %s" % bootstrap_cmd)
+    subprocess.run(bootstrap_cmd, check=True)
 
     if not os.path.exists(boost_b2_path):
         print("%s should exist!" % boost_b2_path)

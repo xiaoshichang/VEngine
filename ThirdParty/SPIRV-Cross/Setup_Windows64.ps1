@@ -68,6 +68,7 @@ Invoke-NativeCommand cmake @(
     "-B", $BuildDir,
     "-G", "Visual Studio 17 2022",
     "-A", "x64",
+    "-T", "v143",
     "-DSPIRV_CROSS_CLI=ON",
     "-DSPIRV_CROSS_ENABLE_TESTS=OFF",
     "-DSPIRV_CROSS_ENABLE_GLSL=ON",

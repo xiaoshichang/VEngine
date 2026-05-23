@@ -11,6 +11,10 @@
             "displayName": "Windows MSVC Debug",
             "generator": "Visual Studio 17 2022",
             "toolchainFile": "${sourceDir}/CMake/Toolchains/Windows64.cmake",
+            "toolset": {
+                "value": "v143",
+                "strategy": "set"
+            },
             "architecture": {
                 "value": "x64",
                 "strategy": "external"

@@ -10,7 +10,10 @@ dependencies under `ThirdParty/`, then CMake presets configure and build the eng
 
 Windows:
 
-- Visual Studio 2022 with the Desktop development with C++ workload.
+- Visual Studio 2022 Build Tools or Visual Studio 2022 with the Desktop development with C++ workload.
+- MSVC v143 x64/x86 build tools installed in the Visual Studio 2022 or Build Tools 2022 instance. The Windows CMake
+  presets use the `Visual Studio 17 2022` generator and explicitly request the v143 platform toolset; installing an
+  older compiler package inside Visual Studio 2026 is not enough for the documented build path.
 - Windows 10/11 SDK installed through Visual Studio Installer.
 - CMake 3.25 or newer.
 - Git.
@@ -44,6 +47,11 @@ Generated dependency source checkouts, build directories, archives, and binaries
 setup script when dependency payloads are missing or after deleting generated third-party directories.
 
 ## Configure, Build, And Test On Windows
+
+The checked-in Windows presets are intentionally pinned to Visual Studio 2022/v143. `CMake\Scripts\WithMsvc.bat` only
+selects Visual Studio 2022 or Build Tools 2022 installations, and the presets explicitly request `v143`. If the VS 2022
+v143 platform toolset is missing, configure fails before any engine targets are generated. Newer Visual Studio versions
+need a separate documented preset and third-party dependency baseline.
 
 Run CMake through `CMake\Scripts\WithMsvc.bat` so the MSVC x64 developer environment is initialized. From PowerShell,
 prefix the command with `cmd /c`.
