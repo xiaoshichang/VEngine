@@ -16,6 +16,7 @@ namespace ve
 {
     struct RenderSystemImpl;
     class GameThreadSystem;
+    class ManualResetEvent;
 
     constexpr UInt32 DefaultMaxRenderFramesInFlight = 2;
 
@@ -65,7 +66,7 @@ namespace ve
         /// Diagnostic name copied into the owned Render Thread.
         std::string threadName = "VEngineRenderThread";
 
-        /// Maximum number of render frames accepted by RenderSystem but not yet completed on the Render Thread.
+        /// Number of render frame contexts in the Render Thread ring.
         UInt32 maxFramesInFlight = DefaultMaxRenderFramesInFlight;
 
         /// RHI device creation options used by Application after the Render Thread starts.
@@ -104,6 +105,30 @@ namespace ve
     {
         std::string debugName;
         RenderCommandFunction function;
+    };
+
+    /// CPU-side fence inserted into the Render Thread command stream.
+    ///
+    /// BeginFrameEndFence() resets the fence and submits a private Render Thread command that signals it. Waiting on
+    /// the fence blocks until the Render Thread has executed every command submitted before that signal command.
+    class RenderCommandFence : public NonMovable
+    {
+    public:
+        RenderCommandFence();
+        ~RenderCommandFence();
+
+        /// Returns true when this fence has no pending signal command or when the signal command has executed.
+        [[nodiscard]] bool IsComplete() const noexcept;
+
+        /// Blocks until this fence is complete.
+        void Wait() noexcept;
+
+    private:
+        friend class RenderSystem;
+
+        void SetCompletionEvent(std::shared_ptr<ManualResetEvent> completed) noexcept;
+
+        std::shared_ptr<ManualResetEvent> completed_;
     };
 
     /// Owns the Render Thread and lock-free render command queue.
@@ -164,16 +189,19 @@ namespace ve
         /// Renders one first-stage frame to the main swapchain.
         ///
         /// Must be called on the Game Thread after GameThreadSystem binds its Game Thread id to RenderSystem.
-        /// The current implementation acquires a render frame slot, submits a render command that clears the back
-        /// buffer, draws a simple triangle, submits the command list, and presents. The call blocks only when all
-        /// render frame slots are already in flight. Submission or Render Thread execution errors are fatal and
-        /// terminate the process.
+        /// The current implementation advances a render-frame context ring, submits a render command that clears the
+        /// back buffer, draws a simple triangle, submits the command list, and presents. GameThreadSystem frame-end
+        /// sync controls how far the Game Thread can run ahead of the Render Thread. Submission or Render Thread
+        /// execution errors are fatal and terminate the process.
         void RenderFrame();
 
         /// Returns the configured render-frame slot count.
         [[nodiscard]] UInt32 GetMaxRenderFramesInFlight() const noexcept;
 
-        /// Returns the number of render frames submitted but not yet completed on the Render Thread.
+        /// Returns zero in the current FrameEndSync-driven CPU pacing model.
+        ///
+        /// RenderSystem no longer owns a CPU in-flight frame counter. Future diagnostics should expose render-frame
+        /// context ring state through a dedicated debug API instead of using this legacy query.
         [[nodiscard]] SizeT GetRenderFramesInFlight() const noexcept;
 
         /// Submits a command to execute on the Render Thread.
@@ -188,6 +216,13 @@ namespace ve
         ///
         /// Flush() is a CPU render command queue fence. It does not wait for GPU idle or future RHI queue completion.
         [[nodiscard]] ErrorCode Flush();
+
+        /// Inserts a CPU fence into the Render Thread command stream.
+        ///
+        /// Must be called on the Game Thread. The supplied fence becomes pending until the Render Thread executes the
+        /// private signal command submitted by this call. GameThreadSystem uses this at EndFrame to control how far the
+        /// Game Thread may run ahead of the Render Thread.
+        void BeginFrameEndFence(RenderCommandFence& fence);
 
     private:
         friend class GameThreadSystem;

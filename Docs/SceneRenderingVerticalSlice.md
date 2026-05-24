@@ -115,8 +115,7 @@ Destroy swapchain and RHI device through RenderSystem
 EngineRuntime::Shutdown()
 ```
 
-Render-side GPU fences are still RHI concepts. `RenderSystem::Flush()` remains a CPU command-queue fence and should not
-silently become a GPU-idle operation.
+`RenderSystem::Flush()` remains a CPU command-queue fence for Render Thread work.
 
 ## 5. Game Thread Design
 
@@ -131,12 +130,12 @@ silently become a GPU-idle operation.
 - Draining resource and IO completions at a controlled frame boundary.
 - Dispatching component lifecycle calls.
 - Producing render-safe scene snapshots for `RenderSystem`.
-- Applying backpressure when Render Thread or GPU work gets too far behind.
+- Applying backpressure when Render Thread work gets too far behind.
 
 It is not responsible for:
 
 - Pumping OS platform messages.
-- Creating RHI devices, swapchains, command lists, or GPU fences.
+- Creating RHI devices, swapchains, or command lists.
 - Mutating render-side resource objects directly.
 - Performing blocking file reads on the frame path when an async route exists.
 
@@ -180,13 +179,13 @@ tests where practical.
 
 The current vertical-slice bridge connects `GameThreadSystem` to `RenderSystem` after the main swapchain is created.
 During `RenderExtraction`, the Game Thread calls `RenderSystem::RenderFrame()`. `RenderSystem` owns
-`MaxRenderFramesInFlight` slots; `RenderFrame()` blocks only when all slots are already in flight, submits one frame
-command with a `RenderFrameToken` to the Render Thread, and returns once that command is accepted. The Render Thread
-uses the token to resolve the matching `RenderFrameContext`. `RenderSystem` records the bound Game Thread id when
-`GameThreadSystem` connects it, and `RenderFrame()`/ordinary `Submit(RenderCommand)` validate that caller before
-accepting Game Thread initiated work. Submission or frame execution failures are fatal errors. When the scene snapshot
-path lands, this narrow boundary should become `RenderSystem::SubmitFrame()` with the same bounded in-flight-frame
-rule.
+`MaxRenderFramesInFlight` render frame contexts; `RenderFrame()` advances the frame id, submits one frame command with a
+`RenderFrameToken` to the Render Thread, and returns once that command is accepted. The Render Thread uses the token to
+resolve the matching `RenderFrameContext`. `GameThreadSystem` frame-end sync controls how far the Game Thread may run
+ahead of the Render Thread. `RenderSystem` records the bound Game Thread id when `GameThreadSystem` connects it, and
+`RenderFrame()`/ordinary `Submit(RenderCommand)` validate that caller before accepting Game Thread initiated work.
+Submission or frame execution failures are fatal errors. When the scene snapshot path lands, this narrow boundary should
+become `RenderSystem::SubmitFrame()` with the same frame-end sync policy.
 
 ### 5.3 Main Thread Relationship
 
@@ -425,17 +424,27 @@ The first implementation may block at the frame boundary if the render submissio
 
 The Game Thread must not run unbounded frames ahead of the Render Thread.
 
-Milestone 5 should define a small limit:
+Milestone 5 should use an `FFrameEndSync`-style frame-end synchronizer to control that lead. The Game Thread inserts a
+CPU `RenderCommandFence` into the Render Thread queue at `EndFrame`. With one-frame thread lag enabled, it then waits
+on the previous fence rather than the one it just inserted:
 
 ```text
-MaxRenderFramesInFlight = 2
+Frame N EndFrame:
+  BeginFence(Fence[0])
+  Wait(Fence[1])
+
+Frame N + 1 EndFrame:
+  BeginFence(Fence[1])
+  Wait(Fence[0])
 ```
 
-When this limit is reached, Player should block at the next render submission boundary until the Render Thread completes
-at least one submitted frame and returns a slot to the frame-slot semaphore. Future Editor viewport updates may choose to coalesce
-visual-only frames, but scene mutation and gameplay frames should not be silently dropped.
+This allows one frame of CPU pipeline overlap while preventing the Game Thread from completing more than one full frame
+ahead of the Render Thread. Future Editor viewport updates may choose to coalesce visual-only frames, but scene mutation
+and gameplay frames should not be silently dropped.
 
-This is CPU-side backpressure. GPU frame latency is tracked separately by RHI fences or backend completion primitives.
+This is CPU-side backpressure between Game Thread and Render Thread. `MaxRenderFramesInFlight = 2` remains the initial
+render-side context ring size, but the frame-end synchronizer is the mechanism that controls Game Thread lead over the
+Render Thread.
 
 ## 12. Render Thread In-Flight Frames
 
@@ -458,32 +467,12 @@ RenderFrameContext[MaxRenderFramesInFlight]
   transient constant/upload allocation state
   transient descriptor/bind-group allocation state
   deferred render-resource releases
-  RHI fence or backend completion value
 ```
-
-Before the Render Thread reuses a frame slot, it must ensure the GPU has completed work that still references resources
-from that slot. The exact backend mapping belongs to RHI:
-
-```text
-D3D12
-  ID3D12Fence value per submitted frame.
-
-Metal
-  MTLCommandBuffer completion handler or shared event when needed.
-
-D3D11
-  DXGI frame latency object, query, or a CPU-side compatibility fence adapter.
-```
-
-D3D11 may initially behave as if work completes immediately after present if that is the only implemented path, but the
-common render-side lifetime model should still keep frame slots and completion points visible so D3D12 and Metal do not
-require a redesign.
 
 Render Thread in-flight frames and Game Thread queued snapshots are related but not the same thing:
 
 - Queued snapshots protect CPU ownership between Game Thread and Render Thread.
-- Render frame slots protect transient render resources between Render Thread and GPU.
-- RHI fences protect GPU lifetime and frame-slot reuse.
+- Render frame contexts organize per-frame render-side data.
 
 ## 13. Render Integration Work
 

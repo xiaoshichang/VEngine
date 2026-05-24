@@ -512,7 +512,7 @@ The render layer should avoid directly depending on GameObject instances on the 
 
 `RenderSystem` owns Render Thread lifecycle and the render command queue. Detailed first-stage service, thread, and
 command queue rules are defined in `Docs/RenderSystemDesign.md`. RHI documents remain focused on backend graphics
-objects such as devices, swapchains, resources, command lists, pipelines, bindings, and GPU synchronization.
+objects such as devices, swapchains, resources, command lists, pipelines, and bindings.
 
 ### 7.13 RHI
 
@@ -619,9 +619,6 @@ IO Thread
 
 Worker Threads
   Job System workers for parallel tasks.
-
-GPU Queue
-  D3D12 / Metal explicit GPU queues, with D3D11 internally adapted.
 ```
 
 The design follows Unreal-style separation between Main Thread and Game Thread at the conceptual level. Milestone 5
@@ -642,16 +639,16 @@ Important rules:
 
 Game Thread and Render Thread communicate through `RenderSystem`. The current vertical slice lets `GameThreadSystem`
 drive `RenderSystem::RenderFrame()` during its render extraction phase. `RenderSystem` owns a small
-`MaxRenderFramesInFlight` slot count, so the Game Thread may run slightly ahead but blocks when every render frame slot
-is occupied. Game Thread-only `RenderSystem` entry points validate the bound Game Thread id before accepting work.
+`MaxRenderFramesInFlight` render frame context ring. `GameThreadSystem` owns the frame-end `RenderCommandFence` sync
+that lets the Game Thread run slightly ahead but prevents it from completing unlimited frames ahead of the Render
+Thread. Game Thread-only `RenderSystem` entry points validate the bound Game Thread id before accepting work.
 Later render snapshots or render world state may use double or triple buffering when scene-to-render synchronization
 needs a stable frame boundary. Milestone 5 defines the target version of this boundary in
 `Docs/SceneRenderingVerticalSlice.md`: Game Thread extracts immutable scene render snapshots, Render Thread consumes
-them, and RenderSystem applies the same frames-in-flight backpressure limit.
+them, and GameThreadSystem applies the same frame-end sync policy.
 
-Render Thread frames in flight are separate from queued Game Thread snapshots. Queued snapshots protect CPU ownership
-between Game Thread and Render Thread. Render frame slots and RHI fences protect transient render resources between
-Render Thread and GPU execution.
+Render Thread frame contexts are separate from queued Game Thread snapshots. Queued snapshots protect CPU ownership
+between Game Thread and Render Thread. Render frame contexts organize per-frame render-side data.
 
 Detailed thread ownership, responsibility boundaries, communication paths, frame flow, and shutdown order are defined in
 `Docs/RuntimeThreadModel.md`.
@@ -674,7 +671,7 @@ Render Thread
   Consume render commands
   Update render resources
   Build RHI command lists
-  Submit to GPU queue
+  Submit and present through RHI
 
 IO Thread + Worker Threads
   Process async loads

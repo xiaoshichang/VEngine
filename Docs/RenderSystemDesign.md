@@ -33,9 +33,9 @@ The first version intentionally keeps the renderer narrow while making the runti
 RHI documents define:
 
 - Common graphics backend object model.
-- Device, queue, command list, resource, shader, pipeline, binding, and fence concepts.
+- Device, queue, command list, resource, shader, pipeline, and binding concepts.
 - D3D11, D3D12, Metal, and future backend mapping.
-- GPU submission and resource-state behavior.
+- Command recording, presentation, and resource-state behavior.
 
 This separation keeps `RenderSystem` focused on service, thread, and lifecycle orchestration. The RHI remains focused on
 backend object behavior; `RenderSystem` decides when those objects are created, used for the main frame smoke path, and
@@ -96,12 +96,11 @@ The first version does not create or own:
 - Platform window or Metal layer.
 - Render resources.
 - RenderWorld or RenderScene.
-- GPU fences.
 - Frame graph.
 - Mesh, material, texture, or UI rendering.
 
-Milestone 5 expands this scope with scene frame submission, render-safe snapshots, render-side frame slots, and
-frames-in-flight lifetime tracking. That vertical slice is described in `Docs/SceneRenderingVerticalSlice.md`.
+Milestone 5 expands this scope with scene frame submission, render-safe snapshots, and render-side frame contexts. That
+vertical slice is described in `Docs/SceneRenderingVerticalSlice.md`.
 
 ## 5. Command Queue Model
 
@@ -154,10 +153,14 @@ context. Game Thread systems should not infer RHI access before those APIs exist
 
 `Flush()` waits until all commands submitted before the flush call have completed on the Render Thread.
 
+`RenderCommandFence` is the lighter CPU command-stream fence used by Game Thread frame pacing. It inserts a private
+signal command into the Render Thread queue and can be waited by the Game Thread without flushing unrelated future
+commands. `GameThreadSystem` uses two of these fences as a first-stage `FFrameEndSync`-style frame-end synchronizer:
+the current frame inserts one fence, then the Game Thread waits on the previous fence when one-frame thread lag is
+allowed.
+
 `Flush()` is a CPU render command queue fence. It does not mean:
 
-- GPU idle.
-- RHI queue idle.
 - swapchain presented.
 - resource uploads are visible to shaders.
 
@@ -265,10 +268,11 @@ The first-stage startup path initializes `EngineRuntime`, creates the main `Wind
 `Application` connects `GameThreadSystem` to `RenderSystem`. The Main Thread keeps pumping the `Window`, while the Game
 Thread calls `RenderSystem::RenderFrame()` during its render extraction phase. `RenderSystem` records the bound Game
 Thread id when `GameThreadSystem` connects it, and Game Thread-only public entry points validate that caller before
-submitting work. `RenderSystem` owns `MaxRenderFramesInFlight` render frame slots; `RenderFrame()` blocks when every
-slot is in flight, otherwise it submits one Render Thread command with a `RenderFrameToken` and returns. The Render
-Thread uses the token to resolve the corresponding `RenderFrameContext`. Shutdown disconnects `GameThreadSystem`,
-drains render work, then destroys the main swapchain and RHI device.
+submitting work. `RenderSystem` owns a `MaxRenderFramesInFlight` ring of render frame contexts; `RenderFrame()` advances
+the frame id, resolves the corresponding ring context, submits one Render Thread command with a `RenderFrameToken`, and
+returns. `GameThreadSystem` frame-end sync, not a RenderSystem frame-slot semaphore, controls how far the Game Thread
+may run ahead of the Render Thread. Shutdown disconnects `GameThreadSystem`, drains render work, then destroys the main
+swapchain and RHI device.
 
 ### 9.3 Threading Rule
 
@@ -315,13 +319,10 @@ teardown in this order:
 Stop accepting public commands
 Drain accepted commands
 Destroy swapchain / viewport surfaces on Render Thread
-Flush or wait-idle RHI device as needed
+Destroy remaining RHI state on Render Thread
 Destroy RHI device on Render Thread
 Join Render Thread
 ```
-
-GPU fences and frame latency should remain RHI concepts. `RenderSystem` coordinates when to call them during lifecycle
-transitions, but should not turn CPU command `Flush()` into a GPU-idle operation.
 
 ## 10. Scene Frame Submission
 
@@ -344,25 +345,31 @@ rendering should prefer the frame-level API so the engine can reason about queue
 
 ## 11. Frames In Flight And Backpressure
 
-Game Thread must not run unbounded frames ahead of Render Thread. Milestone 5 defines a small CPU-side frames-in-flight
-limit:
+Game Thread must not run unbounded frames ahead of Render Thread. Milestone 5 uses an `FFrameEndSync`-style CPU
+command-stream fence at Game Thread frame end. The initial policy allows one frame of Game Thread lead:
 
 ```text
-MaxRenderFramesInFlight = 2
+Frame N EndFrame:
+  BeginFence(Fence[0])
+  Wait(Fence[1])
+
+Frame N + 1 EndFrame:
+  BeginFence(Fence[1])
+  Wait(Fence[0])
 ```
 
-When every frame slot is in flight, Player should block at the next render submission boundary until Render Thread
-completes at least one submitted frame and releases its slot. This keeps scene snapshots, referenced resource handles,
-and transient frame data from growing without bound.
+The fence signal command executes on the Render Thread after all earlier render commands. Waiting on the previous fence
+keeps the Game Thread from completing more than one full frame ahead of the Render Thread while still preserving one
+frame of CPU pipeline overlap.
+
+`MaxRenderFramesInFlight = 2` remains the first render frame context ring size. Frame-end sync controls Game Thread
+lead over the Render Thread. Render frame contexts organize per-frame render-side data.
 
 The frame slot is a CPU ownership boundary:
 
 - Game Thread owns live Scene mutation.
 - Submitted frame slots own immutable extracted scene data or first-stage smoke render work.
 - Render Thread owns packet consumption and render-side state updates.
-
-GPU completion is still tracked separately by RHI fences or backend completion primitives before slot resources are
-reused.
 
 ## 12. Render Frames In Flight
 
@@ -386,37 +393,18 @@ RenderFrameContext[MaxRenderFramesInFlight]
   transient constant/upload allocation state
   transient descriptor/bind-group allocation state
   deferred render-resource releases
-  RHI fence or backend completion value
 ```
 
-The current smoke path already allocates one command list per `RenderFrameContext`. `RenderFrame()` acquires one
-available frame slot from a semaphore, advances a one-based frame id, resolves the corresponding ring slot with
-`(frameId - 1) % MaxRenderFramesInFlight`, returns a `RenderFrameToken` containing the frame id, and submits a Render
-Thread command that resolves the token back to the same context before recording the frame. Future scene frame
-submission should attach the extracted scene packet to the same context boundary.
-
-Before Render Thread reuses a frame slot, it must ensure GPU work that references that slot has completed. Backend
-mapping belongs to RHI:
-
-```text
-D3D12
-  ID3D12Fence value per submitted frame.
-
-Metal
-  MTLCommandBuffer completion handler or shared event when needed.
-
-D3D11
-  DXGI frame latency object, query, or CPU-side compatibility fence adapter.
-```
-
-D3D11 may initially use a conservative compatibility path, but the common render-side lifetime model should still expose
-frame slots and completion points so D3D12 and Metal do not require a redesign.
+The current smoke path already allocates one command list per `RenderFrameContext`. `RenderFrame()` advances a one-based
+frame id, resolves the corresponding ring slot with `(frameId - 1) % MaxRenderFramesInFlight`, returns a
+`RenderFrameToken` containing the frame id, and submits a Render Thread command that resolves the token back to the same
+context before recording the frame. Future scene frame submission should attach the extracted scene packet to the same
+context boundary.
 
 Keep the three frame concepts distinct:
 
 - Queued Game Thread snapshots protect CPU ownership between Game Thread and Render Thread.
-- Render frame slots protect transient render resources between Render Thread and GPU.
-- RHI fences protect GPU completion and frame-slot reuse.
+- Render frame contexts organize per-frame render-side data.
 
 ## 13. Future Render Work
 
@@ -439,4 +427,4 @@ Required tests:
 - Runtime-owned `RenderSystem` initializes and can execute commands through `EngineRuntime`.
 - Milestone 5 frame submission accepts render-safe snapshots without live scene pointers.
 - Queued frame backpressure prevents Game Thread submission from running unbounded ahead of Render Thread.
-- Render frame slots are not reused until their backend completion point allows reuse.
+- Render frame contexts are selected through the documented ring mapping.

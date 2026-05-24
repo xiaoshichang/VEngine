@@ -48,7 +48,6 @@ RhiDevice
 RhiQueue
 RhiCommandAllocator
 RhiCommandList
-RhiFence
 RhiSwapchain
 RhiBuffer
 RhiTexture
@@ -101,18 +100,7 @@ The common API should be command-list-shaped even when D3D11 executes commands i
 
 D3D11 deferred contexts should not be required in the first implementation. They can be evaluated later if profiling shows real benefit.
 
-### 5.4 Fence
-
-```text
-RhiFence
-  D3D11: DXGI frame latency / query / CPU-side frame fence adapter
-  D3D12: ID3D12Fence
-  Metal: command buffer completion handler or shared event when needed
-```
-
-The first goal is frame lifetime safety, not a complete GPU timeline abstraction.
-
-### 5.5 Swapchain
+### 5.4 Swapchain
 
 ```text
 RhiSwapchain
@@ -327,7 +315,6 @@ Record command list
 Begin/end render pass
 Draw indexed static mesh
 Present
-Fence frame completion
 ```
 
 Anything outside this contract should be treated as a later extension.
@@ -341,7 +328,7 @@ Stage 1: D3D11 + D3D12 device and swapchain creation on Windows.
 Stage 2: D3D11 + D3D12 clear-color render pass.
 Stage 3: D3D11 + D3D12 triangle with one pipeline and one vertex buffer.
 Stage 4: D3D11 + D3D12 indexed mesh with constant buffer, texture, and sampler.
-Stage 5: Per-frame resources and fence-based frames-in-flight.
+Stage 5: Per-frame render contexts.
 Stage 6: Metal device, CAMetalLayer surface, clear-color render pass on iOS Simulator.
 Stage 7: Metal triangle using the same high-level RHI client code shape.
 Stage 8: Metal indexed mesh with constant buffer, texture, and sampler.
@@ -357,7 +344,7 @@ The RHI shape is accepted when:
 - Common RHI headers do not include D3D, DXGI, Objective-C, UIKit, or Metal headers.
 - D3D11-specific implementation details do not change the common RHI API shape.
 - Debug builds validate invalid resource states, missing bindings, incompatible pipeline/render-pass formats, and use-after-free handles.
-- The first implementation supports at least two frames in flight without CPU/GPU lifetime hazards.
+- The first implementation supports a small render frame context ring.
 
 ## 15. Main Risks
 

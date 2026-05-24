@@ -136,7 +136,7 @@ VE_LOG_INFO
 - Design common RHI.
 - Implement D3D11RHI minimum path.
 - Implement D3D12RHI minimum path.
-- Add swapchain, buffer, texture, shader, pipeline, command list, and fence concepts.
+- Add swapchain, buffer, texture, shader, pipeline, and command list concepts.
 - Build initial RenderSystem with Render Thread and lock-free Render Command Queue.
 - Connect RenderSystem lifecycle through `EngineRuntime`.
 - Connect RHI device and swapchain lifecycle through RenderSystem after the service boundary is stable.
@@ -195,14 +195,15 @@ Implementation order:
 - Add Game Thread scene extraction that builds render snapshots without live `Scene`, `GameObject`, or `Component`
   pointers.
 - Add `RenderSystem::SubmitFrame()` or an equivalent frame-level submission API for scene snapshots.
-- Add CPU-side frame backpressure through render frames-in-flight, with an initial `MaxRenderFramesInFlight` value of 2.
-- Add render-side frame slots and backend completion tracking for safe frame-slot reuse.
+- Add CPU-side frame backpressure through a Game Thread frame-end `RenderCommandFence`, with an initial one-frame-lag
+  policy.
+- Add render-side frame contexts for per-frame render data.
 - Add render-resource creation paths for static mesh vertex/index buffers, basic material state, shader pipeline state,
   and depth buffer resources.
 - Implement the first forward rendering path with one active camera, one directional light, one main viewport, one
   default material path, and static mesh draw calls.
 - Load or construct the sample scene in `VEnginePlayer` and render it through the existing RenderSystem and RHI path.
-- Add RenderSystem tests for frame submission, queued-frame backpressure, and frame-slot completion/reuse behavior.
+- Add RenderSystem tests for frame submission, queued-frame backpressure, and render frame context selection.
 - Add a Windows Player smoke check that opens the sample scene, renders a lit static mesh, and exits cleanly.
 
 ### Milestone 6: Asset Pipeline

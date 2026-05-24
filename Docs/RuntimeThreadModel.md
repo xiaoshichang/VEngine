@@ -151,9 +151,8 @@ Responsibilities:
 - Own render-side resource state.
 - Own RHI device and main swapchain lifecycle on the Render Thread.
 - Build RHI command lists.
-- Submit graphics work to the backend GPU queue.
 - Present through the main swapchain.
-- Coordinate render-side frame slots and backend completion tracking when frames-in-flight land.
+- Coordinate render-side frame contexts when frame submission lands.
 
 Must not:
 
@@ -168,7 +167,7 @@ Communicates with:
 - Game Thread through render commands and future immutable `SceneRenderSnapshot` frame packets.
 - Main Thread through explicit `RenderSystem` lifecycle calls for device/swapchain startup and shutdown.
 - Job Worker Threads or Resource systems through render commands for upload or render-resource creation work.
-- RHI/GPU through backend-specific command queues, fences, and swapchains.
+- RHI through backend-specific devices, command lists, resources, and swapchains.
 
 Current first-stage behavior:
 
@@ -177,8 +176,10 @@ Current first-stage behavior:
 - `RenderSystem` records the bound Game Thread id and validates Game Thread-only public entry points.
 - `RenderCommandQueue` is a lock-free MPSC queue.
 - Render Thread is the single consumer.
+- GameThreadSystem inserts a frame-end `RenderCommandFence` and waits with a one-frame-lag policy, so the Game Thread
+  cannot complete unlimited frames ahead of the Render Thread.
 - Submission failures are fatal startup/runtime errors rather than recoverable `Submit()` return values.
-- `RenderSystem::Flush()` is a CPU command queue fence. It does not mean GPU idle.
+- `RenderSystem::Flush()` is a CPU command queue fence.
 - RHI device and swapchain lifecycle APIs schedule synchronous work onto the Render Thread.
 
 ## 6. Job Worker Threads
@@ -269,7 +270,7 @@ Game -> Render
   Future: RenderSystem::SubmitFrame(SceneRenderSnapshot).
 
 Render -> Game
-  Future frame-consumed notifications, render fences, or diagnostics through explicit state/queues.
+  Future frame-consumed notifications or diagnostics through explicit state/queues.
   No direct GameObject access from Render Thread.
 
 Main -> Render
@@ -338,7 +339,7 @@ Render Thread
   Consume frame packet
   Update render world/resources
   Build RHI command lists
-  Submit and present
+  Submit and present through RHI
 
 IO Thread + Worker Threads
   Load and prepare resource data
@@ -368,7 +369,6 @@ Application-level shutdown should also destroy or disconnect platform surfaces a
 ```text
 Stop platform/game command submission
 Disconnect GameThreadSystem from RenderSystem
-Flush or drain RenderSystem render frames in flight
 Destroy or flush render work
 Destroy swapchain and RHI device through RenderSystem
 Stop GameThreadSystem
@@ -398,8 +398,7 @@ Synchronization rules:
 
 - Prefer queues, snapshots, handles, and explicit wait/fence APIs over shared mutable state.
 - Avoid cyclic waits between Main, Game, Render, IO, and Worker Threads.
-- `RenderSystem::Flush()` waits for CPU render commands, not GPU idle.
-- Future GPU frame lifetime must be tracked through RHI fences or backend completion objects.
+- `RenderSystem::Flush()` waits for CPU render commands.
 - Future Game-to-Render snapshots should use bounded queues or backpressure so Game Thread cannot run unbounded ahead of
   Render Thread.
 

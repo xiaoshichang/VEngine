@@ -86,28 +86,55 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     struct RenderSystemImpl
     {
-        Thread thread;
-        Atomic<UInt64> renderThreadIdValue{0};
-        Atomic<UInt64> gameThreadIdValue{0};
-        Semaphore commandSemaphore{0};
-        RenderCommandQueue commandQueue;
-        AtomicBool acceptingCommands{false};
-        AtomicBool stopRequested{false};
-        AtomicBool initialized{false};
-        AtomicSize activeSubmitCount{0};
-        Atomic<int> lastFrameError{static_cast<int>(ErrorCode::None)};
-        Atomic<int> backendValue{-1};
-        UInt32 maxFramesInFlight = DefaultMaxRenderFramesInFlight;
-        UInt64 nextRenderFrameId = 0;
-        AtomicSize renderFramesInFlight{0};
-        std::unique_ptr<Semaphore> frameSlotSemaphore;
-        std::vector<RenderFrameContext> frameContexts;
-        std::unique_ptr<rhi::RhiDevice> device;
-        std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
-        std::unique_ptr<rhi::RhiBuffer> triangleVertexBuffer;
-        std::unique_ptr<rhi::RhiShaderModule> triangleVertexShader;
-        std::unique_ptr<rhi::RhiShaderModule> triangleFragmentShader;
-        std::unique_ptr<rhi::RhiPipelineState> trianglePipelineState;
+        struct ThreadState
+        {
+            Thread ownedThread;
+            Atomic<UInt64> renderThreadIdValue{0};
+            AtomicBool initialized{false};
+            AtomicBool stopRequested{false};
+        };
+
+        struct CommandState
+        {
+            Semaphore semaphore{0};
+            RenderCommandQueue queue;
+            AtomicBool acceptingCommands{false};
+            AtomicSize activeSubmitCount{0};
+        };
+
+        struct GameThreadBindingState
+        {
+            Atomic<UInt64> gameThreadIdValue{0};
+        };
+
+        struct FrameRingState
+        {
+            UInt32 maxFramesInFlight = DefaultMaxRenderFramesInFlight;
+            UInt64 nextRenderFrameId = 0;
+            std::vector<RenderFrameContext> contexts;
+        };
+
+        struct RhiState
+        {
+            struct TriangleResources
+            {
+                std::unique_ptr<rhi::RhiBuffer> vertexBuffer;
+                std::unique_ptr<rhi::RhiShaderModule> vertexShader;
+                std::unique_ptr<rhi::RhiShaderModule> fragmentShader;
+                std::unique_ptr<rhi::RhiPipelineState> pipelineState;
+            };
+
+            Atomic<int> backendValue{-1};
+            std::unique_ptr<rhi::RhiDevice> device;
+            std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
+            TriangleResources triangle;
+        };
+
+        ThreadState thread;
+        CommandState commands;
+        GameThreadBindingState gameThreadBinding;
+        FrameRingState frameRing;
+        RhiState rhi;
     };
 
     namespace
@@ -135,7 +162,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         [[nodiscard]] ThreadId GetBoundGameThreadId(const RenderSystemImpl& impl) noexcept
         {
-            return ThreadId{impl.gameThreadIdValue.load(std::memory_order_acquire)};
+            return ThreadId{impl.gameThreadBinding.gameThreadIdValue.load(std::memory_order_acquire)};
         }
 
         [[nodiscard]] bool CheckGameThreadAccess(const RenderSystemImpl& impl) noexcept
@@ -213,22 +240,23 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         void DestroyTriangleResources(RenderSystemImpl& impl)
         {
-            for (RenderFrameContext& frameContext : impl.frameContexts)
+            for (RenderFrameContext& frameContext : impl.frameRing.contexts)
             {
                 frameContext.commandList.reset();
                 frameContext.lastError = ErrorCode::None;
             }
 
-            impl.trianglePipelineState.reset();
-            impl.triangleFragmentShader.reset();
-            impl.triangleVertexShader.reset();
-            impl.triangleVertexBuffer.reset();
+            impl.rhi.triangle.pipelineState.reset();
+            impl.rhi.triangle.fragmentShader.reset();
+            impl.rhi.triangle.vertexShader.reset();
+            impl.rhi.triangle.vertexBuffer.reset();
         }
 
         [[nodiscard]] ErrorCode CreateTriangleResources(RenderSystemImpl& impl)
         {
-            VE_ASSERT_MESSAGE(impl.device != nullptr, "CreateTriangleResources requires an initialized RHI device.");
-            VE_ASSERT_MESSAGE(impl.mainSwapchain != nullptr,
+            VE_ASSERT_MESSAGE(impl.rhi.device != nullptr,
+                              "CreateTriangleResources requires an initialized RHI device.");
+            VE_ASSERT_MESSAGE(impl.rhi.mainSwapchain != nullptr,
                               "CreateTriangleResources requires an initialized main swapchain.");
 
             rhi::RhiBufferDesc vertexBufferDesc = {};
@@ -237,8 +265,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             vertexBufferDesc.initialData = TriangleVertices;
             vertexBufferDesc.debugName = "RenderSystemTriangleVertexBuffer";
 
-            impl.triangleVertexBuffer = impl.device->CreateBuffer(vertexBufferDesc);
-            if (impl.triangleVertexBuffer == nullptr)
+            impl.rhi.triangle.vertexBuffer = impl.rhi.device->CreateBuffer(vertexBufferDesc);
+            if (impl.rhi.triangle.vertexBuffer == nullptr)
             {
                 return ErrorCode::PlatformError;
             }
@@ -249,8 +277,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             vertexShaderDesc.entryPoint = "VSMain";
             vertexShaderDesc.debugName = "RenderSystemTriangleVertexShader";
 
-            impl.triangleVertexShader = impl.device->CreateShaderModule(vertexShaderDesc);
-            if (impl.triangleVertexShader == nullptr)
+            impl.rhi.triangle.vertexShader = impl.rhi.device->CreateShaderModule(vertexShaderDesc);
+            if (impl.rhi.triangle.vertexShader == nullptr)
             {
                 DestroyTriangleResources(impl);
                 return ErrorCode::PlatformError;
@@ -262,8 +290,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             fragmentShaderDesc.entryPoint = "PSMain";
             fragmentShaderDesc.debugName = "RenderSystemTriangleFragmentShader";
 
-            impl.triangleFragmentShader = impl.device->CreateShaderModule(fragmentShaderDesc);
-            if (impl.triangleFragmentShader == nullptr)
+            impl.rhi.triangle.fragmentShader = impl.rhi.device->CreateShaderModule(fragmentShaderDesc);
+            if (impl.rhi.triangle.fragmentShader == nullptr)
             {
                 DestroyTriangleResources(impl);
                 return ErrorCode::PlatformError;
@@ -276,25 +304,25 @@ float4 PSMain(VSOutput input) : SV_TARGET
             positionAttribute.offset = 0;
 
             rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
-            pipelineDesc.vertexShader = impl.triangleVertexShader.get();
-            pipelineDesc.fragmentShader = impl.triangleFragmentShader.get();
+            pipelineDesc.vertexShader = impl.rhi.triangle.vertexShader.get();
+            pipelineDesc.fragmentShader = impl.rhi.triangle.fragmentShader.get();
             pipelineDesc.vertexLayout.attributes = &positionAttribute;
             pipelineDesc.vertexLayout.attributeCount = 1;
             pipelineDesc.vertexLayout.stride = sizeof(TriangleVertex);
             pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
-            pipelineDesc.colorFormat = impl.mainSwapchain->GetColorFormat();
+            pipelineDesc.colorFormat = impl.rhi.mainSwapchain->GetColorFormat();
             pipelineDesc.debugName = "RenderSystemTrianglePipeline";
 
-            impl.trianglePipelineState = impl.device->CreateGraphicsPipeline(pipelineDesc);
-            if (impl.trianglePipelineState == nullptr)
+            impl.rhi.triangle.pipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
+            if (impl.rhi.triangle.pipelineState == nullptr)
             {
                 DestroyTriangleResources(impl);
                 return ErrorCode::PlatformError;
             }
 
-            for (RenderFrameContext& frameContext : impl.frameContexts)
+            for (RenderFrameContext& frameContext : impl.frameRing.contexts)
             {
-                frameContext.commandList = impl.device->CreateCommandList();
+                frameContext.commandList = impl.rhi.device->CreateCommandList();
                 if (frameContext.commandList == nullptr)
                 {
                     DestroyTriangleResources(impl);
@@ -307,12 +335,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         void RenderTriangleFrame(RenderSystemImpl& impl, RenderFrameContext& frameContext)
         {
-            if (impl.device == nullptr || impl.mainSwapchain == nullptr)
+            if (impl.rhi.device == nullptr || impl.rhi.mainSwapchain == nullptr)
             {
                 TerminateRenderSystem("frame execution failed in RenderTriangleFrame", ErrorCode::InvalidState);
             }
 
-            if (impl.triangleVertexBuffer == nullptr || impl.trianglePipelineState == nullptr ||
+            if (impl.rhi.triangle.vertexBuffer == nullptr || impl.rhi.triangle.pipelineState == nullptr ||
                 frameContext.commandList == nullptr)
             {
                 TerminateRenderSystem("frame execution failed in RenderTriangleFrame", ErrorCode::InvalidState);
@@ -323,10 +351,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
             renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
             renderPassDesc.clearColor = {0.05f, 0.07f, 0.10f, 1.0f};
 
-            const rhi::RhiExtent2D extent = impl.mainSwapchain->GetExtent();
+            const rhi::RhiExtent2D extent = impl.rhi.mainSwapchain->GetExtent();
             rhi::RhiCommandList& commandList = *frameContext.commandList;
 
-            if (!commandList.Begin() || !commandList.BeginRenderPass(*impl.mainSwapchain, renderPassDesc))
+            if (!commandList.Begin() || !commandList.BeginRenderPass(*impl.rhi.mainSwapchain, renderPassDesc))
             {
                 TerminateRenderSystem("frame execution failed in RenderTriangleFrame command list begin",
                                       ErrorCode::PlatformError);
@@ -335,12 +363,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
             commandList.SetViewport(rhi::RhiViewport{
                 0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
             commandList.SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
-            commandList.SetPipeline(*impl.trianglePipelineState);
-            commandList.SetVertexBuffer(0, *impl.triangleVertexBuffer, sizeof(TriangleVertex), 0);
+            commandList.SetPipeline(*impl.rhi.triangle.pipelineState);
+            commandList.SetVertexBuffer(0, *impl.rhi.triangle.vertexBuffer, sizeof(TriangleVertex), 0);
             commandList.Draw(3, 0);
             commandList.EndRenderPass();
 
-            if (!commandList.End() || !impl.device->Submit(commandList) || !impl.mainSwapchain->Present())
+            if (!commandList.End() || !impl.rhi.device->Submit(commandList) || !impl.rhi.mainSwapchain->Present())
             {
                 TerminateRenderSystem("frame execution failed in RenderTriangleFrame submit", ErrorCode::PlatformError);
             }
@@ -356,18 +384,18 @@ float4 PSMain(VSOutput input) : SV_TARGET
         [[nodiscard]] RenderFrameContext* FindRenderFrameContext(RenderSystemImpl& impl,
                                                                  const RenderFrameToken& token) noexcept
         {
-            if (token.frameId == 0 || impl.frameContexts.empty())
+            if (token.frameId == 0 || impl.frameRing.contexts.empty())
             {
                 return nullptr;
             }
 
-            const UInt32 slotIndex = GetRenderFrameSlotIndex(token.frameId, impl.maxFramesInFlight);
-            if (slotIndex >= impl.frameContexts.size())
+            const UInt32 slotIndex = GetRenderFrameSlotIndex(token.frameId, impl.frameRing.maxFramesInFlight);
+            if (slotIndex >= impl.frameRing.contexts.size())
             {
                 return nullptr;
             }
 
-            RenderFrameContext& frameContext = impl.frameContexts[slotIndex];
+            RenderFrameContext& frameContext = impl.frameRing.contexts[slotIndex];
             if (frameContext.frameId != token.frameId)
             {
                 return nullptr;
@@ -378,33 +406,21 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         void AcquireRenderFrameSlot(RenderSystemImpl& impl, RenderFrameToken& outToken)
         {
-            if (!impl.acceptingCommands.load(std::memory_order_acquire))
+            if (!impl.commands.acceptingCommands.load(std::memory_order_acquire))
             {
-                impl.lastFrameError.store(static_cast<int>(ErrorCode::InvalidState), std::memory_order_release);
                 TerminateRenderSystem("submission failed in RenderFrame acquire", ErrorCode::InvalidState);
             }
 
-            VE_ASSERT_MESSAGE(impl.frameSlotSemaphore != nullptr,
-                              "RenderSystem frame slot semaphore must be initialized.");
-            impl.frameSlotSemaphore->Acquire();
-
-            if (!impl.acceptingCommands.load(std::memory_order_acquire))
-            {
-                impl.frameSlotSemaphore->Release();
-                impl.lastFrameError.store(static_cast<int>(ErrorCode::InvalidState), std::memory_order_release);
-                TerminateRenderSystem("submission failed in RenderFrame acquire", ErrorCode::InvalidState);
-            }
-
-            ++impl.nextRenderFrameId;
-            const UInt32 slotIndex = GetRenderFrameSlotIndex(impl.nextRenderFrameId, impl.maxFramesInFlight);
-            RenderFrameContext& frameContext = impl.frameContexts[slotIndex];
+            ++impl.frameRing.nextRenderFrameId;
+            const UInt32 slotIndex =
+                GetRenderFrameSlotIndex(impl.frameRing.nextRenderFrameId, impl.frameRing.maxFramesInFlight);
+            RenderFrameContext& frameContext = impl.frameRing.contexts[slotIndex];
             VE_ASSERT_MESSAGE(frameContext.state == RenderFrameSlotState::Free,
                               "Render frame ring slot should be free.");
 
-            frameContext.frameId = impl.nextRenderFrameId;
+            frameContext.frameId = impl.frameRing.nextRenderFrameId;
             frameContext.state = RenderFrameSlotState::Submitted;
             frameContext.lastError = ErrorCode::None;
-            impl.renderFramesInFlight.fetch_add(1, std::memory_order_acq_rel);
             outToken.frameId = frameContext.frameId;
         }
 
@@ -425,16 +441,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             if (frameContext != nullptr)
             {
                 frameContext->lastError = result;
+                frameContext->frameId = 0;
                 frameContext->state = RenderFrameSlotState::Free;
-                VE_ASSERT_MESSAGE(impl.renderFramesInFlight.load(std::memory_order_acquire) > 0,
-                                  "Render frame slot release requires an in-flight frame.");
-                impl.renderFramesInFlight.fetch_sub(1, std::memory_order_acq_rel);
-            }
-
-            impl.lastFrameError.store(static_cast<int>(result), std::memory_order_release);
-            if (impl.frameSlotSemaphore != nullptr)
-            {
-                impl.frameSlotSemaphore->Release();
             }
         }
 
@@ -453,14 +461,6 @@ float4 PSMain(VSOutput input) : SV_TARGET
             RenderTriangleFrame(impl, *frameContext);
         }
 
-        void WaitForRenderFramesInFlight(RenderSystemImpl& impl) noexcept
-        {
-            while (impl.renderFramesInFlight.load(std::memory_order_acquire) != 0)
-            {
-                YieldThread();
-            }
-        }
-
         void ExecuteCommand(RenderThreadContext& context, RenderCommand& command) noexcept
         {
             try
@@ -476,19 +476,19 @@ float4 PSMain(VSOutput input) : SV_TARGET
         void RenderThreadLoop(RenderSystemImpl& impl)
         {
             const ThreadId renderThreadId = GetCurrentThreadId();
-            impl.renderThreadIdValue.store(renderThreadId.value, std::memory_order_release);
+            impl.thread.renderThreadIdValue.store(renderThreadId.value, std::memory_order_release);
             RenderThreadContext context(renderThreadId);
 
             for (;;)
             {
-                while (std::optional<RenderCommand> command = impl.commandQueue.TryPop())
+                while (std::optional<RenderCommand> command = impl.commands.queue.TryPop())
                 {
                     ExecuteCommand(context, *command);
                 }
 
-                if (impl.stopRequested.load(std::memory_order_acquire))
+                if (impl.thread.stopRequested.load(std::memory_order_acquire))
                 {
-                    if (!impl.commandQueue.IsEmptyForConsumer())
+                    if (!impl.commands.queue.IsEmptyForConsumer())
                     {
                         continue;
                     }
@@ -496,10 +496,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
                     break;
                 }
 
-                impl.commandSemaphore.Acquire();
+                impl.commands.semaphore.Acquire();
             }
 
-            while (std::optional<RenderCommand> command = impl.commandQueue.TryPop())
+            while (std::optional<RenderCommand> command = impl.commands.queue.TryPop())
             {
                 ExecuteCommand(context, *command);
             }
@@ -507,44 +507,38 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         void DestroyRhiStateOnRenderThread(RenderSystemImpl& impl)
         {
-            if (impl.device != nullptr)
+            if (impl.rhi.device != nullptr)
             {
-                impl.device->WaitIdle();
+                impl.rhi.device->WaitIdle();
             }
 
             DestroyTriangleResources(impl);
-            impl.mainSwapchain.reset();
+            impl.rhi.mainSwapchain.reset();
 
-            if (impl.device != nullptr)
+            if (impl.rhi.device != nullptr)
             {
-                impl.device.reset();
+                impl.rhi.device.reset();
             }
 
-            impl.backendValue.store(-1, std::memory_order_release);
+            impl.rhi.backendValue.store(-1, std::memory_order_release);
         }
 
         void EnqueueInternalCommand(RenderSystemImpl& impl, RenderCommand command) noexcept
         {
-            ErrorCode pushResult = impl.commandQueue.Push(std::move(command));
+            ErrorCode pushResult = impl.commands.queue.Push(std::move(command));
             VE_ASSERT_MESSAGE(pushResult == ErrorCode::None,
                               "RenderSystem failed to enqueue an internal render command.");
-            impl.commandSemaphore.Release();
+            impl.commands.semaphore.Release();
         }
 
         void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
         {
-            impl.acceptingCommands.store(false, std::memory_order_release);
-            if (impl.frameSlotSemaphore != nullptr)
-            {
-                impl.frameSlotSemaphore->Release();
-            }
+            impl.commands.acceptingCommands.store(false, std::memory_order_release);
 
-            while (impl.activeSubmitCount.load(std::memory_order_acquire) != 0)
+            while (impl.commands.activeSubmitCount.load(std::memory_order_acquire) != 0)
             {
                 YieldThread();
             }
-
-            WaitForRenderFramesInFlight(impl);
 
             auto rhiDestroyed = std::make_shared<ManualResetEvent>(false);
             EnqueueInternalCommand(impl,
@@ -556,20 +550,19 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                                  }});
             rhiDestroyed->Wait();
 
-            impl.stopRequested.store(true, std::memory_order_release);
-            impl.commandSemaphore.Release();
+            impl.thread.stopRequested.store(true, std::memory_order_release);
+            impl.commands.semaphore.Release();
 
-            if (impl.thread.IsJoinable())
+            if (impl.thread.ownedThread.IsJoinable())
             {
-                const bool joined = impl.thread.Join();
+                const bool joined = impl.thread.ownedThread.Join();
                 VE_ASSERT_MESSAGE(joined, "RenderSystem failed to join its Render Thread during shutdown.");
             }
 
-            impl.commandQueue.ClearForConsumer();
-            impl.lastFrameError.store(static_cast<int>(ErrorCode::None), std::memory_order_release);
-            impl.renderThreadIdValue.store(0, std::memory_order_release);
-            impl.stopRequested.store(false, std::memory_order_release);
-            impl.initialized.store(false, std::memory_order_release);
+            impl.commands.queue.ClearForConsumer();
+            impl.thread.renderThreadIdValue.store(0, std::memory_order_release);
+            impl.thread.stopRequested.store(false, std::memory_order_release);
+            impl.thread.initialized.store(false, std::memory_order_release);
         }
     } // namespace
 
@@ -581,6 +574,28 @@ float4 PSMain(VSOutput input) : SV_TARGET
     ThreadId RenderThreadContext::GetRenderThreadId() const noexcept
     {
         return renderThreadId_;
+    }
+
+    RenderCommandFence::RenderCommandFence() = default;
+
+    RenderCommandFence::~RenderCommandFence() = default;
+
+    bool RenderCommandFence::IsComplete() const noexcept
+    {
+        return completed_ == nullptr || completed_->TryWait();
+    }
+
+    void RenderCommandFence::Wait() noexcept
+    {
+        if (completed_ != nullptr)
+        {
+            completed_->Wait();
+        }
+    }
+
+    void RenderCommandFence::SetCompletionEvent(std::shared_ptr<ManualResetEvent> completed) noexcept
+    {
+        completed_ = std::move(completed);
     }
 
     RenderSystem::RenderSystem()
@@ -595,7 +610,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     void RenderSystem::Initialize(const RenderSystemDesc& desc)
     {
-        if (impl_->initialized.load(std::memory_order_acquire))
+        if (impl_->thread.initialized.load(std::memory_order_acquire))
         {
             TerminateRenderSystem("initialization failed: RenderSystem is already initialized",
                                   ErrorCode::InvalidState);
@@ -607,22 +622,18 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                   ErrorCode::InvalidArgument);
         }
 
-        impl_->stopRequested.store(false, std::memory_order_release);
-        impl_->acceptingCommands.store(true, std::memory_order_release);
-        impl_->renderThreadIdValue.store(0, std::memory_order_release);
-        impl_->gameThreadIdValue.store(0, std::memory_order_release);
-        impl_->lastFrameError.store(static_cast<int>(ErrorCode::None), std::memory_order_release);
-        impl_->backendValue.store(-1, std::memory_order_release);
-        impl_->maxFramesInFlight = desc.maxFramesInFlight;
+        impl_->thread.stopRequested.store(false, std::memory_order_release);
+        impl_->commands.acceptingCommands.store(true, std::memory_order_release);
+        impl_->thread.renderThreadIdValue.store(0, std::memory_order_release);
+        impl_->gameThreadBinding.gameThreadIdValue.store(0, std::memory_order_release);
+        impl_->rhi.backendValue.store(-1, std::memory_order_release);
+        impl_->frameRing.maxFramesInFlight = desc.maxFramesInFlight;
 
-        impl_->nextRenderFrameId = 0;
-        impl_->renderFramesInFlight.store(0, std::memory_order_release);
-        impl_->frameContexts.clear();
-        impl_->frameSlotSemaphore.reset();
+        impl_->frameRing.nextRenderFrameId = 0;
+        impl_->frameRing.contexts.clear();
         try
         {
-            impl_->frameContexts.resize(desc.maxFramesInFlight);
-            impl_->frameSlotSemaphore = std::make_unique<Semaphore>(desc.maxFramesInFlight);
+            impl_->frameRing.contexts.resize(desc.maxFramesInFlight);
         }
         catch (const std::bad_alloc&)
         {
@@ -630,27 +641,27 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                   ErrorCode::OutOfMemory);
         }
 
-        for (RenderFrameContext& frameContext : impl_->frameContexts)
+        for (RenderFrameContext& frameContext : impl_->frameRing.contexts)
         {
             frameContext.state = RenderFrameSlotState::Free;
             frameContext.lastError = ErrorCode::None;
         }
 
-        ErrorCode startResult = impl_->thread.Start(desc.threadName.empty() ? ThreadDesc{"VEngineRenderThread"}
-                                                                            : ThreadDesc{desc.threadName},
-                                                    [this]() { RenderThreadLoop(*impl_); });
+        ErrorCode startResult = impl_->thread.ownedThread.Start(
+            desc.threadName.empty() ? ThreadDesc{"VEngineRenderThread"} : ThreadDesc{desc.threadName},
+            [this]() { RenderThreadLoop(*impl_); });
 
         if (startResult != ErrorCode::None)
         {
             TerminateRenderSystem("initialization failed: failed to start Render Thread", startResult);
         }
 
-        impl_->initialized.store(true, std::memory_order_release);
+        impl_->thread.initialized.store(true, std::memory_order_release);
     }
 
     void RenderSystem::Shutdown() noexcept
     {
-        if (!impl_->initialized.load(std::memory_order_acquire))
+        if (!impl_->thread.initialized.load(std::memory_order_acquire))
         {
             return;
         }
@@ -661,22 +672,31 @@ float4 PSMain(VSOutput input) : SV_TARGET
     void RenderSystem::BindGameThread(ThreadId gameThreadId) noexcept
     {
         VE_ASSERT_MESSAGE(gameThreadId.IsValid(), "RenderSystem::BindGameThread requires a valid Game Thread id.");
-        impl_->gameThreadIdValue.store(gameThreadId.value, std::memory_order_release);
+        impl_->gameThreadBinding.gameThreadIdValue.store(gameThreadId.value, std::memory_order_release);
     }
 
     void RenderSystem::ClearGameThreadBinding() noexcept
     {
-        impl_->gameThreadIdValue.store(0, std::memory_order_release);
+        impl_->gameThreadBinding.gameThreadIdValue.store(0, std::memory_order_release);
+    }
+
+    void RenderSystem::BeginFrameEndFence(RenderCommandFence& fence)
+    {
+        ValidateGameThreadAccess(*impl_, "RenderSystem::BeginFrameEndFence must be called on the Game Thread.");
+
+        auto completed = std::make_shared<ManualResetEvent>(false);
+        fence.SetCompletionEvent(completed);
+        SubmitFunction("RenderSystemFrameEndFence", [completed](RenderThreadContext&) { completed->Set(); });
     }
 
     bool RenderSystem::IsInitialized() const noexcept
     {
-        return impl_->initialized.load(std::memory_order_acquire);
+        return impl_->thread.initialized.load(std::memory_order_acquire);
     }
 
     ThreadId RenderSystem::GetRenderThreadId() const noexcept
     {
-        return ThreadId{impl_->renderThreadIdValue.load(std::memory_order_acquire)};
+        return ThreadId{impl_->thread.renderThreadIdValue.load(std::memory_order_acquire)};
     }
 
     ErrorCode RenderSystem::InitializeDevice(const RenderDeviceDesc& desc)
@@ -684,7 +704,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return ExecuteSynchronous("RenderSystemInitializeDevice",
                                   [this, desc](RenderThreadContext&)
                                   {
-                                      if (impl_->device != nullptr)
+                                      if (impl_->rhi.device != nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
@@ -695,9 +715,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                           return ErrorCode::Unsupported;
                                       }
 
-                                      impl_->device = std::move(device);
-                                      impl_->backendValue.store(static_cast<int>(desc.backend),
-                                                                std::memory_order_release);
+                                      impl_->rhi.device = std::move(device);
+                                      impl_->rhi.backendValue.store(static_cast<int>(desc.backend),
+                                                                    std::memory_order_release);
                                       VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
                                       return ErrorCode::None;
                                   });
@@ -705,7 +725,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     void RenderSystem::ShutdownDevice() noexcept
     {
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->commands.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -722,12 +742,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     bool RenderSystem::HasDevice() const noexcept
     {
-        return impl_->backendValue.load(std::memory_order_acquire) >= 0;
+        return impl_->rhi.backendValue.load(std::memory_order_acquire) >= 0;
     }
 
     RenderBackend RenderSystem::GetDeviceBackend() const noexcept
     {
-        const int backendValue = impl_->backendValue.load(std::memory_order_acquire);
+        const int backendValue = impl_->rhi.backendValue.load(std::memory_order_acquire);
         VE_ASSERT_MESSAGE(backendValue >= 0, "RenderSystem::GetDeviceBackend requires an initialized RHI device.");
         return static_cast<RenderBackend>(backendValue);
     }
@@ -743,28 +763,28 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return ExecuteSynchronous("RenderSystemCreateMainSwapchain",
                                   [this, desc](RenderThreadContext&)
                                   {
-                                      if (impl_->device == nullptr)
+                                      if (impl_->rhi.device == nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
 
-                                      if (impl_->mainSwapchain != nullptr)
+                                      if (impl_->rhi.mainSwapchain != nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
 
                                       std::unique_ptr<rhi::RhiSwapchain> swapchain =
-                                          impl_->device->CreateSwapchain(ToRhiSwapchainDesc(desc));
+                                          impl_->rhi.device->CreateSwapchain(ToRhiSwapchainDesc(desc));
                                       if (swapchain == nullptr)
                                       {
                                           return ErrorCode::PlatformError;
                                       }
 
-                                      impl_->mainSwapchain = std::move(swapchain);
+                                      impl_->rhi.mainSwapchain = std::move(swapchain);
                                       ErrorCode triangleResult = CreateTriangleResources(*impl_);
                                       if (triangleResult != ErrorCode::None)
                                       {
-                                          impl_->mainSwapchain.reset();
+                                          impl_->rhi.mainSwapchain.reset();
                                           return triangleResult;
                                       }
 
@@ -774,23 +794,21 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     void RenderSystem::DestroyMainSwapchain() noexcept
     {
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->commands.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
 
-        WaitForRenderFramesInFlight(*impl_);
-
         ErrorCode result = ExecuteSynchronous("RenderSystemDestroyMainSwapchain",
                                               [this](RenderThreadContext&)
                                               {
-                                                  if (impl_->device != nullptr)
+                                                  if (impl_->rhi.device != nullptr)
                                                   {
-                                                      impl_->device->WaitIdle();
+                                                      impl_->rhi.device->WaitIdle();
                                                   }
 
                                                   DestroyTriangleResources(*impl_);
-                                                  impl_->mainSwapchain.reset();
+                                                  impl_->rhi.mainSwapchain.reset();
                                                   return ErrorCode::None;
                                               });
 
@@ -814,12 +832,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     UInt32 RenderSystem::GetMaxRenderFramesInFlight() const noexcept
     {
-        return impl_->maxFramesInFlight;
+        return impl_->frameRing.maxFramesInFlight;
     }
 
     SizeT RenderSystem::GetRenderFramesInFlight() const noexcept
     {
-        return impl_->renderFramesInFlight.load(std::memory_order_acquire);
+        return 0;
     }
 
     void RenderSystem::Submit(RenderCommand command)
@@ -830,7 +848,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     ErrorCode RenderSystem::Flush()
     {
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->commands.acceptingCommands.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
@@ -849,7 +867,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return ErrorCode::InvalidArgument;
         }
 
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->commands.acceptingCommands.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
@@ -875,21 +893,21 @@ float4 PSMain(VSOutput input) : SV_TARGET
             TerminateRenderSystem("submission failed: invalid command function", ErrorCode::InvalidArgument);
         }
 
-        impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
+        impl_->commands.activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
         auto submitCounterGuard =
-            MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
+            MakeScopeExit([this]() { impl_->commands.activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->commands.acceptingCommands.load(std::memory_order_acquire))
         {
             TerminateRenderSystem("submission failed: RenderSystem is not accepting commands", ErrorCode::InvalidState);
         }
 
-        ErrorCode pushResult = impl_->commandQueue.Push(RenderCommand{std::move(debugName), std::move(function)});
+        ErrorCode pushResult = impl_->commands.queue.Push(RenderCommand{std::move(debugName), std::move(function)});
         if (pushResult != ErrorCode::None)
         {
             TerminateRenderSystem("submission failed in RenderCommandQueue::Push", pushResult);
         }
 
-        impl_->commandSemaphore.Release();
+        impl_->commands.semaphore.Release();
     }
 } // namespace ve
