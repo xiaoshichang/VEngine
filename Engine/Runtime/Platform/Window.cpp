@@ -8,13 +8,13 @@
 
 namespace ve
 {
-Result<std::unique_ptr<Window>> Window::Create(const WindowDesc& desc)
-{
+    Result<std::unique_ptr<Window>> Window::Create(const WindowDesc& desc)
+    {
 #if VE_PLATFORM_WINDOWS
-    return Win32Window::CreatePlatformWindow(desc);
+        return Win32Window::CreatePlatformWindow(desc);
 #else
-    return Result<std::unique_ptr<Window>>::Failure(
-        Error(ErrorCode::Unsupported, "This platform does not have a Window backend yet."));
+        return Result<std::unique_ptr<Window>>::Failure(
+            Error(ErrorCode::Unsupported, "This platform does not have a Window backend yet."));
 #endif
-}
-}
+    }
+} // namespace ve

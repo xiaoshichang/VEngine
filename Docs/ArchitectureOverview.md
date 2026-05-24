@@ -640,15 +640,21 @@ Important rules:
 - Parallel jobs do not directly mutate GameObject hierarchy unless explicitly synchronized.
 - Render Thread does not directly access live GameObject data.
 
-Game Thread and Render Thread communicate through the `RenderSystem` render command queue. Later render snapshots or
-render world state may use double or triple buffering when scene-to-render synchronization needs a stable frame boundary.
-Milestone 5 defines the first concrete version of this boundary in `Docs/SceneRenderingVerticalSlice.md`: Game Thread
-extracts immutable scene render snapshots, Render Thread consumes them, and RenderSystem applies a small queued-frame
-backpressure limit.
+Game Thread and Render Thread communicate through `RenderSystem`. The current vertical slice lets `GameThreadSystem`
+drive `RenderSystem::RenderFrame()` during its render extraction phase. `RenderSystem` owns a small
+`MaxRenderFramesInFlight` slot count, so the Game Thread may run slightly ahead but blocks when every render frame slot
+is occupied. Game Thread-only `RenderSystem` entry points validate the bound Game Thread id before accepting work.
+Later render snapshots or render world state may use double or triple buffering when scene-to-render synchronization
+needs a stable frame boundary. Milestone 5 defines the target version of this boundary in
+`Docs/SceneRenderingVerticalSlice.md`: Game Thread extracts immutable scene render snapshots, Render Thread consumes
+them, and RenderSystem applies the same frames-in-flight backpressure limit.
 
 Render Thread frames in flight are separate from queued Game Thread snapshots. Queued snapshots protect CPU ownership
 between Game Thread and Render Thread. Render frame slots and RHI fences protect transient render resources between
 Render Thread and GPU execution.
+
+Detailed thread ownership, responsibility boundaries, communication paths, frame flow, and shutdown order are defined in
+`Docs/RuntimeThreadModel.md`.
 
 Recommended frame flow:
 

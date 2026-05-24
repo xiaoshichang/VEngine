@@ -13,96 +13,91 @@
 
 namespace ve
 {
-/// Severity levels used by the VEngine logging facade.
-enum class LogSeverity
-{
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-    Fatal,
-};
+    /// Severity levels used by the VEngine logging facade.
+    enum class LogSeverity
+    {
+        Trace,
+        Debug,
+        Info,
+        Warn,
+        Error,
+        Fatal,
+    };
 
-/// Runtime configuration for Boost.Log sink setup.
-struct LoggingConfig
-{
+    /// Runtime configuration for Boost.Log sink setup.
+    struct LoggingConfig
+    {
 #if VE_BUILD_DEBUG
-    LogSeverity minimumSeverity = LogSeverity::Trace;
+        LogSeverity minimumSeverity = LogSeverity::Trace;
 #else
-    LogSeverity minimumSeverity = LogSeverity::Info;
+        LogSeverity minimumSeverity = LogSeverity::Info;
 #endif
 
-    bool enableConsole = true;
-    bool enableFile = true;
-    bool enableDebuggerOutput = VE_PLATFORM_WINDOWS != 0;
-    std::filesystem::path filePath = std::filesystem::path("Logs") / "VEngine.log";
-};
+        bool enableConsole = true;
+        bool enableFile = true;
+        bool enableDebuggerOutput = VE_PLATFORM_WINDOWS != 0;
+        std::filesystem::path filePath = std::filesystem::path("Logs") / "VEngine.log";
+    };
 
-/// Structured log record delivered to callbacks before the formatted line reaches sinks.
-struct LogRecord
-{
-    LogSeverity severity = LogSeverity::Info;
-    const char* category = "General";
-    std::string_view message;
-    SourceLocation location = SourceLocation::current();
-};
+    /// Structured log record delivered to callbacks before the formatted line reaches sinks.
+    struct LogRecord
+    {
+        LogSeverity severity = LogSeverity::Info;
+        const char* category = "General";
+        std::string_view message;
+        SourceLocation location = SourceLocation::current();
+    };
 
-/// Optional log callback used by tests and future Editor Console integration.
-using LogCallback = void (*)(const LogRecord& record);
+    /// Optional log callback used by tests and future Editor Console integration.
+    using LogCallback = void (*)(const LogRecord& record);
 
-[[nodiscard]] LoggingConfig MakeDefaultLoggingConfig();
+    [[nodiscard]] LoggingConfig MakeDefaultLoggingConfig();
 
-/// Initializes Boost.Log sinks. Returns InvalidState if logging is already initialized.
-[[nodiscard]] ErrorCode InitializeLogging(const LoggingConfig& config = MakeDefaultLoggingConfig());
+    /// Initializes Boost.Log sinks. Returns InvalidState if logging is already initialized.
+    [[nodiscard]] ErrorCode InitializeLogging(const LoggingConfig& config = MakeDefaultLoggingConfig());
 
-/// Removes logging sinks and clears logging-owned global state.
-void ShutdownLogging() noexcept;
+    /// Removes logging sinks and clears logging-owned global state.
+    void ShutdownLogging() noexcept;
 
-[[nodiscard]] bool IsLoggingInitialized() noexcept;
+    [[nodiscard]] bool IsLoggingInitialized() noexcept;
 
-/// Returns true when a message of the supplied severity would pass the current severity filter.
-[[nodiscard]] bool ShouldLog(LogSeverity severity) noexcept;
+    /// Returns true when a message of the supplied severity would pass the current severity filter.
+    [[nodiscard]] bool ShouldLog(LogSeverity severity) noexcept;
 
-void SetLogCallback(LogCallback callback) noexcept;
-[[nodiscard]] LogCallback GetLogCallback() noexcept;
+    void SetLogCallback(LogCallback callback) noexcept;
+    [[nodiscard]] LogCallback GetLogCallback() noexcept;
 
-/// Logs an already formatted message through the facade.
-void LogMessage(
-    LogSeverity severity,
-    const char* category,
-    std::string_view message,
-    SourceLocation location = SourceLocation::current());
+    /// Logs an already formatted message through the facade.
+    void LogMessage(LogSeverity severity,
+                    const char* category,
+                    std::string_view message,
+                    SourceLocation location = SourceLocation::current());
 
-[[nodiscard]] const char* ToString(LogSeverity severity) noexcept;
+    [[nodiscard]] const char* ToString(LogSeverity severity) noexcept;
 
-namespace detail
-{
-template <typename... TArgs>
-[[nodiscard]] std::string FormatLogMessage(std::format_string<TArgs...> formatString, TArgs&&... args)
-{
-    return std::format(formatString, std::forward<TArgs>(args)...);
-}
+    namespace detail
+    {
+        template<typename... TArgs>
+        [[nodiscard]] std::string FormatLogMessage(std::format_string<TArgs...> formatString, TArgs&&... args)
+        {
+            return std::format(formatString, std::forward<TArgs>(args)...);
+        }
 
-void LogFormattedMessage(
-    LogSeverity severity,
-    const char* category,
-    std::string message,
-    SourceLocation location);
-}
-}
+        void
+        LogFormattedMessage(LogSeverity severity, const char* category, std::string message, SourceLocation location);
+    } // namespace detail
+} // namespace ve
 
-#define VE_DETAIL_LOG(severityName, categoryName, ...)                                                              \
-    do                                                                                                             \
-    {                                                                                                              \
-        if (::ve::ShouldLog(::ve::LogSeverity::severityName))                                                       \
-        {                                                                                                          \
-            ::ve::detail::LogFormattedMessage(                                                                     \
-                ::ve::LogSeverity::severityName,                                                                   \
-                categoryName,                                                                                      \
-                ::ve::detail::FormatLogMessage(__VA_ARGS__),                                                       \
-                ::ve::SourceLocation::current());                                                                  \
-        }                                                                                                          \
+#define VE_DETAIL_LOG(severityName, categoryName, ...)                                                                 \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (::ve::ShouldLog(::ve::LogSeverity::severityName))                                                          \
+        {                                                                                                              \
+            ::ve::detail::LogFormattedMessage(::ve::LogSeverity::severityName,                                         \
+                                              categoryName,                                                            \
+                                              ::ve::detail::FormatLogMessage(__VA_ARGS__),                             \
+                                              ::ve::SourceLocation::current());                                        \
+        }                                                                                                              \
     } while (false)
 
 #define VE_LOG_TRACE(...) VE_DETAIL_LOG(Trace, "General", __VA_ARGS__)

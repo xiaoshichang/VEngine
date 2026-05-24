@@ -11,54 +11,54 @@
 
 namespace ve
 {
-enum class WindowPumpResult
-{
-    Continue,
-    Quit,
-};
+    enum class WindowPumpResult
+    {
+        Continue,
+        Quit,
+    };
 
-struct WindowPumpStatus
-{
-    WindowPumpResult result = WindowPumpResult::Continue;
-    int exitCode = 0;
-};
+    struct WindowPumpStatus
+    {
+        WindowPumpResult result = WindowPumpResult::Continue;
+        int exitCode = 0;
+    };
 
-struct WindowExtent
-{
-    uint32_t width = 0;
-    uint32_t height = 0;
-};
+    struct WindowExtent
+    {
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
 
-struct WindowDesc
-{
-    std::string title = "VEngine";
-    uint32_t width = 1280;
-    uint32_t height = 720;
-    bool visible = true;
-};
+    struct WindowDesc
+    {
+        std::string title = "VEngine";
+        uint32_t width = 1280;
+        uint32_t height = 720;
+        bool visible = true;
+    };
 
-using WindowCommandHandler = std::function<void(std::string_view command)>;
+    using WindowCommandHandler = std::function<void(std::string_view command)>;
 
-class Window : public NonCopyable
-{
-public:
-    virtual ~Window() = default;
+    class Window : public NonCopyable
+    {
+    public:
+        virtual ~Window() = default;
 
-    [[nodiscard]] static Result<std::unique_ptr<Window>> Create(const WindowDesc& desc);
+        [[nodiscard]] static Result<std::unique_ptr<Window>> Create(const WindowDesc& desc);
 
-    virtual void Show() = 0;
-    virtual void Close() = 0;
-    [[nodiscard]] virtual WindowPumpStatus PumpEvents() = 0;
-    virtual void SetCommandHandler(WindowCommandHandler handler) = 0;
-    virtual void PumpCommands() = 0;
+        virtual void Show() = 0;
+        virtual void Close() = 0;
+        [[nodiscard]] virtual WindowPumpStatus PumpEvents() = 0;
+        virtual void SetCommandHandler(WindowCommandHandler handler) = 0;
+        virtual void PumpCommands() = 0;
 
-    [[nodiscard]] virtual bool ShouldClose() const noexcept = 0;
-    [[nodiscard]] virtual bool IsVisible() const noexcept = 0;
-    [[nodiscard]] virtual bool IsFocused() const noexcept = 0;
-    [[nodiscard]] virtual bool IsMinimized() const noexcept = 0;
-    [[nodiscard]] virtual WindowExtent GetClientExtent() const noexcept = 0;
-    [[nodiscard]] virtual const std::string& GetTitle() const noexcept = 0;
-    [[nodiscard]] virtual void* GetNativeHandle() const noexcept = 0;
-    [[nodiscard]] virtual void* GetNativeLayer() const noexcept = 0;
-};
-}
+        [[nodiscard]] virtual bool ShouldClose() const noexcept = 0;
+        [[nodiscard]] virtual bool IsVisible() const noexcept = 0;
+        [[nodiscard]] virtual bool IsFocused() const noexcept = 0;
+        [[nodiscard]] virtual bool IsMinimized() const noexcept = 0;
+        [[nodiscard]] virtual WindowExtent GetClientExtent() const noexcept = 0;
+        [[nodiscard]] virtual const std::string& GetTitle() const noexcept = 0;
+        [[nodiscard]] virtual void* GetNativeHandle() const noexcept = 0;
+        [[nodiscard]] virtual void* GetNativeLayer() const noexcept = 0;
+    };
+} // namespace ve

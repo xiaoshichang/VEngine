@@ -148,24 +148,25 @@ This means:
 This is intentionally a small design adjustment: fixed-step execution should belong to a future Tick Scheduler,
 Physics Scheduler, or Engine Loop stage. Time only provides the per-frame budget.
 
-## 7. Application Loop Integration
+## 7. Game Thread Integration
 
-The Windows `Application` currently calls:
+`GameThreadSystem` owns frame time advancement because it owns world update. The current first-stage loop is:
 
 ```text
-Create main window
-Time::Reset()
+GameThreadSystem::Initialize()
+    Time::Reset()
 
 while running:
-    Pump debug console commands
-    Pump platform messages
-    Time::Tick()
-    Sleep briefly
+    BeginFrame
+        Time::Tick()
+    Update / LateUpdate / TransformUpdate
+    RenderExtraction
+    EndFrame
 ```
 
-The key ordering decision is that platform messages are pumped before `Time::Tick()`. This keeps OS lifecycle and quit
-events ahead of engine frame time advancement. Future engine-loop work can then consume the stable Time snapshot for the
-frame after platform state is current.
+The Main Thread still pumps platform messages and publishes future input/lifecycle data, but it no longer calls
+`Time::Tick()` each loop iteration. Game systems should consume the stable Time snapshot after the Game Thread enters the
+frame. Non-game threads may read the snapshot for diagnostics or presentation, but they should not advance it.
 
 This is only a first-stage loop. Later milestones should introduce a clearer Engine Loop with named phases.
 

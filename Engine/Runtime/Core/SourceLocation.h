@@ -4,5 +4,5 @@
 
 namespace ve
 {
-using SourceLocation = std::source_location;
+    using SourceLocation = std::source_location;
 }

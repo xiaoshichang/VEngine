@@ -6,6 +6,6 @@
 
 namespace ve::rhi
 {
-/// Creates a Metal RHI device that maps the common RHI directly to Metal command objects.
-[[nodiscard]] std::unique_ptr<RhiDevice> CreateMetalDevice(bool enableDebug);
-}
+    /// Creates a Metal RHI device that maps the common RHI directly to Metal command objects.
+    [[nodiscard]] std::unique_ptr<RhiDevice> CreateMetalDevice(bool enableDebug);
+} // namespace ve::rhi

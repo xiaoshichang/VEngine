@@ -87,7 +87,7 @@ The first version includes:
 - RHI device lifecycle APIs.
 - Main swapchain lifecycle APIs.
 - A minimal `RenderFrame()` path that clears, draws one triangle, submits, and presents.
-- Unit tests for lifecycle, command execution, flushing, shutdown draining, and runtime access.
+- Unit tests for command execution, flushing, shutdown draining, and runtime access.
 
 The first version does not create or own:
 
@@ -179,11 +179,14 @@ keeps unit tests straightforward.
 `EngineRuntime` remains one-shot. A single `EngineRuntime` object cannot be initialized again after a completed
 lifecycle.
 
-Repeated `RenderSystem::Initialize()` while running returns `ErrorCode::InvalidState`.
+Repeated `RenderSystem::Initialize()` while running is a fatal startup error. `RenderSystem::Initialize()` logs the
+failure and terminates instead of returning a recoverable error code.
 
-`Submit()` before initialization, after shutdown, or during shutdown returns `ErrorCode::InvalidState`.
+`Submit()` and `SubmitFunction()` submission errors are fatal. Invalid state, empty command functions, or queue push
+failures are logged as fatal errors and terminate the process.
 
-Submitting an empty command function returns `ErrorCode::InvalidArgument`.
+`RenderFrame()` also treats frame-slot acquire, command submission, and Render Thread frame execution failures as fatal
+errors.
 
 ## 9. RHI Device And Swapchain Lifecycle
 
@@ -249,8 +252,7 @@ void DestroyMainSwapchain() noexcept;
 void ShutdownDevice() noexcept;
 bool HasDevice() const noexcept;
 RenderBackend GetDeviceBackend() const noexcept;
-bool HasMainSwapchain() const noexcept;
-ErrorCode RenderFrame();
+void RenderFrame();
 ```
 
 `Application` obtains native surface information through the `Window` base interface instead of branching on a platform
@@ -259,9 +261,14 @@ event pumping, command-console pumping, and native surface handles. `RenderSyste
 surface to RHI swapchain. RHI backend headers stay responsible for backend-specific creation details.
 
 The first-stage startup path initializes `EngineRuntime`, creates the main `Window`, then calls
-`RenderSystem::InitializeDevice()` and `RenderSystem::CreateMainSwapchain()` before entering the main loop. Each loop
-iteration pumps the `Window`, calls `RenderSystem::RenderFrame()` to clear, draw the first-stage triangle, submit, and
-present. Shutdown destroys the main swapchain and RHI device before `EngineRuntime::Shutdown()`.
+`RenderSystem::InitializeDevice()` and `RenderSystem::CreateMainSwapchain()`. After the main swapchain exists,
+`Application` connects `GameThreadSystem` to `RenderSystem`. The Main Thread keeps pumping the `Window`, while the Game
+Thread calls `RenderSystem::RenderFrame()` during its render extraction phase. `RenderSystem` records the bound Game
+Thread id when `GameThreadSystem` connects it, and Game Thread-only public entry points validate that caller before
+submitting work. `RenderSystem` owns `MaxRenderFramesInFlight` render frame slots; `RenderFrame()` blocks when every
+slot is in flight, otherwise it submits one Render Thread command with a `RenderFrameToken` and returns. The Render
+Thread uses the token to resolve the corresponding `RenderFrameContext`. Shutdown disconnects `GameThreadSystem`,
+drains render work, then destroys the main swapchain and RHI device.
 
 ### 9.3 Threading Rule
 
@@ -277,8 +284,9 @@ should:
 
 This keeps startup code straightforward while preserving render-thread ownership of live RHI state.
 
-Ordinary `Submit(RenderCommand)` remains available for render work, resource uploads, and future render-resource
-updates. It should not be the primary public API for device or swapchain lifecycle.
+Ordinary `Submit(RenderCommand)` is a Game Thread-only public entry point for render work, resource uploads, and future
+render-resource updates. It should not be the primary public API for device or swapchain lifecycle. Main Thread startup
+and shutdown paths use explicit lifecycle APIs, which submit private synchronous commands internally.
 
 ### 9.4 State Ownership
 
@@ -331,29 +339,30 @@ The exact C++ type names may change, but the boundary should preserve these rule
 - `SubmitFrame()` should communicate whether the frame was accepted, blocked, or rejected because the render system is
   shutting down.
 
-Ordinary `Submit(RenderCommand)` remains useful for lifecycle commands, uploads, tests, and special render work.
-Scene rendering should prefer the frame-level API so the engine can reason about queued frames and backpressure.
+Ordinary `Submit(RenderCommand)` remains useful for Game Thread initiated uploads and special render work. Scene
+rendering should prefer the frame-level API so the engine can reason about queued frames and backpressure.
 
-## 11. Queued Game Frames And Backpressure
+## 11. Frames In Flight And Backpressure
 
-Game Thread must not run unbounded frames ahead of Render Thread. Milestone 5 should define a small CPU-side queue
+Game Thread must not run unbounded frames ahead of Render Thread. Milestone 5 defines a small CPU-side frames-in-flight
 limit:
 
 ```text
-MaxQueuedGameFrames = 2
+MaxRenderFramesInFlight = 2
 ```
 
-When the queue is full, Player should block at the next render submission boundary until Render Thread consumes at
-least one submitted frame packet. This keeps scene snapshots, referenced resource handles, and transient frame data from
-growing without bound.
+When every frame slot is in flight, Player should block at the next render submission boundary until Render Thread
+completes at least one submitted frame and releases its slot. This keeps scene snapshots, referenced resource handles,
+and transient frame data from growing without bound.
 
-This queue is a CPU ownership boundary:
+The frame slot is a CPU ownership boundary:
 
 - Game Thread owns live Scene mutation.
-- Queued frame packets own immutable extracted scene data.
+- Submitted frame slots own immutable extracted scene data or first-stage smoke render work.
 - Render Thread owns packet consumption and render-side state updates.
 
-This is not the same as GPU frame latency. GPU completion is tracked by render-side frame slots and RHI fences.
+GPU completion is still tracked separately by RHI fences or backend completion primitives before slot resources are
+reused.
 
 ## 12. Render Frames In Flight
 
@@ -366,18 +375,25 @@ Recommended first value:
 MaxRenderFramesInFlight = 2
 ```
 
-`RenderSystem` owns a fixed set of render frame states:
+`RenderSystem` owns a fixed set of render frame contexts:
 
 ```text
-RenderFrameState[MaxRenderFramesInFlight]
+RenderFrameContext[MaxRenderFramesInFlight]
   frameId
-  frameSlot
-  backend command allocator or equivalent
+  slot derived from (frameId - 1) % MaxRenderFramesInFlight
+  slot state: Free / Submitted / Rendering
+  command list or backend command allocator equivalent
   transient constant/upload allocation state
   transient descriptor/bind-group allocation state
   deferred render-resource releases
   RHI fence or backend completion value
 ```
+
+The current smoke path already allocates one command list per `RenderFrameContext`. `RenderFrame()` acquires one
+available frame slot from a semaphore, advances a one-based frame id, resolves the corresponding ring slot with
+`(frameId - 1) % MaxRenderFramesInFlight`, returns a `RenderFrameToken` containing the frame id, and submits a Render
+Thread command that resolves the token back to the same context before recording the frame. Future scene frame
+submission should attach the extracted scene packet to the same context boundary.
 
 Before Render Thread reuses a frame slot, it must ensure GPU work that references that slot has completed. Backend
 mapping belongs to RHI:
@@ -415,9 +431,8 @@ Required tests:
 
 - New `RenderSystem` starts uninitialized.
 - `Initialize()` starts the Render Thread.
-- Repeated `Initialize()` while running fails.
+- Repeated `Initialize()` while running terminates startup.
 - Standalone `RenderSystem` can initialize after shutdown.
-- `Submit()` before initialization and after shutdown fails.
 - Submitted commands execute on the Render Thread.
 - `Flush()` waits for commands accepted before the flush call.
 - `Shutdown()` drains accepted commands before joining the thread.

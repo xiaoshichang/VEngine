@@ -11,7 +11,6 @@
 #endif
 
 #include <Windows.h>
-
 #include <utility>
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR commandLine, int showCommand)

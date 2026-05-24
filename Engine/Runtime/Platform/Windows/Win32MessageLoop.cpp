@@ -12,27 +12,27 @@
 
 namespace ve
 {
-Win32MessageLoop::PumpResult Win32MessageLoop::PumpPendingMessages()
-{
-    MSG message = {};
-
-    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+    Win32MessageLoop::PumpResult Win32MessageLoop::PumpPendingMessages()
     {
-        if (message.message == WM_QUIT)
+        MSG message = {};
+
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
         {
-            quitExitCode_ = static_cast<int>(message.wParam);
-            return PumpResult::Quit;
+            if (message.message == WM_QUIT)
+            {
+                quitExitCode_ = static_cast<int>(message.wParam);
+                return PumpResult::Quit;
+            }
+
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
         }
 
-        TranslateMessage(&message);
-        DispatchMessageW(&message);
+        return PumpResult::Continue;
     }
 
-    return PumpResult::Continue;
-}
-
-int Win32MessageLoop::GetQuitExitCode() const noexcept
-{
-    return quitExitCode_;
-}
-}
+    int Win32MessageLoop::GetQuitExitCode() const noexcept
+    {
+        return quitExitCode_;
+    }
+} // namespace ve

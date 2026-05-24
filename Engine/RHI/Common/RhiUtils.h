@@ -4,6 +4,6 @@
 
 namespace ve::rhi
 {
-/// Returns true when the given format has a known backend representation.
-[[nodiscard]] bool IsKnownFormat(RhiFormat format) noexcept;
-}
+    /// Returns true when the given format has a known backend representation.
+    [[nodiscard]] bool IsKnownFormat(RhiFormat format) noexcept;
+} // namespace ve::rhi

@@ -195,9 +195,8 @@ Implementation order:
 - Add Game Thread scene extraction that builds render snapshots without live `Scene`, `GameObject`, or `Component`
   pointers.
 - Add `RenderSystem::SubmitFrame()` or an equivalent frame-level submission API for scene snapshots.
-- Add CPU-side queued frame backpressure with an initial `MaxQueuedGameFrames` value of 2.
-- Add render-side frame slots with an initial `MaxRenderFramesInFlight` value of 2 and backend completion tracking for
-  safe frame-slot reuse.
+- Add CPU-side frame backpressure through render frames-in-flight, with an initial `MaxRenderFramesInFlight` value of 2.
+- Add render-side frame slots and backend completion tracking for safe frame-slot reuse.
 - Add render-resource creation paths for static mesh vertex/index buffers, basic material state, shader pipeline state,
   and depth buffer resources.
 - Implement the first forward rendering path with one active camera, one directional light, one main viewport, one

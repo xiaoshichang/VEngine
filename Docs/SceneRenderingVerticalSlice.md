@@ -148,7 +148,8 @@ The first version should keep the frame shape explicit and easy to inspect:
 GameThreadSystem::RunLoop()
   while running:
     BeginFrame
-      Update frame id and time data
+      Update frame id
+      Time::Tick()
       Consume input snapshot
       Drain completed IO/resource work
 
@@ -167,7 +168,8 @@ GameThreadSystem::RunLoop()
 
     RenderExtraction
       Build SceneRenderSnapshot
-      Submit snapshot to RenderSystem
+      Current smoke path: drive RenderSystem::RenderFrame()
+      Target scene path: submit snapshot to RenderSystem
 
     EndFrame
       Retire released transient game-frame data
@@ -175,6 +177,16 @@ GameThreadSystem::RunLoop()
 
 The exact function names may change during implementation, but the phase order should stay documented and covered by
 tests where practical.
+
+The current vertical-slice bridge connects `GameThreadSystem` to `RenderSystem` after the main swapchain is created.
+During `RenderExtraction`, the Game Thread calls `RenderSystem::RenderFrame()`. `RenderSystem` owns
+`MaxRenderFramesInFlight` slots; `RenderFrame()` blocks only when all slots are already in flight, submits one frame
+command with a `RenderFrameToken` to the Render Thread, and returns once that command is accepted. The Render Thread
+uses the token to resolve the matching `RenderFrameContext`. `RenderSystem` records the bound Game Thread id when
+`GameThreadSystem` connects it, and `RenderFrame()`/ordinary `Submit(RenderCommand)` validate that caller before
+accepting Game Thread initiated work. Submission or frame execution failures are fatal errors. When the scene snapshot
+path lands, this narrow boundary should become `RenderSystem::SubmitFrame()` with the same bounded in-flight-frame
+rule.
 
 ### 5.3 Main Thread Relationship
 
@@ -416,12 +428,12 @@ The Game Thread must not run unbounded frames ahead of the Render Thread.
 Milestone 5 should define a small limit:
 
 ```text
-MaxQueuedGameFrames = 2
+MaxRenderFramesInFlight = 2
 ```
 
-When this limit is reached, Player should block at the next render submission boundary until the Render Thread consumes
-at least one submitted snapshot. Future Editor viewport updates may choose to coalesce visual-only frames, but scene
-mutation and gameplay frames should not be silently dropped.
+When this limit is reached, Player should block at the next render submission boundary until the Render Thread completes
+at least one submitted frame and returns a slot to the frame-slot semaphore. Future Editor viewport updates may choose to coalesce
+visual-only frames, but scene mutation and gameplay frames should not be silently dropped.
 
 This is CPU-side backpressure. GPU frame latency is tracked separately by RHI fences or backend completion primitives.
 
@@ -435,13 +447,14 @@ Recommended first value:
 MaxRenderFramesInFlight = 2
 ```
 
-`RenderSystem` owns a fixed array of render frame states:
+`RenderSystem` owns a fixed array of render frame contexts:
 
 ```text
-RenderFrameState[MaxRenderFramesInFlight]
+RenderFrameContext[MaxRenderFramesInFlight]
   frameId
-  frameSlot
-  command allocator or backend equivalent
+  slot derived from (frameId - 1) % MaxRenderFramesInFlight
+  slot state: Free / Submitted / Rendering
+  command list or backend command allocator equivalent
   transient constant/upload allocation state
   transient descriptor/bind-group allocation state
   deferred render-resource releases

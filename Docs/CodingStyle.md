@@ -31,6 +31,9 @@ Rules:
 - Do not use tabs.
 - Use a 120-column limit.
 - Use Allman braces.
+- Indent the contents of every C++ namespace by 4 spaces. Nested namespace contents receive one additional 4-space
+  indentation level per namespace.
+- Indent classes, structs, enums, functions, and variables declared inside a namespace.
 - Use `.h` and `.cpp` for C++.
 - Use `.mm` for Objective-C++.
 - Use `.metal` for Metal shader files.
@@ -68,6 +71,23 @@ Use nested namespaces for subsystem-specific code:
 namespace ve::rhi
 {
     class Device;
+}
+```
+
+When nested namespaces are expanded, indent each namespace body:
+
+```cpp
+namespace ve
+{
+    namespace rhi
+    {
+        struct BufferDesc
+        {
+            uint32_t size = 0;
+        };
+
+        class Device;
+    }
 }
 ```
 
