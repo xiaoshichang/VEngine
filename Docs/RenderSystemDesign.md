@@ -326,19 +326,20 @@ Join Render Thread
 
 ## 10. Scene Frame Submission
 
-Milestone 5 should add a higher-level submission boundary for scene rendering:
+Milestone 5 adds a higher-level submission boundary for scene rendering:
 
 ```text
 RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
 ```
 
-The exact C++ type names may change, but the boundary should preserve these rules:
+The first C++ API follows the current fatal-error RenderSystem style and returns `void`. Submission failure, invalid
+thread access, or invalid render state logs a fatal error and terminates rather than returning a status code. The
+boundary preserves these rules:
 
 - Game Thread submits immutable render-safe frame packets.
 - Frame packets do not contain live `Scene`, `GameObject`, or `Component` pointers.
 - Render Thread owns conversion from submitted frame packets into render-side state and RHI commands.
-- `SubmitFrame()` should communicate whether the frame was accepted, blocked, or rejected because the render system is
-  shutting down.
+- Game Thread lead is controlled by the existing frame-end `RenderCommandFence`, not by calling `Flush()` every frame.
 
 Ordinary `Submit(RenderCommand)` remains useful for Game Thread initiated uploads and special render work. Scene
 rendering should prefer the frame-level API so the engine can reason about queued frames and backpressure.
@@ -395,18 +396,32 @@ RenderFrameContext[MaxRenderFramesInFlight]
   deferred render-resource releases
 ```
 
-The current smoke path already allocates one command list per `RenderFrameContext`. `RenderFrame()` advances a one-based
-frame id, resolves the corresponding ring slot with `(frameId - 1) % MaxRenderFramesInFlight`, returns a
-`RenderFrameToken` containing the frame id, and submits a Render Thread command that resolves the token back to the same
-context before recording the frame. Future scene frame submission should attach the extracted scene packet to the same
-context boundary.
+The current path allocates one command list per `RenderFrameContext`. `RenderFrame()` and `SubmitFrame()` both advance a
+one-based frame id, resolve the corresponding ring slot with `(frameId - 1) % MaxRenderFramesInFlight`, create an
+internal `RenderFrameToken` containing the frame id, and submit a Render Thread command that resolves the token back to
+the same context before recording the frame.
 
 Keep the three frame concepts distinct:
 
 - Queued Game Thread snapshots protect CPU ownership between Game Thread and Render Thread.
 - Render frame contexts organize per-frame render-side data.
 
-## 13. Future Render Work
+## 13. Current Milestone 5 Render Work
+
+Milestone 5 renders scene-driven mesh data through `SceneRenderSnapshot`. The current implementation performs the
+minimum render-safe vertical slice:
+
+- Game Thread extracts camera, directional light, mesh renderer, material, transform, and stable object ids.
+- Extracted draw items contain transformed clip-space positions and CPU-lit vertex colors.
+- Render Thread creates a transient scene vertex buffer from the submitted snapshot and draws it through the existing
+  simple forward color pipeline.
+- The submitted packet contains no live Scene, GameObject, or Component pointers.
+
+This intentionally avoids expanding the RHI shape in the same step. GPU constant buffers, indexed mesh buffers, depth
+attachments, full material binding, shader reflection-driven constants, and persistent render-resource registries remain
+future render work.
+
+## 14. Future Render Work
 
 After RHI device and main swapchain lifecycle are connected, later RenderSystem work should add render-resource
 registries, upload scheduling, frame begin/end commands, viewport registration, and RenderWorld/RenderScene ownership.

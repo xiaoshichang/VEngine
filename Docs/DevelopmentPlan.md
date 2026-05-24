@@ -198,13 +198,14 @@ Implementation order:
 - Add CPU-side frame backpressure through a Game Thread frame-end `RenderCommandFence`, with an initial one-frame-lag
   policy.
 - Add render-side frame contexts for per-frame render data.
-- Add render-resource creation paths for static mesh vertex/index buffers, basic material state, shader pipeline state,
-  and depth buffer resources.
-- Implement the first forward rendering path with one active camera, one directional light, one main viewport, one
-  default material path, and static mesh draw calls.
+- Add the first scene-driven render path: extract camera, directional light, material color, transforms, and mesh data
+  into a render-safe snapshot, then draw a CPU-lit static mesh through the existing color pipeline.
+- Defer indexed mesh buffers, GPU constant buffers, depth buffer resources, full material binding, and GPU-side lighting
+  until the next RHI/render-resource expansion.
 - Load or construct the sample scene in `VEnginePlayer` and render it through the existing RenderSystem and RHI path.
 - Add RenderSystem tests for frame submission, queued-frame backpressure, and render frame context selection.
-- Add a Windows Player smoke check that opens the sample scene, renders a lit static mesh, and exits cleanly.
+- Construct the sample scene in Windows Player and bind it to the Game Thread. Keep automated Player window smoke as a
+  follow-up until the window capture/exit harness exists.
 
 ### Milestone 6: Asset Pipeline
 

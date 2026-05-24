@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Platform/Window.h"
+#include "Engine/Runtime/Scene/Scene.h"
 
 #include <memory>
 #include <string>
@@ -36,11 +37,14 @@ namespace ve
         [[nodiscard]] Result<std::unique_ptr<Window>> CreateMainWindow();
         [[nodiscard]] ErrorCode InitializeRendering(Window& mainWindow);
         void ShutdownRendering() noexcept;
+        void CreateSampleScene();
+        void DestroySampleScene() noexcept;
         [[nodiscard]] int RunMainLoop(Window& mainWindow);
         [[nodiscard]] int RunApplication();
 
         ApplicationDesc desc_;
         EngineRuntime engineRuntime_;
+        std::unique_ptr<Scene> sampleScene_;
         int exitCode_ = 0;
     };
 } // namespace ve

@@ -6,6 +6,7 @@
 #include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
+#include "Engine/Runtime/Resource/ResourceManager.h"
 
 namespace ve
 {
@@ -88,6 +89,12 @@ namespace ve
         /// The runtime must be initialized before callers use the returned service.
         [[nodiscard]] const IOSystem& GetIOSystem() const noexcept;
 
+        /// Returns the runtime-owned Resource Manager.
+        [[nodiscard]] ResourceManager& GetResourceManager() noexcept;
+
+        /// Returns the runtime-owned Resource Manager.
+        [[nodiscard]] const ResourceManager& GetResourceManager() const noexcept;
+
         /// Returns the runtime-owned Render System.
         ///
         /// The runtime must be initialized before callers use the returned service.
@@ -111,6 +118,7 @@ namespace ve
     private:
         JobSystem jobSystem_;
         IOSystem ioSystem_;
+        ResourceManager resourceManager_;
         RenderSystem renderSystem_;
         GameThreadSystem gameThreadSystem_;
         EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;

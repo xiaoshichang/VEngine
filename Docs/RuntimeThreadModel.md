@@ -267,7 +267,7 @@ Game -> Main
 
 Game -> Render
   Current: GameThreadSystem calls RenderSystem::RenderFrame(); RenderSystem owns RenderFrameContext slots.
-  Future: RenderSystem::SubmitFrame(SceneRenderSnapshot).
+  RenderSystem::SubmitFrame(SceneRenderSnapshot).
 
 Render -> Game
   Future frame-consumed notifications or diagnostics through explicit state/queues.

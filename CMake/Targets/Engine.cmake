@@ -22,8 +22,17 @@ function(ve_add_engine)
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Platform/Window.cpp
+            Engine/Runtime/Reflection/ReflectionRegistry.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderSystem.cpp
+            Engine/Runtime/Resource/ResourceManager.cpp
+            Engine/Runtime/Scene/Component.cpp
+            Engine/Runtime/Scene/GameObject.cpp
+            Engine/Runtime/Scene/RenderComponents.cpp
+            Engine/Runtime/Scene/Scene.cpp
+            Engine/Runtime/Scene/SceneRenderExtractor.cpp
+            Engine/Runtime/Scene/Serialization/SceneSerialization.cpp
+            Engine/Runtime/Scene/TransformComponent.cpp
             Engine/Runtime/Threading/Synchronization.cpp
             Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
@@ -58,8 +67,20 @@ function(ve_add_engine)
             Engine/Runtime/Math/Vector4.h
             Engine/Runtime/Memory/PoolAllocator.h
             Engine/Runtime/Platform/Window.h
+            Engine/Runtime/Reflection/ReflectionRegistry.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderSystem.h
+            Engine/Runtime/Resource/ResourceHandle.h
+            Engine/Runtime/Resource/ResourceManager.h
+            Engine/Runtime/Scene/Component.h
+            Engine/Runtime/Scene/GameObject.h
+            Engine/Runtime/Scene/RenderComponents.h
+            Engine/Runtime/Scene/Scene.h
+            Engine/Runtime/Scene/SceneRenderExtractor.h
+            Engine/Runtime/Scene/SceneRenderSnapshot.h
+            Engine/Runtime/Scene/SceneTypes.h
+            Engine/Runtime/Scene/Serialization/SceneSerialization.h
+            Engine/Runtime/Scene/TransformComponent.h
             Engine/Runtime/Threading/Atomic.h
             Engine/Runtime/Threading/LockFreeMpscQueue.h
             Engine/Runtime/Threading/LockFreeSpscQueue.h

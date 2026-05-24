@@ -408,17 +408,16 @@ RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
 The implementation may internally translate this into render commands, but the public boundary should communicate that
 the Game Thread is submitting a frame packet, not directly editing render internals.
 
-`SubmitFrame()` should return a token or status that allows the Game Thread to know whether the frame packet was
-accepted:
+The first implementation follows the current RenderSystem fatal-error style:
 
 ```text
-RenderFrameToken
-  frameId
-  submissionIndex
+void RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
 ```
 
-The first implementation may block at the frame boundary if the render submission queue is full. It should not call
-`RenderSystem::Flush()` every frame just to stay simple; that would hide the real asynchronous contract.
+Invalid state, invalid thread access, and queue submission failures log a fatal error and terminate. Internally the
+RenderSystem still creates a frame token for the selected render-frame context. The Game Thread learns pacing through
+frame-end sync rather than a public status value. The implementation does not call `RenderSystem::Flush()` every frame;
+that would hide the real asynchronous contract.
 
 ### 11.3 Backpressure
 
@@ -493,6 +492,16 @@ Required work:
 The first implementation should use one main viewport, one active scene camera, a fixed forward pass, and a default
 material path.
 
+Current Milestone 5 implementation note:
+
+- `SceneRenderSnapshot` is already the Game-to-Render boundary.
+- The first scene render path performs camera transform, world transform, and directional light evaluation during Game
+  Thread extraction, then submits clip-space positions and CPU-lit vertex colors to the Render Thread.
+- The Render Thread creates a transient vertex buffer for the submitted frame and draws the static mesh through the
+  existing color pipeline.
+- Persistent render mesh resources, indexed drawing, depth buffer attachment, shader constant buffers, and GPU-side
+  lighting remain future render work because the current RHI shape has not yet introduced those concepts.
+
 ## 14. EngineRuntime Integration Work
 
 Connect Milestone 5 systems through `EngineRuntime` without global singletons.
@@ -538,6 +547,11 @@ Integration or smoke checks:
 - Render a lit static mesh.
 - Exit cleanly.
 
+The current automated tests cover scene construction, transform propagation, reflection-backed serialization round trip,
+fallback resource lookup, and render snapshot extraction. Windows Player constructs the sample scene and binds it to the
+Game Thread; manual Player execution remains the smoke check for the visible window path until an automated window
+capture/exit harness lands.
+
 ## 16. Milestone Exit Criteria
 
 Milestone 5 is complete when:
@@ -552,3 +566,7 @@ Milestone 5 is complete when:
 - Render-side frame slots and completion tracking exist for at least two frames in flight.
 - Core Scene, Reflection, Resource, Game Thread, and serialization tests are registered with CTest and pass on Windows
   through the MSVC preset.
+
+Current implementation caveat: the static mesh is lit during Game Thread extraction and submitted as colored vertices.
+Moving lighting, matrix constants, depth, and material binding fully onto the GPU requires the next RHI/render-resource
+expansion.

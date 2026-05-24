@@ -29,18 +29,20 @@ namespace ve
         struct TriangleVertex
         {
             Float32 position[3] = {};
+            Float32 color[3] = {};
         };
 
         constexpr TriangleVertex TriangleVertices[] = {
-            TriangleVertex{{0.0f, 0.5f, 0.0f}},
-            TriangleVertex{{0.5f, -0.5f, 0.0f}},
-            TriangleVertex{{-0.5f, -0.5f, 0.0f}},
+            TriangleVertex{{0.0f, 0.5f, 0.0f}, {0.5f, 1.0f, 1.0f}},
+            TriangleVertex{{0.5f, -0.5f, 0.0f}, {1.0f, 0.5f, 1.0f}},
+            TriangleVertex{{-0.5f, -0.5f, 0.0f}, {0.5f, 1.0f, 0.7f}},
         };
 
         const char* TriangleShaderSource = R"(
 struct VSInput
 {
     float3 position : POSITION;
+    float3 color : COLOR0;
 };
 
 struct VSOutput
@@ -53,7 +55,7 @@ VSOutput VSMain(VSInput input)
 {
     VSOutput output;
     output.position = float4(input.position, 1.0f);
-    output.color = float3(input.position.x + 0.5f, input.position.y + 0.5f, 1.0f);
+    output.color = input.color;
     return output;
 }
 
@@ -128,6 +130,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             std::unique_ptr<rhi::RhiDevice> device;
             std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
             TriangleResources triangle;
+            std::unique_ptr<rhi::RhiBuffer> sceneVertexBuffer;
         };
 
         ThreadState thread;
@@ -250,6 +253,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             impl.rhi.triangle.fragmentShader.reset();
             impl.rhi.triangle.vertexShader.reset();
             impl.rhi.triangle.vertexBuffer.reset();
+            impl.rhi.sceneVertexBuffer.reset();
         }
 
         [[nodiscard]] ErrorCode CreateTriangleResources(RenderSystemImpl& impl)
@@ -297,17 +301,21 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 return ErrorCode::PlatformError;
             }
 
-            rhi::RhiVertexAttributeDesc positionAttribute = {};
-            positionAttribute.semanticName = "POSITION";
-            positionAttribute.semanticIndex = 0;
-            positionAttribute.format = rhi::RhiFormat::Rgb32Float;
-            positionAttribute.offset = 0;
+            rhi::RhiVertexAttributeDesc attributes[2] = {};
+            attributes[0].semanticName = "POSITION";
+            attributes[0].semanticIndex = 0;
+            attributes[0].format = rhi::RhiFormat::Rgb32Float;
+            attributes[0].offset = 0;
+            attributes[1].semanticName = "COLOR";
+            attributes[1].semanticIndex = 0;
+            attributes[1].format = rhi::RhiFormat::Rgb32Float;
+            attributes[1].offset = sizeof(Float32) * 3;
 
             rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
             pipelineDesc.vertexShader = impl.rhi.triangle.vertexShader.get();
             pipelineDesc.fragmentShader = impl.rhi.triangle.fragmentShader.get();
-            pipelineDesc.vertexLayout.attributes = &positionAttribute;
-            pipelineDesc.vertexLayout.attributeCount = 1;
+            pipelineDesc.vertexLayout.attributes = attributes;
+            pipelineDesc.vertexLayout.attributeCount = 2;
             pipelineDesc.vertexLayout.stride = sizeof(TriangleVertex);
             pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
             pipelineDesc.colorFormat = impl.rhi.mainSwapchain->GetColorFormat();
@@ -331,6 +339,24 @@ float4 PSMain(VSOutput input) : SV_TARGET
             }
 
             return ErrorCode::None;
+        }
+
+        [[nodiscard]] std::vector<TriangleVertex> BuildSceneVertices(const SceneRenderSnapshot& snapshot)
+        {
+            std::vector<TriangleVertex> vertices;
+            for (const SceneRenderDrawItem& drawItem : snapshot.drawItems)
+            {
+                vertices.reserve(vertices.size() + drawItem.vertices.size());
+                for (const SceneRenderVertex& vertex : drawItem.vertices)
+                {
+                    const Vector3 position = vertex.position;
+                    const Vector3 color = vertex.color;
+                    vertices.push_back(TriangleVertex{{position.GetX(), position.GetY(), position.GetZ()},
+                                                      {color.GetX(), color.GetY(), color.GetZ()}});
+                }
+            }
+
+            return vertices;
         }
 
         void RenderTriangleFrame(RenderSystemImpl& impl, RenderFrameContext& frameContext)
@@ -371,6 +397,76 @@ float4 PSMain(VSOutput input) : SV_TARGET
             if (!commandList.End() || !impl.rhi.device->Submit(commandList) || !impl.rhi.mainSwapchain->Present())
             {
                 TerminateRenderSystem("frame execution failed in RenderTriangleFrame submit", ErrorCode::PlatformError);
+            }
+        }
+
+        void
+        RenderSceneFrame(RenderSystemImpl& impl, RenderFrameContext& frameContext, const SceneRenderSnapshot& snapshot)
+        {
+            if (impl.rhi.device == nullptr || impl.rhi.mainSwapchain == nullptr)
+            {
+                TerminateRenderSystem("frame execution failed in RenderSceneFrame", ErrorCode::InvalidState);
+            }
+
+            if (impl.rhi.triangle.pipelineState == nullptr || frameContext.commandList == nullptr)
+            {
+                TerminateRenderSystem("frame execution failed in RenderSceneFrame", ErrorCode::InvalidState);
+            }
+
+            std::vector<TriangleVertex> vertices = BuildSceneVertices(snapshot);
+            if (!vertices.empty())
+            {
+                rhi::RhiBufferDesc vertexBufferDesc = {};
+                vertexBufferDesc.size = sizeof(TriangleVertex) * vertices.size();
+                vertexBufferDesc.usage = rhi::RhiBufferUsage::Vertex;
+                vertexBufferDesc.initialData = vertices.data();
+                vertexBufferDesc.debugName = "RenderSystemSceneVertexBuffer";
+
+                impl.rhi.sceneVertexBuffer = impl.rhi.device->CreateBuffer(vertexBufferDesc);
+                if (impl.rhi.sceneVertexBuffer == nullptr)
+                {
+                    TerminateRenderSystem("frame execution failed in RenderSceneFrame vertex buffer",
+                                          ErrorCode::PlatformError);
+                }
+            }
+
+            rhi::RhiRenderPassDesc renderPassDesc = {};
+            renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
+            renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
+            if (snapshot.hasMainCamera)
+            {
+                const Vector4 clearColor = snapshot.mainCamera.clearColor;
+                renderPassDesc.clearColor = {
+                    clearColor.GetX(), clearColor.GetY(), clearColor.GetZ(), clearColor.GetW()};
+            }
+            else
+            {
+                renderPassDesc.clearColor = {0.05f, 0.07f, 0.10f, 1.0f};
+            }
+
+            const rhi::RhiExtent2D extent = impl.rhi.mainSwapchain->GetExtent();
+            rhi::RhiCommandList& commandList = *frameContext.commandList;
+
+            if (!commandList.Begin() || !commandList.BeginRenderPass(*impl.rhi.mainSwapchain, renderPassDesc))
+            {
+                TerminateRenderSystem("frame execution failed in RenderSceneFrame command list begin",
+                                      ErrorCode::PlatformError);
+            }
+
+            commandList.SetViewport(rhi::RhiViewport{
+                0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
+            commandList.SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
+            commandList.SetPipeline(*impl.rhi.triangle.pipelineState);
+            if (impl.rhi.sceneVertexBuffer != nullptr && !vertices.empty())
+            {
+                commandList.SetVertexBuffer(0, *impl.rhi.sceneVertexBuffer, sizeof(TriangleVertex), 0);
+                commandList.Draw(static_cast<UInt32>(vertices.size()), 0);
+            }
+            commandList.EndRenderPass();
+
+            if (!commandList.End() || !impl.rhi.device->Submit(commandList) || !impl.rhi.mainSwapchain->Present())
+            {
+                TerminateRenderSystem("frame execution failed in RenderSceneFrame submit", ErrorCode::PlatformError);
             }
         }
 
@@ -459,6 +555,21 @@ float4 PSMain(VSOutput input) : SV_TARGET
             }
 
             RenderTriangleFrame(impl, *frameContext);
+        }
+
+        void ExecuteSceneRenderFrame(RenderSystemImpl& impl,
+                                     const RenderFrameToken& token,
+                                     const SceneRenderSnapshot& snapshot) noexcept
+        {
+            MarkRenderFrameSlotRendering(impl, token);
+
+            RenderFrameContext* frameContext = FindRenderFrameContext(impl, token);
+            if (frameContext == nullptr)
+            {
+                TerminateRenderSystem("frame execution failed in SubmitFrame", ErrorCode::InvalidState);
+            }
+
+            RenderSceneFrame(impl, *frameContext, snapshot);
         }
 
         void ExecuteCommand(RenderThreadContext& context, RenderCommand& command) noexcept
@@ -826,6 +937,21 @@ float4 PSMain(VSOutput input) : SV_TARGET
                        [this, token](RenderThreadContext&)
                        {
                            ExecuteRenderFrame(*impl_, token);
+                           ReleaseRenderFrameSlot(*impl_, token, ErrorCode::None);
+                       });
+    }
+
+    void RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
+    {
+        ValidateGameThreadAccess(*impl_, "RenderSystem::SubmitFrame must be called on the Game Thread.");
+
+        RenderFrameToken token;
+        AcquireRenderFrameSlot(*impl_, token);
+
+        SubmitFunction("RenderSystemSubmitFrame",
+                       [this, token, snapshot = std::move(snapshot)](RenderThreadContext&)
+                       {
+                           ExecuteSceneRenderFrame(*impl_, token, snapshot);
                            ReleaseRenderFrameSlot(*impl_, token, ErrorCode::None);
                        });
     }

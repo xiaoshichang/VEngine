@@ -3,6 +3,9 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/ScopeExit.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
+#include "Engine/Runtime/Resource/ResourceManager.h"
+#include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scene/SceneRenderExtractor.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Time/Time.h"
@@ -72,10 +75,19 @@ namespace ve
             FrameEndSyncState frameEndSync;
         };
 
+        struct SceneState
+        {
+            Mutex mutex;
+            AtomicSize activeSceneFrameCount{0};
+            Scene* activeScene = nullptr;
+            ResourceManager* resourceManager = nullptr;
+        };
+
         ThreadState thread;
         FrameState frame;
         CommandState commandQueue;
         RenderBridgeState renderBridge;
+        SceneState scene;
     };
 
     namespace
@@ -98,6 +110,67 @@ namespace ve
             return impl.renderBridge.renderSystem != nullptr;
         }
 
+        [[nodiscard]] bool
+        AcquireActiveScene(GameThreadSystemImpl& impl, Scene*& outScene, ResourceManager*& outResourceManager)
+        {
+            LockGuard<Mutex> lock(impl.scene.mutex);
+            if (impl.scene.activeScene == nullptr || impl.scene.resourceManager == nullptr)
+            {
+                outScene = nullptr;
+                outResourceManager = nullptr;
+                return false;
+            }
+
+            impl.scene.activeSceneFrameCount.fetch_add(1, std::memory_order_acq_rel);
+            outScene = impl.scene.activeScene;
+            outResourceManager = impl.scene.resourceManager;
+            return true;
+        }
+
+        void ReleaseActiveScene(GameThreadSystemImpl& impl) noexcept
+        {
+            impl.scene.activeSceneFrameCount.fetch_sub(1, std::memory_order_acq_rel);
+        }
+
+        void UpdateActiveScene(GameThreadSystemImpl& impl)
+        {
+            Scene* scene = nullptr;
+            ResourceManager* resourceManager = nullptr;
+            if (!AcquireActiveScene(impl, scene, resourceManager))
+            {
+                return;
+            }
+
+            auto sceneGuard = MakeScopeExit([&impl]() { ReleaseActiveScene(impl); });
+            scene->Update();
+        }
+
+        void LateUpdateActiveScene(GameThreadSystemImpl& impl)
+        {
+            Scene* scene = nullptr;
+            ResourceManager* resourceManager = nullptr;
+            if (!AcquireActiveScene(impl, scene, resourceManager))
+            {
+                return;
+            }
+
+            auto sceneGuard = MakeScopeExit([&impl]() { ReleaseActiveScene(impl); });
+            scene->LateUpdate();
+        }
+
+        void UpdateActiveSceneTransforms(GameThreadSystemImpl& impl)
+        {
+            Scene* scene = nullptr;
+            ResourceManager* resourceManager = nullptr;
+            if (!AcquireActiveScene(impl, scene, resourceManager))
+            {
+                return;
+            }
+
+            auto sceneGuard = MakeScopeExit([&impl]() { ReleaseActiveScene(impl); });
+            scene->UpdateTransforms();
+        }
+
         void ExecuteRenderFrame(GameThreadSystemImpl& impl) noexcept
         {
             RenderSystem* renderSystem = AcquireRenderSystem(impl);
@@ -116,6 +189,47 @@ namespace ve
             catch (...)
             {
                 VE_ASSERT_ALWAYS_MESSAGE(false, "Unhandled exception escaped GameThreadSystem render-frame execution.");
+            }
+        }
+
+        void ExecuteRenderExtraction(GameThreadSystemImpl& impl, UInt64 frameId) noexcept
+        {
+            RenderSystem* renderSystem = AcquireRenderSystem(impl);
+            if (renderSystem == nullptr)
+            {
+                return;
+            }
+
+            auto renderFrameCounterGuard = MakeScopeExit(
+                [&impl]() { impl.renderBridge.activeRenderFrameCount.fetch_sub(1, std::memory_order_acq_rel); });
+
+            Scene* scene = nullptr;
+            ResourceManager* resourceManager = nullptr;
+            const bool hasScene = AcquireActiveScene(impl, scene, resourceManager);
+            auto sceneFrameCounterGuard = MakeScopeExit(
+                [&impl, hasScene]()
+                {
+                    if (hasScene)
+                    {
+                        ReleaseActiveScene(impl);
+                    }
+                });
+
+            try
+            {
+                if (hasScene)
+                {
+                    SceneRenderSnapshot snapshot = ExtractSceneRenderSnapshot(*scene, *resourceManager, frameId);
+                    renderSystem->SubmitFrame(std::move(snapshot));
+                }
+                else
+                {
+                    renderSystem->RenderFrame();
+                }
+            }
+            catch (...)
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Unhandled exception escaped GameThreadSystem render extraction.");
             }
         }
 
@@ -158,10 +272,13 @@ namespace ve
 
             SetPhase(impl.frame.phase, GameThreadPhase::Lifecycle);
             SetPhase(impl.frame.phase, GameThreadPhase::Update);
+            UpdateActiveScene(impl);
             SetPhase(impl.frame.phase, GameThreadPhase::LateUpdate);
+            LateUpdateActiveScene(impl);
             SetPhase(impl.frame.phase, GameThreadPhase::TransformUpdate);
+            UpdateActiveSceneTransforms(impl);
             SetPhase(impl.frame.phase, GameThreadPhase::RenderExtraction);
-            ExecuteRenderFrame(impl);
+            ExecuteRenderExtraction(impl, frameId);
 
             SetPhase(impl.frame.phase, GameThreadPhase::EndFrame);
             SyncFrameEnd(impl);
@@ -241,6 +358,25 @@ namespace ve
             return renderSystem;
         }
 
+        void DetachActiveSceneAndWait(GameThreadSystemImpl& impl) noexcept
+        {
+            {
+                LockGuard<Mutex> lock(impl.scene.mutex);
+                impl.scene.activeScene = nullptr;
+                impl.scene.resourceManager = nullptr;
+            }
+
+            if (GetCurrentThreadId().value == impl.thread.gameThreadIdValue.load(std::memory_order_acquire))
+            {
+                return;
+            }
+
+            while (impl.scene.activeSceneFrameCount.load(std::memory_order_acquire) != 0)
+            {
+                YieldThread();
+            }
+        }
+
         void GameThreadLoop(GameThreadSystemImpl& impl, const std::shared_ptr<ManualResetEvent>& started)
         {
             const ThreadId gameThreadId = GetCurrentThreadId();
@@ -287,6 +423,7 @@ namespace ve
         void StopAndJoinGameThread(GameThreadSystemImpl& impl) noexcept
         {
             impl.thread.acceptingCommands.store(false, std::memory_order_release);
+            DetachActiveSceneAndWait(impl);
             (void)DetachRenderSystemAndWait(impl);
 
             while (impl.thread.activeSubmitCount.load(std::memory_order_acquire) != 0)
@@ -429,6 +566,32 @@ namespace ve
         {
             renderSystem->ClearGameThreadBinding();
         }
+    }
+
+    ErrorCode GameThreadSystem::SetActiveScene(Scene* scene, ResourceManager* resourceManager) noexcept
+    {
+        if (scene == nullptr || resourceManager == nullptr)
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        if (!impl_->thread.initialized.load(std::memory_order_acquire))
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        {
+            LockGuard<Mutex> lock(impl_->scene.mutex);
+            impl_->scene.activeScene = scene;
+            impl_->scene.resourceManager = resourceManager;
+        }
+
+        return ErrorCode::None;
+    }
+
+    void GameThreadSystem::ClearActiveScene() noexcept
+    {
+        DetachActiveSceneAndWait(*impl_);
     }
 
 } // namespace ve

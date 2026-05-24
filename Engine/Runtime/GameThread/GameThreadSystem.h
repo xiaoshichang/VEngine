@@ -11,7 +11,9 @@
 namespace ve
 {
     struct GameThreadSystemImpl;
+    class ResourceManager;
     class RenderSystem;
+    class Scene;
 
     /// Current phase of the Game Thread frame tick.
     enum class GameThreadPhase
@@ -87,6 +89,14 @@ namespace ve
 
         /// Disconnects the RenderSystem frame boundary and waits until any in-progress RenderFrame call has returned.
         void ClearRenderSystem() noexcept;
+
+        /// Sets the active scene updated and extracted by the Game Thread.
+        ///
+        /// The caller owns the Scene lifetime and must keep it alive until ClearActiveScene() or Shutdown() completes.
+        [[nodiscard]] ErrorCode SetActiveScene(Scene* scene, ResourceManager* resourceManager) noexcept;
+
+        /// Clears the active scene and waits until any in-progress scene frame has returned.
+        void ClearActiveScene() noexcept;
 
     private:
         std::unique_ptr<GameThreadSystemImpl> impl_;

@@ -1,6 +1,9 @@
 #include "Engine/Runtime/Application/Application.h"
 
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Math/Quaternion.h"
+#include "Engine/Runtime/Scene/RenderComponents.h"
+#include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <chrono>
 #include <cstdio>
@@ -118,11 +121,54 @@ namespace ve
     void Application::ShutdownRendering() noexcept
     {
         GameThreadSystem& gameThreadSystem = engineRuntime_.GetGameThreadSystem();
+        gameThreadSystem.ClearActiveScene();
         gameThreadSystem.ClearRenderSystem();
 
         RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
         renderSystem.DestroyMainSwapchain();
         renderSystem.ShutdownDevice();
+    }
+
+    void Application::CreateSampleScene()
+    {
+        ResourceManager& resourceManager = engineRuntime_.GetResourceManager();
+        sampleScene_ = std::make_unique<Scene>();
+
+        GameObject& camera = sampleScene_->CreateGameObject("SampleCamera");
+        TransformComponent& cameraTransform = camera.AddComponent<TransformComponent>();
+        cameraTransform.SetLocalPosition(Vector3(2.0f, 1.6f, -3.5f));
+        cameraTransform.SetLocalRotation(Quaternion::FromEulerXYZ(ToRadians(20.0f), ToRadians(-30.0f), 0.0f));
+        camera.AddComponent<CameraComponent>();
+
+        GameObject& light = sampleScene_->CreateGameObject("SampleDirectionalLight");
+        light.AddComponent<TransformComponent>().SetLocalRotation(
+            Quaternion::FromEulerXYZ(ToRadians(-35.0f), ToRadians(20.0f), 0.0f));
+        LightComponent& lightComponent = light.AddComponent<LightComponent>();
+        lightComponent.SetIntensity(1.25f);
+
+        GameObject& cube = sampleScene_->CreateGameObject("SampleCube");
+        cube.AddComponent<TransformComponent>();
+        MeshRendererComponent& renderer = cube.AddComponent<MeshRendererComponent>();
+        renderer.SetMesh(resourceManager.GetFallbackMesh());
+        renderer.SetMaterial(resourceManager.GetDefaultMaterial());
+
+        sampleScene_->UpdateTransforms();
+        ErrorCode sceneResult =
+            engineRuntime_.GetGameThreadSystem().SetActiveScene(sampleScene_.get(), &resourceManager);
+        if (sceneResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR("Failed to bind sample scene to GameThreadSystem: {}", ToString(sceneResult));
+        }
+    }
+
+    void Application::DestroySampleScene() noexcept
+    {
+        if (engineRuntime_.IsInitialized())
+        {
+            engineRuntime_.GetGameThreadSystem().ClearActiveScene();
+        }
+
+        sampleScene_.reset();
     }
 
     int Application::RunMainLoop(Window& mainWindow)
@@ -189,7 +235,9 @@ namespace ve
             return 1;
         }
 
+        CreateSampleScene();
         const int result = RunMainLoop(*mainWindow);
+        DestroySampleScene();
         ShutdownRendering();
         cleanup(mainWindow);
 

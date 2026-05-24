@@ -58,6 +58,7 @@ namespace ve
         state_ = EngineRuntimeState::Initialized;
         VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
         VE_LOG_INFO("IOSystem initialized.");
+        VE_LOG_INFO("ResourceManager initialized.");
         VE_LOG_INFO("RenderSystem initialized.");
         VE_LOG_INFO("GameThreadSystem initialized.");
         return ErrorCode::None;
@@ -109,6 +110,18 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetIOSystem requires an initialized runtime.");
         return ioSystem_;
+    }
+
+    ResourceManager& EngineRuntime::GetResourceManager() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetResourceManager requires an initialized runtime.");
+        return resourceManager_;
+    }
+
+    const ResourceManager& EngineRuntime::GetResourceManager() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetResourceManager requires an initialized runtime.");
+        return resourceManager_;
     }
 
     RenderSystem& EngineRuntime::GetRenderSystem() noexcept
