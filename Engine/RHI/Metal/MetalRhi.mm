@@ -68,6 +68,8 @@ namespace ve::rhi
             }
         }
 
+        constexpr uint32_t MetalUniformBufferBaseSlot = 16;
+
         std::string ToString(NSError* error)
         {
             if (error == nil)
@@ -365,6 +367,33 @@ namespace ve::rhi
                 (void)stride;
                 const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
                 [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+            }
+
+            void SetUniformBuffer(RhiShaderStage stage,
+                                  uint32_t slot,
+                                  const RhiBuffer& buffer,
+                                  uint64_t offset,
+                                  uint64_t size) override
+            {
+                (void)size;
+
+                const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
+                const NSUInteger metalSlot = static_cast<NSUInteger>(MetalUniformBufferBaseSlot + slot);
+                const NSUInteger metalOffset = static_cast<NSUInteger>(offset);
+
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer()
+                                                     offset:metalOffset
+                                                    atIndex:metalSlot];
+                    break;
+                case RhiShaderStage::Fragment:
+                    [renderCommandEncoder_ setFragmentBuffer:metalBuffer.GetNativeBuffer()
+                                                       offset:metalOffset
+                                                      atIndex:metalSlot];
+                    break;
+                }
             }
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override

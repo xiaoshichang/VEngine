@@ -379,7 +379,6 @@ SceneRenderSnapshot
   mainCamera
   directionalLights
   drawItems
-  referencedRenderResources
 ```
 
 Each draw item should contain render-safe data:
@@ -392,6 +391,10 @@ DrawItem
   bounds placeholder
   visibility flags
 ```
+
+Resource upload data is not embedded in the snapshot. `RenderSystem` builds a separate render-command payload from
+`ResourceManager` when it needs to populate or refresh render-side resources, and draw items reference those resources
+by handle rather than embedding duplicate vertex or material data.
 
 The snapshot must not contain live `GameObject`, `Component`, or mutable `Scene` pointers. It may contain stable
 resource handles if `RenderSystem` and `ResourceManager` agree on their lifetime rules.
@@ -408,10 +411,19 @@ RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
 The implementation may internally translate this into render commands, but the public boundary should communicate that
 the Game Thread is submitting a frame packet, not directly editing render internals.
 
+Resource lifetime is synchronized separately from frame submission. The Game Thread asks `RenderSystem` to compare
+`ResourceManager` revisions against its submitted mirror and enqueue render-resource registry commands only for changed
+resources:
+
+```text
+RenderSystem::SynchronizeRenderResources(const ResourceManager& resourceManager)
+```
+
 The first implementation follows the current RenderSystem fatal-error style:
 
 ```text
 void RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
+void RenderSystem::SynchronizeRenderResources(const ResourceManager& resourceManager)
 ```
 
 Invalid state, invalid thread access, and queue submission failures log a fatal error and terminate. Internally the
@@ -495,12 +507,17 @@ material path.
 Current Milestone 5 implementation note:
 
 - `SceneRenderSnapshot` is already the Game-to-Render boundary.
-- The first scene render path performs camera transform, world transform, and directional light evaluation during Game
-  Thread extraction, then submits clip-space positions and CPU-lit vertex colors to the Render Thread.
-- The Render Thread creates a transient vertex buffer for the submitted frame and draws the static mesh through the
-  existing color pipeline.
-- Persistent render mesh resources, indexed drawing, depth buffer attachment, shader constant buffers, and GPU-side
-  lighting remain future render work because the current RHI shape has not yet introduced those concepts.
+- The first scene render path extracts draw items as render mesh/material handles plus camera matrices, world
+  transforms, and directional light data without pre-projecting vertices on the Game Thread.
+- Mesh vertices, normals, colors, and material constants remain owned by `ResourceManager`. Resource create/update/remove
+  changes advance resource revisions and a resource change serial.
+- `RenderSystem::SynchronizeRenderResources()` builds add/update/remove render commands only when that serial changes.
+  The Render Thread applies those commands to its persistent render-resource registry.
+- Frame submission no longer carries mesh/material payloads. The Render Thread binds persistent scene mesh vertex buffers
+  from the registry and per-draw uniform buffers. The vertex shader applies the conventional `projection * view * world`
+  MVP transform.
+- Indexed drawing, depth buffer attachment, full material binding, shader reflection-driven constants, and GPU-safe
+  deferred resource release remain future render work.
 
 ## 14. EngineRuntime Integration Work
 
@@ -567,6 +584,6 @@ Milestone 5 is complete when:
 - Core Scene, Reflection, Resource, Game Thread, and serialization tests are registered with CTest and pass on Windows
   through the MSVC preset.
 
-Current implementation caveat: the static mesh is lit during Game Thread extraction and submitted as colored vertices.
-Moving lighting, matrix constants, depth, and material binding fully onto the GPU requires the next RHI/render-resource
-expansion.
+Current implementation caveat: matrix constants now travel through a narrow RHI uniform-buffer path and mesh/material
+data is cached render-side by resource id, but indexed buffers, depth, material binding layouts, and resource
+invalidation/versioning require the next RHI/render-resource expansion.

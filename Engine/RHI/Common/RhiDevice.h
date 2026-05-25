@@ -116,6 +116,13 @@ namespace ve::rhi
         /// Binds a vertex buffer at the given slot.
         virtual void SetVertexBuffer(uint32_t slot, const RhiBuffer& buffer, uint32_t stride, uint64_t offset) = 0;
 
+        /// Binds a constant/uniform buffer for the given shader stage and logical binding slot.
+        virtual void SetUniformBuffer(RhiShaderStage stage,
+                                      uint32_t slot,
+                                      const RhiBuffer& buffer,
+                                      uint64_t offset,
+                                      uint64_t size) = 0;
+
         /// Issues a non-indexed draw call.
         virtual void Draw(uint32_t vertexCount, uint32_t firstVertex) = 0;
     };

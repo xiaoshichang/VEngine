@@ -191,17 +191,18 @@ Implementation order:
 - Route first-stage resource loading through FileSystem and IOSystem boundaries where practical, while allowing
   synchronous loading for the first vertical slice.
 - Define `SceneRenderSnapshot` or an equivalent render-safe frame packet containing camera, light, draw item, transform,
-  and referenced resource data.
+  and resource handles.
 - Add Game Thread scene extraction that builds render snapshots without live `Scene`, `GameObject`, or `Component`
   pointers.
 - Add `RenderSystem::SubmitFrame()` or an equivalent frame-level submission API for scene snapshots.
 - Add CPU-side frame backpressure through a Game Thread frame-end `RenderCommandFence`, with an initial one-frame-lag
   policy.
 - Add render-side frame contexts for per-frame render data.
-- Add the first scene-driven render path: extract camera, directional light, material color, transforms, and mesh data
-  into a render-safe snapshot, then draw a CPU-lit static mesh through the existing color pipeline.
-- Defer indexed mesh buffers, GPU constant buffers, depth buffer resources, full material binding, and GPU-side lighting
-  until the next RHI/render-resource expansion.
+- Add the first scene-driven render path: extract camera, directional light, transforms, and draw resource handles into
+  a render-safe snapshot; synchronize mesh/material add/update/remove changes into a persistent render-side resource
+  registry; then draw static meshes through an MVP uniform buffer and the existing color pipeline.
+- Defer indexed mesh buffers, depth buffer resources, full material binding, upload scheduling, and GPU-safe deferred
+  release until the next RHI/render-resource expansion.
 - Load or construct the sample scene in `VEnginePlayer` and render it through the existing RenderSystem and RHI path.
 - Add RenderSystem tests for frame submission, queued-frame backpressure, and render frame context selection.
 - Construct the sample scene in Windows Player and bind it to the Game Thread. Keep automated Player window smoke as a

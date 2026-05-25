@@ -18,6 +18,7 @@ namespace ve
     struct RenderSystemImpl;
     class GameThreadSystem;
     class ManualResetEvent;
+    class ResourceManager;
 
     constexpr UInt32 DefaultMaxRenderFramesInFlight = 2;
 
@@ -201,6 +202,12 @@ namespace ve
         /// The snapshot must not contain live Scene, GameObject, or Component pointers. Invalid state or submission
         /// failures are fatal and terminate the process, matching RenderFrame() and Submit().
         void SubmitFrame(SceneRenderSnapshot snapshot);
+
+        /// Synchronizes ResourceManager mesh/material resources into the Render Thread resource registry.
+        ///
+        /// The Game Thread compares ResourceManager revisions against its submitted mirror and enqueues render-resource
+        /// add/update/remove commands only for resources whose lifecycle or revision changed.
+        void SynchronizeRenderResources(const ResourceManager& resourceManager);
 
         /// Returns the configured render-frame slot count.
         [[nodiscard]] UInt32 GetMaxRenderFramesInFlight() const noexcept;

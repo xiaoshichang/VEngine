@@ -69,6 +69,24 @@ namespace ve::rhi
             return flags;
         }
 
+        UINT ToD3D11BufferBindFlags(RhiBufferUsage usage)
+        {
+            UINT flags = 0;
+            const auto usageValue = static_cast<uint32_t>(usage);
+
+            if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Vertex)) != 0)
+            {
+                flags |= D3D11_BIND_VERTEX_BUFFER;
+            }
+
+            if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Uniform)) != 0)
+            {
+                flags |= D3D11_BIND_CONSTANT_BUFFER;
+            }
+
+            return flags;
+        }
+
         std::string MakeHResultError(const char* operation, HRESULT result)
         {
             char buffer[128] = {};
@@ -441,6 +459,29 @@ namespace ve::rhi
                 context_->IASetVertexBuffers(slot, 1, &nativeBuffer, &d3dStride, &d3dOffset);
             }
 
+            void SetUniformBuffer(RhiShaderStage stage,
+                                  uint32_t slot,
+                                  const RhiBuffer& buffer,
+                                  uint64_t offset,
+                                  uint64_t size) override
+            {
+                (void)offset;
+                (void)size;
+
+                const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
+                ID3D11Buffer* nativeBuffer = d3dBuffer.GetNativeBuffer();
+
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    context_->VSSetConstantBuffers(slot, 1, &nativeBuffer);
+                    break;
+                case RhiShaderStage::Fragment:
+                    context_->PSSetConstantBuffers(slot, 1, &nativeBuffer);
+                    break;
+                }
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 context_->Draw(vertexCount, firstVertex);
@@ -591,10 +632,23 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) override
             {
+                if (desc.size == 0)
+                {
+                    SetLastError("D3D11 buffer requires a non-zero size.");
+                    return nullptr;
+                }
+
+                const auto usageValue = static_cast<uint32_t>(desc.usage);
+                if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Uniform)) != 0 && (desc.size % 16) != 0)
+                {
+                    SetLastError("D3D11 constant buffer size must be aligned to 16 bytes.");
+                    return nullptr;
+                }
+
                 D3D11_BUFFER_DESC bufferDesc = {};
                 bufferDesc.ByteWidth = static_cast<UINT>(desc.size);
                 bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-                bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                bufferDesc.BindFlags = ToD3D11BufferBindFlags(desc.usage);
 
                 D3D11_SUBRESOURCE_DATA initialData = {};
                 initialData.pSysMem = desc.initialData;

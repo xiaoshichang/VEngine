@@ -76,6 +76,36 @@ namespace ve::rhi
             return flags;
         }
 
+        [[nodiscard]] bool HasBufferUsage(RhiBufferUsage usage, RhiBufferUsage flag) noexcept
+        {
+            return (static_cast<uint32_t>(usage) & static_cast<uint32_t>(flag)) != 0;
+        }
+
+        [[nodiscard]] uint64_t AlignUp(uint64_t value, uint64_t alignment) noexcept
+        {
+            return ((value + alignment) - 1) / alignment * alignment;
+        }
+
+        D3D12_SHADER_VISIBILITY ToD3D12ShaderVisibility(RhiShaderStage stage)
+        {
+            switch (stage)
+            {
+            case RhiShaderStage::Vertex:
+                return D3D12_SHADER_VISIBILITY_VERTEX;
+            case RhiShaderStage::Fragment:
+                return D3D12_SHADER_VISIBILITY_PIXEL;
+            }
+
+            return D3D12_SHADER_VISIBILITY_ALL;
+        }
+
+        struct D3D12UniformBufferBinding
+        {
+            RhiShaderStage stage = RhiShaderStage::Vertex;
+            uint32_t slot = 0;
+            uint32_t rootParameterIndex = 0;
+        };
+
         std::string MakeHResultError(const char* operation, HRESULT result)
         {
             char buffer[128] = {};
@@ -225,10 +255,12 @@ namespace ve::rhi
         public:
             D3D12PipelineState(RhiPrimitiveTopology topology,
                                ComPtr<ID3D12RootSignature> rootSignature,
-                               ComPtr<ID3D12PipelineState> pipelineState)
+                               ComPtr<ID3D12PipelineState> pipelineState,
+                               std::vector<D3D12UniformBufferBinding> uniformBufferBindings)
                 : topology_(topology)
                 , rootSignature_(std::move(rootSignature))
                 , pipelineState_(std::move(pipelineState))
+                , uniformBufferBindings_(std::move(uniformBufferBindings))
             {
             }
 
@@ -247,10 +279,27 @@ namespace ve::rhi
                 return pipelineState_.Get();
             }
 
+            [[nodiscard]] bool TryGetUniformBufferRootParameterIndex(RhiShaderStage stage,
+                                                                     uint32_t slot,
+                                                                     uint32_t& outIndex) const noexcept
+            {
+                for (const D3D12UniformBufferBinding& binding : uniformBufferBindings_)
+                {
+                    if (binding.stage == stage && binding.slot == slot)
+                    {
+                        outIndex = binding.rootParameterIndex;
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
             ComPtr<ID3D12RootSignature> rootSignature_;
             ComPtr<ID3D12PipelineState> pipelineState_;
+            std::vector<D3D12UniformBufferBinding> uniformBufferBindings_;
         };
 
         class D3D12Swapchain final : public RhiSwapchain
@@ -380,6 +429,7 @@ namespace ve::rhi
 
             [[nodiscard]] bool Begin() override
             {
+                activePipelineState_ = nullptr;
                 HRESULT result = commandAllocator_->Reset();
 
                 if (FAILED(result))
@@ -451,6 +501,7 @@ namespace ve::rhi
             void SetPipeline(const RhiPipelineState& pipelineState) override
             {
                 const auto& d3dPipeline = static_cast<const D3D12PipelineState&>(pipelineState);
+                activePipelineState_ = &d3dPipeline;
                 commandList_->SetGraphicsRootSignature(d3dPipeline.GetRootSignature());
                 commandList_->SetPipelineState(d3dPipeline.GetPipelineState());
                 commandList_->IASetPrimitiveTopology(ToD3DTopology(d3dPipeline.GetTopology()));
@@ -490,6 +541,30 @@ namespace ve::rhi
                 commandList_->IASetVertexBuffers(slot, 1, &bufferView);
             }
 
+            void SetUniformBuffer(RhiShaderStage stage,
+                                  uint32_t slot,
+                                  const RhiBuffer& buffer,
+                                  uint64_t offset,
+                                  uint64_t size) override
+            {
+                (void)size;
+
+                if (activePipelineState_ == nullptr)
+                {
+                    return;
+                }
+
+                uint32_t rootParameterIndex = 0;
+                if (!activePipelineState_->TryGetUniformBufferRootParameterIndex(stage, slot, rootParameterIndex))
+                {
+                    return;
+                }
+
+                const auto& d3dBuffer = static_cast<const D3D12Buffer&>(buffer);
+                commandList_->SetGraphicsRootConstantBufferView(
+                    rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 commandList_->DrawInstanced(vertexCount, 1, firstVertex, 0);
@@ -505,6 +580,7 @@ namespace ve::rhi
             ComPtr<ID3D12CommandAllocator> commandAllocator_;
             ComPtr<ID3D12GraphicsCommandList> commandList_;
             D3D12Swapchain* activeSwapchain_ = nullptr;
+            const D3D12PipelineState* activePipelineState_ = nullptr;
         };
 
         class D3D12Device final : public RhiDevice
@@ -662,6 +738,12 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) override
             {
+                if (desc.size == 0)
+                {
+                    SetLastError("D3D12 buffer requires a non-zero size.");
+                    return nullptr;
+                }
+
                 D3D12_HEAP_PROPERTIES heapProperties = {};
                 heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
                 heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
@@ -672,7 +754,9 @@ namespace ve::rhi
                 D3D12_RESOURCE_DESC resourceDesc = {};
                 resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
                 resourceDesc.Alignment = 0;
-                resourceDesc.Width = desc.size;
+                resourceDesc.Width = HasBufferUsage(desc.usage, RhiBufferUsage::Uniform)
+                                         ? AlignUp(desc.size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)
+                                         : desc.size;
                 resourceDesc.Height = 1;
                 resourceDesc.DepthOrArraySize = 1;
                 resourceDesc.MipLevels = 1;
@@ -819,7 +903,36 @@ namespace ve::rhi
                     return nullptr;
                 }
 
+                if (desc.uniformBufferBindingCount > 0 && desc.uniformBufferBindings == nullptr)
+                {
+                    SetLastError("D3D12 graphics pipeline uniform buffer binding count requires binding data.");
+                    return nullptr;
+                }
+
+                std::vector<D3D12_ROOT_PARAMETER> rootParameters;
+                rootParameters.reserve(desc.uniformBufferBindingCount);
+
+                std::vector<D3D12UniformBufferBinding> uniformBufferBindings;
+                uniformBufferBindings.reserve(desc.uniformBufferBindingCount);
+
+                for (uint32_t index = 0; index < desc.uniformBufferBindingCount; ++index)
+                {
+                    const RhiUniformBufferBindingDesc& binding = desc.uniformBufferBindings[index];
+
+                    D3D12_ROOT_PARAMETER rootParameter = {};
+                    rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                    rootParameter.Descriptor.ShaderRegister = binding.slot;
+                    rootParameter.Descriptor.RegisterSpace = 0;
+                    rootParameter.ShaderVisibility = ToD3D12ShaderVisibility(binding.stage);
+
+                    uniformBufferBindings.push_back(D3D12UniformBufferBinding{
+                        binding.stage, binding.slot, static_cast<uint32_t>(rootParameters.size())});
+                    rootParameters.push_back(rootParameter);
+                }
+
                 D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+                rootSignatureDesc.NumParameters = static_cast<UINT>(rootParameters.size());
+                rootSignatureDesc.pParameters = rootParameters.empty() ? nullptr : rootParameters.data();
                 rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
                 ComPtr<ID3DBlob> signature;
@@ -912,7 +1025,8 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D12PipelineState>(desc.topology, rootSignature, pipelineState);
+                return std::make_unique<D3D12PipelineState>(
+                    desc.topology, rootSignature, pipelineState, std::move(uniformBufferBindings));
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -274,14 +275,16 @@ namespace
         passed &= Expect(snapshot.hasMainCamera, "Snapshot should include a main camera");
         passed &= Expect(snapshot.directionalLights.size() == 1, "Snapshot should include one directional light");
         passed &= Expect(snapshot.drawItems.size() == 1, "Snapshot should include one draw item");
-        passed &= Expect(!snapshot.drawItems[0].vertices.empty(), "Snapshot draw item should contain render vertices");
         passed &= Expect(snapshot.drawItems[0].objectId == cubeObject.GetId(),
                          "Snapshot draw item should use stable object id");
+        passed &= Expect(snapshot.drawItems[0].mesh == renderer.GetMesh(), "Snapshot draw item should reference mesh");
+        passed &= Expect(snapshot.drawItems[0].material == renderer.GetMaterial(),
+                         "Snapshot draw item should reference material");
 
         return passed;
     }
 
-    bool TestDiagonalSampleCameraSeesCube()
+    bool TestDiagonalSampleCameraProvidesGpuMvpInput()
     {
         bool passed = true;
 
@@ -304,22 +307,37 @@ namespace
         const ve::SceneRenderSnapshot snapshot = ve::ExtractSceneRenderSnapshot(scene, resourceManager, 43);
         passed &= Expect(snapshot.drawItems.size() == 1, "Diagonal sample camera scene should include cube draw item");
 
+        bool allVerticesRemainLocal = true;
         bool hasVisibleVertex = false;
-        if (!snapshot.drawItems.empty())
+        const ve::MeshResource* mesh = resourceManager.FindMesh(renderer.GetMesh());
+        passed &= Expect(mesh != nullptr, "Diagonal sample camera mesh should be available through its handle");
+        if (!snapshot.drawItems.empty() && mesh != nullptr)
         {
-            for (const ve::SceneRenderVertex& vertex : snapshot.drawItems[0].vertices)
+            const ve::Matrix44 modelViewProjection = snapshot.mainCamera.projectionMatrix *
+                                                     snapshot.mainCamera.viewMatrix *
+                                                     snapshot.drawItems[0].worldMatrix;
+
+            for (const ve::MeshVertex& vertex : mesh->vertices)
             {
                 const ve::Vector3& position = vertex.position;
-                if (position.GetX() >= -1.0f && position.GetX() <= 1.0f && position.GetY() >= -1.0f &&
-                    position.GetY() <= 1.0f && position.GetZ() >= 0.0f && position.GetZ() <= 1.0f)
+                if (position.GetX() < -0.5f || position.GetX() > 0.5f || position.GetY() < -0.5f ||
+                    position.GetY() > 0.5f || position.GetZ() < -0.5f || position.GetZ() > 0.5f)
+                {
+                    allVerticesRemainLocal = false;
+                }
+
+                const ve::Vector3 clipPosition = modelViewProjection.TransformPoint(position);
+                if (clipPosition.GetX() >= -1.0f && clipPosition.GetX() <= 1.0f &&
+                    clipPosition.GetY() >= -1.0f && clipPosition.GetY() <= 1.0f &&
+                    clipPosition.GetZ() >= 0.0f && clipPosition.GetZ() <= 1.0f)
                 {
                     hasVisibleVertex = true;
-                    break;
                 }
             }
         }
 
-        passed &= Expect(hasVisibleVertex, "Diagonal sample camera should project at least one cube vertex on screen");
+        passed &= Expect(allVerticesRemainLocal, "Snapshot vertices should stay in local mesh space");
+        passed &= Expect(hasVisibleVertex, "Snapshot camera and transform data should produce a visible GPU MVP");
 
         return passed;
     }
@@ -359,6 +377,67 @@ namespace
         }
 
         passed &= Expect(uniqueColors.size() == 6, "Built-in cube should have one distinct color per face");
+
+        return passed;
+    }
+
+    bool TestResourceManagerRenderResourceLifecycle()
+    {
+        bool passed = true;
+
+        ve::ResourceManager resourceManager;
+        const ve::UInt64 initialChangeSerial = resourceManager.GetChangeSerial();
+
+        std::vector<ve::MeshVertex> vertices = {
+            ve::MeshVertex{ve::Vector3(0.0f, 0.5f, 0.0f), ve::Vector3(0.0f, 0.0f, 1.0f), ve::Vector3::One()},
+            ve::MeshVertex{ve::Vector3(0.5f, -0.5f, 0.0f), ve::Vector3(0.0f, 0.0f, 1.0f), ve::Vector3::One()},
+            ve::MeshVertex{ve::Vector3(-0.5f, -0.5f, 0.0f), ve::Vector3(0.0f, 0.0f, 1.0f), ve::Vector3::One()},
+        };
+
+        const ve::ResourceHandle<ve::MeshResource> mesh =
+            resourceManager.CreateMesh("TestTriangle", std::move(vertices));
+        const ve::MeshResource* meshResource = resourceManager.FindMesh(mesh);
+        passed &= Expect(meshResource != nullptr, "Created mesh should be findable");
+        passed &= Expect(meshResource != nullptr && meshResource->revision == 1,
+                         "Created mesh should start at revision one");
+        passed &= Expect(resourceManager.GetChangeSerial() > initialChangeSerial,
+                         "Creating a mesh should advance resource change serial");
+
+        const ve::UInt64 afterCreateSerial = resourceManager.GetChangeSerial();
+        std::vector<ve::MeshVertex> updatedVertices = {
+            ve::MeshVertex{ve::Vector3(0.0f, 0.75f, 0.0f), ve::Vector3(0.0f, 0.0f, 1.0f), ve::Vector3::One()},
+            ve::MeshVertex{ve::Vector3(0.75f, -0.75f, 0.0f), ve::Vector3(0.0f, 0.0f, 1.0f), ve::Vector3::One()},
+            ve::MeshVertex{ve::Vector3(-0.75f, -0.75f, 0.0f), ve::Vector3(0.0f, 0.0f, 1.0f), ve::Vector3::One()},
+        };
+        passed &= Expect(resourceManager.UpdateMesh(mesh, std::move(updatedVertices)),
+                         "Updating an existing mesh should succeed");
+        meshResource = resourceManager.FindMesh(mesh);
+        passed &= Expect(meshResource != nullptr && meshResource->revision == 2,
+                         "Updating a mesh should advance its revision");
+        passed &= Expect(resourceManager.GetChangeSerial() > afterCreateSerial,
+                         "Updating a mesh should advance resource change serial");
+
+        const ve::ResourceHandle<ve::MaterialResource> material =
+            resourceManager.CreateMaterial("TestMaterial", ve::Vector3(0.25f, 0.5f, 0.75f));
+        const ve::MaterialResource* materialResource = resourceManager.FindMaterial(material);
+        passed &= Expect(materialResource != nullptr, "Created material should be findable");
+        passed &= Expect(materialResource != nullptr && materialResource->revision == 1,
+                         "Created material should start at revision one");
+
+        passed &= Expect(resourceManager.UpdateMaterial(material, ve::Vector3(0.75f, 0.5f, 0.25f)),
+                         "Updating an existing material should succeed");
+        materialResource = resourceManager.FindMaterial(material);
+        passed &= Expect(materialResource != nullptr && materialResource->revision == 2,
+                         "Updating a material should advance its revision");
+
+        passed &= Expect(resourceManager.DestroyMesh(mesh), "Destroying an existing mesh should succeed");
+        passed &= Expect(resourceManager.FindMesh(mesh) == nullptr, "Destroyed mesh should no longer be findable");
+        passed &= Expect(!resourceManager.DestroyMesh(mesh), "Destroying a missing mesh should fail");
+
+        passed &= Expect(resourceManager.DestroyMaterial(material), "Destroying an existing material should succeed");
+        passed &= Expect(resourceManager.FindMaterial(material) == nullptr,
+                         "Destroyed material should no longer be findable");
+        passed &= Expect(!resourceManager.DestroyMaterial(material), "Destroying a missing material should fail");
 
         return passed;
     }
@@ -414,8 +493,9 @@ int main()
     passed &= TestDestroyGameObjectTree();
     passed &= TestTransformHierarchyUpdatesWorldMatrices();
     passed &= TestSceneRenderSnapshotExtraction();
-    passed &= TestDiagonalSampleCameraSeesCube();
+    passed &= TestDiagonalSampleCameraProvidesGpuMvpInput();
     passed &= TestBuiltInCubeUsesFaceColors();
+    passed &= TestResourceManagerRenderResourceLifecycle();
     passed &= TestSceneSerializationRoundTrip();
 
     return passed ? 0 : 1;

@@ -58,6 +58,7 @@ namespace ve::rhi
     enum class RhiBufferUsage : uint32_t
     {
         Vertex = 1 << 0,
+        Uniform = 1 << 1,
     };
 
     /// Describes intended usage for a texture.
@@ -174,6 +175,13 @@ namespace ve::rhi
         uint32_t stride = 0;
     };
 
+    /// Describes a constant/uniform buffer binding expected by a graphics pipeline.
+    struct RhiUniformBufferBindingDesc
+    {
+        RhiShaderStage stage = RhiShaderStage::Vertex;
+        uint32_t slot = 0;
+    };
+
     class RhiShaderModule;
 
     /// Describes immutable graphics pipeline state.
@@ -182,6 +190,8 @@ namespace ve::rhi
         const RhiShaderModule* vertexShader = nullptr;
         const RhiShaderModule* fragmentShader = nullptr;
         RhiVertexLayoutDesc vertexLayout = {};
+        const RhiUniformBufferBindingDesc* uniformBufferBindings = nullptr;
+        uint32_t uniformBufferBindingCount = 0;
         RhiPrimitiveTopology topology = RhiPrimitiveTopology::TriangleList;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
         const char* debugName = nullptr;

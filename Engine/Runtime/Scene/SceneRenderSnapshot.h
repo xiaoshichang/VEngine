@@ -12,12 +12,6 @@
 
 namespace ve
 {
-    struct SceneRenderVertex
-    {
-        Vector3 position = Vector3::Zero();
-        Vector3 color = Vector3::One();
-    };
-
     struct SceneRenderCamera
     {
         SceneObjectId objectId = InvalidSceneObjectId;
@@ -43,7 +37,6 @@ namespace ve
         Matrix44 worldMatrix = Matrix44::Identity();
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3(0.5f, 0.5f, 0.5f);
-        std::vector<SceneRenderVertex> vertices;
     };
 
     struct SceneRenderSnapshot

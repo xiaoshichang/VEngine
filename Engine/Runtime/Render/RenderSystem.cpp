@@ -14,12 +14,16 @@
 #include "Engine/Runtime/Core/ScopeExit.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
+#include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 
+#include <array>
 #include <exception>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace ve
@@ -29,39 +33,169 @@ namespace ve
         struct TriangleVertex
         {
             Float32 position[3] = {};
+            Float32 normal[3] = {};
             Float32 color[3] = {};
         };
 
-        constexpr TriangleVertex TriangleVertices[] = {
-            TriangleVertex{{0.0f, 0.5f, 0.0f}, {0.5f, 1.0f, 1.0f}},
-            TriangleVertex{{0.5f, -0.5f, 0.0f}, {1.0f, 0.5f, 1.0f}},
-            TriangleVertex{{-0.5f, -0.5f, 0.0f}, {0.5f, 1.0f, 0.7f}},
+        struct DrawUniformData
+        {
+            Float32 modelViewProjection[16] = {};
+            Float32 worldMatrix[16] = {};
+            Float32 baseColor[4] = {};
+            Float32 lightDirectionIntensity[4] = {};
+            Float32 lightColorAmbient[4] = {};
+        };
+        static_assert((sizeof(DrawUniformData) % 16) == 0,
+                      "Draw uniform data must satisfy D3D constant buffer alignment.");
+
+        struct RenderSceneMeshResource
+        {
+            std::unique_ptr<rhi::RhiBuffer> vertexBuffer;
+            UInt32 vertexCount = 0;
+            ResourceRevision revision = 0;
         };
 
-        const char* TriangleShaderSource = R"(
+        struct RenderSceneMaterialResource
+        {
+            Vector3 baseColor = Vector3::One();
+            ResourceRevision revision = 0;
+        };
+
+        struct RenderMeshResourceUpdate
+        {
+            ResourceId resourceId = InvalidResourceId;
+            ResourceRevision revision = 0;
+            std::vector<TriangleVertex> vertices;
+        };
+
+        struct RenderMaterialResourceUpdate
+        {
+            ResourceId resourceId = InvalidResourceId;
+            ResourceRevision revision = 0;
+            Vector3 baseColor = Vector3::One();
+        };
+
+        struct RenderResourceRegistryUpdate
+        {
+            std::vector<RenderMeshResourceUpdate> meshUpdates;
+            std::vector<ResourceId> removedMeshes;
+            std::vector<RenderMaterialResourceUpdate> materialUpdates;
+            std::vector<ResourceId> removedMaterials;
+
+            [[nodiscard]] bool IsEmpty() const noexcept
+            {
+                return meshUpdates.empty() && removedMeshes.empty() && materialUpdates.empty() &&
+                       removedMaterials.empty();
+            }
+        };
+
+        struct SceneDrawCommand
+        {
+            const RenderSceneMeshResource* mesh = nullptr;
+            Matrix44 worldMatrix = Matrix44::Identity();
+            Matrix44 modelViewProjection = Matrix44::Identity();
+            Vector3 baseColor = Vector3::One();
+        };
+
+        constexpr TriangleVertex TriangleVertices[] = {
+            TriangleVertex{{0.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 1.0f, 1.0f}},
+            TriangleVertex{{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.5f, 1.0f}},
+            TriangleVertex{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 1.0f, 0.7f}},
+        };
+
+        const char* TriangleHlslShaderSource = R"(
+cbuffer DrawConstants : register(b0)
+{
+    row_major float4x4 modelViewProjection;
+    row_major float4x4 worldMatrix;
+    float4 baseColor;
+    float4 lightDirectionIntensity;
+    float4 lightColorAmbient;
+};
+
 struct VSInput
 {
     float3 position : POSITION;
-    float3 color : COLOR0;
+    float3 normal : NORMAL;
+    float3 color : COLOR;
 };
 
 struct VSOutput
 {
     float4 position : SV_POSITION;
-    float3 color : COLOR0;
+    float3 color : COLOR;
 };
 
 VSOutput VSMain(VSInput input)
 {
     VSOutput output;
-    output.position = float4(input.position, 1.0f);
-    output.color = input.color;
+    output.position = mul(modelViewProjection, float4(input.position, 1.0f));
+
+    float3 rawWorldNormal = mul(worldMatrix, float4(input.normal, 0.0f)).xyz;
+    float normalLength = length(rawWorldNormal);
+    float3 worldNormal = normalLength > 0.00001f ? rawWorldNormal / normalLength : float3(0.0f, 1.0f, 0.0f);
+    float3 lightDirection = normalize(lightDirectionIntensity.xyz);
+    float ndotl = max(0.0f, dot(worldNormal, -lightDirection));
+    float3 surfaceColor = input.color * baseColor.rgb;
+    output.color = saturate((surfaceColor * lightColorAmbient.a) +
+                            (surfaceColor * lightColorAmbient.rgb * ndotl * lightDirectionIntensity.a));
     return output;
 }
 
 float4 PSMain(VSOutput input) : SV_TARGET
 {
     return float4(input.color, 1.0f);
+}
+)";
+
+        const char* TriangleMetalShaderSource = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct DrawConstants
+{
+    float4x4 modelViewProjection;
+    float4x4 worldMatrix;
+    float4 baseColor;
+    float4 lightDirectionIntensity;
+    float4 lightColorAmbient;
+};
+
+struct VSInput
+{
+    float3 position [[attribute(0)]];
+    float3 normal [[attribute(1)]];
+    float3 color [[attribute(2)]];
+};
+
+struct VSOutput
+{
+    float4 position [[position]];
+    float3 color;
+};
+
+vertex VSOutput VSMain(VSInput input [[stage_in]], constant DrawConstants& constants [[buffer(16)]])
+{
+    VSOutput output;
+    output.position = constants.modelViewProjection * float4(input.position, 1.0);
+
+    float3 rawWorldNormal = (constants.worldMatrix * float4(input.normal, 0.0)).xyz;
+    float normalLength = length(rawWorldNormal);
+    float3 worldNormal = normalLength > 0.00001 ? rawWorldNormal / normalLength : float3(0.0, 1.0, 0.0);
+    float3 lightDirection = normalize(constants.lightDirectionIntensity.xyz);
+    float ndotl = max(0.0, dot(worldNormal, -lightDirection));
+    float3 surfaceColor = input.color * constants.baseColor.xyz;
+    output.color = clamp((surfaceColor * constants.lightColorAmbient.w) +
+                         (surfaceColor * constants.lightColorAmbient.xyz * ndotl *
+                          constants.lightDirectionIntensity.w),
+                         0.0,
+                         1.0);
+    return output;
+}
+
+fragment float4 PSMain(VSOutput input [[stage_in]])
+{
+    return float4(input.color, 1.0);
 }
 )";
 
@@ -121,6 +255,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             struct TriangleResources
             {
                 std::unique_ptr<rhi::RhiBuffer> vertexBuffer;
+                std::unique_ptr<rhi::RhiBuffer> uniformBuffer;
                 std::unique_ptr<rhi::RhiShaderModule> vertexShader;
                 std::unique_ptr<rhi::RhiShaderModule> fragmentShader;
                 std::unique_ptr<rhi::RhiPipelineState> pipelineState;
@@ -130,7 +265,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
             std::unique_ptr<rhi::RhiDevice> device;
             std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
             TriangleResources triangle;
-            std::unique_ptr<rhi::RhiBuffer> sceneVertexBuffer;
+            std::unordered_map<ResourceId, RenderSceneMeshResource> sceneMeshes;
+            std::unordered_map<ResourceId, RenderSceneMaterialResource> sceneMaterials;
+        };
+
+        struct ResourceSynchronizationState
+        {
+            UInt64 resourceChangeSerial = 0;
+            std::unordered_map<ResourceId, ResourceRevision> meshRevisions;
+            std::unordered_map<ResourceId, ResourceRevision> materialRevisions;
         };
 
         ThreadState thread;
@@ -138,6 +281,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         GameThreadBindingState gameThreadBinding;
         FrameRingState frameRing;
         RhiState rhi;
+        ResourceSynchronizationState resourceSynchronization;
     };
 
     namespace
@@ -241,6 +385,128 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return nullptr;
         }
 
+        [[nodiscard]] const char* GetTriangleShaderSource(rhi::RhiBackend backend) noexcept
+        {
+            switch (backend)
+            {
+            case rhi::RhiBackend::Metal:
+                return TriangleMetalShaderSource;
+            case rhi::RhiBackend::D3D11:
+            case rhi::RhiBackend::D3D12:
+                return TriangleHlslShaderSource;
+            }
+
+            return TriangleHlslShaderSource;
+        }
+
+        [[nodiscard]] Matrix44 ToShaderMatrix(const RenderSystemImpl& impl, const Matrix44& matrix) noexcept
+        {
+            if (impl.rhi.device != nullptr && impl.rhi.device->GetBackend() == rhi::RhiBackend::Metal)
+            {
+                return matrix.Transposed();
+            }
+
+            return matrix;
+        }
+
+        void StoreMatrix(Float32* destination, const Matrix44& matrix) noexcept
+        {
+            const std::array<Float32, 16>& values = matrix.GetValues();
+            for (SizeT index = 0; index < values.size(); ++index)
+            {
+                destination[index] = values[index];
+            }
+        }
+
+        [[nodiscard]] Vector3 NormalizeOrFallback(const Vector3& value, const Vector3& fallback) noexcept
+        {
+            const Vector3 normalized = value.Normalized();
+            return normalized == Vector3::Zero() ? fallback : normalized;
+        }
+
+        [[nodiscard]] DrawUniformData BuildDrawUniformData(const RenderSystemImpl& impl,
+                                                           const Matrix44& modelViewProjection,
+                                                           const Matrix44& worldMatrix,
+                                                           const Vector3& baseColor,
+                                                           const Vector3& lightDirection,
+                                                           const Vector3& lightColor,
+                                                           Float32 lightIntensity,
+                                                           Float32 ambientIntensity) noexcept
+        {
+            DrawUniformData uniforms = {};
+            StoreMatrix(uniforms.modelViewProjection, ToShaderMatrix(impl, modelViewProjection));
+            StoreMatrix(uniforms.worldMatrix, ToShaderMatrix(impl, worldMatrix));
+
+            uniforms.baseColor[0] = baseColor.GetX();
+            uniforms.baseColor[1] = baseColor.GetY();
+            uniforms.baseColor[2] = baseColor.GetZ();
+            uniforms.baseColor[3] = 1.0f;
+
+            const Vector3 normalizedLightDirection = NormalizeOrFallback(lightDirection, Vector3(0.0f, -1.0f, 0.0f));
+            uniforms.lightDirectionIntensity[0] = normalizedLightDirection.GetX();
+            uniforms.lightDirectionIntensity[1] = normalizedLightDirection.GetY();
+            uniforms.lightDirectionIntensity[2] = normalizedLightDirection.GetZ();
+            uniforms.lightDirectionIntensity[3] = lightIntensity;
+
+            uniforms.lightColorAmbient[0] = lightColor.GetX();
+            uniforms.lightColorAmbient[1] = lightColor.GetY();
+            uniforms.lightColorAmbient[2] = lightColor.GetZ();
+            uniforms.lightColorAmbient[3] = ambientIntensity;
+
+            return uniforms;
+        }
+
+        [[nodiscard]] DrawUniformData BuildTriangleUniformData(const RenderSystemImpl& impl) noexcept
+        {
+            return BuildDrawUniformData(impl,
+                                        Matrix44::Identity(),
+                                        Matrix44::Identity(),
+                                        Vector3::One(),
+                                        Vector3(0.0f, -1.0f, 0.0f),
+                                        Vector3::One(),
+                                        0.0f,
+                                        1.0f);
+        }
+
+        [[nodiscard]] DrawUniformData BuildSceneDrawUniformData(const RenderSystemImpl& impl,
+                                                                const SceneRenderSnapshot& snapshot,
+                                                                const SceneDrawCommand& drawCommand) noexcept
+        {
+            Vector3 lightDirection(0.0f, -1.0f, 0.0f);
+            Vector3 lightColor = Vector3::One();
+            Float32 lightIntensity = 0.0f;
+            Float32 ambientIntensity = 1.0f;
+
+            if (!snapshot.directionalLights.empty())
+            {
+                const SceneRenderDirectionalLight& light = snapshot.directionalLights.front();
+                lightDirection = light.direction;
+                lightColor = light.color;
+                lightIntensity = light.intensity;
+                ambientIntensity = 0.2f;
+            }
+
+            return BuildDrawUniformData(impl,
+                                        drawCommand.modelViewProjection,
+                                        drawCommand.worldMatrix,
+                                        drawCommand.baseColor,
+                                        lightDirection,
+                                        lightColor,
+                                        lightIntensity,
+                                        ambientIntensity);
+        }
+
+        [[nodiscard]] std::unique_ptr<rhi::RhiBuffer>
+        CreateDrawUniformBuffer(RenderSystemImpl& impl, const DrawUniformData& uniforms, const char* debugName)
+        {
+            rhi::RhiBufferDesc uniformBufferDesc = {};
+            uniformBufferDesc.size = sizeof(DrawUniformData);
+            uniformBufferDesc.usage = rhi::RhiBufferUsage::Uniform;
+            uniformBufferDesc.initialData = &uniforms;
+            uniformBufferDesc.debugName = debugName;
+            return impl.rhi.device->CreateBuffer(uniformBufferDesc);
+        }
+
         void DestroyTriangleResources(RenderSystemImpl& impl)
         {
             for (RenderFrameContext& frameContext : impl.frameRing.contexts)
@@ -252,8 +518,17 @@ float4 PSMain(VSOutput input) : SV_TARGET
             impl.rhi.triangle.pipelineState.reset();
             impl.rhi.triangle.fragmentShader.reset();
             impl.rhi.triangle.vertexShader.reset();
+            impl.rhi.triangle.uniformBuffer.reset();
             impl.rhi.triangle.vertexBuffer.reset();
-            impl.rhi.sceneVertexBuffer.reset();
+            impl.rhi.sceneMaterials.clear();
+            impl.rhi.sceneMeshes.clear();
+        }
+
+        void ClearResourceSynchronizationState(RenderSystemImpl& impl)
+        {
+            impl.resourceSynchronization.resourceChangeSerial = 0;
+            impl.resourceSynchronization.materialRevisions.clear();
+            impl.resourceSynchronization.meshRevisions.clear();
         }
 
         [[nodiscard]] ErrorCode CreateTriangleResources(RenderSystemImpl& impl)
@@ -275,9 +550,20 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 return ErrorCode::PlatformError;
             }
 
+            const DrawUniformData triangleUniformData = BuildTriangleUniformData(impl);
+            impl.rhi.triangle.uniformBuffer =
+                CreateDrawUniformBuffer(impl, triangleUniformData, "RenderSystemTriangleUniformBuffer");
+            if (impl.rhi.triangle.uniformBuffer == nullptr)
+            {
+                DestroyTriangleResources(impl);
+                return ErrorCode::PlatformError;
+            }
+
+            const char* shaderSource = GetTriangleShaderSource(impl.rhi.device->GetBackend());
+
             rhi::RhiShaderModuleDesc vertexShaderDesc = {};
             vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-            vertexShaderDesc.source = TriangleShaderSource;
+            vertexShaderDesc.source = shaderSource;
             vertexShaderDesc.entryPoint = "VSMain";
             vertexShaderDesc.debugName = "RenderSystemTriangleVertexShader";
 
@@ -290,7 +576,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
             rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
             fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-            fragmentShaderDesc.source = TriangleShaderSource;
+            fragmentShaderDesc.source = shaderSource;
             fragmentShaderDesc.entryPoint = "PSMain";
             fragmentShaderDesc.debugName = "RenderSystemTriangleFragmentShader";
 
@@ -301,22 +587,32 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 return ErrorCode::PlatformError;
             }
 
-            rhi::RhiVertexAttributeDesc attributes[2] = {};
+            rhi::RhiVertexAttributeDesc attributes[3] = {};
             attributes[0].semanticName = "POSITION";
             attributes[0].semanticIndex = 0;
             attributes[0].format = rhi::RhiFormat::Rgb32Float;
             attributes[0].offset = 0;
-            attributes[1].semanticName = "COLOR";
+            attributes[1].semanticName = "NORMAL";
             attributes[1].semanticIndex = 0;
             attributes[1].format = rhi::RhiFormat::Rgb32Float;
             attributes[1].offset = sizeof(Float32) * 3;
+            attributes[2].semanticName = "COLOR";
+            attributes[2].semanticIndex = 0;
+            attributes[2].format = rhi::RhiFormat::Rgb32Float;
+            attributes[2].offset = sizeof(Float32) * 6;
+
+            rhi::RhiUniformBufferBindingDesc uniformBindings[1] = {};
+            uniformBindings[0].stage = rhi::RhiShaderStage::Vertex;
+            uniformBindings[0].slot = 0;
 
             rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
             pipelineDesc.vertexShader = impl.rhi.triangle.vertexShader.get();
             pipelineDesc.fragmentShader = impl.rhi.triangle.fragmentShader.get();
             pipelineDesc.vertexLayout.attributes = attributes;
-            pipelineDesc.vertexLayout.attributeCount = 2;
+            pipelineDesc.vertexLayout.attributeCount = 3;
             pipelineDesc.vertexLayout.stride = sizeof(TriangleVertex);
+            pipelineDesc.uniformBufferBindings = uniformBindings;
+            pipelineDesc.uniformBufferBindingCount = 1;
             pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
             pipelineDesc.colorFormat = impl.rhi.mainSwapchain->GetColorFormat();
             pipelineDesc.debugName = "RenderSystemTrianglePipeline";
@@ -341,22 +637,210 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return ErrorCode::None;
         }
 
-        [[nodiscard]] std::vector<TriangleVertex> BuildSceneVertices(const SceneRenderSnapshot& snapshot)
+        [[nodiscard]] TriangleVertex ToTriangleVertex(const MeshVertex& vertex) noexcept
         {
-            std::vector<TriangleVertex> vertices;
-            for (const SceneRenderDrawItem& drawItem : snapshot.drawItems)
+            const Vector3 position = vertex.position;
+            const Vector3 normal = vertex.normal;
+            const Vector3 color = vertex.color;
+            return TriangleVertex{{position.GetX(), position.GetY(), position.GetZ()},
+                                  {normal.GetX(), normal.GetY(), normal.GetZ()},
+                                  {color.GetX(), color.GetY(), color.GetZ()}};
+        }
+
+        [[nodiscard]] RenderMeshResourceUpdate BuildRenderMeshResourceUpdate(const MeshResource& mesh)
+        {
+            RenderMeshResourceUpdate update;
+            update.resourceId = mesh.id;
+            update.revision = mesh.revision;
+            update.vertices.reserve(mesh.vertices.size());
+
+            for (const MeshVertex& vertex : mesh.vertices)
             {
-                vertices.reserve(vertices.size() + drawItem.vertices.size());
-                for (const SceneRenderVertex& vertex : drawItem.vertices)
+                update.vertices.push_back(ToTriangleVertex(vertex));
+            }
+
+            return update;
+        }
+
+        [[nodiscard]] RenderMaterialResourceUpdate BuildRenderMaterialResourceUpdate(const MaterialResource& material)
+        {
+            return RenderMaterialResourceUpdate{material.id, material.revision, material.baseColor};
+        }
+
+        [[nodiscard]] RenderResourceRegistryUpdate
+        BuildRenderResourceRegistryUpdate(RenderSystemImpl& impl, const ResourceManager& resourceManager)
+        {
+            RenderResourceRegistryUpdate update;
+            RenderSystemImpl::ResourceSynchronizationState& synchronization = impl.resourceSynchronization;
+            const UInt64 resourceChangeSerial = resourceManager.GetChangeSerial();
+
+            if (synchronization.resourceChangeSerial == resourceChangeSerial)
+            {
+                return update;
+            }
+
+            std::unordered_set<ResourceId> liveMeshIds;
+            resourceManager.ForEachMesh(
+                [&update, &liveMeshIds, &synchronization](const MeshResource& mesh)
                 {
-                    const Vector3 position = vertex.position;
-                    const Vector3 color = vertex.color;
-                    vertices.push_back(TriangleVertex{{position.GetX(), position.GetY(), position.GetZ()},
-                                                      {color.GetX(), color.GetY(), color.GetZ()}});
+                    if (mesh.id == InvalidResourceId)
+                    {
+                        return;
+                    }
+
+                    liveMeshIds.insert(mesh.id);
+                    const auto submittedRevision = synchronization.meshRevisions.find(mesh.id);
+                    if (submittedRevision == synchronization.meshRevisions.end() ||
+                        submittedRevision->second != mesh.revision)
+                    {
+                        update.meshUpdates.push_back(BuildRenderMeshResourceUpdate(mesh));
+                        synchronization.meshRevisions[mesh.id] = mesh.revision;
+                    }
+                });
+
+            for (auto iter = synchronization.meshRevisions.begin(); iter != synchronization.meshRevisions.end();)
+            {
+                if (liveMeshIds.find(iter->first) == liveMeshIds.end())
+                {
+                    update.removedMeshes.push_back(iter->first);
+                    iter = synchronization.meshRevisions.erase(iter);
+                }
+                else
+                {
+                    ++iter;
                 }
             }
 
-            return vertices;
+            std::unordered_set<ResourceId> liveMaterialIds;
+            resourceManager.ForEachMaterial(
+                [&update, &liveMaterialIds, &synchronization](const MaterialResource& material)
+                {
+                    if (material.id == InvalidResourceId)
+                    {
+                        return;
+                    }
+
+                    liveMaterialIds.insert(material.id);
+                    const auto submittedRevision = synchronization.materialRevisions.find(material.id);
+                    if (submittedRevision == synchronization.materialRevisions.end() ||
+                        submittedRevision->second != material.revision)
+                    {
+                        update.materialUpdates.push_back(BuildRenderMaterialResourceUpdate(material));
+                        synchronization.materialRevisions[material.id] = material.revision;
+                    }
+                });
+
+            for (auto iter = synchronization.materialRevisions.begin();
+                 iter != synchronization.materialRevisions.end();)
+            {
+                if (liveMaterialIds.find(iter->first) == liveMaterialIds.end())
+                {
+                    update.removedMaterials.push_back(iter->first);
+                    iter = synchronization.materialRevisions.erase(iter);
+                }
+                else
+                {
+                    ++iter;
+                }
+            }
+
+            synchronization.resourceChangeSerial = resourceChangeSerial;
+            return update;
+        }
+
+        void ApplyRenderResourceRegistryUpdate(RenderSystemImpl& impl, const RenderResourceRegistryUpdate& update)
+        {
+            if (impl.rhi.device == nullptr)
+            {
+                TerminateRenderSystem("render-resource registry update failed", ErrorCode::InvalidState);
+            }
+
+            for (ResourceId resourceId : update.removedMeshes)
+            {
+                impl.rhi.sceneMeshes.erase(resourceId);
+            }
+
+            for (ResourceId resourceId : update.removedMaterials)
+            {
+                impl.rhi.sceneMaterials.erase(resourceId);
+            }
+
+            for (const RenderMeshResourceUpdate& mesh : update.meshUpdates)
+            {
+                if (mesh.resourceId == InvalidResourceId || mesh.vertices.empty())
+                {
+                    impl.rhi.sceneMeshes.erase(mesh.resourceId);
+                    continue;
+                }
+
+                const auto existingMesh = impl.rhi.sceneMeshes.find(mesh.resourceId);
+                if (existingMesh != impl.rhi.sceneMeshes.end() && existingMesh->second.revision == mesh.revision)
+                {
+                    continue;
+                }
+
+                rhi::RhiBufferDesc vertexBufferDesc = {};
+                vertexBufferDesc.size = sizeof(TriangleVertex) * mesh.vertices.size();
+                vertexBufferDesc.usage = rhi::RhiBufferUsage::Vertex;
+                vertexBufferDesc.initialData = mesh.vertices.data();
+                vertexBufferDesc.debugName = "RenderSystemSceneMeshVertexBuffer";
+
+                RenderSceneMeshResource renderMesh;
+                renderMesh.vertexCount = static_cast<UInt32>(mesh.vertices.size());
+                renderMesh.revision = mesh.revision;
+                renderMesh.vertexBuffer = impl.rhi.device->CreateBuffer(vertexBufferDesc);
+                if (renderMesh.vertexBuffer == nullptr)
+                {
+                    TerminateRenderSystem("render-resource registry mesh update failed", ErrorCode::PlatformError);
+                }
+
+                impl.rhi.sceneMeshes[mesh.resourceId] = std::move(renderMesh);
+            }
+
+            for (const RenderMaterialResourceUpdate& material : update.materialUpdates)
+            {
+                if (material.resourceId == InvalidResourceId)
+                {
+                    impl.rhi.sceneMaterials.erase(material.resourceId);
+                    continue;
+                }
+
+                impl.rhi.sceneMaterials[material.resourceId] =
+                    RenderSceneMaterialResource{material.baseColor, material.revision};
+            }
+        }
+
+        [[nodiscard]] std::vector<SceneDrawCommand> BuildSceneDrawCommands(RenderSystemImpl& impl,
+                                                                           const SceneRenderSnapshot& snapshot)
+        {
+            std::vector<SceneDrawCommand> drawCommands;
+            drawCommands.reserve(snapshot.drawItems.size());
+
+            const Matrix44 viewProjection = snapshot.hasMainCamera ? snapshot.mainCamera.projectionMatrix *
+                                                                         snapshot.mainCamera.viewMatrix
+                                                                   : Matrix44::Identity();
+
+            for (const SceneRenderDrawItem& drawItem : snapshot.drawItems)
+            {
+                const auto meshIter = impl.rhi.sceneMeshes.find(drawItem.mesh.GetId());
+                if (meshIter == impl.rhi.sceneMeshes.end() || meshIter->second.vertexBuffer == nullptr ||
+                    meshIter->second.vertexCount == 0)
+                {
+                    continue;
+                }
+
+                Vector3 baseColor = Vector3::One();
+                const auto materialIter = impl.rhi.sceneMaterials.find(drawItem.material.GetId());
+                if (materialIter != impl.rhi.sceneMaterials.end())
+                {
+                    baseColor = materialIter->second.baseColor;
+                }
+
+                drawCommands.push_back(SceneDrawCommand{
+                    &meshIter->second, drawItem.worldMatrix, viewProjection * drawItem.worldMatrix, baseColor});
+            }
+
+            return drawCommands;
         }
 
         void RenderTriangleFrame(RenderSystemImpl& impl, RenderFrameContext& frameContext)
@@ -366,8 +850,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 TerminateRenderSystem("frame execution failed in RenderTriangleFrame", ErrorCode::InvalidState);
             }
 
-            if (impl.rhi.triangle.vertexBuffer == nullptr || impl.rhi.triangle.pipelineState == nullptr ||
-                frameContext.commandList == nullptr)
+            if (impl.rhi.triangle.vertexBuffer == nullptr || impl.rhi.triangle.uniformBuffer == nullptr ||
+                impl.rhi.triangle.pipelineState == nullptr || frameContext.commandList == nullptr)
             {
                 TerminateRenderSystem("frame execution failed in RenderTriangleFrame", ErrorCode::InvalidState);
             }
@@ -391,6 +875,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             commandList.SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
             commandList.SetPipeline(*impl.rhi.triangle.pipelineState);
             commandList.SetVertexBuffer(0, *impl.rhi.triangle.vertexBuffer, sizeof(TriangleVertex), 0);
+            commandList.SetUniformBuffer(
+                rhi::RhiShaderStage::Vertex, 0, *impl.rhi.triangle.uniformBuffer, 0, sizeof(DrawUniformData));
             commandList.Draw(3, 0);
             commandList.EndRenderPass();
 
@@ -413,21 +899,22 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 TerminateRenderSystem("frame execution failed in RenderSceneFrame", ErrorCode::InvalidState);
             }
 
-            std::vector<TriangleVertex> vertices = BuildSceneVertices(snapshot);
-            if (!vertices.empty())
-            {
-                rhi::RhiBufferDesc vertexBufferDesc = {};
-                vertexBufferDesc.size = sizeof(TriangleVertex) * vertices.size();
-                vertexBufferDesc.usage = rhi::RhiBufferUsage::Vertex;
-                vertexBufferDesc.initialData = vertices.data();
-                vertexBufferDesc.debugName = "RenderSystemSceneVertexBuffer";
+            std::vector<SceneDrawCommand> drawCommands = BuildSceneDrawCommands(impl, snapshot);
 
-                impl.rhi.sceneVertexBuffer = impl.rhi.device->CreateBuffer(vertexBufferDesc);
-                if (impl.rhi.sceneVertexBuffer == nullptr)
+            std::vector<std::unique_ptr<rhi::RhiBuffer>> drawUniformBuffers;
+            drawUniformBuffers.reserve(drawCommands.size());
+            for (const SceneDrawCommand& drawCommand : drawCommands)
+            {
+                const DrawUniformData uniforms = BuildSceneDrawUniformData(impl, snapshot, drawCommand);
+                std::unique_ptr<rhi::RhiBuffer> uniformBuffer =
+                    CreateDrawUniformBuffer(impl, uniforms, "RenderSystemSceneDrawUniformBuffer");
+                if (uniformBuffer == nullptr)
                 {
-                    TerminateRenderSystem("frame execution failed in RenderSceneFrame vertex buffer",
+                    TerminateRenderSystem("frame execution failed in RenderSceneFrame uniform buffer",
                                           ErrorCode::PlatformError);
                 }
+
+                drawUniformBuffers.push_back(std::move(uniformBuffer));
             }
 
             rhi::RhiRenderPassDesc renderPassDesc = {};
@@ -457,10 +944,13 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
             commandList.SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
             commandList.SetPipeline(*impl.rhi.triangle.pipelineState);
-            if (impl.rhi.sceneVertexBuffer != nullptr && !vertices.empty())
+            for (SizeT index = 0; index < drawCommands.size(); ++index)
             {
-                commandList.SetVertexBuffer(0, *impl.rhi.sceneVertexBuffer, sizeof(TriangleVertex), 0);
-                commandList.Draw(static_cast<UInt32>(vertices.size()), 0);
+                const SceneDrawCommand& drawCommand = drawCommands[index];
+                commandList.SetVertexBuffer(0, *drawCommand.mesh->vertexBuffer, sizeof(TriangleVertex), 0);
+                commandList.SetUniformBuffer(
+                    rhi::RhiShaderStage::Vertex, 0, *drawUniformBuffers[index], 0, sizeof(DrawUniformData));
+                commandList.Draw(drawCommand.mesh->vertexCount, 0);
             }
             commandList.EndRenderPass();
 
@@ -738,6 +1228,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         impl_->thread.renderThreadIdValue.store(0, std::memory_order_release);
         impl_->gameThreadBinding.gameThreadIdValue.store(0, std::memory_order_release);
         impl_->rhi.backendValue.store(-1, std::memory_order_release);
+        ClearResourceSynchronizationState(*impl_);
         impl_->frameRing.maxFramesInFlight = desc.maxFramesInFlight;
 
         impl_->frameRing.nextRenderFrameId = 0;
@@ -778,6 +1269,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         }
 
         StopAndJoinRenderThread(*impl_);
+        ClearResourceSynchronizationState(*impl_);
     }
 
     void RenderSystem::BindGameThread(ThreadId gameThreadId) noexcept
@@ -849,6 +1341,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                               });
 
         VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to shut down its RHI device.");
+        ClearResourceSynchronizationState(*impl_);
     }
 
     bool RenderSystem::HasDevice() const noexcept
@@ -924,6 +1417,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                               });
 
         VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to destroy its main swapchain.");
+        ClearResourceSynchronizationState(*impl_);
     }
 
     void RenderSystem::RenderFrame()
@@ -954,6 +1448,22 @@ float4 PSMain(VSOutput input) : SV_TARGET
                            ExecuteSceneRenderFrame(*impl_, token, snapshot);
                            ReleaseRenderFrameSlot(*impl_, token, ErrorCode::None);
                        });
+    }
+
+    void RenderSystem::SynchronizeRenderResources(const ResourceManager& resourceManager)
+    {
+        ValidateGameThreadAccess(*impl_,
+                                 "RenderSystem::SynchronizeRenderResources must be called on the Game Thread.");
+
+        RenderResourceRegistryUpdate update = BuildRenderResourceRegistryUpdate(*impl_, resourceManager);
+        if (update.IsEmpty())
+        {
+            return;
+        }
+
+        SubmitFunction("RenderSystemSynchronizeRenderResources",
+                       [this, update = std::move(update)](RenderThreadContext&)
+                       { ApplyRenderResourceRegistryUpdate(*impl_, update); });
     }
 
     UInt32 RenderSystem::GetMaxRenderFramesInFlight() const noexcept

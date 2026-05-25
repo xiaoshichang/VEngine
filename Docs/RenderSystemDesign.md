@@ -330,6 +330,7 @@ Milestone 5 adds a higher-level submission boundary for scene rendering:
 
 ```text
 RenderSystem::SubmitFrame(SceneRenderSnapshot snapshot)
+RenderSystem::SynchronizeRenderResources(const ResourceManager& resourceManager)
 ```
 
 The first C++ API follows the current fatal-error RenderSystem style and returns `void`. Submission failure, invalid
@@ -338,11 +339,14 @@ boundary preserves these rules:
 
 - Game Thread submits immutable render-safe frame packets.
 - Frame packets do not contain live `Scene`, `GameObject`, or `Component` pointers.
+- Resource create/update/remove state is synchronized separately through render-resource registry commands; resource
+  payloads are not embedded in the frame packet itself.
 - Render Thread owns conversion from submitted frame packets into render-side state and RHI commands.
 - Game Thread lead is controlled by the existing frame-end `RenderCommandFence`, not by calling `Flush()` every frame.
 
-Ordinary `Submit(RenderCommand)` remains useful for Game Thread initiated uploads and special render work. Scene
-rendering should prefer the frame-level API so the engine can reason about queued frames and backpressure.
+Ordinary `Submit(RenderCommand)` remains useful for special render work. Resource lifecycle updates should flow through
+`SynchronizeRenderResources()`, while scene rendering should prefer the frame-level API so the engine can reason about
+queued frames and backpressure.
 
 ## 11. Frames In Flight And Backpressure
 
@@ -412,21 +416,22 @@ Milestone 5 renders scene-driven mesh data through `SceneRenderSnapshot`. The cu
 minimum render-safe vertical slice:
 
 - Game Thread extracts camera, directional light, mesh renderer, material, transform, and stable object ids.
-- Extracted draw items contain transformed clip-space positions and CPU-lit vertex colors.
-- Render Thread creates a transient scene vertex buffer from the submitted snapshot and draws it through the existing
-  simple forward color pipeline.
+- Extracted draw items contain render mesh/material handles and world transforms. Mesh vertex data remains owned by
+  `ResourceManager`; resource revisions and resource set changes drive explicit add/update/remove commands for the
+  Render Thread registry.
+- Render Thread owns a small persistent render-resource registry, binds persistent scene mesh vertex buffers and per-draw
+  uniform buffers, then lets the vertex shader apply the normal `projection * view * world` MVP transform.
 - The submitted packet contains no live Scene, GameObject, or Component pointers.
 
-This intentionally avoids expanding the RHI shape in the same step. GPU constant buffers, indexed mesh buffers, depth
-attachments, full material binding, shader reflection-driven constants, and persistent render-resource registries remain
-future render work.
+This intentionally keeps the first render-resource registry narrow. Indexed mesh buffers, depth attachments, full
+material binding, shader reflection-driven constants, and GPU-safe deferred release remain future render work.
 
 ## 14. Future Render Work
 
-After RHI device and main swapchain lifecycle are connected, later RenderSystem work should add render-resource
-registries, upload scheduling, frame begin/end commands, viewport registration, and RenderWorld/RenderScene ownership.
-Those features should build on the explicit lifecycle APIs above instead of bypassing them with ad hoc public render
-commands.
+After RHI device and main swapchain lifecycle are connected, later RenderSystem work should expand render-resource
+lifetime with deferred release, upload scheduling, frame begin/end commands, viewport registration, and
+RenderWorld/RenderScene ownership. Those features should build on the explicit lifecycle APIs above instead of bypassing
+them with ad hoc public render commands.
 
 ## 14. Testing Plan
 

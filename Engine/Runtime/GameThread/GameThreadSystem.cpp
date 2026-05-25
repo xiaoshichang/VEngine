@@ -220,6 +220,7 @@ namespace ve
                 if (hasScene)
                 {
                     SceneRenderSnapshot snapshot = ExtractSceneRenderSnapshot(*scene, *resourceManager, frameId);
+                    renderSystem->SynchronizeRenderResources(*resourceManager);
                     renderSystem->SubmitFrame(std::move(snapshot));
                 }
                 else
