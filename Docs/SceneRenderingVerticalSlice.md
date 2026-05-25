@@ -98,9 +98,10 @@ Application startup
   -> Main loop
 ```
 
-`GameThreadSystem` should start ticking only after `ResourceManager` and `RenderSystem` are available. The active scene
-may be loaded by `GameThreadSystem` or assigned to it by a higher-level runtime API, but scene activation must happen
-before the first gameplay tick.
+`GameThreadSystem` should start ticking only after `ResourceManager` and `RenderSystem` are available. The current
+Player path creates the RHI device and main swapchain, connects `GameThreadSystem` to `RenderSystem`, constructs the
+sample scene in code, and then assigns it as the active scene. Until an active scene is bound, the Game Thread can run
+empty frames or the existing clear/triangle smoke path.
 
 Recommended shutdown order:
 
@@ -167,8 +168,9 @@ GameThreadSystem::RunLoop()
 
     RenderExtraction
       Build SceneRenderSnapshot
-      Current smoke path: drive RenderSystem::RenderFrame()
-      Target scene path: submit snapshot to RenderSystem
+      Synchronize ResourceManager changes into RenderSystem
+      Submit snapshot to RenderSystem
+      If no active scene exists, drive RenderSystem::RenderFrame()
 
     EndFrame
       Retire released transient game-frame data
@@ -178,14 +180,17 @@ The exact function names may change during implementation, but the phase order s
 tests where practical.
 
 The current vertical-slice bridge connects `GameThreadSystem` to `RenderSystem` after the main swapchain is created.
-During `RenderExtraction`, the Game Thread calls `RenderSystem::RenderFrame()`. `RenderSystem` owns
-`MaxRenderFramesInFlight` render frame contexts; `RenderFrame()` advances the frame id, submits one frame command with a
-`RenderFrameToken` to the Render Thread, and returns once that command is accepted. The Render Thread uses the token to
-resolve the matching `RenderFrameContext`. `GameThreadSystem` frame-end sync controls how far the Game Thread may run
-ahead of the Render Thread. `RenderSystem` records the bound Game Thread id when `GameThreadSystem` connects it, and
-`RenderFrame()`/ordinary `Submit(RenderCommand)` validate that caller before accepting Game Thread initiated work.
-Submission or frame execution failures are fatal errors. When the scene snapshot path lands, this narrow boundary should
-become `RenderSystem::SubmitFrame()` with the same frame-end sync policy.
+During `RenderExtraction`, the Game Thread extracts a `SceneRenderSnapshot`, calls
+`RenderSystem::SynchronizeRenderResources()` to enqueue mesh/material registry changes when resource revisions changed,
+then calls `RenderSystem::SubmitFrame()` for the immutable frame packet. If there is no active scene, the fallback path
+still calls `RenderSystem::RenderFrame()` to keep the swapchain smoke path alive. `RenderSystem` owns
+`MaxRenderFramesInFlight` render frame contexts; `RenderFrame()` and `SubmitFrame()` advance the frame id, submit one
+frame command with a `RenderFrameToken` to the Render Thread, and return once that command is accepted. The Render
+Thread uses the token to resolve the matching `RenderFrameContext`. `GameThreadSystem` frame-end sync controls how far
+the Game Thread may run ahead of the Render Thread. `RenderSystem` records the bound Game Thread id when
+`GameThreadSystem` connects it, and `RenderFrame()`, `SubmitFrame()`,
+`SynchronizeRenderResources()`, and ordinary `Submit(RenderCommand)` validate that caller before accepting Game Thread
+initiated work. Submission or frame execution failures are fatal errors.
 
 ### 5.3 Main Thread Relationship
 
@@ -317,7 +322,7 @@ Registration can be explicit in this milestone. Code generation is not part of t
 
 ## 9. Scene Serialization Work
 
-Define the first `.vescene` structure around:
+Define the first JSON scene serialization shape around:
 
 - Scene metadata.
 - GameObjects.
@@ -333,7 +338,8 @@ Serialize component properties through reflection rather than component-specific
 Missing or unknown component types should produce a logged warning and be skipped gracefully so scenes remain
 diagnosable while the engine is evolving.
 
-Add a small sample scene under sample assets once the format is stable enough for tests.
+The asset-level `.vescene` file contract and sample scene assets remain Milestone 6 work. Milestone 5 tests exercise
+the JSON serialization shape in memory.
 
 ## 10. Resource Work
 
@@ -352,20 +358,18 @@ Add a first `ResourceManager` responsible for:
 - Fallback resource creation.
 - Lifetime tracking.
 - Missing-resource behavior.
-- Mesh, material, texture, and shader resources needed by the demo scene.
+- Mesh and material resources needed by the demo scene.
 
-Full source asset import remains Milestone 6 work. Milestone 5 may use simple engine-native sample files or generated
-built-in resources.
+Full source asset import remains Milestone 6 work. Milestone 5 uses generated built-in resources rather than file-backed
+resource loading.
 
 Required fallback resources:
 
-- Cube or triangle mesh.
+- Cube mesh.
 - Default material.
-- Default shader references.
-- Placeholder texture if texture binding is already required by the RHI path.
 
-Resource loading should route through FileSystem and IOSystem boundaries where practical. Synchronous loading is allowed
-for the first vertical slice if the async path would expand the milestone too far.
+Texture and shader resource management remain placeholders for the asset/material expansion. The current shader path is
+owned by the RenderSystem/RHI vertical slice, not by `ResourceManager`.
 
 ## 11. Scene-To-Render Synchronization
 
@@ -385,16 +389,17 @@ Each draw item should contain render-safe data:
 
 ```text
 DrawItem
+  object id
   worldTransform
-  mesh handle or render mesh handle
-  material handle or render material handle
+  mesh handle
+  material handle
   bounds placeholder
-  visibility flags
 ```
 
-Resource upload data is not embedded in the snapshot. `RenderSystem` builds a separate render-command payload from
-`ResourceManager` when it needs to populate or refresh render-side resources, and draw items reference those resources
-by handle rather than embedding duplicate vertex or material data.
+Resource upload data is not embedded in the snapshot. `RenderSystem::SynchronizeRenderResources()` compares
+`ResourceManager` revisions against the Game Thread's submitted mirror, builds add/update/remove render-resource
+registry commands only when resource state changes, and draw items reference those persistent render resources by handle
+rather than embedding duplicate vertex or material data.
 
 The snapshot must not contain live `GameObject`, `Component`, or mutable `Scene` pointers. It may contain stable
 resource handles if `RenderSystem` and `ResourceManager` agree on their lifetime rules.
@@ -475,10 +480,10 @@ RenderFrameContext[MaxRenderFramesInFlight]
   slot derived from (frameId - 1) % MaxRenderFramesInFlight
   slot state: Free / Submitted / Rendering
   command list or backend command allocator equivalent
-  transient constant/upload allocation state
-  transient descriptor/bind-group allocation state
-  deferred render-resource releases
 ```
+
+The current vertical slice owns command lists and frame slot state. Transient constant/upload allocators,
+descriptor/bind-group allocation state, and deferred render-resource release queues are future extensions.
 
 Render Thread in-flight frames and Game Thread queued snapshots are related but not the same thing:
 
@@ -487,19 +492,23 @@ Render Thread in-flight frames and Game Thread queued snapshots are related but 
 
 ## 13. Render Integration Work
 
-Add a first render-scene or render-world representation owned by the render side of the engine.
+Add a first render-side representation owned by the Render Thread. The current vertical slice uses a narrow persistent
+mesh/material resource registry; a fuller RenderScene or RenderWorld can grow from this once more draw state and
+viewports exist.
 
-Required work:
+Required first render work:
 
 - Convert `SceneRenderSnapshot` into render-side camera, light, draw, material, and transform state.
-- Create render resources for static mesh vertex and index buffers.
+- Create render resources for static mesh vertex buffers.
 - Create basic material state.
-- Create shader pipeline objects from Milestone 4 shader outputs.
-- Add a depth buffer.
+- Create shader pipeline objects for the first forward color pipeline.
 - Render one active camera.
 - Render one directional light.
 - Render one or more static mesh draw calls.
 - Present through the main swapchain.
+
+Indexed buffers, depth attachments, offline shader artifact loading, and full shader reflection-driven binding are
+deferred to the next RHI/render-resource expansion.
 
 The first implementation should use one main viewport, one active scene camera, a fixed forward pass, and a default
 material path.
@@ -558,23 +567,24 @@ Unit tests:
 
 Integration or smoke checks:
 
-- Load or construct the sample scene.
+- Construct the sample scene in Windows Player.
 - Submit a render snapshot without live scene pointers.
 - Open Windows Player.
 - Render a lit static mesh.
 - Exit cleanly.
 
 The current automated tests cover scene construction, transform propagation, reflection-backed serialization round trip,
-fallback resource lookup, and render snapshot extraction. Windows Player constructs the sample scene and binds it to the
-Game Thread; manual Player execution remains the smoke check for the visible window path until an automated window
-capture/exit harness lands.
+fallback resource lookup, resource create/update/destroy revision behavior, render snapshot extraction, Game Thread
+frame ownership, and ShaderTool smoke coverage. Windows Player constructs the sample scene and binds it to the Game
+Thread; manual Player execution remains the smoke check for the visible window path until an automated window
+capture/exit harness lands. Dedicated RenderSystem tests for frame submission, frame slot selection, backpressure, and
+render-resource synchronization remain pending.
 
 ## 16. Milestone Exit Criteria
 
 Milestone 5 is complete when:
 
-- `VEnginePlayer` can load or construct the sample scene and render a static mesh from a camera with a directional
-  light.
+- `VEnginePlayer` constructs the sample scene and renders a static mesh from a camera with a directional light.
 - The rendered frame uses the `RenderSystem` and RHI path established by earlier milestones.
 - Scene serialization can save and reload the sample scene without losing hierarchy or component property data.
 - Scene mutation APIs are Game Thread-owned.
@@ -584,6 +594,6 @@ Milestone 5 is complete when:
 - Core Scene, Reflection, Resource, Game Thread, and serialization tests are registered with CTest and pass on Windows
   through the MSVC preset.
 
-Current implementation caveat: matrix constants now travel through a narrow RHI uniform-buffer path and mesh/material
-data is cached render-side by resource id, but indexed buffers, depth, material binding layouts, and resource
-invalidation/versioning require the next RHI/render-resource expansion.
+Current implementation caveat: matrix constants travel through a narrow RHI uniform-buffer path, and mesh/material data
+is cached render-side by resource id with resource revisions. Indexed buffers, depth, full material binding layouts,
+upload scheduling, and GPU-safe deferred release require the next RHI/render-resource expansion.
