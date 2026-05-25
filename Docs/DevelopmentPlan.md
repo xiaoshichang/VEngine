@@ -179,22 +179,23 @@ Implementation order:
 - Implement `CameraComponent`, `MeshRendererComponent`, and directional `LightComponent` as render-facing scene
   components.
 - Register render-facing components through Reflection.
-- Define the first `.vescene` structure for scene metadata, GameObjects, hierarchy, components, and reflected property
-  values.
+- Define the first JSON scene serialization shape for scene metadata, GameObjects, hierarchy, components, and reflected
+  property values. Leave the asset-level `.vescene` file contract and AssetDatabase integration to Milestone 6.
 - Implement scene serialization and deserialization, including graceful skip and warning behavior for unknown component
   types.
 - Add a scene serialization round-trip test that covers Transform, Camera, MeshRenderer, and Light components.
-- Add typed resource handles and a first `ResourceManager` for mesh, material, texture, and shader resources needed by
-  the sample scene.
-- Add built-in fallback resources: cube or triangle mesh, default material, default shader references, and placeholder
-  texture if the first RHI path requires one.
-- Route first-stage resource loading through FileSystem and IOSystem boundaries where practical, while allowing
-  synchronous loading for the first vertical slice.
+- Add typed resource handles and a first `ResourceManager` for mesh and material resources used by the sample scene.
+  Keep texture and shader resource management as placeholders for the asset/material expansion.
+- Add built-in fallback resources required by the vertical slice: cube mesh and default material. Default shader
+  resources and placeholder textures are deferred until shader/material assets are introduced.
+- Use code-constructed built-in resources for the first vertical slice. Route file-backed resource loading through
+  FileSystem and IOSystem in the asset pipeline milestone.
 - Define `SceneRenderSnapshot` or an equivalent render-safe frame packet containing camera, light, draw item, transform,
   and resource handles.
 - Add Game Thread scene extraction that builds render snapshots without live `Scene`, `GameObject`, or `Component`
   pointers.
-- Add `RenderSystem::SubmitFrame()` or an equivalent frame-level submission API for scene snapshots.
+- Add `RenderSystem::SynchronizeRenderResources()` for resource add/update/remove propagation and
+  `RenderSystem::SubmitFrame()` for render-safe scene snapshots.
 - Add CPU-side frame backpressure through a Game Thread frame-end `RenderCommandFence`, with an initial one-frame-lag
   policy.
 - Add render-side frame contexts for per-frame render data.
@@ -203,10 +204,11 @@ Implementation order:
   registry; then draw static meshes through an MVP uniform buffer and the existing color pipeline.
 - Defer indexed mesh buffers, depth buffer resources, full material binding, upload scheduling, and GPU-safe deferred
   release until the next RHI/render-resource expansion.
-- Load or construct the sample scene in `VEnginePlayer` and render it through the existing RenderSystem and RHI path.
-- Add RenderSystem tests for frame submission, queued-frame backpressure, and render frame context selection.
-- Construct the sample scene in Windows Player and bind it to the Game Thread. Keep automated Player window smoke as a
-  follow-up until the window capture/exit harness exists.
+- Construct the sample scene in Windows Player, bind it to the Game Thread, and render it through the existing
+  RenderSystem/RHI path. Scene file loading and automated Player window smoke remain follow-up work.
+- Add focused RenderSystem tests for frame submission, queued-frame backpressure, render frame context selection, and
+  render-resource synchronization. Current coverage is through GameThreadSystem, Scene, and ShaderTool tests;
+  dedicated RenderSystem tests remain pending.
 
 ### Milestone 6: Asset Pipeline
 
