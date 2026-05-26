@@ -30,13 +30,21 @@ function(ve_add_windows_editor)
         ve_add_imgui()
 
         add_executable(VEngineEditor WIN32
+            Editor/Core/EditorProject.cpp
+            Editor/Core/EditorProject.h
             Editor/Windows/WindowsEditor.cpp
+            Editor/Windows/WindowsProjectLauncher.cpp
+            Editor/Windows/WindowsProjectLauncher.h
         )
 
         target_link_libraries(VEngineEditor
             PRIVATE
                 VEngine
                 VEngine::ImGui
+                advapi32
+                gdi32
+                ole32
+                shell32
         )
 
         ve_configure_target(VEngineEditor)

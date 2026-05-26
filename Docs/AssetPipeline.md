@@ -427,11 +427,12 @@ can show them in the Console panel.
 Milestone 6 should end with a file-backed sample that replaces the Milestone 5 code-only sample scene where practical:
 
 ```text
-Assets/Samples/Scenes/AssetPipelineSample.vescene
-Assets/Samples/Materials/Default.vematerial
-Assets/Samples/Models/<sample-source-model>
-Assets/Samples/Models/<sample-source-model>.veasset
-Generated/Assets/ImportCache/<asset-guid>/<sample-mesh>.vemesh
+Examples/AssetPipelineSample/.veproject
+Examples/AssetPipelineSample/Assets/Samples/Scenes/AssetPipelineSample.vescene
+Examples/AssetPipelineSample/Assets/Samples/Materials/Default.vematerial
+Examples/AssetPipelineSample/Assets/Samples/Models/<sample-source-model>
+Examples/AssetPipelineSample/Assets/Samples/Models/<sample-source-model>.veasset
+Examples/AssetPipelineSample/Generated/Assets/ImportCache/<asset-guid>/<sample-mesh>.vemesh
 ```
 
 The Windows Player should be able to load the sample scene through the asset pipeline path and render it using the

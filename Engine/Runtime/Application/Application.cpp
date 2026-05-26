@@ -14,8 +14,8 @@
 #include <thread>
 #include <utility>
 
-#ifndef VE_PROJECT_SOURCE_DIR
-#define VE_PROJECT_SOURCE_DIR ""
+#ifndef VE_DEFAULT_PROJECT_DIR
+#define VE_DEFAULT_PROJECT_DIR ""
 #endif
 
 namespace ve
@@ -137,15 +137,36 @@ namespace ve
         renderSystem.ShutdownDevice();
     }
 
-    void Application::CreateSampleScene()
+    ErrorCode Application::CreateInitialScene()
+    {
+        if (desc_.sceneStartup)
+        {
+            return desc_.sceneStartup(engineRuntime_);
+        }
+
+        return CreateSampleScene();
+    }
+
+    void Application::DestroyInitialScene() noexcept
+    {
+        if (desc_.sceneShutdown)
+        {
+            desc_.sceneShutdown(engineRuntime_);
+            return;
+        }
+
+        DestroySampleScene();
+    }
+
+    ErrorCode Application::CreateSampleScene()
     {
         ResourceManager& resourceManager = engineRuntime_.GetResourceManager();
         sampleScene_ = std::make_unique<Scene>();
 
         Path projectRoot = desc_.projectRoot;
-        if (projectRoot.IsEmpty() && std::string_view(VE_PROJECT_SOURCE_DIR).size() > 0)
+        if (projectRoot.IsEmpty() && std::string_view(VE_DEFAULT_PROJECT_DIR).size() > 0)
         {
-            projectRoot = Path(VE_PROJECT_SOURCE_DIR);
+            projectRoot = Path(VE_DEFAULT_PROJECT_DIR);
         }
 
         if (!projectRoot.IsEmpty() && !desc_.sampleScenePath.IsEmpty())
@@ -170,9 +191,10 @@ namespace ve
                     if (bindResult != ErrorCode::None)
                     {
                         VE_LOG_ERROR("Failed to bind asset sample scene to GameThreadSystem: {}", ToString(bindResult));
+                        return bindResult;
                     }
 
-                    return;
+                    return ErrorCode::None;
                 }
 
                 VE_LOG_WARN("Failed to load asset sample scene '{}': {}. Falling back to code sample.",
@@ -211,7 +233,10 @@ namespace ve
         if (sceneResult != ErrorCode::None)
         {
             VE_LOG_ERROR("Failed to bind sample scene to GameThreadSystem: {}", ToString(sceneResult));
+            return sceneResult;
         }
+
+        return ErrorCode::None;
     }
 
     void Application::DestroySampleScene() noexcept
@@ -237,6 +262,11 @@ namespace ve
             {
                 exitCode = pumpStatus.exitCode;
                 break;
+            }
+
+            if (desc_.frameUpdate)
+            {
+                desc_.frameUpdate(mainWindow, engineRuntime_);
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -278,19 +308,43 @@ namespace ve
         }
 
         std::unique_ptr<Window> mainWindow = windowResult.MoveValue();
-        mainWindow->SetCommandHandler([](std::string_view command)
-                                      { VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command); });
-
-        ErrorCode renderResult = InitializeRendering(*mainWindow);
-        if (renderResult != ErrorCode::None)
+        if (desc_.initializeRenderingOnStartup)
         {
+            ErrorCode renderResult = InitializeRendering(*mainWindow);
+            if (renderResult != ErrorCode::None)
+            {
+                cleanup(mainWindow);
+                return 1;
+            }
+        }
+
+        if (desc_.windowConfigure)
+        {
+            desc_.windowConfigure(*mainWindow, engineRuntime_);
+        }
+
+        mainWindow->SetCommandHandler(
+            [this, window = mainWindow.get()](std::string_view command)
+            {
+                if (desc_.commandHandler)
+                {
+                    desc_.commandHandler(command, *window, engineRuntime_);
+                    return;
+                }
+
+                VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command);
+            });
+
+        ErrorCode sceneResult = CreateInitialScene();
+        if (sceneResult != ErrorCode::None)
+        {
+            ShutdownRendering();
             cleanup(mainWindow);
             return 1;
         }
 
-        CreateSampleScene();
         const int result = RunMainLoop(*mainWindow);
-        DestroySampleScene();
+        DestroyInitialScene();
         ShutdownRendering();
         cleanup(mainWindow);
 

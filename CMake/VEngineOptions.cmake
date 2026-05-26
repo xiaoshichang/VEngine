@@ -2,6 +2,7 @@ include_guard(GLOBAL)
 
 option(VE_BUILD_PLAYER "Build Windows player" ON)
 option(VE_BUILD_EDITOR "Build Windows editor" ON)
+option(VE_BUILD_EXAMPLE_PROJECTS "Build generated data for bundled example projects" ON)
 option(VE_BUILD_TESTS "Build Windows tests" ON)
 option(VE_BUILD_TOOLS "Build command line tools" ON)
 option(VE_BUILD_SHADER_TESTS "Build shader pipeline smoke tests" ON)

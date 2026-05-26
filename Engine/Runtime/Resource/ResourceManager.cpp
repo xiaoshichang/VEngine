@@ -40,6 +40,18 @@ namespace ve
         return defaultMaterial_;
     }
 
+    ResourceHandle<MeshResource> ResourceManager::FindBuiltInMesh(std::string_view uri) const noexcept
+    {
+        const auto iter = builtInMeshes_.find(std::string(uri));
+        return iter == builtInMeshes_.end() ? ResourceHandle<MeshResource>() : iter->second;
+    }
+
+    ResourceHandle<MaterialResource> ResourceManager::FindBuiltInMaterial(std::string_view uri) const noexcept
+    {
+        const auto iter = builtInMaterials_.find(std::string(uri));
+        return iter == builtInMaterials_.end() ? ResourceHandle<MaterialResource>() : iter->second;
+    }
+
     UInt64 ResourceManager::GetChangeSerial() const noexcept
     {
         return changeSerial_;
@@ -97,6 +109,7 @@ namespace ve
         if (fallbackMesh_ == handle)
         {
             fallbackMesh_ = ResourceHandle<MeshResource>();
+            builtInMeshes_.erase(std::string(BuiltInResources::FallbackCubeMeshUri));
         }
 
         MarkResourcesChanged();
@@ -112,7 +125,8 @@ namespace ve
         }
 
         MeshAssetData mesh = meshResult.MoveValue();
-        return Result<ResourceHandle<MeshResource>>::Success(CreateMesh(std::move(mesh.name), std::move(mesh.vertices)));
+        ResourceHandle<MeshResource> handle = CreateMesh(std::move(mesh.name), std::move(mesh.vertices));
+        return Result<ResourceHandle<MeshResource>>::Success(handle);
     }
 
     ResourceHandle<MaterialResource> ResourceManager::CreateMaterial(std::string name, const Vector3& baseColor)
@@ -155,6 +169,7 @@ namespace ve
         if (defaultMaterial_ == handle)
         {
             defaultMaterial_ = ResourceHandle<MaterialResource>();
+            builtInMaterials_.erase(std::string(BuiltInResources::DefaultMaterialUri));
         }
 
         MarkResourcesChanged();
@@ -179,7 +194,7 @@ namespace ve
         MeshResource cube;
         cube.id = AllocateResourceId();
         cube.revision = NextResourceRevision(cube.revision);
-        cube.name = "BuiltInCube";
+        cube.name = BuiltInResources::FallbackCubeMeshName;
 
         constexpr Float32 half = 0.5f;
         AddQuad(cube.vertices,
@@ -227,14 +242,16 @@ namespace ve
 
         fallbackMesh_ = ResourceHandle<MeshResource>(cube.id);
         meshes_.emplace(cube.id, std::move(cube));
+        builtInMeshes_.emplace(std::string(BuiltInResources::FallbackCubeMeshUri), fallbackMesh_);
 
         MaterialResource material;
         material.id = AllocateResourceId();
         material.revision = NextResourceRevision(material.revision);
-        material.name = "DefaultMaterial";
+        material.name = BuiltInResources::DefaultMaterialName;
         material.baseColor = Vector3::One();
         defaultMaterial_ = ResourceHandle<MaterialResource>(material.id);
         materials_.emplace(material.id, std::move(material));
+        builtInMaterials_.emplace(std::string(BuiltInResources::DefaultMaterialUri), defaultMaterial_);
 
         MarkResourcesChanged();
     }

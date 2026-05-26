@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
+#include "Engine/Runtime/Resource/BuiltInResources.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/Scene.h"
@@ -350,6 +351,12 @@ namespace
         const ve::MeshResource* cube = resourceManager.FindMesh(resourceManager.GetFallbackMesh());
 
         passed &= Expect(cube != nullptr, "Built-in cube mesh should exist");
+        passed &= Expect(resourceManager.FindBuiltInMesh(ve::BuiltInResources::FallbackCubeMeshUri) ==
+                             resourceManager.GetFallbackMesh(),
+                         "Built-in cube should be addressable by stable URI");
+        passed &= Expect(resourceManager.FindBuiltInMaterial(ve::BuiltInResources::DefaultMaterialUri) ==
+                             resourceManager.GetDefaultMaterial(),
+                         "Built-in default material should be addressable by stable URI");
         if (cube == nullptr)
         {
             return passed;

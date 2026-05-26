@@ -29,6 +29,7 @@ function(ve_add_engine)
             Engine/Runtime/Reflection/ReflectionRegistry.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderSystem.cpp
+            Engine/Runtime/Resource/BuiltInResources.cpp
             Engine/Runtime/Resource/ResourceManager.cpp
             Engine/Runtime/Scene/Component.cpp
             Engine/Runtime/Scene/GameObject.cpp
@@ -79,6 +80,7 @@ function(ve_add_engine)
             Engine/Runtime/Reflection/ReflectionRegistry.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderSystem.h
+            Engine/Runtime/Resource/BuiltInResources.h
             Engine/Runtime/Resource/ResourceHandle.h
             Engine/Runtime/Resource/ResourceManager.h
             Engine/Runtime/Scene/Component.h
@@ -118,7 +120,7 @@ function(ve_add_engine)
             VE_ENABLE_D3D12=$<BOOL:${VE_ENABLE_D3D12}>
             VE_ENABLE_METAL=$<BOOL:${VE_ENABLE_METAL}>
             VE_ENABLE_SCRIPTING=$<BOOL:${VE_ENABLE_SCRIPTING}>
-            VE_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+            VE_DEFAULT_PROJECT_DIR="${PROJECT_SOURCE_DIR}/Examples/AssetPipelineSample"
     )
 
     if(WIN32)

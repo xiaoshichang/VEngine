@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Math/Vector3.h"
+#include "Engine/Runtime/Resource/BuiltInResources.h"
 #include "Engine/Runtime/Resource/ResourceHandle.h"
 
 #include "Engine/Runtime/Core/Result.h"
@@ -56,6 +57,8 @@ namespace ve
 
         [[nodiscard]] ResourceHandle<MeshResource> GetFallbackMesh() const noexcept;
         [[nodiscard]] ResourceHandle<MaterialResource> GetDefaultMaterial() const noexcept;
+        [[nodiscard]] ResourceHandle<MeshResource> FindBuiltInMesh(std::string_view uri) const noexcept;
+        [[nodiscard]] ResourceHandle<MaterialResource> FindBuiltInMaterial(std::string_view uri) const noexcept;
         [[nodiscard]] UInt64 GetChangeSerial() const noexcept;
 
         [[nodiscard]] const MeshResource* FindMesh(ResourceHandle<MeshResource> handle) const noexcept;
@@ -99,6 +102,8 @@ namespace ve
         UInt64 changeSerial_ = 0;
         ResourceHandle<MeshResource> fallbackMesh_;
         ResourceHandle<MaterialResource> defaultMaterial_;
+        std::unordered_map<std::string, ResourceHandle<MeshResource>> builtInMeshes_;
+        std::unordered_map<std::string, ResourceHandle<MaterialResource>> builtInMaterials_;
         std::unordered_map<ResourceId, MeshResource> meshes_;
         std::unordered_map<ResourceId, MaterialResource> materials_;
     };

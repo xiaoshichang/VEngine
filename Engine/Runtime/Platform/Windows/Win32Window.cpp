@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 
 #include <algorithm>
+#include <vector>
 
 namespace ve
 {
@@ -133,7 +134,8 @@ namespace ve
 
     void Win32Window::SetCommandHandler(WindowCommandHandler handler)
     {
-        SetWin32DebugConsoleCommandHandler(std::move(handler));
+        commandHandler_ = std::move(handler);
+        SetWin32DebugConsoleCommandHandler(commandHandler_);
     }
 
     void Win32Window::PumpCommands()
@@ -186,6 +188,11 @@ namespace ve
         return windowHandle_;
     }
 
+    void Win32Window::SetNativeMessageHandler(Win32NativeMessageHandler handler)
+    {
+        nativeMessageHandler_ = std::move(handler);
+    }
+
     ErrorCode Win32Window::Initialize(const WindowDesc& desc)
     {
         ErrorCode registerResult = RegisterWindowClass(&Win32Window::WindowProc);
@@ -232,6 +239,7 @@ namespace ve
             return ErrorCode::PlatformError;
         }
 
+        CreateMenuBar(desc);
         UpdateClientExtent();
 
         if (desc.visible)
@@ -240,6 +248,67 @@ namespace ve
         }
 
         return ErrorCode::None;
+    }
+
+    void Win32Window::CreateMenuBar(const WindowDesc& desc)
+    {
+        if (windowHandle_ == nullptr || desc.menuItems.empty())
+        {
+            return;
+        }
+
+        HMENU menuBar = CreateMenu();
+        if (menuBar == nullptr)
+        {
+            return;
+        }
+
+        std::vector<std::pair<std::string, HMENU>> menus;
+        UINT nextMenuId = 1000;
+
+        for (const WindowMenuItemDesc& item : desc.menuItems)
+        {
+            if (item.menu.empty() || item.label.empty() || item.command.empty())
+            {
+                continue;
+            }
+
+            HMENU submenu = nullptr;
+            auto menuIter = std::find_if(menus.begin(),
+                                         menus.end(),
+                                         [&item](const std::pair<std::string, HMENU>& menu)
+                                         { return menu.first == item.menu; });
+            if (menuIter == menus.end())
+            {
+                submenu = CreatePopupMenu();
+                if (submenu == nullptr)
+                {
+                    continue;
+                }
+
+                const std::wstring wideMenu = Utf8ToWide(item.menu);
+                AppendMenuW(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(submenu), wideMenu.c_str());
+                menus.emplace_back(item.menu, submenu);
+            }
+            else
+            {
+                submenu = menuIter->second;
+            }
+
+            const UINT menuId = nextMenuId++;
+            const std::wstring wideLabel = Utf8ToWide(item.label);
+            AppendMenuW(submenu, MF_STRING, menuId, wideLabel.c_str());
+            menuCommands_.emplace(menuId, item.command);
+        }
+
+        if (SetMenu(windowHandle_, menuBar) == 0)
+        {
+            DestroyMenu(menuBar);
+            menuCommands_.clear();
+            return;
+        }
+
+        DrawMenuBar(windowHandle_);
     }
 
     LRESULT CALLBACK Win32Window::WindowProc(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam)
@@ -268,6 +337,15 @@ namespace ve
 
     LRESULT Win32Window::HandleMessage(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam)
     {
+        if (nativeMessageHandler_)
+        {
+            LRESULT handlerResult = 0;
+            if (nativeMessageHandler_(windowHandle, message, wParam, lParam, handlerResult))
+            {
+                return handlerResult;
+            }
+        }
+
         switch (message)
         {
         case WM_CLOSE:
@@ -294,6 +372,22 @@ namespace ve
         case WM_ACTIVATE:
             focused_ = LOWORD(wParam) != WA_INACTIVE;
             return 0;
+        case WM_COMMAND:
+        {
+            const UINT commandId = LOWORD(wParam);
+            const auto commandIter = menuCommands_.find(commandId);
+            if (commandIter != menuCommands_.end())
+            {
+                if (commandHandler_)
+                {
+                    commandHandler_(commandIter->second);
+                }
+
+                return 0;
+            }
+
+            break;
+        }
         case WM_SETFOCUS:
             focused_ = true;
             return 0;

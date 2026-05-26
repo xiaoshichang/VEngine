@@ -220,6 +220,24 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineAssetPipelineTests>
     )
 
+    add_executable(VEngineEditorProjectTests
+        Tests/Unit/EditorProjectTests.cpp
+        Editor/Core/EditorProject.cpp
+        Editor/Core/EditorProject.h
+    )
+
+    target_link_libraries(VEngineEditorProjectTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineEditorProjectTests)
+
+    add_test(
+        NAME VEngineEditorProjectTests
+        COMMAND $<TARGET_FILE:VEngineEditorProjectTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 

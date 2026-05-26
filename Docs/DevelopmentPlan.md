@@ -190,6 +190,8 @@ Implementation order:
   resources and placeholder textures are deferred until shader/material assets are introduced.
 - Use code-constructed built-in resources for the first vertical slice. Route file-backed resource loading through
   FileSystem and IOSystem in the asset pipeline milestone.
+- Keep built-in resources in a ResourceManager-owned catalog addressed by stable `builtin:` locators so project
+  `Assets/` stays reserved for authored files.
 - Define `SceneRenderSnapshot` or an equivalent render-safe frame packet containing camera, light, draw item, transform,
   and resource handles.
 - Add Game Thread scene extraction that builds render snapshots without live `Scene`, `GameObject`, or `Component`
@@ -267,7 +269,8 @@ Implementation order:
   friendly diagnostics, and return non-zero exit codes on failure.
 - Add an Editor-triggered import backend path that calls the same import service as `VEngineAssetTool`. Keep full Asset
   Browser UI for Milestone 7.
-- Add a file-backed sample scene under `Assets/Samples/` that references a material and imported static mesh asset.
+- Add a file-backed sample scene under `Examples/AssetPipelineSample/Assets/Samples/` that references a material and
+  imported static mesh asset.
 - Update the Windows Player path so it can load the sample `.vescene` through the asset pipeline and render it through
   the existing scene/render vertical slice.
 - Add focused CTest coverage for GUID parsing, asset path normalization, metadata round trips, AssetDatabase lookup,
@@ -276,16 +279,44 @@ Implementation order:
 
 ### Milestone 7: Editor MVP
 
-- Integrate Dear ImGui.
-- Add docking-based Editor shell.
-- Add main menu.
-- Add Scene Hierarchy.
-- Add Inspector.
-- Add Asset Browser.
-- Add Viewport.
-- Add Console / Log panel.
-- Add Play / Stop.
-- Edit component properties through Reflection.
+Detailed design:
+
+- See [Editor MVP](EditorMVP.md).
+
+Implementation order:
+
+- Define the first VEngine project descriptor `.veproject`, including project GUID, display name, engine version, target
+  platforms, and startup scene reference.
+- Keep the repository root as an engine workspace, not a project instance; put bundled editable projects under
+  `Examples/`.
+- Define and validate the project directory contract: versioned authored/source files under `Assets/`, disposable
+  generated files under `Generated/`, and package staging under `Generated/Build/`.
+- Add an Editor project service that owns the opened project root, parsed project descriptor, `AssetDatabase`, current
+  edit scene, dirty state, and project diagnostics.
+- Support direct project opening from `VEngineEditor.exe --project <project-root>`.
+- When `VEngineEditor.exe` starts without a project argument, show a Project Launcher screen that lists recent projects
+  and offers browse/create actions.
+- Store the machine-local recent project list in the current user's Windows registry hive under
+  `HKCU\Software\VEngine\Editor`, and update it after successful project opens.
+- Keep `File -> Open Project...` available inside the Editor for switching projects.
+- On project open, parse `.veproject`, create missing generated subdirectories, refresh `AssetDatabase`, surface
+  diagnostics in the Console, and open the startup scene when available.
+- Store local Editor layout in user-local settings or `Generated/Editor/`, not in authored assets.
+- Integrate Dear ImGui and add the docking-based Editor shell, main menu, status bar, and project title display.
+- Add Console / Log panel backed by the VEngine logging facade callback path.
+- Add Asset Browser over `AssetDatabase` scan results, including GUID, type, path, importer, generated artifact status,
+  and commands for scan, import, reimport, and validate.
+- Add scene open/save for `.vescene` assets through the existing scene serialization and asset reference contracts.
+- Add Scene Hierarchy and Inspector, editing component properties through Reflection.
+- Add Viewport rendering of the current edit scene through the existing RenderSystem/RHI path.
+- Add Play / Stop using a separate play scene instance so runtime state does not mutate the edit scene.
+- Define the first package command/service shape shared by Editor and tools. Stage Windows packages into a read-only
+  `Content/` layout containing `.veproject`, an asset manifest, authored native assets, generated artifacts, shader
+  outputs, and required runtime binaries.
+- Document and structure the iOS package staging layout so Milestone 10 can place the same `Content/` contract inside
+  the iOS app bundle after Metal shader artifacts are generated.
+- Add focused tests for project descriptor parsing, project root validation, generated directory creation, asset browser
+  backend commands, scene open/save, play scene isolation, and package manifest generation.
 
 ### Milestone 8: C# Scripting Windows MVP
 

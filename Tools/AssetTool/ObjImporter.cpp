@@ -337,6 +337,12 @@ namespace ve
 
             return filename.empty() ? "Mesh" : filename;
         }
+
+        [[nodiscard]] bool HasSingleMeshArtifact(const SourceAssetMetadata& metadata, const Path& artifactPath)
+        {
+            return metadata.artifacts.size() == 1 && metadata.artifacts[0].type == "Mesh" &&
+                   metadata.artifacts[0].path == artifactPath;
+        }
     } // namespace
 
     Result<ObjImportResult> ImportObjModel(AssetDatabase& assetDatabase, const Path& sourcePath, bool force)
@@ -379,6 +385,10 @@ namespace ve
         const std::string stem = GetStem(relativeSource);
         const Path meshArtifactPath =
             Path("Generated/Assets/ImportCache") / metadata.guid.ToString() / (stem + ".vemesh");
+        const bool metadataAlreadyCurrent =
+            metadata.assetType == AssetType::SourceModel && metadata.source == relativeSource &&
+            metadata.sourceHash == hash.GetValue() && metadata.importer == "ObjModel" &&
+            metadata.importerVersion == 1 && HasSingleMeshArtifact(metadata, meshArtifactPath);
 
         if (!force && metadata.sourceHash == hash.GetValue() &&
             FileSystem::IsFile(assetDatabase.ResolveProjectPath(meshArtifactPath)))
@@ -388,6 +398,10 @@ namespace ve
             result.metadataPath = metadataPath;
             result.meshArtifactPath = meshArtifactPath;
             result.sourceHash = metadata.sourceHash;
+            if (Result<MeshAssetData> cachedMesh = LoadMeshAsset(assetDatabase.ResolveProjectPath(meshArtifactPath)))
+            {
+                result.vertexCount = cachedMesh.GetValue().vertices.size();
+            }
             return Result<ObjImportResult>::Success(std::move(result));
         }
 
@@ -422,11 +436,14 @@ namespace ve
         metadata.artifacts.clear();
         metadata.artifacts.push_back(AssetArtifact{"Mesh", meshArtifactPath});
 
-        const ErrorCode metadataSaveResult = assetDatabase.SaveSourceMetadata(metadata);
-        if (metadataSaveResult != ErrorCode::None)
+        if (!metadataAlreadyCurrent)
         {
-            return Result<ObjImportResult>::Failure(
-                Error(metadataSaveResult, "Failed to write source asset metadata."));
+            const ErrorCode metadataSaveResult = assetDatabase.SaveSourceMetadata(metadata);
+            if (metadataSaveResult != ErrorCode::None)
+            {
+                return Result<ObjImportResult>::Failure(
+                    Error(metadataSaveResult, "Failed to write source asset metadata."));
+            }
         }
 
         const ErrorCode refreshResult = assetDatabase.Refresh();

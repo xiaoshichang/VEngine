@@ -24,8 +24,8 @@ function(ve_add_shader_tool)
     ve_configure_target(VEngineShaderTool)
 endfunction()
 
-function(ve_add_tools)
-    if(NOT VE_BUILD_TOOLS)
+function(ve_add_asset_tool)
+    if(TARGET VEngineAssetTool)
         return()
     endif()
 
@@ -41,6 +41,13 @@ function(ve_add_tools)
     )
 
     ve_configure_target(VEngineAssetTool)
+endfunction()
 
+function(ve_add_tools)
+    if(NOT VE_BUILD_TOOLS)
+        return()
+    endif()
+
+    ve_add_asset_tool()
     ve_add_shader_tool()
 endfunction()

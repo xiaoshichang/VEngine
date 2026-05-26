@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Asset/AssetReference.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Resource/BuiltInResources.h"
 #include "Engine/Runtime/Scene/Serialization/SceneSerialization.h"
 
 #include <boost/json.hpp>
@@ -172,6 +173,20 @@ namespace ve
                 return Result<ResourceHandle<MeshResource>>::Success(iter->second);
             }
 
+            if (BuiltInResources::IsBuiltInUri(reference.path.GetString()))
+            {
+                const ResourceHandle<MeshResource> handle =
+                    resourceManager.FindBuiltInMesh(reference.path.GetString());
+                if (!handle.IsValid())
+                {
+                    return Result<ResourceHandle<MeshResource>>::Failure(
+                        Error(ErrorCode::NotFound, "Built-in mesh reference could not be resolved."));
+                }
+
+                cache.meshes.emplace(key, handle);
+                return Result<ResourceHandle<MeshResource>>::Success(handle);
+            }
+
             Result<Path> meshPath = ResolveMeshPath(assetDatabase, reference);
             if (!meshPath)
             {
@@ -203,6 +218,19 @@ namespace ve
             if (const auto iter = cache.materials.find(key); iter != cache.materials.end())
             {
                 return iter->second;
+            }
+
+            if (BuiltInResources::IsBuiltInUri(reference.path.GetString()))
+            {
+                const ResourceHandle<MaterialResource> builtInHandle =
+                    resourceManager.FindBuiltInMaterial(reference.path.GetString());
+                if (builtInHandle.IsValid())
+                {
+                    cache.materials.emplace(key, builtInHandle);
+                    return builtInHandle;
+                }
+
+                VE_LOG_WARN_CATEGORY("Asset", "Using fallback material for unresolved built-in material reference.");
             }
 
             ResourceHandle<MaterialResource> handle = resourceManager.GetDefaultMaterial();

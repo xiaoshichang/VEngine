@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ve
 {
@@ -29,12 +30,20 @@ namespace ve
         uint32_t height = 0;
     };
 
+    struct WindowMenuItemDesc
+    {
+        std::string menu;
+        std::string label;
+        std::string command;
+    };
+
     struct WindowDesc
     {
         std::string title = "VEngine";
         uint32_t width = 1280;
         uint32_t height = 720;
         bool visible = true;
+        std::vector<WindowMenuItemDesc> menuItems;
     };
 
     using WindowCommandHandler = std::function<void(std::string_view command)>;

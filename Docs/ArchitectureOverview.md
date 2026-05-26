@@ -249,9 +249,11 @@ VEngine/
       DXBC/
       Reflection/
 
-  Assets/
-    Samples/
-    Engine/
+  Examples/
+    AssetPipelineSample/
+      .veproject
+      Assets/
+      Generated/
 
   ThirdParty/
     CMake/
@@ -965,7 +967,9 @@ Editor principles:
 First-stage Editor workflow:
 
 ```text
-Open project
+Launch Editor
+  -> Project Launcher when no project argument is supplied
+  -> Open project directly when --project is supplied
   -> Scan assets
   -> Open scene
   -> Edit hierarchy and properties
@@ -973,6 +977,21 @@ Open project
   -> Press Play
   -> Stop and return to edit mode
 ```
+
+Editor project structure:
+
+- A project root is identified by a `.veproject` descriptor.
+- The repository root is not a VEngine project instance; bundled project examples live under `Examples/`.
+- Authored and source-controlled files live under `Assets/`.
+- Disposable import caches, shader outputs, package staging folders, Editor workspace state, logs, and temp files live
+  under `Generated/`.
+- The Editor opens projects by root path, initializes `AssetDatabase` from that root, and stores asset references as
+  GUIDs with project-relative path fallbacks.
+- On Windows, the no-argument Project Launcher reads recently opened projects from the current user's registry state
+  under `HKCU\Software\VEngine\Editor`.
+- Packaged Windows and iOS builds should use a read-only `Content/` layout with a compact asset manifest instead of
+  scanning an editable project directory at runtime.
+- Engine-owned built-in resources are addressed through stable `builtin:` locators and are not authored project assets.
 
 ## 16. Runtime UI
 

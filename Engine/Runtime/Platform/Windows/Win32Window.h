@@ -5,8 +5,10 @@
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Platform/Windows/Win32MessageLoop.h"
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -24,6 +26,8 @@
 
 namespace ve
 {
+    using Win32NativeMessageHandler = std::function<bool(HWND, UINT, WPARAM, LPARAM, LRESULT&)>;
+
     class Win32Window final : public Window
     {
     public:
@@ -47,11 +51,13 @@ namespace ve
         [[nodiscard]] void* GetNativeHandle() const noexcept override;
         [[nodiscard]] void* GetNativeLayer() const noexcept override;
         [[nodiscard]] HWND GetWin32Handle() const noexcept;
+        void SetNativeMessageHandler(Win32NativeMessageHandler handler);
 
     private:
         Win32Window() = default;
 
         [[nodiscard]] ErrorCode Initialize(const WindowDesc& desc);
+        void CreateMenuBar(const WindowDesc& desc);
 
         static LRESULT CALLBACK WindowProc(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam);
         LRESULT HandleMessage(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam);
@@ -61,6 +67,9 @@ namespace ve
     private:
         HWND windowHandle_ = nullptr;
         std::string title_;
+        WindowCommandHandler commandHandler_;
+        Win32NativeMessageHandler nativeMessageHandler_;
+        std::unordered_map<UINT, std::string> menuCommands_;
         WindowExtent clientExtent_ = {};
         Win32MessageLoop messageLoop_;
         bool visible_ = false;
