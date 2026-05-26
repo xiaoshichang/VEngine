@@ -202,6 +202,24 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineSceneTests>
     )
 
+    add_executable(VEngineAssetPipelineTests
+        Tests/Unit/AssetPipelineTests.cpp
+        Tools/AssetTool/ObjImporter.cpp
+        Tools/AssetTool/ObjImporter.h
+    )
+
+    target_link_libraries(VEngineAssetPipelineTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineAssetPipelineTests)
+
+    add_test(
+        NAME VEngineAssetPipelineTests
+        COMMAND $<TARGET_FILE:VEngineAssetPipelineTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 

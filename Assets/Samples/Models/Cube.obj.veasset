@@ -1,0 +1,22 @@
+{
+  "format": "VEngine.AssetMetadata",
+  "version": 1,
+  "guid": "11111111-1111-4111-8111-111111111111",
+  "assetType": "SourceModel",
+  "source": "Assets/Samples/Models/Cube.obj",
+  "sourceHash": "",
+  "importer": "ObjModel",
+  "importerVersion": 1,
+  "settings": {
+    "combineMeshes": true,
+    "unitScale": 1.0,
+    "generateNormals": "WhenMissing"
+  },
+  "artifacts": [
+    {
+      "type": "Mesh",
+      "path": "Generated/Assets/ImportCache/11111111-1111-4111-8111-111111111111/Cube.vemesh"
+    }
+  ],
+  "dependencies": []
+}

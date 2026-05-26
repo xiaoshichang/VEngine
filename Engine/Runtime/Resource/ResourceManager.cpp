@@ -1,5 +1,7 @@
 #include "Engine/Runtime/Resource/ResourceManager.h"
 
+#include "Engine/Runtime/Asset/NativeAssetIO.h"
+
 #include <utility>
 
 namespace ve
@@ -101,6 +103,18 @@ namespace ve
         return true;
     }
 
+    Result<ResourceHandle<MeshResource>> ResourceManager::LoadMeshFromFile(const Path& path)
+    {
+        Result<MeshAssetData> meshResult = LoadMeshAsset(path);
+        if (!meshResult)
+        {
+            return Result<ResourceHandle<MeshResource>>::Failure(meshResult.GetError());
+        }
+
+        MeshAssetData mesh = meshResult.MoveValue();
+        return Result<ResourceHandle<MeshResource>>::Success(CreateMesh(std::move(mesh.name), std::move(mesh.vertices)));
+    }
+
     ResourceHandle<MaterialResource> ResourceManager::CreateMaterial(std::string name, const Vector3& baseColor)
     {
         MaterialResource material;
@@ -145,6 +159,19 @@ namespace ve
 
         MarkResourcesChanged();
         return true;
+    }
+
+    Result<ResourceHandle<MaterialResource>> ResourceManager::LoadMaterialFromFile(const Path& path)
+    {
+        Result<MaterialAssetData> materialResult = LoadMaterialAsset(path);
+        if (!materialResult)
+        {
+            return Result<ResourceHandle<MaterialResource>>::Failure(materialResult.GetError());
+        }
+
+        MaterialAssetData material = materialResult.MoveValue();
+        return Result<ResourceHandle<MaterialResource>>::Success(
+            CreateMaterial(std::move(material.name), material.baseColor));
     }
 
     void ResourceManager::CreateBuiltInResources()

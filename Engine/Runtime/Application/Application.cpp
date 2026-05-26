@@ -1,7 +1,11 @@
 #include "Engine/Runtime/Application/Application.h"
 
+#include "Engine/Runtime/Asset/AssetDatabase.h"
+#include "Engine/Runtime/Asset/SceneAssetLoader.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Quaternion.h"
+#include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
@@ -9,6 +13,10 @@
 #include <cstdio>
 #include <thread>
 #include <utility>
+
+#ifndef VE_PROJECT_SOURCE_DIR
+#define VE_PROJECT_SOURCE_DIR ""
+#endif
 
 namespace ve
 {
@@ -133,6 +141,51 @@ namespace ve
     {
         ResourceManager& resourceManager = engineRuntime_.GetResourceManager();
         sampleScene_ = std::make_unique<Scene>();
+
+        Path projectRoot = desc_.projectRoot;
+        if (projectRoot.IsEmpty() && std::string_view(VE_PROJECT_SOURCE_DIR).size() > 0)
+        {
+            projectRoot = Path(VE_PROJECT_SOURCE_DIR);
+        }
+
+        if (!projectRoot.IsEmpty() && !desc_.sampleScenePath.IsEmpty())
+        {
+            FileSystem::SetProjectRoot(projectRoot);
+
+            AssetDatabase assetDatabase;
+            const ErrorCode assetDatabaseResult = assetDatabase.Open(projectRoot);
+            if (assetDatabaseResult == ErrorCode::None)
+            {
+                ReflectionRegistry reflectionRegistry;
+                RegisterSceneReflectionTypes(reflectionRegistry);
+
+                const Path scenePath = assetDatabase.ResolveProjectPath(desc_.sampleScenePath);
+                const ErrorCode sceneLoadResult =
+                    LoadSceneAsset(*sampleScene_, reflectionRegistry, resourceManager, assetDatabase, scenePath);
+                if (sceneLoadResult == ErrorCode::None)
+                {
+                    sampleScene_->UpdateTransforms();
+                    ErrorCode bindResult =
+                        engineRuntime_.GetGameThreadSystem().SetActiveScene(sampleScene_.get(), &resourceManager);
+                    if (bindResult != ErrorCode::None)
+                    {
+                        VE_LOG_ERROR("Failed to bind asset sample scene to GameThreadSystem: {}", ToString(bindResult));
+                    }
+
+                    return;
+                }
+
+                VE_LOG_WARN("Failed to load asset sample scene '{}': {}. Falling back to code sample.",
+                            scenePath.GetString(),
+                            ToString(sceneLoadResult));
+            }
+            else
+            {
+                VE_LOG_WARN("Failed to open AssetDatabase at '{}': {}. Falling back to code sample.",
+                            projectRoot.GetString(),
+                            ToString(assetDatabaseResult));
+            }
+        }
 
         GameObject& camera = sampleScene_->CreateGameObject("SampleCamera");
         TransformComponent& cameraTransform = camera.AddComponent<TransformComponent>();

@@ -71,6 +71,21 @@ namespace ve
                               static_cast<Float32>(values[3].as_double()));
         }
 
+        [[nodiscard]] ResourceId ToResourceId(const value& jsonValue, ResourceId fallback) noexcept
+        {
+            if (jsonValue.is_uint64())
+            {
+                return jsonValue.as_uint64();
+            }
+
+            if (jsonValue.is_int64() && jsonValue.as_int64() >= 0)
+            {
+                return static_cast<ResourceId>(jsonValue.as_int64());
+            }
+
+            return fallback;
+        }
+
         template<typename T>
         [[nodiscard]] ReflectedPropertyInfo
         MakeVector3Property(std::string name, Vector3 (T::*getter)() const, void (T::*setter)(const Vector3&))
@@ -257,11 +272,9 @@ namespace ve
                                   },
                                   [](Component& component, const value& jsonValue)
                                   {
-                                      if (jsonValue.is_uint64())
-                                      {
-                                          static_cast<MeshRendererComponent&>(component).SetMesh(
-                                              ResourceHandle<MeshResource>(jsonValue.as_uint64()));
-                                      }
+                                      auto& renderer = static_cast<MeshRendererComponent&>(component);
+                                      renderer.SetMesh(ResourceHandle<MeshResource>(
+                                          ToResourceId(jsonValue, renderer.GetMesh().GetId())));
                                   }});
         meshRenderer.properties.push_back(
             ReflectedPropertyInfo{"material",
@@ -276,11 +289,9 @@ namespace ve
                                   },
                                   [](Component& component, const value& jsonValue)
                                   {
-                                      if (jsonValue.is_uint64())
-                                      {
-                                          static_cast<MeshRendererComponent&>(component).SetMaterial(
-                                              ResourceHandle<MaterialResource>(jsonValue.as_uint64()));
-                                      }
+                                      auto& renderer = static_cast<MeshRendererComponent&>(component);
+                                      renderer.SetMaterial(ResourceHandle<MaterialResource>(
+                                          ToResourceId(jsonValue, renderer.GetMaterial().GetId())));
                                   }});
         meshRenderer.properties.push_back(ReflectedPropertyInfo{
             "visible",

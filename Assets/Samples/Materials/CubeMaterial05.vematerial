@@ -1,0 +1,14 @@
+{
+  "format": "VEngine.Material",
+  "version": 1,
+  "guid": "22222222-2222-4222-8222-222222222205",
+  "name": "CubeMaterial05",
+  "shader": {
+    "guid": "00000000-0000-0000-0000-000000000000",
+    "path": "Shaders/Generated/Basic.shader"
+  },
+  "parameters": {
+    "baseColor": [0.3, 0.78, 0.28]
+  },
+  "textures": []
+}

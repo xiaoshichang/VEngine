@@ -31,6 +31,8 @@ function(ve_add_tools)
 
     add_executable(VEngineAssetTool
         Tools/AssetTool/AssetTool.cpp
+        Tools/AssetTool/ObjImporter.cpp
+        Tools/AssetTool/ObjImporter.h
     )
 
     target_link_libraries(VEngineAssetTool

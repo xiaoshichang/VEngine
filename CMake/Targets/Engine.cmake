@@ -11,6 +11,10 @@ function(ve_add_engine)
         PRIVATE
             Engine/Runtime/Application/Application.cpp
             Engine/Runtime/Application/EngineRuntime.cpp
+            Engine/Runtime/Asset/AssetDatabase.cpp
+            Engine/Runtime/Asset/AssetGuid.cpp
+            Engine/Runtime/Asset/NativeAssetIO.cpp
+            Engine/Runtime/Asset/SceneAssetLoader.cpp
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
             Engine/Runtime/Core/Version.cpp
@@ -41,6 +45,11 @@ function(ve_add_engine)
         PUBLIC
             Engine/Runtime/Application/Application.h
             Engine/Runtime/Application/EngineRuntime.h
+            Engine/Runtime/Asset/AssetDatabase.h
+            Engine/Runtime/Asset/AssetGuid.h
+            Engine/Runtime/Asset/AssetReference.h
+            Engine/Runtime/Asset/NativeAssetIO.h
+            Engine/Runtime/Asset/SceneAssetLoader.h
             Engine/Runtime/Core/Assert.h
             Engine/Runtime/Core/BuildConfig.h
             Engine/Runtime/Core/Compiler.h
@@ -109,6 +118,7 @@ function(ve_add_engine)
             VE_ENABLE_D3D12=$<BOOL:${VE_ENABLE_D3D12}>
             VE_ENABLE_METAL=$<BOOL:${VE_ENABLE_METAL}>
             VE_ENABLE_SCRIPTING=$<BOOL:${VE_ENABLE_SCRIPTING}>
+            VE_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     )
 
     if(WIN32)

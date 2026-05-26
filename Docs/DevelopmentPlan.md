@@ -212,16 +212,67 @@ Implementation order:
 
 ### Milestone 6: Asset Pipeline
 
-- Implement AssetDatabase.
-- Define `.veasset`, `.vescene`, and `.vematerial`.
-- Integrate assimp import.
-- Import mesh source files.
-- Track material and texture references.
-- Create `VEngineAssetTool`.
-- Add command line import path.
-- Add Editor-triggered import path.
-- Route asset import and runtime loading work through Resource, IOSystem, and Job System services owned by
-  `EngineRuntime`.
+Detailed design:
+
+- See [Asset Pipeline](AssetPipeline.md).
+
+Implementation order:
+
+- Define stable `AssetGuid` handling for project assets using Boost.UUID, and keep `AssetGuid` distinct from runtime
+  `ResourceId` values.
+- Add first asset reference types for scene/component serialization so mesh and material references are stored as GUIDs
+  with optional project-relative path fallbacks instead of runtime resource handles.
+- Establish first project asset roots: versioned authored/source assets under `Assets/` and generated import artifacts
+  under `Generated/Assets/`.
+- Define the common JSON file contract rules for asset files: `format`, `version`, `guid`, `assetType`, project-relative
+  paths, explicit version checks, and clear diagnostics for unsupported versions.
+- Define `.veasset` source metadata sidecars with GUID, source path, source hash placeholder or content hash, importer
+  id, importer version, import settings, generated artifacts, and dependency records.
+- Promote the Milestone 5 scene serialization shape into the asset-level `.vescene` contract with scene metadata and
+  asset-reference properties.
+- Define `.vematerial` with shader reference, base color parameters, and texture slots. Use base color in the first
+  renderer path and keep texture slots as dependency metadata until texture resource loading lands.
+- Define first `.vemesh` native mesh payloads for imported static meshes. Keep the earliest payload text-friendly, and
+  either expand indices during load or add indexed mesh support only if it remains a small render-resource change.
+- Implement `AssetDatabase` as a simple in-memory index backed by per-asset text files rather than a central binary
+  database.
+- Add `AssetDatabase` project open, refresh, path normalization, GUID lookup, path lookup, artifact lookup, dependency
+  lookup, duplicate GUID detection, and validation APIs.
+- Add metadata creation and update paths for source assets and authored VEngine assets.
+- Add atomic-enough save behavior for local development metadata writes.
+- Keep source importers separate from Player runtime loading. Link source import code through `VEngineAssetTool` and the
+  Windows Editor import path, not through runtime source loading.
+- Implement a tiny project-owned OBJ importer first to prove the full source-to-runtime chain while the assimp
+  third-party wrapper is prepared.
+- Add the assimp importer backend for `fbx`, `gltf`, and `glb` source files after the first OBJ vertical slice is
+  stable.
+- Implement first import settings for unit scale, normal generation policy, and basic mesh combine or per-mesh artifact
+  behavior.
+- Import mesh positions, normals, vertex colors where present, material slots, and source names into `.vemesh`
+  artifacts.
+- Create or update simple `.vematerial` assets from imported material colors when practical.
+- Track source material texture references as asset dependencies without requiring full texture decoding or GPU texture
+  upload in this milestone.
+- Write generated import artifacts to stable GUID-based paths under `Generated/Assets/ImportCache/`.
+- Add deterministic reimport behavior based on source path, importer version, settings, and source hash when available.
+- Expand `ResourceManager` with file-backed mesh and material loading APIs while keeping built-in fallback resources.
+- Route runtime file reads through `IOSystem` and CPU parse/conversion work through `JobSystem` where the runtime path
+  can be asynchronous.
+- Apply completed resource loads to live runtime state at a controlled Game Thread boundary, then rely on existing
+  `RenderSystem::SynchronizeRenderResources()` revision tracking for render-side updates.
+- Add scene loading from `.vescene`, including GUID-based mesh/material resolution. Missing mesh artifacts fail scene
+  loading, while missing material assets can warn and use the default material.
+- Create `VEngineAssetTool` commands for `scan`, `import`, `reimport`, and `validate`.
+- Make `VEngineAssetTool` initialize logging, open the project `AssetDatabase`, run the shared import pipeline, print CI
+  friendly diagnostics, and return non-zero exit codes on failure.
+- Add an Editor-triggered import backend path that calls the same import service as `VEngineAssetTool`. Keep full Asset
+  Browser UI for Milestone 7.
+- Add a file-backed sample scene under `Assets/Samples/` that references a material and imported static mesh asset.
+- Update the Windows Player path so it can load the sample `.vescene` through the asset pipeline and render it through
+  the existing scene/render vertical slice.
+- Add focused CTest coverage for GUID parsing, asset path normalization, metadata round trips, AssetDatabase lookup,
+  validation, material loading, scene asset loading, assimp import smoke, reimport stability, ResourceManager
+  file-backed loading, and `VEngineAssetTool` command smoke behavior.
 
 ### Milestone 7: Editor MVP
 

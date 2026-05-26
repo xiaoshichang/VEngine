@@ -3,6 +3,9 @@
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Resource/ResourceHandle.h"
 
+#include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/FileSystem/Path.h"
+
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -61,10 +64,12 @@ namespace ve
         [[nodiscard]] ResourceHandle<MeshResource> CreateMesh(std::string name, std::vector<MeshVertex> vertices);
         [[nodiscard]] bool UpdateMesh(ResourceHandle<MeshResource> handle, std::vector<MeshVertex> vertices);
         [[nodiscard]] bool DestroyMesh(ResourceHandle<MeshResource> handle);
+        [[nodiscard]] Result<ResourceHandle<MeshResource>> LoadMeshFromFile(const Path& path);
 
         [[nodiscard]] ResourceHandle<MaterialResource> CreateMaterial(std::string name, const Vector3& baseColor);
         [[nodiscard]] bool UpdateMaterial(ResourceHandle<MaterialResource> handle, const Vector3& baseColor);
         [[nodiscard]] bool DestroyMaterial(ResourceHandle<MaterialResource> handle);
+        [[nodiscard]] Result<ResourceHandle<MaterialResource>> LoadMaterialFromFile(const Path& path);
 
         template<typename Visitor>
         void ForEachMesh(Visitor&& visitor) const

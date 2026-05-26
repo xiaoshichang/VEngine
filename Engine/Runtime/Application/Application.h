@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Scene/Scene.h"
 
@@ -16,6 +17,8 @@ namespace ve
         std::string name = "VEngine";
         WindowDesc mainWindow;
         EngineRuntimeDesc runtime;
+        Path projectRoot;
+        Path sampleScenePath = Path("Assets/Samples/Scenes/AssetPipelineSample.vescene");
     };
 
     class Application
