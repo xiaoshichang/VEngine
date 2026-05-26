@@ -39,18 +39,6 @@
             "binaryDir": "${sourceDir}/Build/windows-msvc-release"
         },
         {
-            "name": "windows-msvc-editor",
-            "displayName": "Windows MSVC Editor",
-            "inherits": "windows-msvc-debug",
-            "binaryDir": "${sourceDir}/Build/windows-msvc-editor",
-            "cacheVariables": {
-                "VE_BUILD_PLAYER": "ON",
-                "VE_BUILD_EDITOR": "ON",
-                "VE_BUILD_TESTS": "OFF",
-                "VE_BUILD_TOOLS": "ON"
-            }
-        },
-        {
             "name": "windows-msvc-tests",
             "displayName": "Windows MSVC Tests",
             "inherits": "windows-msvc-debug",
@@ -99,11 +87,6 @@
             "name": "windows-msvc-release",
             "configurePreset": "windows-msvc-release",
             "configuration": "Release"
-        },
-        {
-            "name": "windows-msvc-editor",
-            "configurePreset": "windows-msvc-editor",
-            "configuration": "Debug"
         },
         {
             "name": "windows-msvc-tests",

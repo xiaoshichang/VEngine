@@ -17,6 +17,7 @@ ThirdParty\Setup_Windows64.bat
 The script prepares:
 
 - Boost 1.85.0 under `Boost/Build/Windows64`.
+- Dear ImGui under `ImGui/Source`.
 - Microsoft DirectXShaderCompiler under `DirectXShaderCompiler/Build/Windows64`.
 - SPIRV-Cross under `SPIRV-Cross/Source` and `SPIRV-Cross/Build/Windows64`.
 

@@ -1085,7 +1085,6 @@ Recommended presets:
 ```text
 windows-msvc-debug
 windows-msvc-release
-windows-msvc-editor
 windows-msvc-tests
 ios-simulator-debug
 ios-simulator-release

@@ -27,6 +27,8 @@ function(ve_add_windows_editor)
     endif()
 
     if(WIN32)
+        ve_add_imgui()
+
         add_executable(VEngineEditor WIN32
             Editor/Windows/WindowsEditor.cpp
         )
@@ -34,6 +36,7 @@ function(ve_add_windows_editor)
         target_link_libraries(VEngineEditor
             PRIVATE
                 VEngine
+                VEngine::ImGui
         )
 
         ve_configure_target(VEngineEditor)

@@ -1,5 +1,6 @@
 param(
-    [switch]$SkipBoost
+    [switch]$SkipBoost,
+    [switch]$SkipImGui
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,6 +72,11 @@ if (-not $SkipBoost)
     {
         Write-Host "Boost already prepared: $(Join-Path $Root "Boost\Build\Windows64")"
     }
+}
+
+if (-not $SkipImGui)
+{
+    & (Join-Path $Root "ImGui\Setup_Windows64.ps1")
 }
 
 & (Join-Path $Root "DirectXShaderCompiler\Setup_Windows64.ps1")

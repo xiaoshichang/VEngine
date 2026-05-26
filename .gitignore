@@ -23,3 +23,5 @@ CTestTestfile.cmake
 
 cmake-build-debug/
 Generated/
+
+ThirdParty/ImGui/Source/

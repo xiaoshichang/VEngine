@@ -82,12 +82,12 @@ namespace ve
 
         /// Connects the RenderSystem frame boundary driven by the Game Thread.
         ///
-        /// During RenderExtraction, the Game Thread calls RenderSystem::RenderFrame(). RenderSystem owns the render
-        /// frames-in-flight slots. During EndFrame, GameThreadSystem inserts a Render Thread fence and waits with a
-        /// one-frame-lag policy so the Game Thread cannot run unbounded ahead of the Render Thread.
+        /// During RenderExtraction, the Game Thread submits a scene snapshot when an active scene is bound. During
+        /// EndFrame, GameThreadSystem inserts a Render Thread fence and waits with a one-frame-lag policy so the Game
+        /// Thread cannot run unbounded ahead of the Render Thread.
         [[nodiscard]] ErrorCode SetRenderSystem(RenderSystem* renderSystem) noexcept;
 
-        /// Disconnects the RenderSystem frame boundary and waits until any in-progress RenderFrame call has returned.
+        /// Disconnects the RenderSystem frame boundary and waits until any in-progress render extraction has returned.
         void ClearRenderSystem() noexcept;
 
         /// Sets the active scene updated and extracted by the Game Thread.

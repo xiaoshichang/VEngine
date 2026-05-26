@@ -30,7 +30,7 @@ namespace ve
 {
     namespace
     {
-        struct TriangleVertex
+        struct RenderVertex
         {
             Float32 position[3] = {};
             Float32 normal[3] = {};
@@ -65,7 +65,7 @@ namespace ve
         {
             ResourceId resourceId = InvalidResourceId;
             ResourceRevision revision = 0;
-            std::vector<TriangleVertex> vertices;
+            std::vector<RenderVertex> vertices;
         };
 
         struct RenderMaterialResourceUpdate
@@ -97,13 +97,7 @@ namespace ve
             Vector3 baseColor = Vector3::One();
         };
 
-        constexpr TriangleVertex TriangleVertices[] = {
-            TriangleVertex{{0.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 1.0f, 1.0f}},
-            TriangleVertex{{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.5f, 1.0f}},
-            TriangleVertex{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 1.0f, 0.7f}},
-        };
-
-        const char* TriangleHlslShaderSource = R"(
+        const char* DrawHlslShaderSource = R"(
 cbuffer DrawConstants : register(b0)
 {
     row_major float4x4 modelViewProjection;
@@ -148,7 +142,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 }
 )";
 
-        const char* TriangleMetalShaderSource = R"(
+        const char* DrawMetalShaderSource = R"(
 #include <metal_stdlib>
 using namespace metal;
 
@@ -252,10 +246,8 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
 
         struct RhiState
         {
-            struct TriangleResources
+            struct ScenePipelineResources
             {
-                std::unique_ptr<rhi::RhiBuffer> vertexBuffer;
-                std::unique_ptr<rhi::RhiBuffer> uniformBuffer;
                 std::unique_ptr<rhi::RhiShaderModule> vertexShader;
                 std::unique_ptr<rhi::RhiShaderModule> fragmentShader;
                 std::unique_ptr<rhi::RhiPipelineState> pipelineState;
@@ -264,7 +256,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             Atomic<int> backendValue{-1};
             std::unique_ptr<rhi::RhiDevice> device;
             std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
-            TriangleResources triangle;
+            ScenePipelineResources scenePipeline;
             std::unordered_map<ResourceId, RenderSceneMeshResource> sceneMeshes;
             std::unordered_map<ResourceId, RenderSceneMaterialResource> sceneMaterials;
         };
@@ -385,18 +377,18 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             return nullptr;
         }
 
-        [[nodiscard]] const char* GetTriangleShaderSource(rhi::RhiBackend backend) noexcept
+        [[nodiscard]] const char* GetDrawShaderSource(rhi::RhiBackend backend) noexcept
         {
             switch (backend)
             {
             case rhi::RhiBackend::Metal:
-                return TriangleMetalShaderSource;
+                return DrawMetalShaderSource;
             case rhi::RhiBackend::D3D11:
             case rhi::RhiBackend::D3D12:
-                return TriangleHlslShaderSource;
+                return DrawHlslShaderSource;
             }
 
-            return TriangleHlslShaderSource;
+            return DrawHlslShaderSource;
         }
 
         [[nodiscard]] Matrix44 ToShaderMatrix(const RenderSystemImpl& impl, const Matrix44& matrix) noexcept
@@ -456,18 +448,6 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             return uniforms;
         }
 
-        [[nodiscard]] DrawUniformData BuildTriangleUniformData(const RenderSystemImpl& impl) noexcept
-        {
-            return BuildDrawUniformData(impl,
-                                        Matrix44::Identity(),
-                                        Matrix44::Identity(),
-                                        Vector3::One(),
-                                        Vector3(0.0f, -1.0f, 0.0f),
-                                        Vector3::One(),
-                                        0.0f,
-                                        1.0f);
-        }
-
         [[nodiscard]] DrawUniformData BuildSceneDrawUniformData(const RenderSystemImpl& impl,
                                                                 const SceneRenderSnapshot& snapshot,
                                                                 const SceneDrawCommand& drawCommand) noexcept
@@ -507,7 +487,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             return impl.rhi.device->CreateBuffer(uniformBufferDesc);
         }
 
-        void DestroyTriangleResources(RenderSystemImpl& impl)
+        void DestroyScenePipelineResources(RenderSystemImpl& impl)
         {
             for (RenderFrameContext& frameContext : impl.frameRing.contexts)
             {
@@ -515,11 +495,9 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 frameContext.lastError = ErrorCode::None;
             }
 
-            impl.rhi.triangle.pipelineState.reset();
-            impl.rhi.triangle.fragmentShader.reset();
-            impl.rhi.triangle.vertexShader.reset();
-            impl.rhi.triangle.uniformBuffer.reset();
-            impl.rhi.triangle.vertexBuffer.reset();
+            impl.rhi.scenePipeline.pipelineState.reset();
+            impl.rhi.scenePipeline.fragmentShader.reset();
+            impl.rhi.scenePipeline.vertexShader.reset();
             impl.rhi.sceneMaterials.clear();
             impl.rhi.sceneMeshes.clear();
         }
@@ -531,46 +509,25 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             impl.resourceSynchronization.meshRevisions.clear();
         }
 
-        [[nodiscard]] ErrorCode CreateTriangleResources(RenderSystemImpl& impl)
+        [[nodiscard]] ErrorCode CreateScenePipelineResources(RenderSystemImpl& impl)
         {
             VE_ASSERT_MESSAGE(impl.rhi.device != nullptr,
-                              "CreateTriangleResources requires an initialized RHI device.");
+                              "CreateScenePipelineResources requires an initialized RHI device.");
             VE_ASSERT_MESSAGE(impl.rhi.mainSwapchain != nullptr,
-                              "CreateTriangleResources requires an initialized main swapchain.");
+                              "CreateScenePipelineResources requires an initialized main swapchain.");
 
-            rhi::RhiBufferDesc vertexBufferDesc = {};
-            vertexBufferDesc.size = sizeof(TriangleVertices);
-            vertexBufferDesc.usage = rhi::RhiBufferUsage::Vertex;
-            vertexBufferDesc.initialData = TriangleVertices;
-            vertexBufferDesc.debugName = "RenderSystemTriangleVertexBuffer";
-
-            impl.rhi.triangle.vertexBuffer = impl.rhi.device->CreateBuffer(vertexBufferDesc);
-            if (impl.rhi.triangle.vertexBuffer == nullptr)
-            {
-                return ErrorCode::PlatformError;
-            }
-
-            const DrawUniformData triangleUniformData = BuildTriangleUniformData(impl);
-            impl.rhi.triangle.uniformBuffer =
-                CreateDrawUniformBuffer(impl, triangleUniformData, "RenderSystemTriangleUniformBuffer");
-            if (impl.rhi.triangle.uniformBuffer == nullptr)
-            {
-                DestroyTriangleResources(impl);
-                return ErrorCode::PlatformError;
-            }
-
-            const char* shaderSource = GetTriangleShaderSource(impl.rhi.device->GetBackend());
+            const char* shaderSource = GetDrawShaderSource(impl.rhi.device->GetBackend());
 
             rhi::RhiShaderModuleDesc vertexShaderDesc = {};
             vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
             vertexShaderDesc.source = shaderSource;
             vertexShaderDesc.entryPoint = "VSMain";
-            vertexShaderDesc.debugName = "RenderSystemTriangleVertexShader";
+            vertexShaderDesc.debugName = "RenderSystemSceneVertexShader";
 
-            impl.rhi.triangle.vertexShader = impl.rhi.device->CreateShaderModule(vertexShaderDesc);
-            if (impl.rhi.triangle.vertexShader == nullptr)
+            impl.rhi.scenePipeline.vertexShader = impl.rhi.device->CreateShaderModule(vertexShaderDesc);
+            if (impl.rhi.scenePipeline.vertexShader == nullptr)
             {
-                DestroyTriangleResources(impl);
+                DestroyScenePipelineResources(impl);
                 return ErrorCode::PlatformError;
             }
 
@@ -578,12 +535,12 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
             fragmentShaderDesc.source = shaderSource;
             fragmentShaderDesc.entryPoint = "PSMain";
-            fragmentShaderDesc.debugName = "RenderSystemTriangleFragmentShader";
+            fragmentShaderDesc.debugName = "RenderSystemSceneFragmentShader";
 
-            impl.rhi.triangle.fragmentShader = impl.rhi.device->CreateShaderModule(fragmentShaderDesc);
-            if (impl.rhi.triangle.fragmentShader == nullptr)
+            impl.rhi.scenePipeline.fragmentShader = impl.rhi.device->CreateShaderModule(fragmentShaderDesc);
+            if (impl.rhi.scenePipeline.fragmentShader == nullptr)
             {
-                DestroyTriangleResources(impl);
+                DestroyScenePipelineResources(impl);
                 return ErrorCode::PlatformError;
             }
 
@@ -606,21 +563,21 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             uniformBindings[0].slot = 0;
 
             rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
-            pipelineDesc.vertexShader = impl.rhi.triangle.vertexShader.get();
-            pipelineDesc.fragmentShader = impl.rhi.triangle.fragmentShader.get();
+            pipelineDesc.vertexShader = impl.rhi.scenePipeline.vertexShader.get();
+            pipelineDesc.fragmentShader = impl.rhi.scenePipeline.fragmentShader.get();
             pipelineDesc.vertexLayout.attributes = attributes;
             pipelineDesc.vertexLayout.attributeCount = 3;
-            pipelineDesc.vertexLayout.stride = sizeof(TriangleVertex);
+            pipelineDesc.vertexLayout.stride = sizeof(RenderVertex);
             pipelineDesc.uniformBufferBindings = uniformBindings;
             pipelineDesc.uniformBufferBindingCount = 1;
             pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
             pipelineDesc.colorFormat = impl.rhi.mainSwapchain->GetColorFormat();
-            pipelineDesc.debugName = "RenderSystemTrianglePipeline";
+            pipelineDesc.debugName = "RenderSystemScenePipeline";
 
-            impl.rhi.triangle.pipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
-            if (impl.rhi.triangle.pipelineState == nullptr)
+            impl.rhi.scenePipeline.pipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
+            if (impl.rhi.scenePipeline.pipelineState == nullptr)
             {
-                DestroyTriangleResources(impl);
+                DestroyScenePipelineResources(impl);
                 return ErrorCode::PlatformError;
             }
 
@@ -629,7 +586,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 frameContext.commandList = impl.rhi.device->CreateCommandList();
                 if (frameContext.commandList == nullptr)
                 {
-                    DestroyTriangleResources(impl);
+                    DestroyScenePipelineResources(impl);
                     return ErrorCode::PlatformError;
                 }
             }
@@ -637,14 +594,14 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             return ErrorCode::None;
         }
 
-        [[nodiscard]] TriangleVertex ToTriangleVertex(const MeshVertex& vertex) noexcept
+        [[nodiscard]] RenderVertex ToRenderVertex(const MeshVertex& vertex) noexcept
         {
             const Vector3 position = vertex.position;
             const Vector3 normal = vertex.normal;
             const Vector3 color = vertex.color;
-            return TriangleVertex{{position.GetX(), position.GetY(), position.GetZ()},
-                                  {normal.GetX(), normal.GetY(), normal.GetZ()},
-                                  {color.GetX(), color.GetY(), color.GetZ()}};
+            return RenderVertex{{position.GetX(), position.GetY(), position.GetZ()},
+                                {normal.GetX(), normal.GetY(), normal.GetZ()},
+                                {color.GetX(), color.GetY(), color.GetZ()}};
         }
 
         [[nodiscard]] RenderMeshResourceUpdate BuildRenderMeshResourceUpdate(const MeshResource& mesh)
@@ -656,7 +613,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
 
             for (const MeshVertex& vertex : mesh.vertices)
             {
-                update.vertices.push_back(ToTriangleVertex(vertex));
+                update.vertices.push_back(ToRenderVertex(vertex));
             }
 
             return update;
@@ -780,7 +737,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 }
 
                 rhi::RhiBufferDesc vertexBufferDesc = {};
-                vertexBufferDesc.size = sizeof(TriangleVertex) * mesh.vertices.size();
+                vertexBufferDesc.size = sizeof(RenderVertex) * mesh.vertices.size();
                 vertexBufferDesc.usage = rhi::RhiBufferUsage::Vertex;
                 vertexBufferDesc.initialData = mesh.vertices.data();
                 vertexBufferDesc.debugName = "RenderSystemSceneMeshVertexBuffer";
@@ -843,17 +800,16 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             return drawCommands;
         }
 
-        void RenderTriangleFrame(RenderSystemImpl& impl, RenderFrameContext& frameContext)
+        void RenderClearFrame(RenderSystemImpl& impl, RenderFrameContext& frameContext)
         {
             if (impl.rhi.device == nullptr || impl.rhi.mainSwapchain == nullptr)
             {
-                TerminateRenderSystem("frame execution failed in RenderTriangleFrame", ErrorCode::InvalidState);
+                TerminateRenderSystem("frame execution failed in RenderClearFrame", ErrorCode::InvalidState);
             }
 
-            if (impl.rhi.triangle.vertexBuffer == nullptr || impl.rhi.triangle.uniformBuffer == nullptr ||
-                impl.rhi.triangle.pipelineState == nullptr || frameContext.commandList == nullptr)
+            if (frameContext.commandList == nullptr)
             {
-                TerminateRenderSystem("frame execution failed in RenderTriangleFrame", ErrorCode::InvalidState);
+                TerminateRenderSystem("frame execution failed in RenderClearFrame", ErrorCode::InvalidState);
             }
 
             rhi::RhiRenderPassDesc renderPassDesc = {};
@@ -866,23 +822,18 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
 
             if (!commandList.Begin() || !commandList.BeginRenderPass(*impl.rhi.mainSwapchain, renderPassDesc))
             {
-                TerminateRenderSystem("frame execution failed in RenderTriangleFrame command list begin",
+                TerminateRenderSystem("frame execution failed in RenderClearFrame command list begin",
                                       ErrorCode::PlatformError);
             }
 
             commandList.SetViewport(rhi::RhiViewport{
                 0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
             commandList.SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
-            commandList.SetPipeline(*impl.rhi.triangle.pipelineState);
-            commandList.SetVertexBuffer(0, *impl.rhi.triangle.vertexBuffer, sizeof(TriangleVertex), 0);
-            commandList.SetUniformBuffer(
-                rhi::RhiShaderStage::Vertex, 0, *impl.rhi.triangle.uniformBuffer, 0, sizeof(DrawUniformData));
-            commandList.Draw(3, 0);
             commandList.EndRenderPass();
 
             if (!commandList.End() || !impl.rhi.device->Submit(commandList) || !impl.rhi.mainSwapchain->Present())
             {
-                TerminateRenderSystem("frame execution failed in RenderTriangleFrame submit", ErrorCode::PlatformError);
+                TerminateRenderSystem("frame execution failed in RenderClearFrame submit", ErrorCode::PlatformError);
             }
         }
 
@@ -894,7 +845,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 TerminateRenderSystem("frame execution failed in RenderSceneFrame", ErrorCode::InvalidState);
             }
 
-            if (impl.rhi.triangle.pipelineState == nullptr || frameContext.commandList == nullptr)
+            if (impl.rhi.scenePipeline.pipelineState == nullptr || frameContext.commandList == nullptr)
             {
                 TerminateRenderSystem("frame execution failed in RenderSceneFrame", ErrorCode::InvalidState);
             }
@@ -943,11 +894,11 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             commandList.SetViewport(rhi::RhiViewport{
                 0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
             commandList.SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
-            commandList.SetPipeline(*impl.rhi.triangle.pipelineState);
+            commandList.SetPipeline(*impl.rhi.scenePipeline.pipelineState);
             for (SizeT index = 0; index < drawCommands.size(); ++index)
             {
                 const SceneDrawCommand& drawCommand = drawCommands[index];
-                commandList.SetVertexBuffer(0, *drawCommand.mesh->vertexBuffer, sizeof(TriangleVertex), 0);
+                commandList.SetVertexBuffer(0, *drawCommand.mesh->vertexBuffer, sizeof(RenderVertex), 0);
                 commandList.SetUniformBuffer(
                     rhi::RhiShaderStage::Vertex, 0, *drawUniformBuffers[index], 0, sizeof(DrawUniformData));
                 commandList.Draw(drawCommand.mesh->vertexCount, 0);
@@ -1044,7 +995,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 TerminateRenderSystem("frame execution failed in RenderFrame", ErrorCode::InvalidState);
             }
 
-            RenderTriangleFrame(impl, *frameContext);
+            RenderClearFrame(impl, *frameContext);
         }
 
         void ExecuteSceneRenderFrame(RenderSystemImpl& impl,
@@ -1113,7 +1064,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 impl.rhi.device->WaitIdle();
             }
 
-            DestroyTriangleResources(impl);
+            DestroyScenePipelineResources(impl);
             impl.rhi.mainSwapchain.reset();
 
             if (impl.rhi.device != nullptr)
@@ -1385,11 +1336,11 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                                       }
 
                                       impl_->rhi.mainSwapchain = std::move(swapchain);
-                                      ErrorCode triangleResult = CreateTriangleResources(*impl_);
-                                      if (triangleResult != ErrorCode::None)
+                                      ErrorCode pipelineResult = CreateScenePipelineResources(*impl_);
+                                      if (pipelineResult != ErrorCode::None)
                                       {
                                           impl_->rhi.mainSwapchain.reset();
-                                          return triangleResult;
+                                          return pipelineResult;
                                       }
 
                                       return ErrorCode::None;
@@ -1411,7 +1362,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                                                       impl_->rhi.device->WaitIdle();
                                                   }
 
-                                                  DestroyTriangleResources(*impl_);
+                                                  DestroyScenePipelineResources(*impl_);
                                                   impl_->rhi.mainSwapchain.reset();
                                                   return ErrorCode::None;
                                               });

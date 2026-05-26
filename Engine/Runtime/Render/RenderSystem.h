@@ -181,19 +181,19 @@ namespace ve
         /// Creates the main swapchain on the Render Thread.
         ///
         /// The RHI device must already be initialized. The surface descriptor must carry the native handle required by
-        /// the selected backend. The first implementation also creates the minimal triangle resources used by
-        /// RenderFrame().
+        /// the selected backend. The first implementation also creates the minimal scene pipeline resources used by
+        /// SubmitFrame().
         [[nodiscard]] ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
 
         /// Destroys the main swapchain on the Render Thread if one exists.
         void DestroyMainSwapchain() noexcept;
 
-        /// Renders one first-stage frame to the main swapchain.
+        /// Renders one clear-only fallback frame to the main swapchain.
         ///
         /// Must be called on the Game Thread after GameThreadSystem binds its Game Thread id to RenderSystem.
         /// The current implementation advances a render-frame context ring, submits a render command that clears the
-        /// back buffer, draws a simple triangle, submits the command list, and presents. GameThreadSystem frame-end
-        /// sync controls how far the Game Thread can run ahead of the Render Thread. Submission or Render Thread
+        /// back buffer, submits the command list, and presents. Scene rendering should use SubmitFrame(); this fallback
+        /// is intentionally non-drawing so startup never presents placeholder geometry. Submission or Render Thread
         /// execution errors are fatal and terminate the process.
         void RenderFrame();
 

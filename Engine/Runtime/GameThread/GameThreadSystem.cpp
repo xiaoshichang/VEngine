@@ -171,27 +171,6 @@ namespace ve
             scene->UpdateTransforms();
         }
 
-        void ExecuteRenderFrame(GameThreadSystemImpl& impl) noexcept
-        {
-            RenderSystem* renderSystem = AcquireRenderSystem(impl);
-            if (renderSystem == nullptr)
-            {
-                return;
-            }
-
-            auto renderFrameCounterGuard = MakeScopeExit(
-                [&impl]() { impl.renderBridge.activeRenderFrameCount.fetch_sub(1, std::memory_order_acq_rel); });
-
-            try
-            {
-                renderSystem->RenderFrame();
-            }
-            catch (...)
-            {
-                VE_ASSERT_ALWAYS_MESSAGE(false, "Unhandled exception escaped GameThreadSystem render-frame execution.");
-            }
-        }
-
         void ExecuteRenderExtraction(GameThreadSystemImpl& impl, UInt64 frameId) noexcept
         {
             RenderSystem* renderSystem = AcquireRenderSystem(impl);
@@ -222,10 +201,6 @@ namespace ve
                     SceneRenderSnapshot snapshot = ExtractSceneRenderSnapshot(*scene, *resourceManager, frameId);
                     renderSystem->SynchronizeRenderResources(*resourceManager);
                     renderSystem->SubmitFrame(std::move(snapshot));
-                }
-                else
-                {
-                    renderSystem->RenderFrame();
                 }
             }
             catch (...)
