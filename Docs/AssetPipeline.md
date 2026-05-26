@@ -419,8 +419,8 @@ Acceptable first UI entry points:
 - A small developer-only import panel.
 
 The Editor path should call the same import service as `VEngineAssetTool`. It should not duplicate assimp import logic
-or write metadata through separate ad hoc code. Import diagnostics should go through the logging facade so Milestone 7
-can show them in the Console panel.
+or write metadata through separate ad hoc code. Import diagnostics should go through the logging facade so the Windows
+debug console and any future tooling hooks receive the same messages.
 
 ## 11. Sample Vertical Slice
 

@@ -111,7 +111,7 @@ Select project root
   -> create missing Generated subdirectories
   -> open AssetDatabase(projectRoot)
   -> scan Assets and .veasset sidecars
-  -> report diagnostics in Console
+  -> report diagnostics in the Windows debug console
   -> open startupScene when present
   -> fall back to an empty unsaved scene when startupScene is missing
 ```
@@ -444,7 +444,7 @@ Recommended order:
 - Add a no-argument Project Launcher that reads recent projects from the Windows registry.
 - Add `File -> Open Project...` and update the registry-backed recent project list after successful opens.
 - Create missing `Generated/` subdirectories when a project opens.
-- Add docking Editor shell, main menu, console panel, and project status display.
+- Add docking Editor shell, main menu, and project status display.
 - Add Asset Browser over `AssetDatabase` scan results.
 - Add scene open/save and startup scene loading.
 - Add Scene Hierarchy and Inspector using Scene and Reflection APIs.
@@ -462,7 +462,8 @@ Milestone 7 is complete when:
 - Asset Browser reflects `AssetDatabase` state and can trigger import, reimport, scan, and validate.
 - A `.vescene` can be opened, inspected, edited through Reflection, saved, and loaded again.
 - The Viewport can render the currently opened scene.
-- Console displays engine logs and asset diagnostics.
+- Windows Debug Console displays engine logs, asset diagnostics, and GM command input in both Debug and Release Editor
+  builds.
 - Play/Stop runs a separate play scene without corrupting the edit scene.
 - Windows package staging can produce a read-only `Content/` layout with `.veproject`, manifest, native assets, and
   generated artifacts.

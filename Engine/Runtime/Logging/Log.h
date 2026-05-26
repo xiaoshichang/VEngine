@@ -48,7 +48,7 @@ namespace ve
         SourceLocation location = SourceLocation::current();
     };
 
-    /// Optional log callback used by tests and future Editor Console integration.
+    /// Optional log callback used by tests and future tooling integrations.
     using LogCallback = void (*)(const LogRecord& record);
 
     [[nodiscard]] LoggingConfig MakeDefaultLoggingConfig();

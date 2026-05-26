@@ -796,7 +796,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     (void)previousInstance;
     (void)showCommand;
 
-    ve::InitializeWin32DebugConsole();
+    ve::InitializeWin32DebugConsole(true);
 
     ve::ErrorCode loggingResult = ve::InitializeLogging();
     if (loggingResult != ve::ErrorCode::None)

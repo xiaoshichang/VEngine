@@ -596,9 +596,13 @@ namespace
 
 namespace ve
 {
-    void InitializeWin32DebugConsole()
+    void InitializeWin32DebugConsole(bool forceEnable)
     {
-#if VE_BUILD_DEBUG
+        if (!forceEnable && VE_BUILD_DEBUG == 0)
+        {
+            return;
+        }
+
         if (GetConsoleWindow() == nullptr)
         {
             if (AttachConsole(ATTACH_PARENT_PROCESS) == 0)
@@ -661,7 +665,6 @@ namespace ve
         {
             std::thread(RunConsoleInputThread).detach();
         }
-#endif
     }
 
     void SetWin32DebugConsoleCommandHandler(Win32DebugConsoleCommandHandler handler)

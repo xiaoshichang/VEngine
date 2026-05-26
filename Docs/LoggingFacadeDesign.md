@@ -6,7 +6,7 @@
 implemented on top of `Boost.Log`, but ordinary engine code should not include or call `Boost.Log` APIs directly.
 
 The first-stage goal is to provide a practical, testable logging system with predictable initialization, useful default
-sinks, source-location diagnostics, and clear extension points for the future Editor Console.
+sinks, source-location diagnostics, and a small callback extension point for tests and tooling.
 
 ## 2. Design Decisions
 
@@ -23,7 +23,7 @@ The first-stage `Logging` design follows these decisions:
 - Log formatting uses C++20 `std::format` and `{}` placeholders.
 - Windows defaults to console, file, and debugger-output sinks.
 - iOS defaults to console output; file output is available through explicit config.
-- Editor Console support is exposed through a callback hook, not an Editor UI implementation.
+- The Windows Editor uses the Win32 debug console for logs and command input rather than an in-editor log panel.
 - Tests are registered through CMake/CTest.
 
 ## 3. Responsibilities
@@ -39,7 +39,7 @@ The first-stage `Logging` design follows these decisions:
 - Console output sink.
 - File output sink.
 - Windows debugger-output sink.
-- Editor callback hook.
+- Callback hook for tests and tooling.
 - Logging tests.
 
 ## 4. Non-Responsibilities
@@ -49,7 +49,7 @@ The first-stage `Logging` design follows these decisions:
 - Crash handling.
 - Fatal error termination policy.
 - Assertion macro definitions.
-- Editor Console UI.
+- In-editor log viewer UI.
 - Platform-specific writable directory policy.
 - FileSystem abstraction.
 - Structured telemetry.
@@ -169,7 +169,7 @@ Rules:
   message without crashing. The first implementation should prefer a minimal fallback to standard error or debugger output
   so early failures are visible.
 - `SetLogCallback(nullptr)` removes the callback.
-- The callback is an extension point for Editor Console and tests. The callback must not be required for normal sinks.
+- The callback is an extension point for tests and future tooling. The callback must not be required for normal sinks.
 
 ## 8. Logging Macros
 
@@ -274,7 +274,8 @@ Expected behavior:
 
 ### 10.4 Callback Sink
 
-The callback sink supports Editor Console and tests.
+The callback sink supports tests and future tooling integrations. The Windows Editor log view is the Win32 debug
+console, not an ImGui log panel.
 
 Rules:
 
@@ -338,7 +339,7 @@ The first implementation should do the following:
 
 The first implementation should not add:
 
-- Editor Console UI.
+- In-editor log viewer UI.
 - Crash handling.
 - Log rotation.
 - Async logging queue.

@@ -364,7 +364,7 @@ Recommended sinks:
 
 - Console sink.
 - File sink.
-- Editor console callback sink.
+- Optional callback hook for tests and tooling.
 - Optional debugger output sink on Windows.
 
 The public engine code should not depend directly on `Boost.Log` APIs everywhere. Most code should go through the VEngine logging facade so the backend remains replaceable if needed.
@@ -949,7 +949,6 @@ Scene Hierarchy
 Inspector
 Asset Browser
 Viewport
-Console / Log
 Project Settings
 Import Settings
 Play / Stop Toolbar
@@ -962,7 +961,8 @@ Editor principles:
 - Editor edits scene through public Scene and Reflection APIs.
 - Editor imports assets through AssetDatabase and AssetImporter.
 - Editor Viewport renders through the engine Render and RHI layers.
-- Editor Console receives logs through the VEngine logging facade callback path.
+- Windows Editor uses the engine-owned Win32 debug console for log output and command input. This console remains
+  available in both Debug and Release Editor builds.
 
 First-stage Editor workflow:
 
@@ -989,6 +989,8 @@ Editor project structure:
   GUIDs with project-relative path fallbacks.
 - On Windows, the no-argument Project Launcher reads recently opened projects from the current user's registry state
   under `HKCU\Software\VEngine\Editor`.
+- On Windows, the Editor keeps the Win32 debug console enabled in every build configuration so project open diagnostics
+  and GM commands stay available without an in-editor log panel.
 - Packaged Windows and iOS builds should use a read-only `Content/` layout with a compact asset manifest instead of
   scanning an editable project directory at runtime.
 - Engine-owned built-in resources are addressed through stable `builtin:` locators and are not authored project assets.
@@ -1020,7 +1022,8 @@ Windows platform layer:
 - Owns Win32 message loop.
 - Exposes native window handles.
 - Supports Player and Editor shells.
-- Owns debug console output and command input in debug builds.
+- Owns debug console output and command input. Windows Editor keeps this console enabled in both Debug and Release
+  builds; Player currently uses the default debug-build console behavior.
 - Later produces input events.
 - Later supports dynamic library loading for scripting.
 - Later provides platform file path utilities.

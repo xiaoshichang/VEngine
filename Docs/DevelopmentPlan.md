@@ -82,16 +82,16 @@ iOS app
 
 Goal:
 
-- Confirm the engine logging facade can route logs to console, file, and the Editor Console callback path.
+- Confirm the engine logging facade can route logs to the Windows debug console, file sink, and optional callback path
+  used by tests or tooling.
 
 Prototype:
 
 ```text
 VE_LOG_INFO
   -> Boost.Log core
-  -> Console sink
+  -> Debug console sink
   -> File sink
-  -> Editor callback sink
 ```
 
 ## 3. Development Roadmap
@@ -300,10 +300,9 @@ Implementation order:
   `HKCU\Software\VEngine\Editor`, and update it after successful project opens.
 - Keep `File -> Open Project...` available inside the Editor for switching projects.
 - On project open, parse `.veproject`, create missing generated subdirectories, refresh `AssetDatabase`, surface
-  diagnostics in the Console, and open the startup scene when available.
+  diagnostics in the Windows debug console, and open the startup scene when available.
 - Store local Editor layout in user-local settings or `Generated/Editor/`, not in authored assets.
 - Integrate Dear ImGui and add the docking-based Editor shell, main menu, status bar, and project title display.
-- Add Console / Log panel backed by the VEngine logging facade callback path.
 - Add Asset Browser over `AssetDatabase` scan results, including GUID, type, path, importer, generated artifact status,
   and commands for scan, import, reimport, and validate.
 - Add scene open/save for `.vescene` assets through the existing scene serialization and asset reference contracts.
