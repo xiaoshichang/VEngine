@@ -274,7 +274,7 @@ Implementation order:
 - Update the Windows Player path so it can load the sample `.vescene` through the asset pipeline and render it through
   the existing scene/render vertical slice.
 - Add focused CTest coverage for GUID parsing, asset path normalization, metadata round trips, AssetDatabase lookup,
-  validation, material loading, scene asset loading, assimp import smoke, reimport stability, ResourceManager
+  validation, material loading, scene asset loading, source-model import smoke, reimport stability, ResourceManager
   file-backed loading, and `VEngineAssetTool` command smoke behavior.
 
 ### Milestone 7: Editor MVP
@@ -301,8 +301,10 @@ Implementation order:
 - Keep `File -> Open Project...` available inside the Editor for switching projects.
 - On project open, parse `.veproject`, create missing generated subdirectories, refresh `AssetDatabase`, surface
   diagnostics in the Windows debug console, and open the startup scene when available.
-- Store local Editor layout in user-local settings or `Generated/Editor/`, not in authored assets.
-- Integrate Dear ImGui and add the docking-based Editor shell, main menu, status bar, and project title display.
+- Store any persisted local Editor layout or workspace state in user-local settings or `Generated/Editor/`, not in
+  authored assets.
+- Integrate Dear ImGui and add the Editor shell, main menu, status bar, project title display, and first Unity-style
+  panel layout.
 - Add Asset Browser over `AssetDatabase` scan results, including GUID, type, path, importer, generated artifact status,
   and commands for scan, import, reimport, and validate.
 - Add scene open/save for `.vescene` assets through the existing scene serialization and asset reference contracts.

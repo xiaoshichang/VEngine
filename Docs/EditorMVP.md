@@ -451,7 +451,7 @@ Recommended order:
 - Add a no-argument Project Launcher that reads recent projects from the Windows registry.
 - Add `File -> Open Project...` and update the registry-backed recent project list after successful opens.
 - Create missing `Generated/` subdirectories when a project opens.
-- Add docking Editor shell, main menu, and project status display.
+- Add the Dear ImGui Editor shell, main menu, project status display, and first Unity-style panel layout.
 - Add Asset Browser over `AssetDatabase` scan results.
 - Add scene open/save and startup scene loading.
 - Add Scene Hierarchy and Inspector using Scene and Reflection APIs.

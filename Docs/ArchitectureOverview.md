@@ -154,7 +154,7 @@ VEngineIOSPlayer
   Planned iOS player app target for Milestone 10.
 
 VEngineAssetTool
-  Planned command line asset import and cook tool. The current target may exist as a placeholder before Milestone 6.
+  Command line asset scan, import, reimport, and validation tool.
 
 VEngineShaderTool
   Command line shader compile, reflection, and cross-compile tool.
@@ -963,10 +963,11 @@ Inspector
 Asset Browser
 SceneView
 GameView
-Project Settings
-Import Settings
 Play / Stop Toolbar
 ```
+
+Later Editor panels can add Project Settings, Import Settings, Console views, and other specialized tools once the
+underlying settings and authoring contracts exist.
 
 Editor principles:
 

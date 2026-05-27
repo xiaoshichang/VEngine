@@ -35,7 +35,7 @@ This milestone should stay focused on the first usable asset flow. It does not i
 - Asset hot reload while the Player or Editor is running.
 - File watching.
 - Drag-and-drop asset UI.
-- Full Asset Browser UI. The Asset Browser remains Milestone 7 work.
+- Full Asset Browser UI. That belongs to the Editor MVP rather than this asset-pipeline milestone.
 - Large-scale dependency graph optimization.
 - Build packaging, patching, or remote asset cache support.
 - Importing source assets at runtime in Player builds.
@@ -154,7 +154,7 @@ Required first-stage fields:
   "assetType": "SourceModel",
   "source": "Assets/Samples/Models/Crate.obj",
   "sourceHash": "sha256-or-placeholder",
-  "importer": "AssimpModel",
+  "importer": "ObjModel",
   "importerVersion": 1,
   "settings": {},
   "artifacts": [],
@@ -233,8 +233,8 @@ Required first-stage fields:
 }
 ```
 
-The first runtime renderer may only consume `baseColor`. Texture slots should still be represented so assimp material
-import can record source texture dependencies without requiring texture decoding to be complete.
+The first runtime renderer may only consume `baseColor`. Texture slots should still be represented so source material
+import can record texture dependencies without requiring texture decoding to be complete.
 
 ### 5.4 `.vemesh`
 
@@ -418,9 +418,9 @@ Acceptable first UI entry points:
 - A temporary file path command.
 - A small developer-only import panel.
 
-The Editor path should call the same import service as `VEngineAssetTool`. It should not duplicate assimp import logic
-or write metadata through separate ad hoc code. Import diagnostics should go through the logging facade so the Windows
-debug console and any future tooling hooks receive the same messages.
+The Editor path should call the same import service as `VEngineAssetTool`. It should not duplicate source-model import
+logic or write metadata through separate ad hoc code. Import diagnostics should go through the logging facade so the
+Windows debug console and any future tooling hooks receive the same messages.
 
 ## 11. Sample Vertical Slice
 
@@ -453,7 +453,7 @@ Prioritize small deterministic tests:
 - Duplicate GUID detection.
 - Missing dependency and missing artifact validation.
 - AssetDatabase refresh after adding or updating metadata.
-- assimp import smoke test using a tiny checked-in source model.
+- Source-model import smoke test using a tiny checked-in source model.
 - Import re-run stability for unchanged source/settings.
 - Runtime mesh and material loading into `ResourceManager`.
 - Scene load resolving mesh and material asset references.
@@ -467,7 +467,8 @@ Milestone 6 is complete when:
 
 - Asset identity and metadata are stable enough for scene references.
 - `AssetDatabase` can scan, resolve, validate, and update first-stage assets.
-- `VEngineAssetTool` can import a static model through assimp into VEngine-native mesh/material files.
+- `VEngineAssetTool` can import a static model through the first source-model importer into VEngine-native mesh/material
+  files.
 - `.veasset`, `.vescene`, `.vematerial`, and first `.vemesh` contracts are documented and tested.
 - Runtime code can load a `.vescene` that references mesh and material assets by GUID.
 - `ResourceManager` can create runtime mesh and material resources from file-backed assets.
