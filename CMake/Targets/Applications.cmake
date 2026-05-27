@@ -33,8 +33,17 @@ function(ve_add_windows_editor)
             Editor/Core/EditorProject.cpp
             Editor/Core/EditorProject.h
             Editor/Windows/WindowsEditor.cpp
+            Editor/Windows/WindowsEditorAssetBrowserPanel.cpp
+            Editor/Windows/WindowsEditorGameViewPanel.cpp
+            Editor/Windows/WindowsEditorInspectorPanel.cpp
+            Editor/Windows/WindowsEditorPanels.cpp
+            Editor/Windows/WindowsEditorPanels.h
             Editor/Windows/WindowsProjectLauncher.cpp
             Editor/Windows/WindowsProjectLauncher.h
+            Editor/Windows/WindowsEditorSceneHierarchyPanel.cpp
+            Editor/Windows/WindowsEditorSceneViewPanel.cpp
+            Tools/AssetTool/ObjImporter.cpp
+            Tools/AssetTool/ObjImporter.h
         )
 
         target_link_libraries(VEngineEditor

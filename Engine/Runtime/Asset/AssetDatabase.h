@@ -83,6 +83,7 @@ namespace ve
     private:
         [[nodiscard]] ErrorCode ScanDirectory(const Path& path);
         [[nodiscard]] ErrorCode AddRecord(AssetRecord record);
+        [[nodiscard]] ErrorCode AddSourceAssetCandidateRecord(const Path& path);
         [[nodiscard]] ErrorCode AddNativeAssetRecord(const Path& path);
 
         Path projectRoot_;

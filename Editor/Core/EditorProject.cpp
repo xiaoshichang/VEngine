@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
+#include "Engine/Runtime/Scene/Serialization/SceneSerialization.h"
 
 #include <boost/json.hpp>
 #include <boost/system/error_code.hpp>
@@ -193,6 +194,407 @@ namespace ve
             root["name"] = std::string(name);
             root["scene"] = std::move(sceneData);
             return root;
+        }
+
+        [[nodiscard]] std::string MakeSceneNameFromPath(const Path& scenePath)
+        {
+            std::string filename = scenePath.GetFilename();
+            const SizeT dot = filename.find_last_of('.');
+            if (dot != std::string::npos)
+            {
+                filename.erase(dot);
+            }
+
+            return filename.empty() ? "Scene" : filename;
+        }
+
+        [[nodiscard]] UInt64 ReadUInt64Value(const value* jsonValue, UInt64 fallback = 0) noexcept
+        {
+            if (jsonValue == nullptr)
+            {
+                return fallback;
+            }
+
+            if (jsonValue->is_uint64())
+            {
+                return jsonValue->as_uint64();
+            }
+
+            if (jsonValue->is_int64() && jsonValue->as_int64() >= 0)
+            {
+                return static_cast<UInt64>(jsonValue->as_int64());
+            }
+
+            return fallback;
+        }
+
+        [[nodiscard]] const array* FindSceneGameObjects(const object& sceneAsset)
+        {
+            const value* sceneValue = FindMember(sceneAsset, "scene");
+            if (sceneValue == nullptr || !sceneValue->is_object())
+            {
+                return nullptr;
+            }
+
+            const value* gameObjectsValue = FindMember(sceneValue->as_object(), "gameObjects");
+            return gameObjectsValue != nullptr && gameObjectsValue->is_array() ? &gameObjectsValue->as_array()
+                                                                               : nullptr;
+        }
+
+        [[nodiscard]] array* FindSceneGameObjects(object& sceneAsset)
+        {
+            value* sceneValue = sceneAsset.if_contains("scene");
+            if (sceneValue == nullptr || !sceneValue->is_object())
+            {
+                return nullptr;
+            }
+
+            value* gameObjectsValue = sceneValue->as_object().if_contains("gameObjects");
+            return gameObjectsValue != nullptr && gameObjectsValue->is_array() ? &gameObjectsValue->as_array()
+                                                                               : nullptr;
+        }
+
+        [[nodiscard]] const object* FindGameObjectById(const array& gameObjects, UInt64 id)
+        {
+            for (const value& gameObjectValue : gameObjects)
+            {
+                if (!gameObjectValue.is_object())
+                {
+                    continue;
+                }
+
+                const object& gameObjectJson = gameObjectValue.as_object();
+                if (ReadUInt64Value(FindMember(gameObjectJson, "id")) == id)
+                {
+                    return &gameObjectJson;
+                }
+            }
+
+            return nullptr;
+        }
+
+        [[nodiscard]] object* FindGameObjectById(array& gameObjects, UInt64 id)
+        {
+            for (value& gameObjectValue : gameObjects)
+            {
+                if (!gameObjectValue.is_object())
+                {
+                    continue;
+                }
+
+                object& gameObjectJson = gameObjectValue.as_object();
+                if (ReadUInt64Value(FindMember(gameObjectJson, "id")) == id)
+                {
+                    return &gameObjectJson;
+                }
+            }
+
+            return nullptr;
+        }
+
+        [[nodiscard]] bool IsAssetReferenceValue(const value& jsonValue) noexcept
+        {
+            return jsonValue.is_object() || jsonValue.is_string();
+        }
+
+        [[nodiscard]] AssetGuid ReadOptionalAssetGuid(const object& jsonObject, const char* name)
+        {
+            const value* member = FindMember(jsonObject, name);
+            if (member == nullptr || !member->is_string())
+            {
+                return {};
+            }
+
+            const boost::json::string& guidText = member->as_string();
+            Result<AssetGuid> guid = AssetGuid::Parse(std::string_view(guidText.data(), guidText.size()));
+            return guid ? guid.GetValue() : AssetGuid();
+        }
+
+        [[nodiscard]] EditorAuthoredAssetReference ReadAuthoredAssetReference(const value& jsonValue)
+        {
+            EditorAuthoredAssetReference reference;
+            if (jsonValue.is_object())
+            {
+                const object& referenceJson = jsonValue.as_object();
+                reference.guid = ReadOptionalAssetGuid(referenceJson, "guid");
+                reference.path = Path(ReadString(referenceJson, "path"));
+            }
+            else if (jsonValue.is_string())
+            {
+                reference.path = Path(std::string(jsonValue.as_string()));
+            }
+
+            reference.hasValue = reference.guid.IsValid() || !reference.path.IsEmpty();
+            return reference;
+        }
+
+        [[nodiscard]] value WriteAuthoredAssetReference(const EditorAuthoredAssetReference& reference)
+        {
+            object referenceJson;
+            if (reference.guid.IsValid())
+            {
+                referenceJson["guid"] = reference.guid.ToString();
+            }
+
+            if (!reference.path.IsEmpty())
+            {
+                referenceJson["path"] = reference.path.GetString();
+            }
+
+            return value(std::move(referenceJson));
+        }
+
+        [[nodiscard]] std::vector<EditorProjectService::EditorMeshRendererAssetReferences>
+        ExtractMeshRendererAssetReferences(const object& sceneAsset)
+        {
+            std::vector<EditorProjectService::EditorMeshRendererAssetReferences> references;
+            const array* gameObjects = FindSceneGameObjects(sceneAsset);
+            if (gameObjects == nullptr)
+            {
+                return references;
+            }
+
+            for (const value& gameObjectValue : *gameObjects)
+            {
+                if (!gameObjectValue.is_object())
+                {
+                    continue;
+                }
+
+                const object& gameObjectJson = gameObjectValue.as_object();
+                const SceneObjectId gameObjectId = ReadUInt64Value(FindMember(gameObjectJson, "id"));
+                if (gameObjectId == InvalidSceneObjectId)
+                {
+                    continue;
+                }
+
+                const value* componentsValue = FindMember(gameObjectJson, "components");
+                if (componentsValue == nullptr || !componentsValue->is_array())
+                {
+                    continue;
+                }
+
+                const array& components = componentsValue->as_array();
+                for (SizeT componentIndex = 0; componentIndex < components.size(); ++componentIndex)
+                {
+                    if (!components[componentIndex].is_object())
+                    {
+                        continue;
+                    }
+
+                    const object& componentJson = components[componentIndex].as_object();
+                    if (ReadString(componentJson, "type") != "MeshRendererComponent")
+                    {
+                        continue;
+                    }
+
+                    const value* propertiesValue = FindMember(componentJson, "properties");
+                    if (propertiesValue == nullptr || !propertiesValue->is_object())
+                    {
+                        continue;
+                    }
+
+                    const object& properties = propertiesValue->as_object();
+                    EditorProjectService::EditorMeshRendererAssetReferences entry;
+                    entry.gameObjectId = gameObjectId;
+                    entry.componentIndex = componentIndex;
+
+                    if (const value* meshValue = FindMember(properties, "mesh");
+                        meshValue != nullptr && IsAssetReferenceValue(*meshValue))
+                    {
+                        entry.mesh = ReadAuthoredAssetReference(*meshValue);
+                    }
+
+                    if (const value* materialValue = FindMember(properties, "material");
+                        materialValue != nullptr && IsAssetReferenceValue(*materialValue))
+                    {
+                        entry.material = ReadAuthoredAssetReference(*materialValue);
+                    }
+
+                    if (entry.mesh.IsSet() || entry.material.IsSet())
+                    {
+                        references.push_back(std::move(entry));
+                    }
+                }
+            }
+
+            return references;
+        }
+
+        void ApplyMeshRendererAssetReferences(
+            object& sceneAsset,
+            const std::vector<EditorProjectService::EditorMeshRendererAssetReferences>& references)
+        {
+            array* gameObjects = FindSceneGameObjects(sceneAsset);
+            if (gameObjects == nullptr)
+            {
+                return;
+            }
+
+            for (const EditorProjectService::EditorMeshRendererAssetReferences& reference : references)
+            {
+                object* gameObject = FindGameObjectById(*gameObjects, reference.gameObjectId);
+                if (gameObject == nullptr)
+                {
+                    continue;
+                }
+
+                value* componentsValue = gameObject->if_contains("components");
+                if (componentsValue == nullptr || !componentsValue->is_array() ||
+                    reference.componentIndex >= componentsValue->as_array().size())
+                {
+                    continue;
+                }
+
+                value& componentValue = componentsValue->as_array()[reference.componentIndex];
+                if (!componentValue.is_object())
+                {
+                    continue;
+                }
+
+                object& component = componentValue.as_object();
+                if (ReadString(component, "type") != "MeshRendererComponent")
+                {
+                    continue;
+                }
+
+                value* propertiesValue = component.if_contains("properties");
+                if (propertiesValue == nullptr || !propertiesValue->is_object())
+                {
+                    component["properties"] = object();
+                    propertiesValue = component.if_contains("properties");
+                }
+
+                if (propertiesValue == nullptr || !propertiesValue->is_object())
+                {
+                    continue;
+                }
+
+                object& properties = propertiesValue->as_object();
+                if (reference.mesh.IsSet())
+                {
+                    properties["mesh"] = WriteAuthoredAssetReference(reference.mesh);
+                }
+
+                if (reference.material.IsSet())
+                {
+                    properties["material"] = WriteAuthoredAssetReference(reference.material);
+                }
+            }
+        }
+
+        void PreserveReferenceProperty(object& nextProperties, const object& previousProperties, const char* name)
+        {
+            value* nextValue = nextProperties.if_contains(name);
+            const value* previousValue = FindMember(previousProperties, name);
+            if (nextValue != nullptr && previousValue != nullptr && IsAssetReferenceValue(*previousValue))
+            {
+                *nextValue = *previousValue;
+            }
+        }
+
+        void PreserveMeshRendererReferences(object& nextComponent, const object& previousComponent)
+        {
+            value* nextPropertiesValue = nextComponent.if_contains("properties");
+            const value* previousPropertiesValue = FindMember(previousComponent, "properties");
+            if (nextPropertiesValue == nullptr || previousPropertiesValue == nullptr ||
+                !nextPropertiesValue->is_object() || !previousPropertiesValue->is_object())
+            {
+                return;
+            }
+
+            object& nextProperties = nextPropertiesValue->as_object();
+            const object& previousProperties = previousPropertiesValue->as_object();
+            PreserveReferenceProperty(nextProperties, previousProperties, "mesh");
+            PreserveReferenceProperty(nextProperties, previousProperties, "material");
+        }
+
+        void PreserveSceneAssetReferences(object& nextSceneAsset, const object& previousSceneAsset)
+        {
+            array* nextGameObjects = FindSceneGameObjects(nextSceneAsset);
+            const array* previousGameObjects = FindSceneGameObjects(previousSceneAsset);
+            if (nextGameObjects == nullptr || previousGameObjects == nullptr)
+            {
+                return;
+            }
+
+            for (value& nextGameObjectValue : *nextGameObjects)
+            {
+                if (!nextGameObjectValue.is_object())
+                {
+                    continue;
+                }
+
+                object& nextGameObject = nextGameObjectValue.as_object();
+                const UInt64 gameObjectId = ReadUInt64Value(FindMember(nextGameObject, "id"));
+                const object* previousGameObject = FindGameObjectById(*previousGameObjects, gameObjectId);
+                if (previousGameObject == nullptr)
+                {
+                    continue;
+                }
+
+                value* nextComponentsValue = nextGameObject.if_contains("components");
+                const value* previousComponentsValue = FindMember(*previousGameObject, "components");
+                if (nextComponentsValue == nullptr || previousComponentsValue == nullptr ||
+                    !nextComponentsValue->is_array() || !previousComponentsValue->is_array())
+                {
+                    continue;
+                }
+
+                const array& previousComponents = previousComponentsValue->as_array();
+                for (SizeT componentIndex = 0; componentIndex < nextComponentsValue->as_array().size();
+                     ++componentIndex)
+                {
+                    value& nextComponentValue = nextComponentsValue->as_array()[componentIndex];
+                    if (!nextComponentValue.is_object() || componentIndex >= previousComponents.size() ||
+                        !previousComponents[componentIndex].is_object())
+                    {
+                        continue;
+                    }
+
+                    object& nextComponent = nextComponentValue.as_object();
+                    const object& previousComponent = previousComponents[componentIndex].as_object();
+                    if (ReadString(nextComponent, "type") == "MeshRendererComponent" &&
+                        ReadString(previousComponent, "type") == "MeshRendererComponent")
+                    {
+                        PreserveMeshRendererReferences(nextComponent, previousComponent);
+                    }
+                }
+            }
+        }
+
+        [[nodiscard]] Result<object> MakeSceneAssetJson(const Scene& scene,
+                                                        const ReflectionRegistry& reflectionRegistry,
+                                                        const AssetGuid& sceneGuid,
+                                                        const Path& scenePath)
+        {
+            boost::system::error_code parseError;
+            value serializedScene = boost::json::parse(SerializeSceneToJson(scene, reflectionRegistry), parseError);
+            if (parseError || !serializedScene.is_object())
+            {
+                return Result<object>::Failure(
+                    Error(ErrorCode::InvalidState, "Scene serialization did not produce a JSON object."));
+            }
+
+            object sceneBody;
+            const object& serializedRoot = serializedScene.as_object();
+            if (const value* gameObjects = FindMember(serializedRoot, "gameObjects");
+                gameObjects != nullptr && gameObjects->is_array())
+            {
+                sceneBody["gameObjects"] = *gameObjects;
+            }
+            else
+            {
+                sceneBody["gameObjects"] = array();
+            }
+
+            object root;
+            root["format"] = "VEngine.Scene";
+            root["version"] = 1;
+            root["guid"] = sceneGuid.ToString();
+            root["name"] = MakeSceneNameFromPath(scenePath);
+            root["scene"] = std::move(sceneBody);
+            return Result<object>::Success(std::move(root));
         }
 
         [[nodiscard]] std::string MakeProjectNameFromPath(const Path& projectRoot)
@@ -463,6 +865,107 @@ namespace ve
         return gameThreadSystem.SetActiveScene(&currentEditScene_, &resourceManager);
     }
 
+    ErrorCode EditorProjectService::RefreshAssetDatabase()
+    {
+        if (!hasOpenProject_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const ErrorCode refreshResult = assetDatabase_.Refresh();
+        if (refreshResult != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          std::string("AssetDatabase refresh failed: ") + ToString(refreshResult));
+            return refreshResult;
+        }
+
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
+                      "AssetDatabase refreshed " + std::to_string(assetDatabase_.GetRecords().size()) + " asset(s).");
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectService::OpenScene(const Path& projectRelativeScenePath, ResourceManager& resourceManager)
+    {
+        if (!hasOpenProject_ || projectRelativeScenePath.IsEmpty())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const AssetRecord* record = assetDatabase_.FindAssetByPath(projectRelativeScenePath);
+        if (record == nullptr)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Scene asset was not found: " + projectRelativeScenePath.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        if (record->assetType != AssetType::Scene)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Asset is not a scene: " + projectRelativeScenePath.GetString());
+            return ErrorCode::InvalidArgument;
+        }
+
+        return LoadSceneFromRecord(*record, resourceManager);
+    }
+
+    ErrorCode EditorProjectService::SaveCurrentScene()
+    {
+        if (!hasOpenProject_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (currentScenePath_.IsEmpty() || !currentSceneGuid_.IsValid())
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Current edit scene has no authored .vescene asset to save.");
+            return ErrorCode::InvalidState;
+        }
+
+        ReflectionRegistry reflectionRegistry;
+        RegisterSceneReflectionTypes(reflectionRegistry);
+
+        Result<object> sceneAsset =
+            MakeSceneAssetJson(currentEditScene_, reflectionRegistry, currentSceneGuid_, currentScenePath_);
+        if (!sceneAsset)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error, sceneAsset.GetError().GetMessage());
+            return sceneAsset.GetError().GetCode();
+        }
+
+        const Path scenePath = assetDatabase_.ResolveProjectPath(currentScenePath_);
+        if (Result<object> previousSceneAsset = ReadJsonObject(scenePath))
+        {
+            PreserveSceneAssetReferences(sceneAsset.GetValue(), previousSceneAsset.GetValue());
+        }
+
+        ApplyMeshRendererAssetReferences(sceneAsset.GetValue(), meshRendererAssetReferences_);
+
+        const ErrorCode writeResult =
+            FileSystem::WriteTextFile(scenePath, boost::json::serialize(sceneAsset.GetValue()));
+        if (writeResult != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Failed to save scene: " + currentScenePath_.GetString());
+            return writeResult;
+        }
+
+        meshRendererAssetReferences_ = ExtractMeshRendererAssetReferences(sceneAsset.GetValue());
+        dirty_ = false;
+        const ErrorCode refreshResult = assetDatabase_.Refresh();
+        if (refreshResult != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
+                          "Scene saved, but AssetDatabase refresh failed: " + std::string(ToString(refreshResult)));
+            return refreshResult;
+        }
+
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Saved scene: " + currentScenePath_.GetString());
+        return ErrorCode::None;
+    }
+
     bool EditorProjectService::HasOpenProject() const noexcept
     {
         return hasOpenProject_;
@@ -498,6 +1001,21 @@ namespace ve
         return currentEditScene_;
     }
 
+    bool EditorProjectService::HasCurrentScene() const noexcept
+    {
+        return !currentScenePath_.IsEmpty() && currentSceneGuid_.IsValid();
+    }
+
+    const Path& EditorProjectService::GetCurrentScenePath() const noexcept
+    {
+        return currentScenePath_;
+    }
+
+    const AssetGuid& EditorProjectService::GetCurrentSceneGuid() const noexcept
+    {
+        return currentSceneGuid_;
+    }
+
     bool EditorProjectService::IsDirty() const noexcept
     {
         return dirty_;
@@ -528,12 +1046,37 @@ namespace ve
         return diagnostics_;
     }
 
+    const EditorAuthoredAssetReference*
+    EditorProjectService::FindMeshRendererAssetReference(SceneObjectId gameObjectId,
+                                                         SizeT componentIndex,
+                                                         EditorMeshRendererAssetSlot slot) const noexcept
+    {
+        const auto iter = std::find_if(meshRendererAssetReferences_.begin(),
+                                       meshRendererAssetReferences_.end(),
+                                       [gameObjectId, componentIndex](const auto& reference)
+                                       {
+                                           return reference.gameObjectId == gameObjectId &&
+                                                  reference.componentIndex == componentIndex;
+                                       });
+        if (iter == meshRendererAssetReferences_.end())
+        {
+            return nullptr;
+        }
+
+        const EditorAuthoredAssetReference& reference =
+            slot == EditorMeshRendererAssetSlot::Mesh ? iter->mesh : iter->material;
+        return reference.IsSet() ? &reference : nullptr;
+    }
+
     void EditorProjectService::ClearOpenedProject() noexcept
     {
         projectRoot_ = {};
         descriptor_ = {};
         assetDatabase_ = {};
         currentEditScene_.Clear();
+        currentScenePath_ = {};
+        currentSceneGuid_ = {};
+        meshRendererAssetReferences_.clear();
         diagnostics_.clear();
         hasOpenProject_ = false;
         dirty_ = false;
@@ -605,11 +1148,16 @@ namespace ve
             return ErrorCode::NotFound;
         }
 
-        ReflectionRegistry reflectionRegistry;
-        RegisterSceneReflectionTypes(reflectionRegistry);
+        const AssetRecord* startupRecord = assetDatabase_.FindAssetByPath(descriptor_.startupScene.path);
+        if (startupRecord == nullptr || startupRecord->assetType != AssetType::Scene)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
+                          "Startup scene was not found in the AssetDatabase: " +
+                              descriptor_.startupScene.path.GetString());
+            return ErrorCode::NotFound;
+        }
 
-        ErrorCode sceneResult =
-            LoadSceneAsset(currentEditScene_, reflectionRegistry, resourceManager, assetDatabase_, startupScenePath);
+        ErrorCode sceneResult = LoadSceneFromRecord(*startupRecord, resourceManager);
         if (sceneResult != ErrorCode::None)
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
@@ -617,8 +1165,48 @@ namespace ve
             return sceneResult;
         }
 
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
-                      "Opened startup scene: " + descriptor_.startupScene.path.GetString());
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectService::LoadSceneFromRecord(const AssetRecord& record, ResourceManager& resourceManager)
+    {
+        if (record.assetType != AssetType::Scene || !record.guid.IsValid() || record.path.IsEmpty())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        const Path scenePath = assetDatabase_.ResolveProjectPath(record.path);
+        if (!FileSystem::IsFile(scenePath))
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error, "Scene file is missing: " + record.path.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        ReflectionRegistry reflectionRegistry;
+        RegisterSceneReflectionTypes(reflectionRegistry);
+
+        Result<object> authoredSceneAsset = ReadJsonObject(scenePath);
+        if (!authoredSceneAsset)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Scene parse failed: " + record.path.GetString());
+            return authoredSceneAsset.GetError().GetCode();
+        }
+
+        const ErrorCode sceneResult =
+            LoadSceneAsset(currentEditScene_, reflectionRegistry, resourceManager, assetDatabase_, scenePath);
+        if (sceneResult != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Scene load failed: " + record.path.GetString() + " (" + ToString(sceneResult) + ")");
+            return sceneResult;
+        }
+
+        currentScenePath_ = record.path;
+        currentSceneGuid_ = record.guid;
+        meshRendererAssetReferences_ = ExtractMeshRendererAssetReferences(authoredSceneAsset.GetValue());
+        dirty_ = false;
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Opened scene: " + currentScenePath_.GetString());
         return ErrorCode::None;
     }
 
@@ -626,5 +1214,8 @@ namespace ve
     {
         currentEditScene_.Clear();
         currentEditScene_.UpdateTransforms();
+        currentScenePath_ = {};
+        currentSceneGuid_ = {};
+        meshRendererAssetReferences_.clear();
     }
 } // namespace ve

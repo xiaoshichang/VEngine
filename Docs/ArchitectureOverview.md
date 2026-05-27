@@ -948,7 +948,8 @@ Main Menu
 Scene Hierarchy
 Inspector
 Asset Browser
-Viewport
+SceneView
+GameView
 Project Settings
 Import Settings
 Play / Stop Toolbar
@@ -958,6 +959,10 @@ Editor principles:
 
 - ImGui is only for Editor and debug UI.
 - Runtime UI remains separate.
+- Editor shell logic, ImGui panels, project selection, asset commands, dirty-scene prompts, and edit-scene selection
+  state live on the Main Thread.
+- The Game Thread is not the editor UI or project-management thread. It owns runtime/play-scene update and future
+  editor viewport extraction points that cross through explicit commands or snapshots.
 - Editor edits scene through public Scene and Reflection APIs.
 - Editor imports assets through AssetDatabase and AssetImporter.
 - Editor Viewport renders through the engine Render and RHI layers.
@@ -987,6 +992,9 @@ Editor project structure:
   under `Generated/`.
 - The Editor opens projects by root path, initializes `AssetDatabase` from that root, and stores asset references as
   GUIDs with project-relative path fallbacks.
+- Editor scene documents keep authored asset references as the Editor source of truth. Runtime `ResourceHandle` and
+  `ResourceId` values are resolved from those references for rendering and simulation, but they are not saved as
+  authored scene references or shown as primary Inspector data.
 - On Windows, the no-argument Project Launcher reads recently opened projects from the current user's registry state
   under `HKCU\Software\VEngine\Editor`.
 - On Windows, the Editor keeps the Win32 debug console enabled in every build configuration so project open diagnostics

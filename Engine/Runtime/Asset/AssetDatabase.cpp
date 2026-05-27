@@ -42,6 +42,11 @@ namespace ve
             return text.size() >= prefix.size() && EqualsIgnoreCase(text.substr(0, prefix.size()), prefix);
         }
 
+        [[nodiscard]] bool IsObjSourceAsset(const Path& path)
+        {
+            return EqualsIgnoreCase(path.GetExtension(), ".obj");
+        }
+
         [[nodiscard]] const value* FindMember(const object& jsonObject, const char* name)
         {
             const auto iter = jsonObject.find(name);
@@ -303,6 +308,11 @@ namespace ve
 
     const AssetRecord* AssetDatabase::FindAsset(const AssetGuid& guid) const noexcept
     {
+        if (!guid.IsValid())
+        {
+            return nullptr;
+        }
+
         const std::string guidText = guid.ToString();
         const auto iter = std::find_if(records_.begin(),
                                        records_.end(),
@@ -507,6 +517,17 @@ namespace ve
                 continue;
             }
 
+            if (IsObjSourceAsset(entry.path))
+            {
+                const ErrorCode result = AddSourceAssetCandidateRecord(entry.path);
+                if (result != ErrorCode::None)
+                {
+                    return result;
+                }
+
+                continue;
+            }
+
             if (entry.path.GetExtension() == ".vescene" || entry.path.GetExtension() == ".vematerial")
             {
                 const ErrorCode result = AddNativeAssetRecord(entry.path);
@@ -533,6 +554,24 @@ namespace ve
             return ErrorCode::AlreadyExists;
         }
 
+        records_.push_back(std::move(record));
+        return ErrorCode::None;
+    }
+
+    ErrorCode AssetDatabase::AddSourceAssetCandidateRecord(const Path& path)
+    {
+        const Path relativePath = MakeProjectRelativePath(path);
+        const Path metadataPath = GetSourceMetadataPath(relativePath);
+        if (FileSystem::IsFile(ResolveProjectPath(metadataPath)))
+        {
+            return ErrorCode::None;
+        }
+
+        AssetRecord record;
+        record.assetType = AssetType::SourceModel;
+        record.path = relativePath;
+        record.metadataPath = metadataPath;
+        record.source = relativePath;
         records_.push_back(std::move(record));
         return ErrorCode::None;
     }

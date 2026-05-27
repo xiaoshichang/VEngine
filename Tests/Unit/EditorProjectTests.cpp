@@ -1,10 +1,13 @@
 #include "Editor/Core/EditorProject.h"
 
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Resource/BuiltInResources.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
+#include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <filesystem>
 #include <iostream>
+#include <string>
 #include <system_error>
 
 namespace
@@ -53,6 +56,16 @@ namespace
         std::filesystem::remove_all(std::filesystem::path("Generated") / "EditorProjectTests", error);
     }
 
+    void ReplaceAll(std::string& text, std::string_view from, std::string_view to)
+    {
+        size_t offset = 0;
+        while ((offset = text.find(from, offset)) != std::string::npos)
+        {
+            text.replace(offset, from.size(), to);
+            offset += to.size();
+        }
+    }
+
     bool TestCreateAndOpenProject()
     {
         bool passed = true;
@@ -93,6 +106,11 @@ namespace
         passed &= Expect(projectService.GetProjectRoot() == projectRoot, "Project root should be stored");
         passed &= Expect(projectService.GetAssetDatabase().GetRecords().size() == 1,
                          "AssetDatabase should discover the startup scene");
+        passed &= Expect(projectService.HasCurrentScene(), "Startup scene should be recorded as the current scene");
+        passed &= Expect(projectService.GetCurrentScenePath() == ve::Path("Assets/Scenes/Main.vescene"),
+                         "Current scene path should point at the startup scene");
+        passed &= Expect(projectService.GetCurrentSceneGuid() == descriptor.GetValue().startupScene.guid,
+                         "Current scene GUID should match the startup scene GUID");
         passed &= Expect(projectService.GetCurrentEditScene().GetGameObjectCount() == 0,
                          "Empty startup scene should load as an empty edit scene");
         passed &= Expect(projectService.GetEditorLayoutPath() ==
@@ -104,6 +122,123 @@ namespace
         passed &= Expect(projectService.IsDirty(), "MarkDirty should set dirty state");
         projectService.ClearDirty();
         passed &= Expect(!projectService.IsDirty(), "ClearDirty should reset dirty state");
+
+        ve::GameObject& gameObject = projectService.GetCurrentEditScene().CreateGameObject("SavedObject");
+        gameObject.AddComponent<ve::TransformComponent>();
+        projectService.GetCurrentEditScene().UpdateTransforms();
+        projectService.MarkDirty();
+        passed &= ExpectOk(projectService.SaveCurrentScene(), "SaveCurrentScene should write the current scene");
+        passed &= Expect(!projectService.IsDirty(), "SaveCurrentScene should clear dirty state");
+
+        ve::Result<std::string> savedScene = ve::FileSystem::ReadTextFile(projectRoot / "Assets/Scenes/Main.vescene");
+        passed &= ExpectOk(savedScene, "Saved scene should be readable");
+        if (savedScene)
+        {
+            passed &= Expect(savedScene.GetValue().find("SavedObject") != std::string::npos,
+                             "Saved scene should contain edited GameObject name");
+        }
+
+        passed &= ExpectOk(projectService.OpenScene(ve::Path("Assets/Scenes/Main.vescene"), resourceManager),
+                           "OpenScene should load a saved .vescene asset");
+        passed &= Expect(projectService.GetCurrentEditScene().GetGameObjectCount() == 1,
+                         "Saved scene should reopen with the edited GameObject");
+
+        CleanTestRoot();
+        return passed;
+    }
+
+    bool TestMeshRendererAuthoredReferences()
+    {
+        bool passed = true;
+
+        CleanTestRoot();
+
+        const ve::Path projectRoot = GetTestRoot() / "MeshRendererReferences";
+        passed &= ExpectOk(ve::EditorProjectService::CreateProjectSkeleton(projectRoot, "MeshRendererReferences"),
+                           "CreateProjectSkeleton should create a reference test project");
+
+        ve::Result<ve::EditorProjectDescriptor> descriptor =
+            ve::EditorProjectService::LoadProjectDescriptor(projectRoot);
+        passed &= ExpectOk(descriptor, "Reference test project descriptor should parse");
+        if (!descriptor)
+        {
+            CleanTestRoot();
+            return false;
+        }
+
+        std::string scene = R"json({
+  "format": "VEngine.Scene",
+  "version": 1,
+  "guid": "$SCENE_GUID$",
+  "name": "Main",
+  "scene": {
+    "gameObjects": [
+      {
+        "id": 1,
+        "name": "AuthoredMeshRenderer",
+        "active": true,
+        "parent": 0,
+        "components": [
+          {
+            "type": "MeshRendererComponent",
+            "properties": {
+              "mesh": {
+                "path": "builtin:mesh/cube"
+              },
+              "material": {
+                "path": "builtin:material/default"
+              },
+              "visible": true
+            }
+          }
+        ]
+      }
+    ]
+  }
+})json";
+        ReplaceAll(scene, "$SCENE_GUID$", descriptor.GetValue().startupScene.guid.ToString());
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(projectRoot / "Assets/Scenes/Main.vescene", scene),
+                           "Reference test scene should be written");
+
+        ve::ResourceManager resourceManager;
+        ve::EditorProjectService projectService;
+        passed &= ExpectOk(projectService.OpenProject(projectRoot, resourceManager),
+                           "EditorProjectService should open authored reference scene");
+
+        const ve::EditorAuthoredAssetReference* meshReference =
+            projectService.FindMeshRendererAssetReference(1, 0, ve::EditorMeshRendererAssetSlot::Mesh);
+        passed &= Expect(meshReference != nullptr, "MeshRenderer mesh authored reference should be indexed");
+        if (meshReference != nullptr)
+        {
+            passed &= Expect(meshReference->path.GetString() == ve::BuiltInResources::FallbackCubeMeshUri,
+                             "Mesh authored reference should preserve built-in mesh URI");
+        }
+
+        const ve::EditorAuthoredAssetReference* materialReference =
+            projectService.FindMeshRendererAssetReference(1, 0, ve::EditorMeshRendererAssetSlot::Material);
+        passed &= Expect(materialReference != nullptr, "MeshRenderer material authored reference should be indexed");
+        if (materialReference != nullptr)
+        {
+            passed &= Expect(materialReference->path.GetString() == ve::BuiltInResources::DefaultMaterialUri,
+                             "Material authored reference should preserve built-in material URI");
+        }
+
+        passed &= ExpectOk(projectService.SaveCurrentScene(),
+                           "SaveCurrentScene should write authored references instead of runtime resource IDs");
+        ve::Result<std::string> savedScene =
+            ve::FileSystem::ReadTextFile(projectRoot / "Assets/Scenes/Main.vescene");
+        passed &= ExpectOk(savedScene, "Saved authored reference scene should be readable");
+        if (savedScene)
+        {
+            passed &= Expect(savedScene.GetValue().find("builtin:mesh/cube") != std::string::npos,
+                             "Saved scene should keep authored mesh reference");
+            passed &= Expect(savedScene.GetValue().find("builtin:material/default") != std::string::npos,
+                             "Saved scene should keep authored material reference");
+            passed &= Expect(savedScene.GetValue().find("\"mesh\":1") == std::string::npos,
+                             "Saved scene should not write mesh runtime ID");
+            passed &= Expect(savedScene.GetValue().find("\"material\":2") == std::string::npos,
+                             "Saved scene should not write material runtime ID");
+        }
 
         CleanTestRoot();
         return passed;
@@ -134,6 +269,7 @@ int main()
     bool passed = true;
 
     passed &= TestCreateAndOpenProject();
+    passed &= TestMeshRendererAuthoredReferences();
     passed &= TestRejectsMissingDescriptor();
 
     if (passed)

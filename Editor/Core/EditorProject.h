@@ -45,6 +45,24 @@ namespace ve
         std::string message;
     };
 
+    enum class EditorMeshRendererAssetSlot
+    {
+        Mesh,
+        Material,
+    };
+
+    struct EditorAuthoredAssetReference
+    {
+        AssetGuid guid;
+        Path path;
+        bool hasValue = false;
+
+        [[nodiscard]] bool IsSet() const noexcept
+        {
+            return hasValue && (guid.IsValid() || !path.IsEmpty());
+        }
+    };
+
     class EditorProjectService
     {
     public:
@@ -54,6 +72,9 @@ namespace ve
         [[nodiscard]] ErrorCode OpenProject(const Path& projectRoot, ResourceManager& resourceManager);
         void CloseProject(GameThreadSystem* gameThreadSystem = nullptr) noexcept;
         [[nodiscard]] ErrorCode BindActiveScene(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager);
+        [[nodiscard]] ErrorCode RefreshAssetDatabase();
+        [[nodiscard]] ErrorCode OpenScene(const Path& projectRelativeScenePath, ResourceManager& resourceManager);
+        [[nodiscard]] ErrorCode SaveCurrentScene();
 
         [[nodiscard]] bool HasOpenProject() const noexcept;
         [[nodiscard]] const Path& GetProjectRoot() const noexcept;
@@ -62,6 +83,9 @@ namespace ve
         [[nodiscard]] const AssetDatabase& GetAssetDatabase() const noexcept;
         [[nodiscard]] Scene& GetCurrentEditScene() noexcept;
         [[nodiscard]] const Scene& GetCurrentEditScene() const noexcept;
+        [[nodiscard]] bool HasCurrentScene() const noexcept;
+        [[nodiscard]] const Path& GetCurrentScenePath() const noexcept;
+        [[nodiscard]] const AssetGuid& GetCurrentSceneGuid() const noexcept;
         [[nodiscard]] bool IsDirty() const noexcept;
         void MarkDirty() noexcept;
         void ClearDirty() noexcept;
@@ -69,6 +93,18 @@ namespace ve
         [[nodiscard]] Path GetGeneratedRoot() const;
         [[nodiscard]] Path GetEditorLayoutPath() const;
         [[nodiscard]] const std::vector<EditorProjectDiagnostic>& GetDiagnostics() const noexcept;
+        [[nodiscard]] const EditorAuthoredAssetReference*
+        FindMeshRendererAssetReference(SceneObjectId gameObjectId,
+                                       SizeT componentIndex,
+                                       EditorMeshRendererAssetSlot slot) const noexcept;
+
+        struct EditorMeshRendererAssetReferences
+        {
+            SceneObjectId gameObjectId = InvalidSceneObjectId;
+            SizeT componentIndex = 0;
+            EditorAuthoredAssetReference mesh;
+            EditorAuthoredAssetReference material;
+        };
 
     private:
         void ClearOpenedProject() noexcept;
@@ -76,12 +112,16 @@ namespace ve
         [[nodiscard]] ErrorCode ValidateDirectoryContract(const Path& projectRoot);
         [[nodiscard]] ErrorCode EnsureGeneratedDirectories(const Path& projectRoot);
         [[nodiscard]] ErrorCode OpenStartupScene(ResourceManager& resourceManager);
+        [[nodiscard]] ErrorCode LoadSceneFromRecord(const AssetRecord& record, ResourceManager& resourceManager);
         void OpenEmptyEditScene();
 
         Path projectRoot_;
         EditorProjectDescriptor descriptor_;
         AssetDatabase assetDatabase_;
         Scene currentEditScene_;
+        Path currentScenePath_;
+        AssetGuid currentSceneGuid_;
+        std::vector<EditorMeshRendererAssetReferences> meshRendererAssetReferences_;
         std::vector<EditorProjectDiagnostic> diagnostics_;
         bool hasOpenProject_ = false;
         bool dirty_ = false;

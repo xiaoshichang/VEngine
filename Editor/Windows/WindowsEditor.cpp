@@ -1,4 +1,5 @@
 #include "Editor/Core/EditorProject.h"
+#include "Editor/Windows/WindowsEditorPanels.h"
 #include "Editor/Windows/WindowsProjectLauncher.h"
 
 #include "Engine/Runtime/Application/Application.h"
@@ -38,8 +39,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window,
 
 namespace
 {
-    constexpr std::string_view OpenProjectCommand = "Editor.OpenProject";
-
     class WindowsComScope
     {
     public:
@@ -180,12 +179,6 @@ namespace
             return openResult;
         }
 
-        ve::ErrorCode bindResult = projectService.BindActiveScene(gameThreadSystem, runtime.GetResourceManager());
-        if (bindResult != ve::ErrorCode::None)
-        {
-            return bindResult;
-        }
-
         if (updateRecentProjects)
         {
             const ve::ErrorCode recentResult =
@@ -198,6 +191,15 @@ namespace
 
         return ve::ErrorCode::None;
     }
+
+    class WindowsProjectLauncherUi;
+
+    [[nodiscard]] bool TryOpenProjectSelection(WindowsProjectLauncherUi& launcherUi,
+                                               ve::EditorProjectService& projectService,
+                                               ve::EngineRuntime& runtime,
+                                               ve::Window& window,
+                                               const ve::WindowsProjectLauncherResult& selection,
+                                               bool reportInLauncher);
 
     class WindowsProjectLauncherUi
     {
@@ -269,6 +271,7 @@ namespace
             fontAtlasSubmitted_ = false;
             window_ = nullptr;
             fontAtlas_ = {};
+            ResetEditorSelection();
         }
 
         [[nodiscard]] bool
@@ -308,6 +311,32 @@ namespace
             return result;
         }
 
+        void RenderEditor(HWND owner,
+                          ve::Window& window,
+                          ve::EditorProjectService& projectService,
+                          ve::EngineRuntime& runtime)
+        {
+            if (!initialized_)
+            {
+                return;
+            }
+
+            if (IsIconic(window_) != FALSE)
+            {
+                return;
+            }
+
+            ImGui_ImplWin32_NewFrame();
+            ImGui::NewFrame();
+
+            DrawEditor(owner, window, projectService, runtime);
+
+            ImGui::Render();
+            ve::EditorUiFrameData frameData = CaptureEditorUiFrame(!fontAtlasSubmitted_);
+            runtime.GetRenderSystem().SubmitEditorUiFrame(std::move(frameData));
+            fontAtlasSubmitted_ = true;
+        }
+
         void RefreshRecentProjects()
         {
             recentProjects_ = ve::LoadWindowsRecentProjects();
@@ -318,12 +347,61 @@ namespace
             pendingError_ = std::move(message);
         }
 
+        void SetStatus(std::string message)
+        {
+            statusMessage_ = std::move(message);
+        }
+
+        void ResetEditorSelection() noexcept
+        {
+            editorPanels_.ResetSelection();
+            pendingAction_ = {};
+            openDirtyScenePopup_ = false;
+        }
+
+        void RequestProjectOpen(ve::WindowsProjectLauncherResult selection, bool reportInLauncher)
+        {
+            pendingAction_ = {};
+            pendingAction_.kind = PendingActionKind::OpenProject;
+            pendingAction_.projectSelection = std::move(selection);
+            pendingAction_.reportInLauncher = reportInLauncher;
+            openDirtyScenePopup_ = true;
+        }
+
+        void SaveCurrentScene(ve::EditorProjectService& projectService, ve::EngineRuntime& runtime)
+        {
+            runtime.GetGameThreadSystem().ClearActiveScene();
+            const ve::ErrorCode saveResult = projectService.SaveCurrentScene();
+            if (saveResult == ve::ErrorCode::None)
+            {
+                statusMessage_ = "Scene saved: " + projectService.GetCurrentScenePath().GetString();
+                return;
+            }
+
+            statusMessage_ = MakeProjectOpenError("Save Scene failed", saveResult);
+        }
+
         [[nodiscard]] const std::string& GetLastError() const noexcept
         {
             return lastError_;
         }
 
     private:
+        enum class PendingActionKind
+        {
+            None,
+            OpenScene,
+            OpenProject,
+        };
+
+        struct PendingAction
+        {
+            PendingActionKind kind = PendingActionKind::None;
+            ve::Path scenePath;
+            ve::WindowsProjectLauncherResult projectSelection;
+            bool reportInLauncher = false;
+        };
+
         void ApplyStyle()
         {
             ImGuiStyle& style = ImGui::GetStyle();
@@ -448,6 +526,246 @@ namespace
             }
 
             return frameData;
+        }
+
+        void DrawEditor(HWND owner,
+                        ve::Window& window,
+                        ve::EditorProjectService& projectService,
+                        ve::EngineRuntime& runtime)
+        {
+            const ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->WorkPos);
+            ImGui::SetNextWindowSize(viewport->WorkSize);
+
+            constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                                     ImGuiWindowFlags_NoSavedSettings |
+                                                     ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                                     ImGuiWindowFlags_MenuBar;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+            ImGui::Begin("VEngineEditorMain", nullptr, windowFlags);
+
+            DrawEditorMenu(owner, window, projectService, runtime);
+
+            const ImVec2 available = ImGui::GetContentRegionAvail();
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const float statusHeight = 24.0f;
+            const float assetHeight = std::min(std::max(available.y * 0.30f, 190.0f), 310.0f);
+            const float topHeight = std::max(120.0f, available.y - assetHeight - statusHeight - spacing * 2.0f);
+            const float hierarchyWidth = std::min(std::max(available.x * 0.20f, 240.0f), 360.0f);
+            const float inspectorWidth = std::min(std::max(available.x * 0.24f, 300.0f), 430.0f);
+            const float centerWidth = std::max(240.0f, available.x - hierarchyWidth - inspectorWidth - spacing * 2.0f);
+
+            ImGui::BeginChild("SceneHierarchyPanel", ImVec2(hierarchyWidth, topHeight), true);
+            editorPanels_.DrawSceneHierarchy(projectService, runtime, statusMessage_);
+            ImGui::EndChild();
+
+            ImGui::SameLine();
+            ImGui::BeginChild("ViewportPanel", ImVec2(centerWidth, topHeight), true);
+            if (ImGui::BeginTabBar("EditorViewTabs"))
+            {
+                if (ImGui::BeginTabItem("SceneView"))
+                {
+                    editorPanels_.DrawSceneView(projectService);
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("GameView"))
+                {
+                    editorPanels_.DrawGameView(projectService);
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
+            }
+            ImGui::EndChild();
+
+            ImGui::SameLine();
+            ImGui::BeginChild("InspectorPanel", ImVec2(0.0f, topHeight), true);
+            editorPanels_.DrawInspector(projectService, runtime, statusMessage_);
+            ImGui::EndChild();
+
+            ImGui::BeginChild("AssetBrowserPanel", ImVec2(0.0f, assetHeight), true);
+            editorPanels_.DrawAssetBrowser(projectService,
+                                           runtime,
+                                           statusMessage_,
+                                           [this, &projectService, &runtime](const ve::Path& scenePath)
+                                           { RequestOpenScene(projectService, runtime, scenePath); });
+            ImGui::EndChild();
+
+            DrawStatusBar(projectService);
+            DrawDirtySceneModal(window, projectService, runtime);
+
+            ImGui::End();
+            ImGui::PopStyleVar();
+        }
+
+        void DrawEditorMenu(HWND owner,
+                            ve::Window& window,
+                            ve::EditorProjectService& projectService,
+                            ve::EngineRuntime& runtime)
+        {
+            if (!ImGui::BeginMenuBar())
+            {
+                return;
+            }
+
+            if (ImGui::BeginMenu("File"))
+            {
+                if (ImGui::MenuItem("Open Project..."))
+                {
+                    ve::Result<ve::Path> selectedFolder =
+                        ve::BrowseForWindowsProjectFolder(owner, L"Open VEngine project");
+                    if (selectedFolder)
+                    {
+                        ve::WindowsProjectLauncherResult selection;
+                        selection.accepted = true;
+                        selection.projectRoot = selectedFolder.GetValue();
+
+                        if (projectService.IsDirty())
+                        {
+                            RequestProjectOpen(std::move(selection), false);
+                        }
+                        else
+                        {
+                            (void)TryOpenProjectSelection(
+                                *this, projectService, runtime, window, selection, false);
+                        }
+                    }
+                }
+
+                if (ImGui::MenuItem("Save Scene"))
+                {
+                    SaveCurrentScene(projectService, runtime);
+                }
+
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndMenuBar();
+        }
+
+        void RequestOpenScene(ve::EditorProjectService& projectService,
+                              ve::EngineRuntime& runtime,
+                              const ve::Path& scenePath)
+        {
+            if (projectService.IsDirty())
+            {
+                pendingAction_ = {};
+                pendingAction_.kind = PendingActionKind::OpenScene;
+                pendingAction_.scenePath = scenePath;
+                openDirtyScenePopup_ = true;
+                return;
+            }
+
+            OpenScene(projectService, runtime, scenePath);
+        }
+
+        void OpenScene(ve::EditorProjectService& projectService,
+                       ve::EngineRuntime& runtime,
+                       const ve::Path& scenePath)
+        {
+            runtime.GetGameThreadSystem().ClearActiveScene();
+            const ve::ErrorCode openResult = projectService.OpenScene(scenePath, runtime.GetResourceManager());
+            if (openResult == ve::ErrorCode::None)
+            {
+                editorPanels_.ResetSelection();
+                statusMessage_ = "Opened scene: " + scenePath.GetString();
+                return;
+            }
+
+            statusMessage_ = MakeProjectOpenError("Open Scene failed", openResult);
+        }
+
+        void DrawStatusBar(const ve::EditorProjectService& projectService)
+        {
+            ImGui::Separator();
+            const std::string sceneText = projectService.HasCurrentScene()
+                                              ? projectService.GetCurrentScenePath().GetString()
+                                              : std::string("No scene");
+            ImGui::TextDisabled("%s | %s%s",
+                                projectService.GetDescriptor().displayName.c_str(),
+                                sceneText.c_str(),
+                                projectService.IsDirty() ? " *" : "");
+            if (!statusMessage_.empty())
+            {
+                ImGui::SameLine();
+                ImGui::TextUnformatted(statusMessage_.c_str());
+            }
+        }
+
+        void DrawDirtySceneModal(ve::Window& window,
+                                 ve::EditorProjectService& projectService,
+                                 ve::EngineRuntime& runtime)
+        {
+            if (openDirtyScenePopup_)
+            {
+                ImGui::OpenPopup("Unsaved Scene Changes");
+                openDirtyScenePopup_ = false;
+            }
+
+            if (!ImGui::BeginPopupModal("Unsaved Scene Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                return;
+            }
+
+            ImGui::TextUnformatted("The current scene has unsaved changes.");
+            ImGui::TextUnformatted("Save changes before continuing?");
+            ImGui::Spacing();
+
+            if (ImGui::Button("Save", ImVec2(96.0f, 0.0f)))
+            {
+                SaveCurrentScene(projectService, runtime);
+                if (!projectService.IsDirty())
+                {
+                    PerformPendingAction(window, projectService, runtime);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Discard", ImVec2(96.0f, 0.0f)))
+            {
+                projectService.ClearDirty();
+                PerformPendingAction(window, projectService, runtime);
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(96.0f, 0.0f)))
+            {
+                pendingAction_ = {};
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        void PerformPendingAction(ve::Window& window,
+                                  ve::EditorProjectService& projectService,
+                                  ve::EngineRuntime& runtime)
+        {
+            PendingAction action = std::move(pendingAction_);
+            pendingAction_ = {};
+
+            switch (action.kind)
+            {
+            case PendingActionKind::OpenScene:
+                OpenScene(projectService, runtime, action.scenePath);
+                break;
+            case PendingActionKind::OpenProject:
+                (void)TryOpenProjectSelection(*this,
+                                              projectService,
+                                              runtime,
+                                              window,
+                                              action.projectSelection,
+                                              action.reportInLauncher);
+                editorPanels_.ResetSelection();
+                break;
+            case PendingActionKind::None:
+            default:
+                break;
+            }
         }
 
         [[nodiscard]] std::optional<ve::WindowsProjectLauncherResult> DrawLauncher(HWND owner)
@@ -577,8 +895,12 @@ namespace
         std::vector<ve::WindowsRecentProject> recentProjects_;
         std::string pendingError_;
         std::string lastError_;
+        std::string statusMessage_;
+        ve::WindowsEditorPanels editorPanels_;
+        PendingAction pendingAction_;
         bool initialized_ = false;
         bool fontAtlasSubmitted_ = false;
+        bool openDirtyScenePopup_ = false;
         ve::EditorUiFontAtlas fontAtlas_;
     };
 
@@ -632,7 +954,8 @@ namespace
         const ve::ErrorCode openResult = OpenEditorProject(projectService, runtime, selection.projectRoot, true);
         if (openResult == ve::ErrorCode::None)
         {
-            launcherUi.Shutdown();
+            launcherUi.ResetEditorSelection();
+            launcherUi.SetStatus("Project open complete: " + projectService.GetDescriptor().displayName);
             return true;
         }
 
@@ -678,7 +1001,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     desc.mainWindow.width = 1600;
     desc.mainWindow.height = 900;
     desc.mainWindow.visible = true;
-    desc.mainWindow.menuItems.push_back({"File", "Open Project...", std::string(OpenProjectCommand)});
     desc.projectRoot = projectRoot;
     desc.initializeRenderingOnStartup = true;
     desc.runtime.jobSystem.workerThreadNamePrefix = "VEngineEditorJobWorker";
@@ -724,11 +1046,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
 
     desc.frameUpdate = [&projectService, &launcherUi](ve::Window& window, ve::EngineRuntime& runtime)
     {
-        if (projectService.HasOpenProject())
-        {
-            return;
-        }
-
         HWND nativeWindow = static_cast<HWND>(window.GetNativeHandle());
         if (nativeWindow == nullptr)
         {
@@ -740,37 +1057,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
             return;
         }
 
+        if (projectService.HasOpenProject())
+        {
+            launcherUi.RenderEditor(nativeWindow, window, projectService, runtime);
+            return;
+        }
+
         std::optional<ve::WindowsProjectLauncherResult> selection =
             launcherUi.Render(nativeWindow, runtime.GetRenderSystem());
         if (selection)
         {
             (void)TryOpenProjectSelection(launcherUi, projectService, runtime, window, *selection, true);
         }
-    };
-
-    desc.commandHandler = [&projectService, &launcherUi](std::string_view command,
-                                                         ve::Window& window,
-                                                         ve::EngineRuntime& runtime)
-    {
-        if (command != OpenProjectCommand)
-        {
-            VE_LOG_INFO_CATEGORY("Editor", "Unhandled Editor command: {}", command);
-            return;
-        }
-
-        ve::Result<ve::Path> selectedFolder =
-            ve::BrowseForWindowsProjectFolder(static_cast<HWND>(window.GetNativeHandle()), L"Open VEngine project");
-        if (!selectedFolder)
-        {
-            return;
-        }
-
-        ve::WindowsProjectLauncherResult selection;
-        selection.accepted = true;
-        selection.projectRoot = selectedFolder.GetValue();
-
-        const bool reportInLauncher = !projectService.HasOpenProject();
-        (void)TryOpenProjectSelection(launcherUi, projectService, runtime, window, selection, reportInLauncher);
     };
 
     ve::Application application(std::move(desc));
