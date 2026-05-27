@@ -43,11 +43,31 @@ function(ve_add_asset_tool)
     ve_configure_target(VEngineAssetTool)
 endfunction()
 
+function(ve_add_package_tool)
+    if(TARGET VEnginePackageTool)
+        return()
+    endif()
+
+    add_executable(VEnginePackageTool
+        Tools/Package/PackageService.cpp
+        Tools/Package/PackageService.h
+        Tools/Package/PackageTool.cpp
+    )
+
+    target_link_libraries(VEnginePackageTool
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEnginePackageTool)
+endfunction()
+
 function(ve_add_tools)
     if(NOT VE_BUILD_TOOLS)
         return()
     endif()
 
     ve_add_asset_tool()
+    ve_add_package_tool()
     ve_add_shader_tool()
 endfunction()

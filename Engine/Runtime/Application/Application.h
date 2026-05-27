@@ -26,7 +26,7 @@ namespace ve
         WindowDesc mainWindow;
         EngineRuntimeDesc runtime;
         Path projectRoot;
-        Path sampleScenePath = Path("Assets/Samples/Scenes/AssetPipelineSample.vescene");
+        Path sampleScenePath;
         bool initializeRenderingOnStartup = true;
         ApplicationSceneStartupFunction sceneStartup;
         ApplicationSceneShutdownFunction sceneShutdown;

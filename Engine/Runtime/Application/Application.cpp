@@ -9,6 +9,9 @@
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
+#include <boost/json.hpp>
+#include <boost/system/error_code.hpp>
+
 #include <chrono>
 #include <cstdio>
 #include <thread>
@@ -22,9 +25,73 @@ namespace ve
 {
     namespace
     {
+        using boost::json::object;
+        using boost::json::value;
+
+        constexpr std::string_view ProjectDescriptorFileName = ".veproject";
+        constexpr std::string_view DefaultSampleScenePath = "Assets/Samples/Scenes/AssetPipelineSample.vescene";
+
         void ShutdownEngineRuntime(EngineRuntime& runtime)
         {
             runtime.Shutdown();
+        }
+
+        [[nodiscard]] const value* FindMember(const object& jsonObject, const char* name)
+        {
+            const auto iter = jsonObject.find(name);
+            return iter == jsonObject.end() ? nullptr : &iter->value();
+        }
+
+        [[nodiscard]] std::string ReadString(const object& jsonObject, const char* name)
+        {
+            const value* member = FindMember(jsonObject, name);
+            return member != nullptr && member->is_string() ? std::string(member->as_string()) : std::string();
+        }
+
+        [[nodiscard]] Path ReadStartupScenePathFromProjectDescriptor(const Path& projectRoot)
+        {
+            Result<std::string> textResult = FileSystem::ReadTextFile(projectRoot / ProjectDescriptorFileName);
+            if (!textResult)
+            {
+                return {};
+            }
+
+            boost::system::error_code parseError;
+            value rootValue = boost::json::parse(textResult.GetValue(), parseError);
+            if (parseError || !rootValue.is_object())
+            {
+                return {};
+            }
+
+            const object& root = rootValue.as_object();
+            if (ReadString(root, "format") != "VEngine.Project")
+            {
+                return {};
+            }
+
+            const value* startupSceneValue = FindMember(root, "startupScene");
+            if (startupSceneValue == nullptr || !startupSceneValue->is_object())
+            {
+                return {};
+            }
+
+            return Path(ReadString(startupSceneValue->as_object(), "path"));
+        }
+
+        [[nodiscard]] Path ResolveStartupScenePath(const Path& projectRoot, const Path& overrideScenePath)
+        {
+            if (!overrideScenePath.IsEmpty())
+            {
+                return overrideScenePath;
+            }
+
+            const Path descriptorScenePath = ReadStartupScenePathFromProjectDescriptor(projectRoot);
+            if (!descriptorScenePath.IsEmpty())
+            {
+                return descriptorScenePath;
+            }
+
+            return Path(DefaultSampleScenePath);
         }
     } // namespace
 
@@ -169,7 +236,7 @@ namespace ve
             projectRoot = Path(VE_DEFAULT_PROJECT_DIR);
         }
 
-        if (!projectRoot.IsEmpty() && !desc_.sampleScenePath.IsEmpty())
+        if (!projectRoot.IsEmpty())
         {
             FileSystem::SetProjectRoot(projectRoot);
 
@@ -177,10 +244,12 @@ namespace ve
             const ErrorCode assetDatabaseResult = assetDatabase.Open(projectRoot);
             if (assetDatabaseResult == ErrorCode::None)
             {
+                const Path startupScenePath = ResolveStartupScenePath(projectRoot, desc_.sampleScenePath);
+
                 ReflectionRegistry reflectionRegistry;
                 RegisterSceneReflectionTypes(reflectionRegistry);
 
-                const Path scenePath = assetDatabase.ResolveProjectPath(desc_.sampleScenePath);
+                const Path scenePath = assetDatabase.ResolveProjectPath(startupScenePath);
                 const ErrorCode sceneLoadResult =
                     LoadSceneAsset(*sampleScene_, reflectionRegistry, resourceManager, assetDatabase, scenePath);
                 if (sceneLoadResult == ErrorCode::None)

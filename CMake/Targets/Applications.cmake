@@ -44,6 +44,8 @@ function(ve_add_windows_editor)
             Editor/Windows/WindowsEditorSceneViewPanel.cpp
             Tools/AssetTool/ObjImporter.cpp
             Tools/AssetTool/ObjImporter.h
+            Tools/Package/PackageService.cpp
+            Tools/Package/PackageService.h
         )
 
         target_link_libraries(VEngineEditor

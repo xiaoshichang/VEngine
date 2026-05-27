@@ -3,11 +3,14 @@
 #include "Editor/Windows/WindowsProjectLauncher.h"
 
 #include "Engine/Runtime/Application/Application.h"
+#include "Engine/Runtime/Core/BuildConfig.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 #include "Engine/Runtime/Platform/Windows/Win32Window.h"
 #include "Engine/Runtime/Render/EditorUiFrame.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
+#include "Tools/Package/PackageService.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -163,6 +166,15 @@ namespace
         message += ": ";
         message += ve::ToString(result);
         return message;
+    }
+
+    [[nodiscard]] ve::PackageConfiguration GetEditorPackageConfiguration() noexcept
+    {
+#if VE_BUILD_DEBUG
+        return ve::PackageConfiguration::Debug;
+#else
+        return ve::PackageConfiguration::Release;
+#endif
     }
 
     [[nodiscard]] ve::ErrorCode OpenEditorProject(ve::EditorProjectService& projectService,
@@ -384,6 +396,40 @@ namespace
             }
 
             statusMessage_ = MakeProjectOpenError("Save Scene failed", saveResult);
+        }
+
+        void PackageCurrentProject(ve::EditorProjectService& projectService)
+        {
+            if (!projectService.HasOpenProject())
+            {
+                statusMessage_ = "Package Project failed: no project is open.";
+                return;
+            }
+
+            const ve::PackageConfiguration configuration = GetEditorPackageConfiguration();
+
+            ve::PackageRequest request;
+            request.projectRoot = projectService.GetProjectRoot();
+            request.outputRoot = projectService.GetProjectRoot() / "Generated/Build/Windows" /
+                                 ve::ToString(configuration);
+            request.playerExecutable = ve::FileSystem::GetExecutableDirectory() / "VEnginePlayer.exe";
+            request.platform = ve::PackagePlatform::Windows;
+            request.configuration = configuration;
+            request.includeRuntimeBinaries = true;
+
+            ve::Result<ve::PackageResult> packageResult = ve::StagePackage(request);
+            if (!packageResult)
+            {
+                statusMessage_ = "Package Project failed: " + packageResult.GetError().GetMessage();
+                VE_LOG_ERROR_CATEGORY("Editor", "{}", statusMessage_);
+                return;
+            }
+
+            statusMessage_ = "Package staged: " + packageResult.GetValue().packageRoot.GetString();
+            VE_LOG_INFO_CATEGORY("Editor",
+                                 "Packaged project '{}' to '{}'",
+                                 projectService.GetDescriptor().displayName,
+                                 packageResult.GetValue().packageRoot.GetString());
         }
 
         [[nodiscard]] const std::string& GetLastError() const noexcept
@@ -677,6 +723,18 @@ namespace
                 if (ImGui::MenuItem("Save Scene"))
                 {
                     SaveCurrentScene(projectService, runtime);
+                }
+
+                if (ImGui::BeginMenu("Package Project"))
+                {
+                    const ve::PackageConfiguration configuration = GetEditorPackageConfiguration();
+                    const std::string label = std::string("Windows ") + ve::ToString(configuration);
+                    if (ImGui::MenuItem(label.c_str()))
+                    {
+                        PackageCurrentProject(projectService);
+                    }
+
+                    ImGui::EndMenu();
                 }
 
                 ImGui::EndMenu();

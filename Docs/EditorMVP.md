@@ -299,7 +299,7 @@ Milestone 7 should define a simple Windows package path even if the first packag
 Recommended command shape:
 
 ```text
-VEngineAssetTool package --project <project-root> --platform Windows --config Debug|Release --output <output-dir>
+VEnginePackageTool package --project <project-root> --platform Windows --config Debug|Release --output <output-dir>
 ```
 
 The Editor can expose the same backend through:
@@ -326,7 +326,7 @@ Open project
 Recommended Windows package output:
 
 ```text
-<OutputDir>/<ProjectName>-Windows/
+<OutputDir>/
   VEnginePlayer.exe
   Content/
     .veproject
@@ -347,6 +347,11 @@ Recommended Windows package output:
 Rules:
 
 - Player runtime reads from `Content/` as a read-only packaged project root.
+- `VEnginePlayer.exe --package <package-root>` resolves `<package-root>/Content`, while `--content <content-root>`
+  can point directly at the content root. A packaged Player launched without arguments auto-detects an adjacent
+  `Content/.veproject`.
+- `VEnginePlayer.exe --project <project-root>` remains available for development runs against editable projects, and
+  `--scene <project-relative .vescene>` can override the `.veproject` startup scene.
 - Runtime source import is disabled.
 - The manifest maps `AssetGuid` to package-relative native asset or generated artifact paths.
 - Debug packages may keep text `.vemesh` and JSON assets for inspection.
@@ -362,7 +367,7 @@ execution.
 Recommended command shape:
 
 ```text
-VEngineAssetTool package --project <project-root> --platform iOS --config Debug|Release --output <output-dir>
+VEnginePackageTool package --project <project-root> --platform iOS --config Debug|Release --output <output-dir>
 ```
 
 Recommended iOS package flow:
@@ -399,6 +404,8 @@ VEngineIOSPlayer.app/
 iOS rules:
 
 - Bundle `Content/` is read-only at runtime.
+- The first staging tool writes `<output-dir>/VEngineIOSPlayer.app/Content/` unless `<output-dir>` already names an
+  `.app` bundle, so Milestone 10 can copy or merge the same `Content/` contract into the Xcode-built app bundle.
 - Runtime source import is disabled.
 - Generated import artifacts and Metal shader outputs must be produced before the Xcode build packages resources.
 - Runtime writable data goes to the app sandbox, not the bundle.

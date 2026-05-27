@@ -40,6 +40,30 @@ function(ve_add_example_projects)
 
     if(TARGET VEnginePlayer)
         add_dependencies(VEnginePlayer VEngineExampleAssetPipelineSample)
+
+        ve_add_package_tool()
+
+        add_custom_target(VEngineExampleAssetPipelineSamplePackage ALL
+            COMMAND $<TARGET_FILE:VEnginePackageTool>
+                package
+                --project "${veAssetPipelineSampleRoot}"
+                --platform Windows
+                --config $<CONFIG>
+                --output "${veAssetPipelineSampleRoot}/Generated/Build/Windows/$<CONFIG>"
+                --player $<TARGET_FILE:VEnginePlayer>
+            DEPENDS
+                VEnginePackageTool
+                VEnginePlayer
+                VEngineExampleAssetPipelineSample
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+            COMMENT "Packaging VEngine example project: AssetPipelineSample"
+            VERBATIM
+        )
+
+        set_target_properties(VEngineExampleAssetPipelineSamplePackage
+            PROPERTIES
+                FOLDER "Examples"
+        )
     endif()
 
     if(TARGET VEngineEditor)

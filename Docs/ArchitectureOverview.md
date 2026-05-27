@@ -158,6 +158,9 @@ VEngineAssetTool
 
 VEngineShaderTool
   Command line shader compile, reflection, and cross-compile tool.
+
+VEnginePackageTool
+  Command line package staging tool shared with the Windows Editor packaging path.
 ```
 
 Windows first-stage outputs:
@@ -168,6 +171,7 @@ VEnginePlayer.exe
 VEngineEditor.exe
 VEngineAssetTool.exe
 VEngineShaderTool.exe
+VEnginePackageTool.exe
 ```
 
 Windows unit and smoke test executables are registered through CTest. Individual test target names are intentionally kept
@@ -1010,6 +1014,13 @@ Editor project structure:
   and GM commands stay available without an in-editor log panel.
 - Packaged Windows and iOS builds should use a read-only `Content/` layout with a compact asset manifest instead of
   scanning an editable project directory at runtime.
+- The first package service is shared by `VEnginePackageTool` and the Windows Editor. Windows staging writes
+  `VEnginePlayer.exe` beside `Content/`, copies required runtime DLLs, and preserves project-relative authored native
+  assets plus generated artifacts under `Content/`. iOS staging writes the same `Content/` contract under an app-bundle
+  staging directory so the later Xcode build can place it inside `VEngineIOSPlayer.app`.
+- Windows Player startup accepts `--package <package-root>`, `--content <content-root>`, `--project <project-root>`,
+  and optional `--scene <project-relative .vescene>`. Without arguments it first checks for `Content/.veproject` beside
+  the executable, then falls back to the bundled sample project used by development builds.
 - Engine-owned built-in resources are addressed through stable `builtin:` locators and are not authored project assets.
 
 ## 16. Runtime UI

@@ -238,6 +238,24 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineEditorProjectTests>
     )
 
+    add_executable(VEnginePackageTests
+        Tests/Unit/PackageTests.cpp
+        Tools/Package/PackageService.cpp
+        Tools/Package/PackageService.h
+    )
+
+    target_link_libraries(VEnginePackageTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEnginePackageTests)
+
+    add_test(
+        NAME VEnginePackageTests
+        COMMAND $<TARGET_FILE:VEnginePackageTests>
+    )
+
     if(VE_BUILD_SHADER_TESTS)
         ve_add_shader_tool()
 
