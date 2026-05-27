@@ -5,6 +5,8 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 #include "Engine/Runtime/Platform/Windows/Win32Window.h"
+#include "Engine/Runtime/Render/EditorUiFrame.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -18,18 +20,11 @@
 #include <Objbase.h>
 #include <Shellapi.h>
 #include <ShlObj.h>
-#include <d3d11.h>
-#include <dxgi.h>
-#include <wrl/client.h>
 
 #include <imgui.h>
-#include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 
 #include <algorithm>
-#include <cstdio>
-#include <iterator>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,8 +38,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND window,
 
 namespace
 {
-    using Microsoft::WRL::ComPtr;
-
     constexpr std::string_view OpenProjectCommand = "Editor.OpenProject";
 
     class WindowsComScope
@@ -152,17 +145,6 @@ namespace
         return projectRoot;
     }
 
-    [[nodiscard]] std::string MakeHResultError(const char* operation, HRESULT result)
-    {
-        char buffer[160] = {};
-        std::snprintf(buffer,
-                      sizeof(buffer),
-                      "%s failed with HRESULT 0x%08X",
-                      operation,
-                      static_cast<unsigned>(result));
-        return buffer;
-    }
-
     [[nodiscard]] std::string MakeProjectDisplayName(const ve::Path& projectRoot)
     {
         std::string displayName = projectRoot.GetFilename();
@@ -182,64 +164,6 @@ namespace
         message += ": ";
         message += ve::ToString(result);
         return message;
-    }
-
-    [[nodiscard]] ve::ErrorCode InitializeEditorRendering(ve::EngineRuntime& runtime,
-                                                          ve::Window& window,
-                                                          const ve::RenderDeviceDesc& deviceDesc)
-    {
-        ve::RenderSystem& renderSystem = runtime.GetRenderSystem();
-        if (renderSystem.HasDevice())
-        {
-            return ve::ErrorCode::None;
-        }
-
-        ve::ErrorCode deviceResult = renderSystem.InitializeDevice(deviceDesc);
-        if (deviceResult != ve::ErrorCode::None)
-        {
-            VE_LOG_ERROR_CATEGORY("Editor", "Failed to initialize render device: {}", ve::ToString(deviceResult));
-            return deviceResult;
-        }
-
-        const ve::WindowExtent extent = window.GetClientExtent();
-        ve::RenderSurfaceDesc surfaceDesc;
-        surfaceDesc.nativeWindow = window.GetNativeHandle();
-        surfaceDesc.nativeLayer = window.GetNativeLayer();
-        surfaceDesc.width = std::max(extent.width, 1u);
-        surfaceDesc.height = std::max(extent.height, 1u);
-
-        ve::ErrorCode swapchainResult = renderSystem.CreateMainSwapchain(surfaceDesc);
-        if (swapchainResult != ve::ErrorCode::None)
-        {
-            VE_LOG_ERROR_CATEGORY("Editor", "Failed to create render swapchain: {}", ve::ToString(swapchainResult));
-            renderSystem.ShutdownDevice();
-            return swapchainResult;
-        }
-
-        ve::GameThreadSystem& gameThreadSystem = runtime.GetGameThreadSystem();
-        ve::ErrorCode renderConnectionResult = gameThreadSystem.SetRenderSystem(&renderSystem);
-        if (renderConnectionResult != ve::ErrorCode::None)
-        {
-            VE_LOG_ERROR_CATEGORY("Editor",
-                                  "Failed to connect Game Thread to RenderSystem: {}",
-                                  ve::ToString(renderConnectionResult));
-            renderSystem.DestroyMainSwapchain();
-            renderSystem.ShutdownDevice();
-            return renderConnectionResult;
-        }
-
-        return ve::ErrorCode::None;
-    }
-
-    void ShutdownEditorRendering(ve::EngineRuntime& runtime) noexcept
-    {
-        ve::GameThreadSystem& gameThreadSystem = runtime.GetGameThreadSystem();
-        gameThreadSystem.ClearActiveScene();
-        gameThreadSystem.ClearRenderSystem();
-
-        ve::RenderSystem& renderSystem = runtime.GetRenderSystem();
-        renderSystem.DestroyMainSwapchain();
-        renderSystem.ShutdownDevice();
     }
 
     [[nodiscard]] ve::ErrorCode OpenEditorProject(ve::EditorProjectService& projectService,
@@ -306,34 +230,26 @@ namespace
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO();
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+            io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+            io.BackendRendererName = "VEngine RHI ImGui Renderer";
             io.IniFilename = nullptr;
 
             ImGui::StyleColorsDark();
             ApplyStyle();
 
-            if (!CreateDeviceObjects(window_))
+            if (!PrepareFontAtlas())
             {
                 ImGui::DestroyContext();
                 window_ = nullptr;
+                lastError_ = "ImGui font atlas preparation failed.";
                 return ve::ErrorCode::PlatformError;
             }
 
             if (!ImGui_ImplWin32_Init(window_))
             {
-                DestroyDeviceObjects();
                 ImGui::DestroyContext();
                 window_ = nullptr;
                 lastError_ = "ImGui Win32 backend initialization failed.";
-                return ve::ErrorCode::PlatformError;
-            }
-
-            if (!ImGui_ImplDX11_Init(device_.Get(), context_.Get()))
-            {
-                ImGui_ImplWin32_Shutdown();
-                DestroyDeviceObjects();
-                ImGui::DestroyContext();
-                window_ = nullptr;
-                lastError_ = "ImGui D3D11 backend initialization failed.";
                 return ve::ErrorCode::PlatformError;
             }
 
@@ -345,14 +261,14 @@ namespace
         {
             if (initialized_)
             {
-                ImGui_ImplDX11_Shutdown();
                 ImGui_ImplWin32_Shutdown();
                 ImGui::DestroyContext();
             }
 
-            DestroyDeviceObjects();
             initialized_ = false;
+            fontAtlasSubmitted_ = false;
             window_ = nullptr;
+            fontAtlas_ = {};
         }
 
         [[nodiscard]] bool
@@ -367,32 +283,27 @@ namespace
             return result != 0;
         }
 
-        [[nodiscard]] std::optional<ve::WindowsProjectLauncherResult> Render(HWND owner)
+        [[nodiscard]] std::optional<ve::WindowsProjectLauncherResult> Render(HWND owner, ve::RenderSystem& renderSystem)
         {
             if (!initialized_)
             {
                 return std::nullopt;
             }
 
-            ResizeIfNeeded();
-            if (renderTargetView_ == nullptr || IsIconic(window_) != FALSE)
+            if (IsIconic(window_) != FALSE)
             {
                 return std::nullopt;
             }
 
-            ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
 
             std::optional<ve::WindowsProjectLauncherResult> result = DrawLauncher(owner);
 
             ImGui::Render();
-            const float clearColor[4] = {0.055f, 0.06f, 0.065f, 1.0f};
-            ID3D11RenderTargetView* renderTargetView = renderTargetView_.Get();
-            context_->OMSetRenderTargets(1, &renderTargetView, nullptr);
-            context_->ClearRenderTargetView(renderTargetView_.Get(), clearColor);
-            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-            swapchain_->Present(1, 0);
+            ve::EditorUiFrameData frameData = CaptureEditorUiFrame(!fontAtlasSubmitted_);
+            renderSystem.SubmitEditorUiFrame(std::move(frameData));
+            fontAtlasSubmitted_ = true;
 
             return result;
         }
@@ -442,136 +353,101 @@ namespace
             colors[ImGuiCol_HeaderActive] = ImVec4(0.24f, 0.30f, 0.33f, 1.0f);
         }
 
-        [[nodiscard]] bool CreateDeviceObjects(HWND window)
+        [[nodiscard]] bool PrepareFontAtlas()
         {
-            RECT clientRect = {};
-            GetClientRect(window, &clientRect);
-            width_ = static_cast<UINT>(std::max<LONG>(clientRect.right - clientRect.left, 1));
-            height_ = static_cast<UINT>(std::max<LONG>(clientRect.bottom - clientRect.top, 1));
+            unsigned char* pixels = nullptr;
+            int width = 0;
+            int height = 0;
+            ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+            ImGui::GetIO().Fonts->SetTexID(static_cast<ImTextureID>(1));
 
-            DXGI_SWAP_CHAIN_DESC swapchainDesc = {};
-            swapchainDesc.BufferDesc.Width = width_;
-            swapchainDesc.BufferDesc.Height = height_;
-            swapchainDesc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-            swapchainDesc.BufferDesc.RefreshRate.Numerator = 60;
-            swapchainDesc.BufferDesc.RefreshRate.Denominator = 1;
-            swapchainDesc.SampleDesc.Count = 1;
-            swapchainDesc.SampleDesc.Quality = 0;
-            swapchainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-            swapchainDesc.BufferCount = 2;
-            swapchainDesc.OutputWindow = window;
-            swapchainDesc.Windowed = TRUE;
-            swapchainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-            UINT createDeviceFlags = 0;
-#if defined(_DEBUG)
-            createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-
-            const D3D_FEATURE_LEVEL featureLevels[] = {
-                D3D_FEATURE_LEVEL_11_1,
-                D3D_FEATURE_LEVEL_11_0,
-            };
-            D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
-
-            HRESULT result = D3D11CreateDeviceAndSwapChain(nullptr,
-                                                           D3D_DRIVER_TYPE_HARDWARE,
-                                                           nullptr,
-                                                           createDeviceFlags,
-                                                           featureLevels,
-                                                           static_cast<UINT>(std::size(featureLevels)),
-                                                           D3D11_SDK_VERSION,
-                                                           &swapchainDesc,
-                                                           &swapchain_,
-                                                           &device_,
-                                                           &featureLevel,
-                                                           &context_);
-
-#if defined(_DEBUG)
-            if (FAILED(result))
+            if (pixels == nullptr || width <= 0 || height <= 0)
             {
-                createDeviceFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
-                result = D3D11CreateDeviceAndSwapChain(nullptr,
-                                                       D3D_DRIVER_TYPE_HARDWARE,
-                                                       nullptr,
-                                                       createDeviceFlags,
-                                                       featureLevels,
-                                                       static_cast<UINT>(std::size(featureLevels)),
-                                                       D3D11_SDK_VERSION,
-                                                       &swapchainDesc,
-                                                       &swapchain_,
-                                                       &device_,
-                                                       &featureLevel,
-                                                       &context_);
-            }
-#endif
-
-            if (FAILED(result))
-            {
-                lastError_ = MakeHResultError("D3D11CreateDeviceAndSwapChain", result);
                 return false;
             }
 
-            return CreateRenderTarget();
-        }
-
-        void DestroyDeviceObjects() noexcept
-        {
-            CleanupRenderTarget();
-            swapchain_.Reset();
-            context_.Reset();
-            device_.Reset();
-            width_ = 0;
-            height_ = 0;
-        }
-
-        [[nodiscard]] bool CreateRenderTarget()
-        {
-            ComPtr<ID3D11Texture2D> backBuffer;
-            HRESULT result = swapchain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
-            if (FAILED(result))
-            {
-                lastError_ = MakeHResultError("IDXGISwapChain::GetBuffer", result);
-                return false;
-            }
-
-            result = device_->CreateRenderTargetView(backBuffer.Get(), nullptr, &renderTargetView_);
-            if (FAILED(result))
-            {
-                lastError_ = MakeHResultError("ID3D11Device::CreateRenderTargetView", result);
-                return false;
-            }
-
+            const size_t pixelByteCount = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+            fontAtlas_.width = static_cast<ve::UInt32>(width);
+            fontAtlas_.height = static_cast<ve::UInt32>(height);
+            fontAtlas_.rgbaPixels.assign(pixels, pixels + pixelByteCount);
             return true;
         }
 
-        void CleanupRenderTarget() noexcept
+        [[nodiscard]] ve::EditorUiFrameData CaptureEditorUiFrame(bool includeFontAtlas)
         {
-            renderTargetView_.Reset();
-        }
+            ve::EditorUiFrameData frameData;
 
-        void ResizeIfNeeded()
-        {
-            RECT clientRect = {};
-            GetClientRect(window_, &clientRect);
-            const UINT width = static_cast<UINT>(std::max<LONG>(clientRect.right - clientRect.left, 1));
-            const UINT height = static_cast<UINT>(std::max<LONG>(clientRect.bottom - clientRect.top, 1));
-            if (width == width_ && height == height_)
+            ImDrawData* drawData = ImGui::GetDrawData();
+            if (drawData == nullptr)
             {
-                return;
+                return frameData;
             }
 
-            CleanupRenderTarget();
-            HRESULT result = swapchain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-            if (FAILED(result))
+            frameData.displayPos[0] = drawData->DisplayPos.x;
+            frameData.displayPos[1] = drawData->DisplayPos.y;
+            frameData.displaySize[0] = drawData->DisplaySize.x;
+            frameData.displaySize[1] = drawData->DisplaySize.y;
+            frameData.framebufferScale[0] = drawData->FramebufferScale.x;
+            frameData.framebufferScale[1] = drawData->FramebufferScale.y;
+
+            if (includeFontAtlas)
             {
-                lastError_ = MakeHResultError("IDXGISwapChain::ResizeBuffers", result);
-                return;
+                frameData.fontAtlas = fontAtlas_;
             }
 
-            width_ = width;
-            height_ = height;
-            (void)CreateRenderTarget();
+            frameData.drawLists.reserve(static_cast<size_t>(drawData->CmdListsCount));
+            for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex)
+            {
+                const ImDrawList* sourceList = drawData->CmdLists[listIndex];
+                if (sourceList == nullptr)
+                {
+                    continue;
+                }
+
+                ve::EditorUiDrawList drawList;
+                drawList.vertices.reserve(static_cast<size_t>(sourceList->VtxBuffer.Size));
+                drawList.indices.reserve(static_cast<size_t>(sourceList->IdxBuffer.Size));
+                drawList.commands.reserve(static_cast<size_t>(sourceList->CmdBuffer.Size));
+
+                for (const ImDrawVert& sourceVertex : sourceList->VtxBuffer)
+                {
+                    ve::EditorUiVertex vertex;
+                    vertex.position[0] = sourceVertex.pos.x;
+                    vertex.position[1] = sourceVertex.pos.y;
+                    vertex.uv[0] = sourceVertex.uv.x;
+                    vertex.uv[1] = sourceVertex.uv.y;
+                    vertex.color = sourceVertex.col;
+                    drawList.vertices.push_back(vertex);
+                }
+
+                for (ImDrawIdx sourceIndex : sourceList->IdxBuffer)
+                {
+                    drawList.indices.push_back(static_cast<ve::UInt32>(sourceIndex));
+                }
+
+                for (const ImDrawCmd& sourceCommand : sourceList->CmdBuffer)
+                {
+                    if (sourceCommand.UserCallback != nullptr)
+                    {
+                        continue;
+                    }
+
+                    ve::EditorUiDrawCommand command;
+                    command.elementCount = sourceCommand.ElemCount;
+                    command.indexOffset = sourceCommand.IdxOffset;
+                    command.vertexOffset = sourceCommand.VtxOffset;
+                    command.clipRect[0] = sourceCommand.ClipRect.x;
+                    command.clipRect[1] = sourceCommand.ClipRect.y;
+                    command.clipRect[2] = sourceCommand.ClipRect.z;
+                    command.clipRect[3] = sourceCommand.ClipRect.w;
+                    command.textureId = static_cast<ve::UInt64>(sourceCommand.GetTexID());
+                    drawList.commands.push_back(command);
+                }
+
+                frameData.drawLists.push_back(std::move(drawList));
+            }
+
+            return frameData;
         }
 
         [[nodiscard]] std::optional<ve::WindowsProjectLauncherResult> DrawLauncher(HWND owner)
@@ -698,16 +574,12 @@ namespace
         }
 
         HWND window_ = nullptr;
-        ComPtr<ID3D11Device> device_;
-        ComPtr<ID3D11DeviceContext> context_;
-        ComPtr<IDXGISwapChain> swapchain_;
-        ComPtr<ID3D11RenderTargetView> renderTargetView_;
         std::vector<ve::WindowsRecentProject> recentProjects_;
         std::string pendingError_;
         std::string lastError_;
-        UINT width_ = 0;
-        UINT height_ = 0;
         bool initialized_ = false;
+        bool fontAtlasSubmitted_ = false;
+        ve::EditorUiFontAtlas fontAtlas_;
     };
 
     [[nodiscard]] ve::ErrorCode EnsureLauncherUi(WindowsProjectLauncherUi& launcherUi, HWND window)
@@ -728,7 +600,6 @@ namespace
                                                ve::EditorProjectService& projectService,
                                                ve::EngineRuntime& runtime,
                                                ve::Window& window,
-                                               const ve::RenderDeviceDesc& renderDeviceDesc,
                                                const ve::WindowsProjectLauncherResult& selection,
                                                bool reportInLauncher)
     {
@@ -758,20 +629,6 @@ namespace
             }
         }
 
-        const bool renderingWasInitialized = runtime.GetRenderSystem().HasDevice();
-        if (!renderingWasInitialized)
-        {
-            launcherUi.Shutdown();
-            const ve::ErrorCode renderResult = InitializeEditorRendering(runtime, window, renderDeviceDesc);
-            if (renderResult != ve::ErrorCode::None)
-            {
-                const std::string message = MakeProjectOpenError("Failed to initialize Editor rendering", renderResult);
-                (void)EnsureLauncherUi(launcherUi, static_cast<HWND>(window.GetNativeHandle()));
-                launcherUi.SetError(message);
-                return false;
-            }
-        }
-
         const ve::ErrorCode openResult = OpenEditorProject(projectService, runtime, selection.projectRoot, true);
         if (openResult == ve::ErrorCode::None)
         {
@@ -783,7 +640,6 @@ namespace
         VE_LOG_ERROR_CATEGORY("Editor", "{}", message);
         projectService.CloseProject(&runtime.GetGameThreadSystem());
 
-        ShutdownEditorRendering(runtime);
         (void)EnsureLauncherUi(launcherUi, static_cast<HWND>(window.GetNativeHandle()));
         launcherUi.SetError(message);
         return false;
@@ -824,13 +680,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     desc.mainWindow.visible = true;
     desc.mainWindow.menuItems.push_back({"File", "Open Project...", std::string(OpenProjectCommand)});
     desc.projectRoot = projectRoot;
-    desc.initializeRenderingOnStartup = !projectRoot.IsEmpty();
+    desc.initializeRenderingOnStartup = true;
     desc.runtime.jobSystem.workerThreadNamePrefix = "VEngineEditorJobWorker";
     desc.runtime.ioSystem.threadName = "VEngineEditorIOThread";
     desc.runtime.renderSystem.threadName = "VEngineEditorRenderThread";
     desc.runtime.gameThreadSystem.threadName = "VEngineEditorGameThread";
-
-    const ve::RenderDeviceDesc renderDeviceDesc = desc.runtime.renderSystem.device;
 
     desc.windowConfigure = [&launcherUi](ve::Window& window, ve::EngineRuntime&)
     {
@@ -868,8 +722,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         projectService.CloseProject(&runtime.GetGameThreadSystem());
     };
 
-    desc.frameUpdate = [&projectService, &launcherUi, renderDeviceDesc](ve::Window& window,
-                                                                        ve::EngineRuntime& runtime)
+    desc.frameUpdate = [&projectService, &launcherUi](ve::Window& window, ve::EngineRuntime& runtime)
     {
         if (projectService.HasOpenProject())
         {
@@ -882,32 +735,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
             return;
         }
 
-        if (runtime.GetRenderSystem().HasDevice())
-        {
-            ShutdownEditorRendering(runtime);
-        }
-
         if (EnsureLauncherUi(launcherUi, nativeWindow) != ve::ErrorCode::None)
         {
             return;
         }
 
-        std::optional<ve::WindowsProjectLauncherResult> selection = launcherUi.Render(nativeWindow);
+        std::optional<ve::WindowsProjectLauncherResult> selection =
+            launcherUi.Render(nativeWindow, runtime.GetRenderSystem());
         if (selection)
         {
-            (void)TryOpenProjectSelection(launcherUi,
-                                          projectService,
-                                          runtime,
-                                          window,
-                                          renderDeviceDesc,
-                                          *selection,
-                                          true);
+            (void)TryOpenProjectSelection(launcherUi, projectService, runtime, window, *selection, true);
         }
     };
 
-    desc.commandHandler = [&projectService, &launcherUi, renderDeviceDesc](std::string_view command,
-                                                                           ve::Window& window,
-                                                                           ve::EngineRuntime& runtime)
+    desc.commandHandler = [&projectService, &launcherUi](std::string_view command,
+                                                         ve::Window& window,
+                                                         ve::EngineRuntime& runtime)
     {
         if (command != OpenProjectCommand)
         {
@@ -927,13 +770,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         selection.projectRoot = selectedFolder.GetValue();
 
         const bool reportInLauncher = !projectService.HasOpenProject();
-        (void)TryOpenProjectSelection(launcherUi,
-                                      projectService,
-                                      runtime,
-                                      window,
-                                      renderDeviceDesc,
-                                      selection,
-                                      reportInLauncher);
+        (void)TryOpenProjectSelection(launcherUi, projectService, runtime, window, selection, reportInLauncher);
     };
 
     ve::Application application(std::move(desc));

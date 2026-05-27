@@ -31,6 +31,7 @@ namespace ve::rhi
         Unknown,
         Rgba8Unorm,
         Bgra8Unorm,
+        Rg32Float,
         Rgb32Float,
     };
 
@@ -59,6 +60,21 @@ namespace ve::rhi
     {
         Vertex = 1 << 0,
         Uniform = 1 << 1,
+        Index = 1 << 2,
+    };
+
+    /// Describes the integer width of an index buffer.
+    enum class RhiIndexFormat
+    {
+        UInt16,
+        UInt32,
+    };
+
+    /// Describes triangle culling used by a graphics pipeline.
+    enum class RhiCullMode
+    {
+        None,
+        Back,
     };
 
     /// Describes intended usage for a texture.
@@ -182,6 +198,13 @@ namespace ve::rhi
         uint32_t slot = 0;
     };
 
+    /// Describes a sampled texture binding expected by a graphics pipeline.
+    struct RhiTextureBindingDesc
+    {
+        RhiShaderStage stage = RhiShaderStage::Fragment;
+        uint32_t slot = 0;
+    };
+
     class RhiShaderModule;
 
     /// Describes immutable graphics pipeline state.
@@ -192,8 +215,13 @@ namespace ve::rhi
         RhiVertexLayoutDesc vertexLayout = {};
         const RhiUniformBufferBindingDesc* uniformBufferBindings = nullptr;
         uint32_t uniformBufferBindingCount = 0;
+        const RhiTextureBindingDesc* textureBindings = nullptr;
+        uint32_t textureBindingCount = 0;
         RhiPrimitiveTopology topology = RhiPrimitiveTopology::TriangleList;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
+        RhiCullMode cullMode = RhiCullMode::Back;
+        bool enableAlphaBlending = false;
+        bool enableScissor = false;
         const char* debugName = nullptr;
     };
 } // namespace ve::rhi

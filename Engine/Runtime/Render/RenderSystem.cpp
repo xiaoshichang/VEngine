@@ -18,7 +18,9 @@
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <exception>
 #include <optional>
 #include <string_view>
@@ -47,6 +49,13 @@ namespace ve
         };
         static_assert((sizeof(DrawUniformData) % 16) == 0,
                       "Draw uniform data must satisfy D3D constant buffer alignment.");
+
+        struct EditorUiUniformData
+        {
+            Float32 projection[16] = {};
+        };
+        static_assert((sizeof(EditorUiUniformData) % 16) == 0,
+                      "Editor UI uniform data must satisfy D3D constant buffer alignment.");
 
         struct RenderSceneMeshResource
         {
@@ -193,6 +202,83 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
 }
 )";
 
+        const char* EditorUiHlslShaderSource = R"(
+cbuffer UiConstants : register(b0)
+{
+    row_major float4x4 projection;
+};
+
+Texture2D fontTexture : register(t0);
+SamplerState fontSampler : register(s0);
+
+struct VSInput
+{
+    float2 position : POSITION;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR0;
+};
+
+struct VSOutput
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR0;
+};
+
+VSOutput VSMain(VSInput input)
+{
+    VSOutput output;
+    output.position = mul(projection, float4(input.position, 0.0f, 1.0f));
+    output.uv = input.uv;
+    output.color = input.color;
+    return output;
+}
+
+float4 PSMain(VSOutput input) : SV_TARGET
+{
+    return input.color * fontTexture.Sample(fontSampler, input.uv);
+}
+)";
+
+        const char* EditorUiMetalShaderSource = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct UiConstants
+{
+    float4x4 projection;
+};
+
+struct VSInput
+{
+    float2 position [[attribute(0)]];
+    float2 uv [[attribute(1)]];
+    float4 color [[attribute(2)]];
+};
+
+struct VSOutput
+{
+    float4 position [[position]];
+    float2 uv;
+    float4 color;
+};
+
+vertex VSOutput VSMain(VSInput input [[stage_in]], constant UiConstants& constants [[buffer(16)]])
+{
+    VSOutput output;
+    output.position = constants.projection * float4(input.position, 0.0, 1.0);
+    output.uv = input.uv;
+    output.color = input.color;
+    return output;
+}
+
+fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture [[texture(0)]])
+{
+    constexpr sampler fontSampler(coord::normalized, address::clamp_to_edge, filter::linear);
+    return input.color * fontTexture.sample(fontSampler, input.uv);
+}
+)";
+
         enum class RenderFrameSlotState
         {
             Free,
@@ -253,10 +339,19 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 std::unique_ptr<rhi::RhiPipelineState> pipelineState;
             };
 
+            struct EditorUiPipelineResources
+            {
+                std::unique_ptr<rhi::RhiShaderModule> vertexShader;
+                std::unique_ptr<rhi::RhiShaderModule> fragmentShader;
+                std::unique_ptr<rhi::RhiPipelineState> pipelineState;
+                std::unique_ptr<rhi::RhiTexture> fontTexture;
+            };
+
             Atomic<int> backendValue{-1};
             std::unique_ptr<rhi::RhiDevice> device;
             std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
             ScenePipelineResources scenePipeline;
+            EditorUiPipelineResources editorUiPipeline;
             std::unordered_map<ResourceId, RenderSceneMeshResource> sceneMeshes;
             std::unordered_map<ResourceId, RenderSceneMaterialResource> sceneMaterials;
         };
@@ -391,6 +486,20 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             return DrawHlslShaderSource;
         }
 
+        [[nodiscard]] const char* GetEditorUiShaderSource(rhi::RhiBackend backend) noexcept
+        {
+            switch (backend)
+            {
+            case rhi::RhiBackend::Metal:
+                return EditorUiMetalShaderSource;
+            case rhi::RhiBackend::D3D11:
+            case rhi::RhiBackend::D3D12:
+                return EditorUiHlslShaderSource;
+            }
+
+            return EditorUiHlslShaderSource;
+        }
+
         [[nodiscard]] Matrix44 ToShaderMatrix(const RenderSystemImpl& impl, const Matrix44& matrix) noexcept
         {
             if (impl.rhi.device != nullptr && impl.rhi.device->GetBackend() == rhi::RhiBackend::Metal)
@@ -408,6 +517,41 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             {
                 destination[index] = values[index];
             }
+        }
+
+        [[nodiscard]] Matrix44 BuildEditorUiProjectionMatrix(const EditorUiFrameData& frameData) noexcept
+        {
+            const Float32 left = frameData.displayPos[0];
+            const Float32 right = frameData.displayPos[0] + frameData.displaySize[0];
+            const Float32 top = frameData.displayPos[1];
+            const Float32 bottom = frameData.displayPos[1] + frameData.displaySize[1];
+
+            return Matrix44(std::array<Float32, 16>{
+                2.0f / (right - left),
+                0.0f,
+                0.0f,
+                (right + left) / (left - right),
+                0.0f,
+                2.0f / (top - bottom),
+                0.0f,
+                (top + bottom) / (bottom - top),
+                0.0f,
+                0.0f,
+                0.5f,
+                0.5f,
+                0.0f,
+                0.0f,
+                0.0f,
+                1.0f,
+            });
+        }
+
+        [[nodiscard]] EditorUiUniformData BuildEditorUiUniformData(RenderSystemImpl& impl,
+                                                                   const EditorUiFrameData& frameData) noexcept
+        {
+            EditorUiUniformData uniforms = {};
+            StoreMatrix(uniforms.projection, ToShaderMatrix(impl, BuildEditorUiProjectionMatrix(frameData)));
+            return uniforms;
         }
 
         [[nodiscard]] Vector3 NormalizeOrFallback(const Vector3& value, const Vector3& fallback) noexcept
@@ -502,11 +646,137 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             impl.rhi.sceneMeshes.clear();
         }
 
+        void DestroyEditorUiPipelineResources(RenderSystemImpl& impl)
+        {
+            impl.rhi.editorUiPipeline.fontTexture.reset();
+            impl.rhi.editorUiPipeline.pipelineState.reset();
+            impl.rhi.editorUiPipeline.fragmentShader.reset();
+            impl.rhi.editorUiPipeline.vertexShader.reset();
+        }
+
         void ClearResourceSynchronizationState(RenderSystemImpl& impl)
         {
             impl.resourceSynchronization.resourceChangeSerial = 0;
             impl.resourceSynchronization.materialRevisions.clear();
             impl.resourceSynchronization.meshRevisions.clear();
+        }
+
+        [[nodiscard]] ErrorCode CreateEditorUiPipelineResources(RenderSystemImpl& impl)
+        {
+            VE_ASSERT_MESSAGE(impl.rhi.device != nullptr,
+                              "CreateEditorUiPipelineResources requires an initialized RHI device.");
+            VE_ASSERT_MESSAGE(impl.rhi.mainSwapchain != nullptr,
+                              "CreateEditorUiPipelineResources requires an initialized main swapchain.");
+
+            const char* shaderSource = GetEditorUiShaderSource(impl.rhi.device->GetBackend());
+
+            rhi::RhiShaderModuleDesc vertexShaderDesc = {};
+            vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
+            vertexShaderDesc.source = shaderSource;
+            vertexShaderDesc.entryPoint = "VSMain";
+            vertexShaderDesc.debugName = "RenderSystemEditorUiVertexShader";
+
+            impl.rhi.editorUiPipeline.vertexShader = impl.rhi.device->CreateShaderModule(vertexShaderDesc);
+            if (impl.rhi.editorUiPipeline.vertexShader == nullptr)
+            {
+                DestroyEditorUiPipelineResources(impl);
+                return ErrorCode::PlatformError;
+            }
+
+            rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
+            fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
+            fragmentShaderDesc.source = shaderSource;
+            fragmentShaderDesc.entryPoint = "PSMain";
+            fragmentShaderDesc.debugName = "RenderSystemEditorUiFragmentShader";
+
+            impl.rhi.editorUiPipeline.fragmentShader = impl.rhi.device->CreateShaderModule(fragmentShaderDesc);
+            if (impl.rhi.editorUiPipeline.fragmentShader == nullptr)
+            {
+                DestroyEditorUiPipelineResources(impl);
+                return ErrorCode::PlatformError;
+            }
+
+            rhi::RhiVertexAttributeDesc attributes[3] = {};
+            attributes[0].semanticName = "POSITION";
+            attributes[0].semanticIndex = 0;
+            attributes[0].format = rhi::RhiFormat::Rg32Float;
+            attributes[0].offset = 0;
+            attributes[1].semanticName = "TEXCOORD";
+            attributes[1].semanticIndex = 0;
+            attributes[1].format = rhi::RhiFormat::Rg32Float;
+            attributes[1].offset = sizeof(Float32) * 2;
+            attributes[2].semanticName = "COLOR";
+            attributes[2].semanticIndex = 0;
+            attributes[2].format = rhi::RhiFormat::Rgba8Unorm;
+            attributes[2].offset = sizeof(Float32) * 4;
+
+            rhi::RhiUniformBufferBindingDesc uniformBindings[1] = {};
+            uniformBindings[0].stage = rhi::RhiShaderStage::Vertex;
+            uniformBindings[0].slot = 0;
+
+            rhi::RhiTextureBindingDesc textureBindings[1] = {};
+            textureBindings[0].stage = rhi::RhiShaderStage::Fragment;
+            textureBindings[0].slot = 0;
+
+            rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
+            pipelineDesc.vertexShader = impl.rhi.editorUiPipeline.vertexShader.get();
+            pipelineDesc.fragmentShader = impl.rhi.editorUiPipeline.fragmentShader.get();
+            pipelineDesc.vertexLayout.attributes = attributes;
+            pipelineDesc.vertexLayout.attributeCount = 3;
+            pipelineDesc.vertexLayout.stride = sizeof(EditorUiVertex);
+            pipelineDesc.uniformBufferBindings = uniformBindings;
+            pipelineDesc.uniformBufferBindingCount = 1;
+            pipelineDesc.textureBindings = textureBindings;
+            pipelineDesc.textureBindingCount = 1;
+            pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
+            pipelineDesc.colorFormat = impl.rhi.mainSwapchain->GetColorFormat();
+            pipelineDesc.cullMode = rhi::RhiCullMode::None;
+            pipelineDesc.enableAlphaBlending = true;
+            pipelineDesc.enableScissor = true;
+            pipelineDesc.debugName = "RenderSystemEditorUiPipeline";
+
+            impl.rhi.editorUiPipeline.pipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
+            if (impl.rhi.editorUiPipeline.pipelineState == nullptr)
+            {
+                DestroyEditorUiPipelineResources(impl);
+                return ErrorCode::PlatformError;
+            }
+
+            return ErrorCode::None;
+        }
+
+        [[nodiscard]] std::unique_ptr<rhi::RhiBuffer>
+        CreateEditorUiUniformBuffer(RenderSystemImpl& impl,
+                                    const EditorUiUniformData& uniforms,
+                                    const char* debugName)
+        {
+            rhi::RhiBufferDesc uniformBufferDesc = {};
+            uniformBufferDesc.size = sizeof(EditorUiUniformData);
+            uniformBufferDesc.usage = rhi::RhiBufferUsage::Uniform;
+            uniformBufferDesc.initialData = &uniforms;
+            uniformBufferDesc.debugName = debugName;
+            return impl.rhi.device->CreateBuffer(uniformBufferDesc);
+        }
+
+        [[nodiscard]] std::unique_ptr<rhi::RhiTexture> CreateEditorUiFontTexture(RenderSystemImpl& impl,
+                                                                                 const EditorUiFontAtlas& fontAtlas)
+        {
+            if (!fontAtlas.IsValid())
+            {
+                return nullptr;
+            }
+
+            rhi::RhiTextureDesc textureDesc = {};
+            textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
+            textureDesc.width = fontAtlas.width;
+            textureDesc.height = fontAtlas.height;
+            textureDesc.format = rhi::RhiFormat::Rgba8Unorm;
+            textureDesc.usage = rhi::RhiTextureUsage::Sampled;
+            textureDesc.initialData = fontAtlas.rgbaPixels.data();
+            textureDesc.initialDataSize = fontAtlas.rgbaPixels.size();
+            textureDesc.initialDataRowPitch = fontAtlas.width * 4;
+            textureDesc.debugName = "RenderSystemEditorUiFontAtlas";
+            return impl.rhi.device->CreateTexture(textureDesc);
         }
 
         [[nodiscard]] ErrorCode CreateScenePipelineResources(RenderSystemImpl& impl)
@@ -911,6 +1181,181 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
             }
         }
 
+        [[nodiscard]] bool MakeEditorUiScissor(const EditorUiFrameData& frameData,
+                                               const EditorUiDrawCommand& drawCommand,
+                                               const rhi::RhiExtent2D& extent,
+                                               rhi::RhiScissorRect& outScissor) noexcept
+        {
+            const Float32 scaleX = frameData.framebufferScale[0] == 0.0f ? 1.0f : frameData.framebufferScale[0];
+            const Float32 scaleY = frameData.framebufferScale[1] == 0.0f ? 1.0f : frameData.framebufferScale[1];
+
+            Float32 clipMinX = (drawCommand.clipRect[0] - frameData.displayPos[0]) * scaleX;
+            Float32 clipMinY = (drawCommand.clipRect[1] - frameData.displayPos[1]) * scaleY;
+            Float32 clipMaxX = (drawCommand.clipRect[2] - frameData.displayPos[0]) * scaleX;
+            Float32 clipMaxY = (drawCommand.clipRect[3] - frameData.displayPos[1]) * scaleY;
+
+            clipMinX = std::clamp(clipMinX, 0.0f, static_cast<Float32>(extent.width));
+            clipMinY = std::clamp(clipMinY, 0.0f, static_cast<Float32>(extent.height));
+            clipMaxX = std::clamp(clipMaxX, 0.0f, static_cast<Float32>(extent.width));
+            clipMaxY = std::clamp(clipMaxY, 0.0f, static_cast<Float32>(extent.height));
+
+            if (clipMaxX <= clipMinX || clipMaxY <= clipMinY)
+            {
+                return false;
+            }
+
+            const Int32 x = static_cast<Int32>(std::floor(clipMinX));
+            const Int32 y = static_cast<Int32>(std::floor(clipMinY));
+            const UInt32 width = static_cast<UInt32>(std::ceil(clipMaxX) - std::floor(clipMinX));
+            const UInt32 height = static_cast<UInt32>(std::ceil(clipMaxY) - std::floor(clipMinY));
+            outScissor = rhi::RhiScissorRect{x, y, width, height};
+            return width > 0 && height > 0;
+        }
+
+        void EnsureEditorUiFontTexture(RenderSystemImpl& impl, const EditorUiFrameData& frameData)
+        {
+            if (impl.rhi.editorUiPipeline.fontTexture != nullptr)
+            {
+                return;
+            }
+
+            if (!frameData.fontAtlas.IsValid())
+            {
+                TerminateRenderSystem("Editor UI frame is missing the initial font atlas", ErrorCode::InvalidState);
+            }
+
+            impl.rhi.editorUiPipeline.fontTexture = CreateEditorUiFontTexture(impl, frameData.fontAtlas);
+            if (impl.rhi.editorUiPipeline.fontTexture == nullptr)
+            {
+                TerminateRenderSystem("Editor UI font texture creation failed", ErrorCode::PlatformError);
+            }
+        }
+
+        void RenderEditorUiFrame(RenderSystemImpl& impl, const EditorUiFrameData& frameData)
+        {
+            if (impl.rhi.device == nullptr || impl.rhi.mainSwapchain == nullptr)
+            {
+                TerminateRenderSystem("frame execution failed in RenderEditorUiFrame", ErrorCode::InvalidState);
+            }
+
+            if (impl.rhi.editorUiPipeline.pipelineState == nullptr)
+            {
+                TerminateRenderSystem("frame execution failed in RenderEditorUiFrame", ErrorCode::InvalidState);
+            }
+
+            if (!frameData.HasDrawableArea())
+            {
+                return;
+            }
+
+            EnsureEditorUiFontTexture(impl, frameData);
+
+            struct EditorUiDrawListResources
+            {
+                const EditorUiDrawList* drawList = nullptr;
+                std::unique_ptr<rhi::RhiBuffer> vertexBuffer;
+                std::unique_ptr<rhi::RhiBuffer> indexBuffer;
+            };
+
+            std::vector<EditorUiDrawListResources> drawListResources;
+            drawListResources.reserve(frameData.drawLists.size());
+
+            for (const EditorUiDrawList& drawList : frameData.drawLists)
+            {
+                if (drawList.vertices.empty() || drawList.indices.empty() || drawList.commands.empty())
+                {
+                    continue;
+                }
+
+                rhi::RhiBufferDesc vertexBufferDesc = {};
+                vertexBufferDesc.size = sizeof(EditorUiVertex) * drawList.vertices.size();
+                vertexBufferDesc.usage = rhi::RhiBufferUsage::Vertex;
+                vertexBufferDesc.initialData = drawList.vertices.data();
+                vertexBufferDesc.debugName = "RenderSystemEditorUiVertexBuffer";
+
+                rhi::RhiBufferDesc indexBufferDesc = {};
+                indexBufferDesc.size = sizeof(UInt32) * drawList.indices.size();
+                indexBufferDesc.usage = rhi::RhiBufferUsage::Index;
+                indexBufferDesc.initialData = drawList.indices.data();
+                indexBufferDesc.debugName = "RenderSystemEditorUiIndexBuffer";
+
+                EditorUiDrawListResources resources;
+                resources.drawList = &drawList;
+                resources.vertexBuffer = impl.rhi.device->CreateBuffer(vertexBufferDesc);
+                resources.indexBuffer = impl.rhi.device->CreateBuffer(indexBufferDesc);
+                if (resources.vertexBuffer == nullptr || resources.indexBuffer == nullptr)
+                {
+                    TerminateRenderSystem("Editor UI draw buffer creation failed", ErrorCode::PlatformError);
+                }
+
+                drawListResources.push_back(std::move(resources));
+            }
+
+            const EditorUiUniformData uniforms = BuildEditorUiUniformData(impl, frameData);
+            std::unique_ptr<rhi::RhiBuffer> uniformBuffer =
+                CreateEditorUiUniformBuffer(impl, uniforms, "RenderSystemEditorUiUniformBuffer");
+            if (uniformBuffer == nullptr)
+            {
+                TerminateRenderSystem("Editor UI uniform buffer creation failed", ErrorCode::PlatformError);
+            }
+
+            std::unique_ptr<rhi::RhiCommandList> commandList = impl.rhi.device->CreateCommandList();
+            if (commandList == nullptr)
+            {
+                TerminateRenderSystem("Editor UI command list creation failed", ErrorCode::PlatformError);
+            }
+
+            rhi::RhiRenderPassDesc renderPassDesc = {};
+            renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
+            renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
+            renderPassDesc.clearColor = {0.055f, 0.06f, 0.065f, 1.0f};
+
+            const rhi::RhiExtent2D extent = impl.rhi.mainSwapchain->GetExtent();
+            if (!commandList->Begin() || !commandList->BeginRenderPass(*impl.rhi.mainSwapchain, renderPassDesc))
+            {
+                TerminateRenderSystem("Editor UI command list begin failed", ErrorCode::PlatformError);
+            }
+
+            commandList->SetViewport(rhi::RhiViewport{
+                0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
+            commandList->SetPipeline(*impl.rhi.editorUiPipeline.pipelineState);
+            commandList->SetUniformBuffer(
+                rhi::RhiShaderStage::Vertex, 0, *uniformBuffer, 0, sizeof(EditorUiUniformData));
+            commandList->SetTexture(rhi::RhiShaderStage::Fragment, 0, *impl.rhi.editorUiPipeline.fontTexture);
+
+            for (const EditorUiDrawListResources& resources : drawListResources)
+            {
+                commandList->SetVertexBuffer(0, *resources.vertexBuffer, sizeof(EditorUiVertex), 0);
+                commandList->SetIndexBuffer(*resources.indexBuffer, rhi::RhiIndexFormat::UInt32, 0);
+
+                for (const EditorUiDrawCommand& drawCommand : resources.drawList->commands)
+                {
+                    if (drawCommand.elementCount == 0)
+                    {
+                        continue;
+                    }
+
+                    rhi::RhiScissorRect scissor = {};
+                    if (!MakeEditorUiScissor(frameData, drawCommand, extent, scissor))
+                    {
+                        continue;
+                    }
+
+                    commandList->SetScissor(scissor);
+                    commandList->DrawIndexed(drawCommand.elementCount,
+                                             drawCommand.indexOffset,
+                                             static_cast<int32_t>(drawCommand.vertexOffset));
+                }
+            }
+
+            commandList->EndRenderPass();
+
+            if (!commandList->End() || !impl.rhi.device->Submit(*commandList) || !impl.rhi.mainSwapchain->Present())
+            {
+                TerminateRenderSystem("Editor UI frame submit failed", ErrorCode::PlatformError);
+            }
+        }
+
         [[nodiscard]] UInt32 GetRenderFrameSlotIndex(UInt64 frameId, UInt32 maxFramesInFlight) noexcept
         {
             VE_ASSERT_MESSAGE(frameId > 0, "Render frame slot index requires a non-zero frame id.");
@@ -1064,6 +1509,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                 impl.rhi.device->WaitIdle();
             }
 
+            DestroyEditorUiPipelineResources(impl);
             DestroyScenePipelineResources(impl);
             impl.rhi.mainSwapchain.reset();
 
@@ -1343,6 +1789,14 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                                           return pipelineResult;
                                       }
 
+                                      pipelineResult = CreateEditorUiPipelineResources(*impl_);
+                                      if (pipelineResult != ErrorCode::None)
+                                      {
+                                          DestroyScenePipelineResources(*impl_);
+                                          impl_->rhi.mainSwapchain.reset();
+                                          return pipelineResult;
+                                      }
+
                                       return ErrorCode::None;
                                   });
     }
@@ -1362,6 +1816,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                                                       impl_->rhi.device->WaitIdle();
                                                   }
 
+                                                  DestroyEditorUiPipelineResources(*impl_);
                                                   DestroyScenePipelineResources(*impl_);
                                                   impl_->rhi.mainSwapchain.reset();
                                                   return ErrorCode::None;
@@ -1399,6 +1854,19 @@ fragment float4 PSMain(VSOutput input [[stage_in]])
                            ExecuteSceneRenderFrame(*impl_, token, snapshot);
                            ReleaseRenderFrameSlot(*impl_, token, ErrorCode::None);
                        });
+    }
+
+    void RenderSystem::SubmitEditorUiFrame(EditorUiFrameData frameData)
+    {
+        auto completed = std::make_shared<ManualResetEvent>(false);
+        SubmitFunction("RenderSystemSubmitEditorUiFrame",
+                       [this, frameData = std::move(frameData), completed](RenderThreadContext&)
+                       {
+                           RenderEditorUiFrame(*impl_, frameData);
+                           completed->Set();
+                       });
+
+        completed->Wait();
     }
 
     void RenderSystem::SynchronizeRenderResources(const ResourceManager& resourceManager)

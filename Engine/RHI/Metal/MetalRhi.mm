@@ -3,6 +3,7 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -19,6 +20,7 @@ namespace ve::rhi
                 return MTLPixelFormatRGBA8Unorm;
             case RhiFormat::Bgra8Unorm:
                 return MTLPixelFormatBGRA8Unorm;
+            case RhiFormat::Rg32Float:
             case RhiFormat::Rgb32Float:
             case RhiFormat::Unknown:
             default:
@@ -48,9 +50,12 @@ namespace ve::rhi
         {
             switch (format)
             {
+            case RhiFormat::Rg32Float:
+                return MTLVertexFormatFloat2;
             case RhiFormat::Rgb32Float:
                 return MTLVertexFormatFloat3;
             case RhiFormat::Rgba8Unorm:
+                return MTLVertexFormatUChar4Normalized;
             case RhiFormat::Bgra8Unorm:
             case RhiFormat::Unknown:
             default:
@@ -65,6 +70,30 @@ namespace ve::rhi
             case RhiPrimitiveTopology::TriangleList:
             default:
                 return MTLPrimitiveTypeTriangle;
+            }
+        }
+
+        MTLIndexType ToMetalIndexType(RhiIndexFormat format)
+        {
+            switch (format)
+            {
+            case RhiIndexFormat::UInt16:
+                return MTLIndexTypeUInt16;
+            case RhiIndexFormat::UInt32:
+            default:
+                return MTLIndexTypeUInt32;
+            }
+        }
+
+        MTLCullMode ToMetalCullMode(RhiCullMode cullMode)
+        {
+            switch (cullMode)
+            {
+            case RhiCullMode::None:
+                return MTLCullModeNone;
+            case RhiCullMode::Back:
+            default:
+                return MTLCullModeBack;
             }
         }
 
@@ -207,9 +236,12 @@ namespace ve::rhi
         class MetalPipelineState final : public RhiPipelineState
         {
         public:
-            MetalPipelineState(RhiPrimitiveTopology topology, id<MTLRenderPipelineState> pipelineState)
+            MetalPipelineState(RhiPrimitiveTopology topology,
+                               id<MTLRenderPipelineState> pipelineState,
+                               RhiCullMode cullMode)
                 : topology_(topology)
                 , pipelineState_(pipelineState)
+                , cullMode_(cullMode)
             {
             }
 
@@ -223,9 +255,15 @@ namespace ve::rhi
                 return pipelineState_;
             }
 
+            [[nodiscard]] RhiCullMode GetCullMode() const noexcept
+            {
+                return cullMode_;
+            }
+
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
             id<MTLRenderPipelineState> pipelineState_ = nil;
+            RhiCullMode cullMode_ = RhiCullMode::Back;
         };
 
         class MetalSwapchain final : public RhiSwapchain
@@ -338,6 +376,7 @@ namespace ve::rhi
             {
                 const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
+                [renderCommandEncoder_ setCullMode:ToMetalCullMode(metalPipelineState.GetCullMode())];
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -369,6 +408,14 @@ namespace ve::rhi
                 [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
             }
 
+            void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) override
+            {
+                const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
+                activeIndexBuffer_ = metalBuffer.GetNativeBuffer();
+                activeIndexFormat_ = format;
+                activeIndexOffset_ = offset;
+            }
+
             void SetUniformBuffer(RhiShaderStage stage,
                                   uint32_t slot,
                                   const RhiBuffer& buffer,
@@ -396,11 +443,44 @@ namespace ve::rhi
                 }
             }
 
+            void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
+            {
+                const auto& metalTexture = static_cast<const MetalTexture&>(texture);
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    [renderCommandEncoder_ setVertexTexture:metalTexture.GetNativeTexture() atIndex:slot];
+                    break;
+                case RhiShaderStage::Fragment:
+                    [renderCommandEncoder_ setFragmentTexture:metalTexture.GetNativeTexture() atIndex:slot];
+                    break;
+                }
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 [renderCommandEncoder_ drawPrimitives:MTLPrimitiveTypeTriangle
                                           vertexStart:firstVertex
                                           vertexCount:vertexCount];
+            }
+
+            void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
+            {
+                if (activeIndexBuffer_ == nil)
+                {
+                    return;
+                }
+
+                const NSUInteger indexSize = activeIndexFormat_ == RhiIndexFormat::UInt16 ? sizeof(uint16_t)
+                                                                                          : sizeof(uint32_t);
+                [renderCommandEncoder_ drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                                                  indexCount:indexCount
+                                                   indexType:ToMetalIndexType(activeIndexFormat_)
+                                                 indexBuffer:activeIndexBuffer_
+                                           indexBufferOffset:activeIndexOffset_ + (firstIndex * indexSize)
+                                               instanceCount:1
+                                                  baseVertex:vertexOffset
+                                                baseInstance:0];
             }
 
             [[nodiscard]] bool CommitAndWait()
@@ -429,6 +509,9 @@ namespace ve::rhi
             id<MTLCommandBuffer> commandBuffer_ = nil;
             id<MTLRenderCommandEncoder> renderCommandEncoder_ = nil;
             id<CAMetalDrawable> drawable_ = nil;
+            id<MTLBuffer> activeIndexBuffer_ = nil;
+            RhiIndexFormat activeIndexFormat_ = RhiIndexFormat::UInt32;
+            uint64_t activeIndexOffset_ = 0;
         };
 
         class MetalDevice final : public RhiDevice
@@ -615,6 +698,18 @@ namespace ve::rhi
                 pipelineDescriptor.fragmentFunction = fragmentShaderModule->GetFunction();
                 pipelineDescriptor.vertexDescriptor = vertexDescriptor;
                 pipelineDescriptor.colorAttachments[0].pixelFormat = ToMetalPixelFormat(desc.colorFormat);
+                pipelineDescriptor.colorAttachments[0].blendingEnabled = desc.enableAlphaBlending ? YES : NO;
+                if (desc.enableAlphaBlending)
+                {
+                    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+                    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor =
+                        MTLBlendFactorOneMinusSourceAlpha;
+                    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+                    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+                    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor =
+                        MTLBlendFactorOneMinusSourceAlpha;
+                    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+                }
 
                 NSError* error = nil;
                 id<MTLRenderPipelineState> pipelineState =
@@ -629,7 +724,7 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<MetalPipelineState>(desc.topology, pipelineState);
+                return std::make_unique<MetalPipelineState>(desc.topology, pipelineState, desc.cullMode);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

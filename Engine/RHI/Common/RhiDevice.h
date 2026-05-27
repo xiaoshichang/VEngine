@@ -116,6 +116,9 @@ namespace ve::rhi
         /// Binds a vertex buffer at the given slot.
         virtual void SetVertexBuffer(uint32_t slot, const RhiBuffer& buffer, uint32_t stride, uint64_t offset) = 0;
 
+        /// Binds an index buffer for following indexed draw calls.
+        virtual void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) = 0;
+
         /// Binds a constant/uniform buffer for the given shader stage and logical binding slot.
         virtual void SetUniformBuffer(RhiShaderStage stage,
                                       uint32_t slot,
@@ -123,8 +126,14 @@ namespace ve::rhi
                                       uint64_t offset,
                                       uint64_t size) = 0;
 
+        /// Binds a sampled texture for the given shader stage and logical binding slot.
+        virtual void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) = 0;
+
         /// Issues a non-indexed draw call.
         virtual void Draw(uint32_t vertexCount, uint32_t firstVertex) = 0;
+
+        /// Issues an indexed draw call.
+        virtual void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) = 0;
     };
 
     /// Creates RHI objects and submits command lists to a backend graphics queue.

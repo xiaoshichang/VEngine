@@ -61,11 +61,7 @@ $RequiredFiles = @(
     "imgui_widgets.cpp",
     "imgui.h",
     "backends\imgui_impl_win32.cpp",
-    "backends\imgui_impl_win32.h",
-    "backends\imgui_impl_dx11.cpp",
-    "backends\imgui_impl_dx11.h",
-    "backends\imgui_impl_dx12.cpp",
-    "backends\imgui_impl_dx12.h"
+    "backends\imgui_impl_win32.h"
 )
 
 foreach ($RequiredFile in $RequiredFiles)

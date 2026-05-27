@@ -110,6 +110,12 @@ namespace ve
             return impl.renderBridge.renderSystem != nullptr;
         }
 
+        [[nodiscard]] bool HasActiveScene(GameThreadSystemImpl& impl)
+        {
+            LockGuard<Mutex> lock(impl.scene.mutex);
+            return impl.scene.activeScene != nullptr && impl.scene.resourceManager != nullptr;
+        }
+
         [[nodiscard]] bool
         AcquireActiveScene(GameThreadSystemImpl& impl, Scene*& outScene, ResourceManager*& outResourceManager)
         {
@@ -171,12 +177,12 @@ namespace ve
             scene->UpdateTransforms();
         }
 
-        void ExecuteRenderExtraction(GameThreadSystemImpl& impl, UInt64 frameId) noexcept
+        [[nodiscard]] bool ExecuteRenderExtraction(GameThreadSystemImpl& impl, UInt64 frameId) noexcept
         {
             RenderSystem* renderSystem = AcquireRenderSystem(impl);
             if (renderSystem == nullptr)
             {
-                return;
+                return false;
             }
 
             auto renderFrameCounterGuard = MakeScopeExit(
@@ -201,16 +207,24 @@ namespace ve
                     SceneRenderSnapshot snapshot = ExtractSceneRenderSnapshot(*scene, *resourceManager, frameId);
                     renderSystem->SynchronizeRenderResources(*resourceManager);
                     renderSystem->SubmitFrame(std::move(snapshot));
+                    return true;
                 }
             }
             catch (...)
             {
                 VE_ASSERT_ALWAYS_MESSAGE(false, "Unhandled exception escaped GameThreadSystem render extraction.");
             }
+
+            return false;
         }
 
-        void SyncFrameEnd(GameThreadSystemImpl& impl) noexcept
+        void SyncFrameEnd(GameThreadSystemImpl& impl, bool submittedRenderFrame) noexcept
         {
+            if (!submittedRenderFrame)
+            {
+                return;
+            }
+
             RenderSystem* renderSystem = AcquireRenderSystem(impl);
             if (renderSystem == nullptr)
             {
@@ -254,10 +268,10 @@ namespace ve
             SetPhase(impl.frame.phase, GameThreadPhase::TransformUpdate);
             UpdateActiveSceneTransforms(impl);
             SetPhase(impl.frame.phase, GameThreadPhase::RenderExtraction);
-            ExecuteRenderExtraction(impl, frameId);
+            const bool submittedRenderFrame = ExecuteRenderExtraction(impl, frameId);
 
             SetPhase(impl.frame.phase, GameThreadPhase::EndFrame);
-            SyncFrameEnd(impl);
+            SyncFrameEnd(impl, submittedRenderFrame);
 
             impl.frame.completedFrameCount.fetch_add(1, std::memory_order_acq_rel);
             SetPhase(impl.frame.phase, GameThreadPhase::Idle);
@@ -381,7 +395,7 @@ namespace ve
 
                 RunGameFrame(impl);
 
-                if (!HasRenderSystem(impl))
+                if (!HasRenderSystem(impl) || !HasActiveScene(impl))
                 {
                     SleepFor(std::chrono::milliseconds(1));
                 }

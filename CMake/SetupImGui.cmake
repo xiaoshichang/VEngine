@@ -66,16 +66,6 @@ function(ve_add_imgui)
         "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_win32.h"
     )
 
-    if(VE_ENABLE_D3D11)
-        list(APPEND imguiSources "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx11.cpp")
-        list(APPEND imguiHeaders "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx11.h")
-    endif()
-
-    if(VE_ENABLE_D3D12)
-        list(APPEND imguiSources "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx12.cpp")
-        list(APPEND imguiHeaders "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx12.h")
-    endif()
-
     foreach(imguiSource IN LISTS imguiSources)
         if(NOT EXISTS "${imguiSource}")
             message(FATAL_ERROR "Dear ImGui source is missing required file: ${imguiSource}")
@@ -114,22 +104,6 @@ function(ve_add_imgui)
         PUBLIC
             imm32
     )
-
-    if(VE_ENABLE_D3D11)
-        target_link_libraries(VEngineImGui
-            PUBLIC
-                d3d11
-                dxgi
-        )
-    endif()
-
-    if(VE_ENABLE_D3D12)
-        target_link_libraries(VEngineImGui
-            PUBLIC
-                d3d12
-                dxgi
-        )
-    endif()
 
     set_target_properties(VEngineImGui
         PROPERTIES

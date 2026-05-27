@@ -33,6 +33,8 @@ namespace ve::rhi
                 return DXGI_FORMAT_R8G8B8A8_UNORM;
             case RhiFormat::Bgra8Unorm:
                 return DXGI_FORMAT_B8G8R8A8_UNORM;
+            case RhiFormat::Rg32Float:
+                return DXGI_FORMAT_R32G32_FLOAT;
             case RhiFormat::Rgb32Float:
                 return DXGI_FORMAT_R32G32B32_FLOAT;
             case RhiFormat::Unknown:
@@ -84,7 +86,36 @@ namespace ve::rhi
                 flags |= D3D11_BIND_CONSTANT_BUFFER;
             }
 
+            if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Index)) != 0)
+            {
+                flags |= D3D11_BIND_INDEX_BUFFER;
+            }
+
             return flags;
+        }
+
+        DXGI_FORMAT ToD3D11IndexFormat(RhiIndexFormat format)
+        {
+            switch (format)
+            {
+            case RhiIndexFormat::UInt16:
+                return DXGI_FORMAT_R16_UINT;
+            case RhiIndexFormat::UInt32:
+            default:
+                return DXGI_FORMAT_R32_UINT;
+            }
+        }
+
+        D3D11_CULL_MODE ToD3D11CullMode(RhiCullMode cullMode)
+        {
+            switch (cullMode)
+            {
+            case RhiCullMode::None:
+                return D3D11_CULL_NONE;
+            case RhiCullMode::Back:
+            default:
+                return D3D11_CULL_BACK;
+            }
         }
 
         std::string MakeHResultError(const char* operation, HRESULT result)
@@ -122,8 +153,11 @@ namespace ve::rhi
         class D3D11Texture final : public RhiTexture
         {
         public:
-            D3D11Texture(ComPtr<ID3D11Texture2D> texture, RhiTextureDesc desc)
+            D3D11Texture(ComPtr<ID3D11Texture2D> texture,
+                         ComPtr<ID3D11ShaderResourceView> shaderResourceView,
+                         RhiTextureDesc desc)
                 : texture_(std::move(texture))
+                , shaderResourceView_(std::move(shaderResourceView))
                 , desc_(desc)
             {
             }
@@ -153,8 +187,14 @@ namespace ve::rhi
                 return texture_.Get();
             }
 
+            [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceView() const noexcept
+            {
+                return shaderResourceView_.Get();
+            }
+
         private:
             ComPtr<ID3D11Texture2D> texture_;
+            ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
             RhiTextureDesc desc_ = {};
         };
 
@@ -264,11 +304,15 @@ namespace ve::rhi
             D3D11PipelineState(RhiPrimitiveTopology topology,
                                ComPtr<ID3D11VertexShader> vertexShader,
                                ComPtr<ID3D11PixelShader> pixelShader,
-                               ComPtr<ID3D11InputLayout> inputLayout)
+                               ComPtr<ID3D11InputLayout> inputLayout,
+                               ComPtr<ID3D11RasterizerState> rasterizerState,
+                               ComPtr<ID3D11BlendState> blendState)
                 : topology_(topology)
                 , vertexShader_(std::move(vertexShader))
                 , pixelShader_(std::move(pixelShader))
                 , inputLayout_(std::move(inputLayout))
+                , rasterizerState_(std::move(rasterizerState))
+                , blendState_(std::move(blendState))
             {
             }
 
@@ -283,6 +327,10 @@ namespace ve::rhi
                 context->IASetInputLayout(inputLayout_.Get());
                 context->VSSetShader(vertexShader_.Get(), nullptr, 0);
                 context->PSSetShader(pixelShader_.Get(), nullptr, 0);
+                context->RSSetState(rasterizerState_.Get());
+
+                const float blendFactor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+                context->OMSetBlendState(blendState_.Get(), blendFactor, 0xFFFFFFFFu);
             }
 
         private:
@@ -290,6 +338,8 @@ namespace ve::rhi
             ComPtr<ID3D11VertexShader> vertexShader_;
             ComPtr<ID3D11PixelShader> pixelShader_;
             ComPtr<ID3D11InputLayout> inputLayout_;
+            ComPtr<ID3D11RasterizerState> rasterizerState_;
+            ComPtr<ID3D11BlendState> blendState_;
         };
 
         class D3D11Swapchain final : public RhiSwapchain
@@ -379,8 +429,9 @@ namespace ve::rhi
         class D3D11CommandList final : public RhiCommandList
         {
         public:
-            explicit D3D11CommandList(ComPtr<ID3D11DeviceContext> context)
+            D3D11CommandList(ComPtr<ID3D11DeviceContext> context, ComPtr<ID3D11SamplerState> defaultSampler)
                 : context_(std::move(context))
+                , defaultSampler_(std::move(defaultSampler))
             {
             }
 
@@ -459,6 +510,13 @@ namespace ve::rhi
                 context_->IASetVertexBuffers(slot, 1, &nativeBuffer, &d3dStride, &d3dOffset);
             }
 
+            void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) override
+            {
+                const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
+                context_->IASetIndexBuffer(
+                    d3dBuffer.GetNativeBuffer(), ToD3D11IndexFormat(format), static_cast<UINT>(offset));
+            }
+
             void SetUniformBuffer(RhiShaderStage stage,
                                   uint32_t slot,
                                   const RhiBuffer& buffer,
@@ -482,13 +540,38 @@ namespace ve::rhi
                 }
             }
 
+            void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
+            {
+                const auto& d3dTexture = static_cast<const D3D11Texture&>(texture);
+                ID3D11ShaderResourceView* shaderResourceView = d3dTexture.GetShaderResourceView();
+                ID3D11SamplerState* sampler = defaultSampler_.Get();
+
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    context_->VSSetShaderResources(slot, 1, &shaderResourceView);
+                    context_->VSSetSamplers(slot, 1, &sampler);
+                    break;
+                case RhiShaderStage::Fragment:
+                    context_->PSSetShaderResources(slot, 1, &shaderResourceView);
+                    context_->PSSetSamplers(slot, 1, &sampler);
+                    break;
+                }
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 context_->Draw(vertexCount, firstVertex);
             }
 
+            void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
+            {
+                context_->DrawIndexed(indexCount, firstIndex, vertexOffset);
+            }
+
         private:
             ComPtr<ID3D11DeviceContext> context_;
+            ComPtr<ID3D11SamplerState> defaultSampler_;
         };
 
         class D3D11Device final : public RhiDevice
@@ -543,6 +626,22 @@ namespace ve::rhi
                 if (FAILED(result))
                 {
                     SetLastError(MakeHResultError("D3D11CreateDevice", result));
+                    return false;
+                }
+
+                D3D11_SAMPLER_DESC samplerDesc = {};
+                samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+                samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+                samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+                samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+                samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+                samplerDesc.MinLOD = 0.0f;
+                samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+                result = device_->CreateSamplerState(&samplerDesc, &defaultSampler_);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateSamplerState", result));
                     return false;
                 }
 
@@ -698,7 +797,19 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11Texture>(texture, desc);
+                ComPtr<ID3D11ShaderResourceView> shaderResourceView;
+                const auto usageValue = static_cast<uint32_t>(desc.usage);
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Sampled)) != 0)
+                {
+                    result = device_->CreateShaderResourceView(texture.Get(), nullptr, &shaderResourceView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateShaderResourceView", result));
+                        return nullptr;
+                    }
+                }
+
+                return std::make_unique<D3D11Texture>(texture, shaderResourceView, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
@@ -814,12 +925,49 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11PipelineState>(desc.topology, vertexShader, pixelShader, inputLayout);
+                D3D11_RASTERIZER_DESC rasterizerDesc = {};
+                rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+                rasterizerDesc.CullMode = ToD3D11CullMode(desc.cullMode);
+                rasterizerDesc.FrontCounterClockwise = FALSE;
+                rasterizerDesc.DepthClipEnable = TRUE;
+                rasterizerDesc.ScissorEnable = desc.enableScissor ? TRUE : FALSE;
+
+                ComPtr<ID3D11RasterizerState> rasterizerState;
+                result = device_->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateRasterizerState", result));
+                    return nullptr;
+                }
+
+                D3D11_BLEND_DESC blendDesc = {};
+                blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+                if (desc.enableAlphaBlending)
+                {
+                    blendDesc.RenderTarget[0].BlendEnable = TRUE;
+                    blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+                    blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+                    blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+                    blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+                    blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+                    blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+                }
+
+                ComPtr<ID3D11BlendState> blendState;
+                result = device_->CreateBlendState(&blendDesc, &blendState);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateBlendState", result));
+                    return nullptr;
+                }
+
+                return std::make_unique<D3D11PipelineState>(
+                    desc.topology, vertexShader, pixelShader, inputLayout, rasterizerState, blendState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override
             {
-                return std::make_unique<D3D11CommandList>(context_);
+                return std::make_unique<D3D11CommandList>(context_, defaultSampler_);
             }
 
             [[nodiscard]] std::unique_ptr<RhiFence> CreateFence(uint64_t initialValue = 0) override
@@ -879,6 +1027,7 @@ namespace ve::rhi
             bool enableDebug_ = false;
             ComPtr<ID3D11Device> device_;
             ComPtr<ID3D11DeviceContext> context_;
+            ComPtr<ID3D11SamplerState> defaultSampler_;
             std::string lastError_;
         };
     } // namespace

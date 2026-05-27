@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Render/EditorUiFrame.h"
 #include "Engine/Runtime/Scene/SceneRenderSnapshot.h"
 #include "Engine/Runtime/Threading/Thread.h"
 
@@ -202,6 +203,11 @@ namespace ve
         /// The snapshot must not contain live Scene, GameObject, or Component pointers. Invalid state or submission
         /// failures are fatal and terminate the process, matching RenderFrame() and Submit().
         void SubmitFrame(SceneRenderSnapshot snapshot);
+
+        /// Submits one immutable Editor UI frame from the platform/editor main thread and renders it on the Render
+        /// Thread. This path is used for Editor-owned UI surfaces such as the Project Launcher; the UI draw data must
+        /// already be detached from Dear ImGui before submission.
+        void SubmitEditorUiFrame(EditorUiFrameData frameData);
 
         /// Synchronizes ResourceManager mesh/material resources into the Render Thread resource registry.
         ///

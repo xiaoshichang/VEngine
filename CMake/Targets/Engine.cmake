@@ -79,6 +79,7 @@ function(ve_add_engine)
             Engine/Runtime/Platform/Window.h
             Engine/Runtime/Reflection/ReflectionRegistry.h
             Engine/Runtime/Render/RenderCommandQueue.h
+            Engine/Runtime/Render/EditorUiFrame.h
             Engine/Runtime/Render/RenderSystem.h
             Engine/Runtime/Resource/BuiltInResources.h
             Engine/Runtime/Resource/ResourceHandle.h
