@@ -92,7 +92,7 @@ namespace ve
                          const AssetRecord& record,
                          bool force);
 
-        void PrepareSceneMutation(EngineRuntime& runtime);
+        void PrepareSceneMutation(EditorProjectService& projectService, EngineRuntime& runtime);
         void FinishSceneMutation(EditorProjectService& projectService);
 
         ReflectionRegistry reflectionRegistry_;

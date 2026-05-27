@@ -798,6 +798,35 @@ namespace ve::rhi
                 return std::make_unique<D3D11Buffer>(buffer, desc.size);
             }
 
+            [[nodiscard]] bool UpdateBuffer(RhiBuffer& buffer,
+                                            const void* data,
+                                            uint64_t size,
+                                            uint64_t offset = 0) override
+            {
+                auto* d3dBuffer = dynamic_cast<D3D11Buffer*>(&buffer);
+                if (d3dBuffer == nullptr || data == nullptr || size == 0 || offset + size > d3dBuffer->GetSize())
+                {
+                    SetLastError("D3D11 buffer update received invalid data or range.");
+                    return false;
+                }
+
+                if (offset == 0 && size == d3dBuffer->GetSize())
+                {
+                    context_->UpdateSubresource(d3dBuffer->GetNativeBuffer(), 0, nullptr, data, 0, 0);
+                    return true;
+                }
+
+                D3D11_BOX box = {};
+                box.left = static_cast<UINT>(offset);
+                box.right = static_cast<UINT>(offset + size);
+                box.top = 0;
+                box.bottom = 1;
+                box.front = 0;
+                box.back = 1;
+                context_->UpdateSubresource(d3dBuffer->GetNativeBuffer(), 0, &box, data, 0, 0);
+                return true;
+            }
+
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
             {
                 if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)

@@ -4,6 +4,7 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <utility>
@@ -620,6 +621,24 @@ namespace ve::rhi
                 }
 
                 return std::make_unique<MetalBuffer>(buffer, desc.size);
+            }
+
+            [[nodiscard]] bool UpdateBuffer(RhiBuffer& buffer,
+                                            const void* data,
+                                            uint64_t size,
+                                            uint64_t offset = 0) override
+            {
+                auto* metalBuffer = dynamic_cast<MetalBuffer*>(&buffer);
+                if (metalBuffer == nullptr || data == nullptr || size == 0 || offset + size > metalBuffer->GetSize())
+                {
+                    SetLastError("Metal buffer update received invalid data or range.");
+                    return false;
+                }
+
+                std::memcpy(static_cast<uint8_t*>([metalBuffer->GetNativeBuffer() contents]) + offset,
+                            data,
+                            static_cast<size_t>(size));
+                return true;
             }
 
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override

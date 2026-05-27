@@ -155,6 +155,12 @@ namespace ve::rhi
         /// Creates a GPU buffer and optionally uploads initial data.
         [[nodiscard]] virtual std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) = 0;
 
+        /// Updates an existing GPU buffer with CPU data.
+        [[nodiscard]] virtual bool UpdateBuffer(RhiBuffer& buffer,
+                                                const void* data,
+                                                uint64_t size,
+                                                uint64_t offset = 0) = 0;
+
         /// Creates a texture resource and optionally uploads initial data.
         [[nodiscard]] virtual std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) = 0;
 

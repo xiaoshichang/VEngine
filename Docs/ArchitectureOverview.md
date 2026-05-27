@@ -968,7 +968,9 @@ Editor principles:
 - Editor Viewport renders through the engine Render and RHI layers.
 - SceneView and GameView submit immutable viewport snapshots to `RenderSystem`, which renders them on the Render Thread
   into RHI render-target textures. ImGui samples those textures through engine-owned texture ids; ImGui does not own
-  viewport rendering or call a native graphics backend directly.
+  viewport rendering or call a native graphics backend directly. The Editor UI samples the last completed viewport
+  texture, then submits the next viewport update asynchronously so Main Thread UI assembly is not blocked by same-frame
+  viewport rendering.
 - First-stage Play mode uses a separate play scene instance so runtime edits and component updates do not mutate the
   authored edit scene. The first implementation ticks this play scene from the editor frame; a later game-thread
   viewport extraction path should move play-scene ticking back under `GameThreadSystem` without changing the edit/play

@@ -35,7 +35,7 @@ namespace ve
         {
             if (ImGui::MenuItem("Create Empty"))
             {
-                PrepareSceneMutation(runtime);
+                PrepareSceneMutation(projectService, runtime);
                 GameObject& gameObject = projectService.GetActiveScene().CreateGameObject("GameObject");
                 gameObject.AddComponent<TransformComponent>();
                 selectedGameObjectId_ = gameObject.GetId();
@@ -47,7 +47,7 @@ namespace ve
             {
                 if (GameObject* selected = projectService.GetActiveScene().FindGameObject(selectedGameObjectId_))
                 {
-                    PrepareSceneMutation(runtime);
+                    PrepareSceneMutation(projectService, runtime);
                     (void)projectService.GetActiveScene().DestroyGameObject(*selected);
                     selectedGameObjectId_ = InvalidSceneObjectId;
                     FinishSceneMutation(projectService);

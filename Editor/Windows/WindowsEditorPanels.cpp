@@ -34,9 +34,12 @@ namespace ve
         selectedGameObjectId_ = InvalidSceneObjectId;
     }
 
-    void WindowsEditorPanels::PrepareSceneMutation(EngineRuntime& runtime)
+    void WindowsEditorPanels::PrepareSceneMutation(EditorProjectService& projectService, EngineRuntime& runtime)
     {
-        runtime.GetGameThreadSystem().ClearActiveScene();
+        if (projectService.IsPlaying())
+        {
+            runtime.GetGameThreadSystem().ClearActiveScene();
+        }
     }
 
     void WindowsEditorPanels::FinishSceneMutation(EditorProjectService& projectService)

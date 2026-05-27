@@ -332,13 +332,14 @@ namespace
             projectService.TickPlayMode();
             editorPanels_.BeginFrame();
             DrawEditor(owner, window, projectService, runtime);
-            runtime.GetRenderSystem().SubmitEditorViewportFrame(editorPanels_.ConsumeViewportFrameData(),
-                                                                 runtime.GetResourceManager());
 
             ImGui::Render();
             ve::EditorUiFrameData frameData = CaptureEditorUiFrame(!fontAtlasSubmitted_);
             runtime.GetRenderSystem().SubmitEditorUiFrame(std::move(frameData));
             fontAtlasSubmitted_ = true;
+
+            runtime.GetRenderSystem().SubmitEditorViewportFrame(editorPanels_.ConsumeViewportFrameData(),
+                                                                 runtime.GetResourceManager());
         }
 
         void RefreshRecentProjects()

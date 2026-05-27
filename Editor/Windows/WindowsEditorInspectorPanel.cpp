@@ -241,7 +241,7 @@ namespace ve
         ImGui::SetNextItemWidth(-1.0f);
         if (ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size()))
         {
-            PrepareSceneMutation(runtime);
+            PrepareSceneMutation(projectService, runtime);
             selected->SetName(nameBuffer.data());
             FinishSceneMutation(projectService);
             statusMessage = "Edited GameObject name.";
@@ -250,7 +250,7 @@ namespace ve
         bool active = selected->IsActiveSelf();
         if (ImGui::Checkbox("Active", &active))
         {
-            PrepareSceneMutation(runtime);
+            PrepareSceneMutation(projectService, runtime);
             selected->SetActive(active);
             FinishSceneMutation(projectService);
             statusMessage = "Edited GameObject active state.";
@@ -281,7 +281,7 @@ namespace ve
         bool enabled = component.IsEnabled();
         if (ImGui::Checkbox("Enabled", &enabled))
         {
-            PrepareSceneMutation(runtime);
+            PrepareSceneMutation(projectService, runtime);
             component.SetEnabled(enabled);
             FinishSceneMutation(projectService);
             statusMessage = "Edited component enabled state.";
@@ -433,7 +433,7 @@ namespace ve
 
         if (changed)
         {
-            PrepareSceneMutation(runtime);
+            PrepareSceneMutation(projectService, runtime);
             property.deserialize(component, nextValue);
             FinishSceneMutation(projectService);
             statusMessage = "Edited " + property.name + ".";

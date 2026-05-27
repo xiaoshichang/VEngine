@@ -1015,6 +1015,36 @@ namespace ve::rhi
                 return std::make_unique<D3D12Buffer>(resource, desc.size);
             }
 
+            [[nodiscard]] bool UpdateBuffer(RhiBuffer& buffer,
+                                            const void* data,
+                                            uint64_t size,
+                                            uint64_t offset = 0) override
+            {
+                auto* d3dBuffer = dynamic_cast<D3D12Buffer*>(&buffer);
+                if (d3dBuffer == nullptr || data == nullptr || size == 0 || offset + size > d3dBuffer->GetSize())
+                {
+                    SetLastError("D3D12 buffer update received invalid data or range.");
+                    return false;
+                }
+
+                void* mappedData = nullptr;
+                D3D12_RANGE readRange = {};
+                HRESULT result = d3dBuffer->GetNativeResource()->Map(0, &readRange, &mappedData);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D12Resource::Map buffer update", result));
+                    return false;
+                }
+
+                std::memcpy(static_cast<uint8_t*>(mappedData) + offset, data, static_cast<size_t>(size));
+
+                D3D12_RANGE writtenRange = {};
+                writtenRange.Begin = static_cast<SIZE_T>(offset);
+                writtenRange.End = static_cast<SIZE_T>(offset + size);
+                d3dBuffer->GetNativeResource()->Unmap(0, &writtenRange);
+                return true;
+            }
+
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
             {
                 if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
