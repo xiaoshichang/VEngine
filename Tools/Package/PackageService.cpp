@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <sstream>
 #include <string_view>
 #include <utility>
 
@@ -62,6 +63,88 @@ namespace ve
         {
             return text == prefix || (text.size() > prefix.size() && text.starts_with(prefix) &&
                                       text[prefix.size()] == '/');
+        }
+
+        void WriteIndent(std::ostringstream& stream, SizeT indent)
+        {
+            for (SizeT index = 0; index < indent; ++index)
+            {
+                stream << ' ';
+            }
+        }
+
+        [[nodiscard]] std::string QuoteJsonString(std::string_view text)
+        {
+            return boost::json::serialize(value(boost::json::string(text)));
+        }
+
+        void WritePrettyJsonValue(std::ostringstream& stream, const value& jsonValue, SizeT indent);
+
+        void WritePrettyJsonObject(std::ostringstream& stream, const object& jsonObject, SizeT indent)
+        {
+            if (jsonObject.empty())
+            {
+                stream << "{}";
+                return;
+            }
+
+            stream << "{\n";
+            SizeT index = 0;
+            for (const auto& member : jsonObject)
+            {
+                WriteIndent(stream, indent + 2);
+                stream << QuoteJsonString(std::string_view(member.key().data(), member.key().size())) << ": ";
+                WritePrettyJsonValue(stream, member.value(), indent + 2);
+                stream << (++index < jsonObject.size() ? ",\n" : "\n");
+            }
+
+            WriteIndent(stream, indent);
+            stream << '}';
+        }
+
+        void WritePrettyJsonArray(std::ostringstream& stream, const array& jsonArray, SizeT indent)
+        {
+            if (jsonArray.empty())
+            {
+                stream << "[]";
+                return;
+            }
+
+            stream << "[\n";
+            for (SizeT index = 0; index < jsonArray.size(); ++index)
+            {
+                WriteIndent(stream, indent + 2);
+                WritePrettyJsonValue(stream, jsonArray[index], indent + 2);
+                stream << (index + 1 < jsonArray.size() ? ",\n" : "\n");
+            }
+
+            WriteIndent(stream, indent);
+            stream << ']';
+        }
+
+        void WritePrettyJsonValue(std::ostringstream& stream, const value& jsonValue, SizeT indent)
+        {
+            if (jsonValue.is_object())
+            {
+                WritePrettyJsonObject(stream, jsonValue.as_object(), indent);
+                return;
+            }
+
+            if (jsonValue.is_array())
+            {
+                WritePrettyJsonArray(stream, jsonValue.as_array(), indent);
+                return;
+            }
+
+            stream << boost::json::serialize(jsonValue);
+        }
+
+        [[nodiscard]] std::string SerializePrettyJsonObject(const object& jsonObject)
+        {
+            std::ostringstream stream;
+            WritePrettyJsonObject(stream, jsonObject, 0);
+            stream << '\n';
+            return stream.str();
         }
 
         [[nodiscard]] Result<object> ReadJsonObject(const Path& path)
@@ -653,7 +736,7 @@ namespace ve
         }
 
         const object manifest = WriteManifestJson(request, descriptor.GetValue(), assetDatabase, result);
-        const std::string manifestText = boost::json::serialize(manifest);
+        const std::string manifestText = SerializePrettyJsonObject(manifest);
         const ErrorCode manifestResult = FileSystem::WriteTextFile(result.manifestPath, manifestText);
         if (manifestResult != ErrorCode::None)
         {

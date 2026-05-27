@@ -432,6 +432,15 @@ Resource, and Scene lifetimes expose stable requirements.
 - `Matrix44`.
 - `Quaternion`.
 
+VEngine world and authoring coordinates follow the Unity-style left-handed scene convention:
+
+- The world basis is `+X` right, `+Y` up, and `+Z` forward.
+- The ground plane is the XZ plane, with height measured along Y.
+- Transform local axes use the same basis: local right is `+X`, local up is `+Y`, and local forward is `+Z`.
+- Camera and directional-light forward direction are derived from Transform `+Z`.
+- Runtime and authored scene data store distances in engine units; one unit should be treated as one meter unless a
+  specific importer or project setting states otherwise.
+
 Geometry math types should be added with the systems that first need them:
 
 - `AABB`.

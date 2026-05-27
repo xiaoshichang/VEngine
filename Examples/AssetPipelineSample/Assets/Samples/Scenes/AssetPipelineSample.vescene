@@ -14,8 +14,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [0.0, 0.0, -12.0],
-              "localRotation": [0.0, 0.0, 0.0, 1.0],
+              "localPosition": [0.0, 10.0, -10.0],
+              "localRotation": [0.382683, 0.0, 0.0, 0.92388],
               "localScale": [1.0, 1.0, 1.0]
             }
           },
@@ -38,8 +38,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [0.0, 0.0, 0.0],
-              "localRotation": [0.0, 1.0, 0.0, 0.0],
+              "localPosition": [0.0, 6.0, -4.0],
+              "localRotation": [0.440377, -0.266729, 0.13885, 0.845957],
               "localScale": [1.0, 1.0, 1.0]
             }
           },
@@ -61,8 +61,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-4.2, 3.15, 0.0],
-              "localRotation": [0.026099, 0.217997, 0.291382, 0.931071],
+              "localPosition": [-4.2, 0.425, -3.15],
+              "localRotation": [0.0, -0.156434, 0.0, 0.987688],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -91,8 +91,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-2.1, 3.15, 0.0],
-              "localRotation": [-0.090555, 0.412022, 0.484253, 0.766509],
+              "localPosition": [-2.1, 0.425, -3.15],
+              "localRotation": [0.0, -0.078459, 0.0, 0.996917],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -121,8 +121,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [0.0, 3.15, 0.0],
-              "localRotation": [-0.314992, 0.500503, 0.560098, 0.580143],
+              "localPosition": [0.0, 0.425, -3.15],
+              "localRotation": [0.0, 0.0, 0.0, 1.0],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -151,8 +151,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [2.1, 3.15, 0.0],
-              "localRotation": [-0.569396, 0.433982, 0.54485, 0.436562],
+              "localPosition": [2.1, 0.425, -3.15],
+              "localRotation": [0.0, 0.078459, 0.0, 0.996917],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -181,8 +181,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [4.2, 3.15, 0.0],
-              "localRotation": [-0.758207, 0.21523, 0.493124, 0.368276],
+              "localPosition": [4.2, 0.425, -3.15],
+              "localRotation": [0.0, 0.156434, 0.0, 0.987688],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -211,8 +211,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-4.2, 1.05, 0.0],
-              "localRotation": [-0.800909, -0.098373, 0.462807, 0.366984],
+              "localPosition": [-4.2, 0.425, -1.05],
+              "localRotation": [0.0, -0.104528, 0.0, 0.994522],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -241,8 +241,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-2.1, 1.05, 0.0],
-              "localRotation": [-0.660951, -0.411693, 0.490206, 0.391599],
+              "localPosition": [-2.1, 0.425, -1.05],
+              "localRotation": [0.0, -0.026177, 0.0, 0.999657],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -271,8 +271,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [0.0, 1.05, 0.0],
-              "localRotation": [-0.3604, -0.62251, 0.575441, 0.389179],
+              "localPosition": [0.0, 0.425, -1.05],
+              "localRotation": [0.0, 0.052336, 0.0, 0.99863],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -301,8 +301,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [2.1, 1.05, 0.0],
-              "localRotation": [0.025187, -0.655495, 0.683574, 0.32003],
+              "localPosition": [2.1, 0.425, -1.05],
+              "localRotation": [0.0, 0.130526, 0.0, 0.991445],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -331,8 +331,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [4.2, 1.05, 0.0],
-              "localRotation": [-0.390178, 0.487686, -0.760706, -0.176777],
+              "localPosition": [4.2, 0.425, -1.05],
+              "localRotation": [0.0, 0.207912, 0.0, 0.978148],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -361,8 +361,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-4.2, -1.05, 0.0],
-              "localRotation": [-0.632609, 0.156572, -0.758409, 0.01037],
+              "localPosition": [-4.2, 0.425, 1.05],
+              "localRotation": [0.0, -0.207912, 0.0, 0.978148],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -391,8 +391,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-2.1, -1.05, 0.0],
-              "localRotation": [-0.686629, -0.252016, -0.656525, 0.184401],
+              "localPosition": [-2.1, 0.425, 1.05],
+              "localRotation": [0.0, -0.130526, 0.0, 0.991445],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -421,8 +421,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [0.0, -1.05, 0.0],
-              "localRotation": [-0.542527, -0.631869, -0.474963, 0.284283],
+              "localPosition": [0.0, 0.425, 1.05],
+              "localRotation": [0.0, -0.052336, 0.0, 0.99863],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -451,8 +451,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [2.1, -1.05, 0.0],
-              "localRotation": [-0.247681, -0.890384, -0.269317, 0.270811],
+              "localPosition": [2.1, 0.425, 1.05],
+              "localRotation": [0.0, 0.026177, 0.0, 0.999657],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -481,8 +481,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [4.2, -1.05, 0.0],
-              "localRotation": [0.111411, -0.976777, -0.111411, 0.145194],
+              "localPosition": [4.2, 0.425, 1.05],
+              "localRotation": [0.0, 0.104528, 0.0, 0.994522],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -511,8 +511,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-4.2, -3.15, 0.0],
-              "localRotation": [-0.439225, 0.894991, 0.061852, 0.047397],
+              "localPosition": [-4.2, 0.425, 3.15],
+              "localRotation": [0.0, -0.258819, 0.0, 0.965926],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -541,8 +541,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [-2.1, -3.15, 0.0],
-              "localRotation": [-0.662521, 0.697463, 0.145001, 0.231486],
+              "localPosition": [-2.1, 0.425, 3.15],
+              "localRotation": [0.0, -0.182236, 0.0, 0.983255],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -571,8 +571,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [0.0, -3.15, 0.0],
-              "localRotation": [-0.751876, 0.462807, 0.336249, 0.327762],
+              "localPosition": [0.0, 0.425, 3.15],
+              "localRotation": [0.0, -0.104528, 0.0, 0.994522],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -601,8 +601,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [2.1, -3.15, 0.0],
-              "localRotation": [-0.726319, 0.266145, 0.567103, 0.28288],
+              "localPosition": [2.1, 0.425, 3.15],
+              "localRotation": [0.0, -0.026177, 0.0, 0.999657],
               "localScale": [0.85, 0.85, 0.85]
             }
           },
@@ -631,8 +631,8 @@
           {
             "type": "TransformComponent",
             "properties": {
-              "localPosition": [4.2, -3.15, 0.0],
-              "localRotation": [0.640343, -0.153135, -0.747086, -0.091506],
+              "localPosition": [4.2, 0.425, 3.15],
+              "localRotation": [0.0, 0.052336, 0.0, 0.99863],
               "localScale": [0.85, 0.85, 0.85]
             }
           },

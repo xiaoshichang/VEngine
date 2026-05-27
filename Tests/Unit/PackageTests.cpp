@@ -1,6 +1,9 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Tools/Package/PackageService.h"
 
+#include <boost/json.hpp>
+#include <boost/system/error_code.hpp>
+
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -13,6 +16,10 @@ namespace
     constexpr const char* SourceGuid = "22222222-2222-4222-8222-222222222222";
     constexpr const char* MaterialGuid = "33333333-3333-4333-8333-333333333333";
     constexpr const char* SceneGuid = "44444444-4444-4444-8444-444444444444";
+
+    using boost::json::array;
+    using boost::json::object;
+    using boost::json::value;
 
     bool Expect(bool condition, const char* message)
     {
@@ -77,6 +84,58 @@ namespace
             text.replace(offset, token.size(), replacement);
             offset += replacement.size();
         }
+    }
+
+    [[nodiscard]] const value* FindMember(const object& jsonObject, const char* name)
+    {
+        const auto iter = jsonObject.find(name);
+        return iter == jsonObject.end() ? nullptr : &iter->value();
+    }
+
+    [[nodiscard]] std::string ReadString(const object& jsonObject, const char* name)
+    {
+        const value* member = FindMember(jsonObject, name);
+        return member != nullptr && member->is_string() ? std::string(member->as_string()) : std::string();
+    }
+
+    [[nodiscard]] bool ReadBool(const object& jsonObject, const char* name, bool fallback) noexcept
+    {
+        const value* member = FindMember(jsonObject, name);
+        return member != nullptr && member->is_bool() ? member->as_bool() : fallback;
+    }
+
+    [[nodiscard]] bool ArrayContainsString(const array& jsonArray, std::string_view expected)
+    {
+        for (const value& item : jsonArray)
+        {
+            if (item.is_string() && item.as_string() == expected)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    [[nodiscard]] bool ExpectManifestIsPrettyPrinted(const std::string& manifestText)
+    {
+        return Expect(manifestText.ends_with('\n'), "Manifest should end with a newline") &&
+               Expect(manifestText.find("\n  \"format\": \"VEngine.AssetManifest\"") != std::string::npos,
+                      "Manifest should be indented for readability");
+    }
+
+    [[nodiscard]] bool ParseManifest(const std::string& manifestText, object& manifestObject)
+    {
+        boost::system::error_code parseError;
+        value root = boost::json::parse(manifestText, parseError);
+        if (parseError || !root.is_object())
+        {
+            std::cerr << "FAILED: Manifest should parse as a JSON object\n";
+            return false;
+        }
+
+        manifestObject = root.as_object();
+        return true;
     }
 
     bool WritePackageProject()
@@ -210,12 +269,31 @@ namespace
         passed &= ExpectOk(manifest, "Windows package manifest should be readable");
         if (manifest)
         {
-            passed &= Expect(manifest.GetValue().find("\"format\":\"VEngine.AssetManifest\"") != std::string::npos,
-                             "Manifest should declare the VEngine asset manifest format");
-            passed &= Expect(manifest.GetValue().find("\"readOnlyContent\":true") != std::string::npos,
-                             "Manifest should mark Content as read-only");
-            passed &= Expect(manifest.GetValue().find("\"Generated/Shaders/Windows/D3D11\"") != std::string::npos,
-                             "Manifest should list Windows shader roots");
+            passed &= ExpectManifestIsPrettyPrinted(manifest.GetValue());
+
+            object manifestObject;
+            if (ParseManifest(manifest.GetValue(), manifestObject))
+            {
+                passed &= Expect(ReadString(manifestObject, "format") == "VEngine.AssetManifest",
+                                 "Manifest should declare the VEngine asset manifest format");
+                passed &= Expect(ReadBool(manifestObject, "readOnlyContent", false),
+                                 "Manifest should mark Content as read-only");
+
+                const value* shaderRoots = FindMember(manifestObject, "shaderRoots");
+                passed &= Expect(shaderRoots != nullptr && shaderRoots->is_array(),
+                                 "Manifest should contain shaderRoots");
+                if (shaderRoots != nullptr && shaderRoots->is_array())
+                {
+                    passed &= Expect(ArrayContainsString(shaderRoots->as_array(), "Generated/Shaders/Windows/D3D11"),
+                                     "Manifest should list the D3D11 shader root");
+                    passed &= Expect(ArrayContainsString(shaderRoots->as_array(), "Generated/Shaders/Windows/D3D12"),
+                                     "Manifest should list the D3D12 shader root");
+                }
+            }
+            else
+            {
+                passed = false;
+            }
         }
 
         return passed;
@@ -253,10 +331,27 @@ namespace
         passed &= ExpectOk(manifest, "iOS package manifest should be readable");
         if (manifest)
         {
-            passed &= Expect(manifest.GetValue().find("\"platform\":\"iOS\"") != std::string::npos,
-                             "iOS package manifest should record platform");
-            passed &= Expect(manifest.GetValue().find("\"Generated/Shaders/iOS/Metal\"") != std::string::npos,
-                             "Manifest should list Metal shader root");
+            passed &= ExpectManifestIsPrettyPrinted(manifest.GetValue());
+
+            object manifestObject;
+            if (ParseManifest(manifest.GetValue(), manifestObject))
+            {
+                passed &= Expect(ReadString(manifestObject, "platform") == "iOS",
+                                 "iOS package manifest should record platform");
+
+                const value* shaderRoots = FindMember(manifestObject, "shaderRoots");
+                passed &= Expect(shaderRoots != nullptr && shaderRoots->is_array(),
+                                 "Manifest should contain shaderRoots");
+                if (shaderRoots != nullptr && shaderRoots->is_array())
+                {
+                    passed &= Expect(ArrayContainsString(shaderRoots->as_array(), "Generated/Shaders/iOS/Metal"),
+                                     "Manifest should list the Metal shader root");
+                }
+            }
+            else
+            {
+                passed = false;
+            }
         }
 
         return passed;
