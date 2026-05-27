@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,12 +18,12 @@ namespace ve
 {
     namespace
     {
-        enum class AssetArtifactStatus
+        struct AssetTreeNode
         {
-            Authored,
-            Ready,
-            Missing,
-            Unknown,
+            std::string name;
+            std::string fullPath;
+            std::vector<std::unique_ptr<AssetTreeNode>> children;
+            std::vector<const AssetRecord*> assets;
         };
 
         [[nodiscard]] std::string MakeStatusError(std::string_view prefix, ErrorCode result)
@@ -31,22 +32,6 @@ namespace ve
             message += ": ";
             message += ToString(result);
             return message;
-        }
-
-        [[nodiscard]] const char* ToDisplayString(AssetArtifactStatus status) noexcept
-        {
-            switch (status)
-            {
-            case AssetArtifactStatus::Authored:
-                return "Authored";
-            case AssetArtifactStatus::Ready:
-                return "Ready";
-            case AssetArtifactStatus::Missing:
-                return "Missing";
-            case AssetArtifactStatus::Unknown:
-            default:
-                return "Unknown";
-            }
         }
 
         [[nodiscard]] bool IsNativeAuthoredAsset(AssetType type) noexcept
@@ -64,58 +49,124 @@ namespace ve
             return record.source.IsEmpty() ? record.path : record.source;
         }
 
+        [[nodiscard]] Path GetDisplayPath(const AssetRecord& record)
+        {
+            return record.assetType == AssetType::SourceModel && !record.source.IsEmpty() ? record.source : record.path;
+        }
+
+        [[nodiscard]] std::vector<std::string> SplitPathSegments(const Path& path)
+        {
+            std::vector<std::string> segments;
+            std::string segment;
+            for (char value : path.GetString())
+            {
+                if (value == '/' || value == '\\')
+                {
+                    if (!segment.empty())
+                    {
+                        segments.push_back(std::move(segment));
+                        segment.clear();
+                    }
+                    continue;
+                }
+
+                segment.push_back(value);
+            }
+
+            if (!segment.empty())
+            {
+                segments.push_back(std::move(segment));
+            }
+
+            return segments;
+        }
+
         [[nodiscard]] bool CanImportAssetRecord(const AssetRecord& record)
         {
             return record.assetType == AssetType::SourceModel && IsObjSource(GetImportSourcePath(record));
         }
 
-        [[nodiscard]] std::string FormatGuidForUi(const AssetGuid& guid)
+        [[nodiscard]] bool ValidateAssetRecord(const AssetDatabase& assetDatabase, const AssetRecord& record)
         {
-            return guid.IsValid() ? guid.ToString() : std::string("(unimported)");
+            if (record.assetType == AssetType::SourceModel)
+            {
+                if (record.source.IsEmpty() || !FileSystem::IsFile(assetDatabase.ResolveProjectPath(record.source)))
+                {
+                    return false;
+                }
+
+                for (const AssetArtifact& artifact : record.artifacts)
+                {
+                    if (artifact.path.IsEmpty() || !FileSystem::IsFile(assetDatabase.ResolveProjectPath(artifact.path)))
+                    {
+                        return false;
+                    }
+                }
+
+                return record.guid.IsValid() && !record.artifacts.empty();
+            }
+
+            return IsNativeAuthoredAsset(record.assetType) &&
+                   FileSystem::IsFile(assetDatabase.ResolveProjectPath(record.path));
         }
 
-        [[nodiscard]] AssetArtifactStatus GetArtifactStatus(const AssetDatabase& assetDatabase,
-                                                            const AssetRecord& record)
+        [[nodiscard]] AssetTreeNode& FindOrCreateChild(AssetTreeNode& parent, const std::string& name)
         {
-            if (IsNativeAuthoredAsset(record.assetType))
+            const auto iter = std::find_if(parent.children.begin(),
+                                           parent.children.end(),
+                                           [&name](const auto& child) { return child->name == name; });
+            if (iter != parent.children.end())
             {
-                return AssetArtifactStatus::Authored;
+                return **iter;
             }
 
-            if (record.assetType != AssetType::SourceModel || !record.guid.IsValid() || record.artifacts.empty())
-            {
-                return AssetArtifactStatus::Unknown;
-            }
-
-            for (const AssetArtifact& artifact : record.artifacts)
-            {
-                if (artifact.path.IsEmpty() || !FileSystem::IsFile(assetDatabase.ResolveProjectPath(artifact.path)))
-                {
-                    return AssetArtifactStatus::Missing;
-                }
-            }
-
-            return AssetArtifactStatus::Ready;
+            auto child = std::make_unique<AssetTreeNode>();
+            child->name = name;
+            child->fullPath = parent.fullPath.empty() ? name : parent.fullPath + "/" + name;
+            AssetTreeNode& result = *child;
+            parent.children.push_back(std::move(child));
+            return result;
         }
 
-        [[nodiscard]] std::string GetImporterName(const AssetDatabase& assetDatabase, const AssetRecord& record)
+        void SortAssetTree(AssetTreeNode& node)
         {
-            if (IsNativeAuthoredAsset(record.assetType))
-            {
-                return "Native";
-            }
+            std::sort(node.children.begin(),
+                      node.children.end(),
+                      [](const auto& left, const auto& right) { return left->name < right->name; });
+            std::sort(node.assets.begin(),
+                      node.assets.end(),
+                      [](const AssetRecord* left, const AssetRecord* right)
+                      { return GetDisplayPath(*left).GetFilename() < GetDisplayPath(*right).GetFilename(); });
 
-            if (!record.metadataPath.IsEmpty() &&
-                FileSystem::IsFile(assetDatabase.ResolveProjectPath(record.metadataPath)))
+            for (const auto& child : node.children)
             {
-                Result<SourceAssetMetadata> metadata = assetDatabase.LoadSourceMetadata(record.metadataPath);
-                if (metadata && !metadata.GetValue().importer.empty())
+                SortAssetTree(*child);
+            }
+        }
+
+        [[nodiscard]] AssetTreeNode BuildAssetTree(const AssetDatabase& assetDatabase)
+        {
+            AssetTreeNode root;
+            for (const AssetRecord& record : assetDatabase.GetRecords())
+            {
+                const std::vector<std::string> segments = SplitPathSegments(GetDisplayPath(record));
+                if (segments.empty())
                 {
-                    return metadata.GetValue().importer;
+                    root.assets.push_back(&record);
+                    continue;
                 }
+
+                AssetTreeNode* parent = &root;
+                for (SizeT index = 0; index + 1 < segments.size(); ++index)
+                {
+                    parent = &FindOrCreateChild(*parent, segments[index]);
+                }
+
+                parent->assets.push_back(&record);
             }
 
-            return CanImportAssetRecord(record) ? "ObjModel" : "Unknown";
+            SortAssetTree(root);
+            return root;
         }
     } // namespace
 
@@ -129,94 +180,101 @@ namespace ve
         ImGui::TextDisabled("%zu asset(s)", projectService.GetAssetDatabase().GetRecords().size());
         ImGui::Separator();
 
-        if (ImGui::Button("Scan"))
+        if (ImGui::BeginPopupContextWindow("AssetBrowserContextMenu",
+                                           ImGuiPopupFlags_MouseButtonRight |
+                                               ImGuiPopupFlags_NoOpenOverItems))
         {
-            const ErrorCode refreshResult = projectService.RefreshAssetDatabase();
-            statusMessage = refreshResult == ErrorCode::None
-                                ? "AssetDatabase scan complete."
-                                : MakeStatusError("AssetDatabase scan failed", refreshResult);
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Validate"))
-        {
-            const ErrorCode validateResult = projectService.GetAssetDatabase().Validate();
-            statusMessage = validateResult == ErrorCode::None
-                                ? "AssetDatabase validation passed."
-                                : MakeStatusError("AssetDatabase validation failed", validateResult);
-        }
-
-        ImGui::Separator();
-        DrawAssetTable(projectService, runtime, statusMessage, openSceneRequest);
-    }
-
-    void WindowsEditorPanels::DrawAssetTable(EditorProjectService& projectService,
-                                             EngineRuntime& runtime,
-                                             std::string& statusMessage,
-                                             const OpenSceneRequest& openSceneRequest)
-    {
-        const AssetDatabase& assetDatabase = projectService.GetAssetDatabase();
-        std::vector<const AssetRecord*> records;
-        records.reserve(assetDatabase.GetRecords().size());
-        for (const AssetRecord& record : assetDatabase.GetRecords())
-        {
-            records.push_back(&record);
-        }
-
-        std::sort(records.begin(),
-                  records.end(),
-                  [](const AssetRecord* left, const AssetRecord* right)
-                  { return left->path.GetString() < right->path.GetString(); });
-
-        constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders |
-                                               ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY |
-                                               ImGuiTableFlags_SizingStretchProp;
-        if (!ImGui::BeginTable("AssetBrowserTable", 6, tableFlags))
-        {
-            return;
-        }
-
-        ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch, 0.36f);
-        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthStretch, 0.12f);
-        ImGui::TableSetupColumn("GUID", ImGuiTableColumnFlags_WidthStretch, 0.20f);
-        ImGui::TableSetupColumn("Importer", ImGuiTableColumnFlags_WidthStretch, 0.12f);
-        ImGui::TableSetupColumn("Artifact", ImGuiTableColumnFlags_WidthStretch, 0.10f);
-        ImGui::TableSetupColumn("Commands", ImGuiTableColumnFlags_WidthStretch, 0.10f);
-        ImGui::TableHeadersRow();
-
-        for (const AssetRecord* record : records)
-        {
-            ImGui::PushID(record);
-            ImGui::TableNextRow();
-
-            ImGui::TableSetColumnIndex(0);
-            ImGui::TextUnformatted(record->path.GetString().c_str());
-            if (!record->source.IsEmpty() && record->source != record->path)
+            if (ImGui::MenuItem("Scan"))
             {
-                ImGui::TextDisabled("%s", record->source.GetString().c_str());
+                const ErrorCode refreshResult = projectService.RefreshAssetDatabase();
+                statusMessage = refreshResult == ErrorCode::None
+                                    ? "AssetDatabase scan complete."
+                                    : MakeStatusError("AssetDatabase scan failed", refreshResult);
             }
 
-            ImGui::TableSetColumnIndex(1);
-            ImGui::TextUnformatted(ToString(record->assetType));
+            if (ImGui::MenuItem("Validate"))
+            {
+                const ErrorCode validateResult = projectService.GetAssetDatabase().Validate();
+                statusMessage = validateResult == ErrorCode::None
+                                    ? "AssetDatabase validation passed."
+                                    : MakeStatusError("AssetDatabase validation failed", validateResult);
+            }
 
-            ImGui::TableSetColumnIndex(2);
-            const std::string guidText = FormatGuidForUi(record->guid);
-            ImGui::TextUnformatted(guidText.c_str());
-
-            ImGui::TableSetColumnIndex(3);
-            const std::string importer = GetImporterName(assetDatabase, *record);
-            ImGui::TextUnformatted(importer.c_str());
-
-            ImGui::TableSetColumnIndex(4);
-            ImGui::TextUnformatted(ToDisplayString(GetArtifactStatus(assetDatabase, *record)));
-
-            ImGui::TableSetColumnIndex(5);
-            DrawAssetCommands(projectService, runtime, statusMessage, *record, openSceneRequest);
-
-            ImGui::PopID();
+            ImGui::EndPopup();
         }
 
-        ImGui::EndTable();
+        DrawAssetTree(projectService, runtime, statusMessage, openSceneRequest);
+    }
+
+    void WindowsEditorPanels::DrawAssetTree(EditorProjectService& projectService,
+                                            EngineRuntime& runtime,
+                                            std::string& statusMessage,
+                                            const OpenSceneRequest& openSceneRequest)
+    {
+        const AssetDatabase& assetDatabase = projectService.GetAssetDatabase();
+        AssetTreeNode root = BuildAssetTree(assetDatabase);
+
+        const auto drawAssetNode = [this, &projectService, &runtime, &statusMessage, &openSceneRequest](
+                                       const AssetRecord& record)
+        {
+            const Path displayPath = GetDisplayPath(record);
+            const std::string nodeId = displayPath.GetString();
+            const std::string label = displayPath.GetFilename().empty() ? displayPath.GetString()
+                                                                        : displayPath.GetFilename();
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                                       ImGuiTreeNodeFlags_SpanAvailWidth;
+            if (IsAssetSelected(record))
+            {
+                flags |= ImGuiTreeNodeFlags_Selected;
+            }
+
+            ImGui::PushID(nodeId.c_str());
+            ImGui::TreeNodeEx("Asset", flags, "%s", label.c_str());
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
+            {
+                SelectAssetRecord(record);
+            }
+
+            if (ImGui::BeginPopupContextItem())
+            {
+                SelectAssetRecord(record);
+                DrawAssetCommands(projectService, runtime, statusMessage, record, openSceneRequest);
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+        };
+
+        const auto drawDirectoryNode = [&drawAssetNode](const AssetTreeNode& node, const auto& drawSelf) -> void
+        {
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
+            const bool opened = ImGui::TreeNodeEx(node.fullPath.c_str(), flags, "%s", node.name.c_str());
+            if (!opened)
+            {
+                return;
+            }
+
+            for (const auto& child : node.children)
+            {
+                drawSelf(*child, drawSelf);
+            }
+
+            for (const AssetRecord* record : node.assets)
+            {
+                drawAssetNode(*record);
+            }
+
+            ImGui::TreePop();
+        };
+
+        for (const auto& child : root.children)
+        {
+            drawDirectoryNode(*child, drawDirectoryNode);
+        }
+
+        for (const AssetRecord* record : root.assets)
+        {
+            drawAssetNode(*record);
+        }
     }
 
     void WindowsEditorPanels::DrawAssetCommands(EditorProjectService& projectService,
@@ -227,9 +285,17 @@ namespace ve
     {
         (void)runtime;
 
+        const AssetDatabase& assetDatabase = projectService.GetAssetDatabase();
+        if (ImGui::MenuItem("Validate"))
+        {
+            const bool valid = ValidateAssetRecord(assetDatabase, record);
+            statusMessage = valid ? "Asset validation passed: " + GetDisplayPath(record).GetString()
+                                  : "Asset validation failed: " + GetDisplayPath(record).GetString();
+        }
+
         if (record.assetType == AssetType::Scene)
         {
-            if (ImGui::SmallButton("Open") && openSceneRequest)
+            if (ImGui::MenuItem("Open Scene") && openSceneRequest)
             {
                 openSceneRequest(record.path);
             }
@@ -240,13 +306,12 @@ namespace ve
         const bool canImport = CanImportAssetRecord(record);
         if (!canImport)
         {
-            ImGui::TextDisabled("-");
             return;
         }
 
         if (!record.guid.IsValid())
         {
-            if (ImGui::SmallButton("Import"))
+            if (ImGui::MenuItem("Import"))
             {
                 ImportAsset(projectService, statusMessage, record, false);
             }
@@ -254,7 +319,7 @@ namespace ve
             return;
         }
 
-        if (ImGui::SmallButton("Reimport"))
+        if (ImGui::MenuItem("Reimport"))
         {
             ImportAsset(projectService, statusMessage, record, true);
         }

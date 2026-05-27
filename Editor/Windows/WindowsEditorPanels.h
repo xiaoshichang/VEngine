@@ -43,6 +43,13 @@ namespace ve
                               const OpenSceneRequest& openSceneRequest);
 
     private:
+        enum class SelectionKind
+        {
+            None,
+            GameObject,
+            Asset,
+        };
+
         struct SceneViewCameraState
         {
             Vector3 position = Vector3(0.0f, 2.0f, -6.0f);
@@ -64,8 +71,17 @@ namespace ve
                                const char* overlayText,
                                bool showOverlayText);
         void HandleSceneViewCameraInput(const ImVec2& imageSize);
+        void SelectGameObject(SceneObjectId gameObjectId) noexcept;
         void DrawGameObjectNode(GameObject& gameObject);
 
+        void SelectAssetRecord(const AssetRecord& record);
+        [[nodiscard]] bool IsAssetSelected(const AssetRecord& record) const noexcept;
+        [[nodiscard]] const AssetRecord* FindSelectedAssetRecord(const EditorProjectService& projectService) const
+            noexcept;
+        [[nodiscard]] Path GetAssetSelectionPath(const AssetRecord& record) const;
+        void DrawSelectedAssetInspector(EditorProjectService& projectService,
+                                        std::string& statusMessage,
+                                        const AssetRecord& record);
         void DrawComponentInspector(EditorProjectService& projectService,
                                     EngineRuntime& runtime,
                                     std::string& statusMessage,
@@ -78,10 +94,10 @@ namespace ve
                                    Component& component,
                                    const ReflectedPropertyInfo& property);
 
-        void DrawAssetTable(EditorProjectService& projectService,
-                            EngineRuntime& runtime,
-                            std::string& statusMessage,
-                            const OpenSceneRequest& openSceneRequest);
+        void DrawAssetTree(EditorProjectService& projectService,
+                           EngineRuntime& runtime,
+                           std::string& statusMessage,
+                           const OpenSceneRequest& openSceneRequest);
         void DrawAssetCommands(EditorProjectService& projectService,
                                EngineRuntime& runtime,
                                std::string& statusMessage,
@@ -98,7 +114,9 @@ namespace ve
         ReflectionRegistry reflectionRegistry_;
         std::vector<EditorViewportRenderRequest> viewportRequests_;
         SceneViewCameraState sceneViewCamera_;
+        SelectionKind selectionKind_ = SelectionKind::None;
         SceneObjectId selectedGameObjectId_ = InvalidSceneObjectId;
+        Path selectedAssetPath_;
         UInt64 nextViewportFrameId_ = 1;
         bool sceneViewLookActive_ = false;
     };

@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorProject.h"
 
 #include "Engine/Runtime/Application/EngineRuntime.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Scene/Component.h"
 #include "Engine/Runtime/Scene/GameObject.h"
@@ -24,6 +25,108 @@ namespace ve
 {
     namespace
     {
+        enum class AssetArtifactStatus
+        {
+            Authored,
+            Ready,
+            Missing,
+            Unknown,
+        };
+
+        [[nodiscard]] const char* ToDisplayString(AssetArtifactStatus status) noexcept
+        {
+            switch (status)
+            {
+            case AssetArtifactStatus::Authored:
+                return "Authored";
+            case AssetArtifactStatus::Ready:
+                return "Ready";
+            case AssetArtifactStatus::Missing:
+                return "Missing";
+            case AssetArtifactStatus::Unknown:
+            default:
+                return "Unknown";
+            }
+        }
+
+        [[nodiscard]] bool IsNativeAuthoredAsset(AssetType type) noexcept
+        {
+            return type == AssetType::Scene || type == AssetType::Material;
+        }
+
+        [[nodiscard]] bool IsObjSource(const Path& path)
+        {
+            return path.GetExtension() == ".obj" || path.GetExtension() == ".OBJ";
+        }
+
+        [[nodiscard]] Path GetImportSourcePath(const AssetRecord& record)
+        {
+            return record.source.IsEmpty() ? record.path : record.source;
+        }
+
+        [[nodiscard]] bool CanImportAssetRecord(const AssetRecord& record)
+        {
+            return record.assetType == AssetType::SourceModel && IsObjSource(GetImportSourcePath(record));
+        }
+
+        [[nodiscard]] std::string FormatGuidForUi(const AssetGuid& guid)
+        {
+            return guid.IsValid() ? guid.ToString() : std::string("(unimported)");
+        }
+
+        [[nodiscard]] AssetArtifactStatus GetArtifactStatus(const AssetDatabase& assetDatabase,
+                                                            const AssetRecord& record)
+        {
+            if (IsNativeAuthoredAsset(record.assetType))
+            {
+                return AssetArtifactStatus::Authored;
+            }
+
+            if (record.assetType != AssetType::SourceModel || !record.guid.IsValid() || record.artifacts.empty())
+            {
+                return AssetArtifactStatus::Unknown;
+            }
+
+            for (const AssetArtifact& artifact : record.artifacts)
+            {
+                if (artifact.path.IsEmpty() || !FileSystem::IsFile(assetDatabase.ResolveProjectPath(artifact.path)))
+                {
+                    return AssetArtifactStatus::Missing;
+                }
+            }
+
+            return AssetArtifactStatus::Ready;
+        }
+
+        [[nodiscard]] std::string GetImporterName(const AssetDatabase& assetDatabase, const AssetRecord& record)
+        {
+            if (IsNativeAuthoredAsset(record.assetType))
+            {
+                return "Native";
+            }
+
+            if (!record.metadataPath.IsEmpty() &&
+                FileSystem::IsFile(assetDatabase.ResolveProjectPath(record.metadataPath)))
+            {
+                Result<SourceAssetMetadata> metadata = assetDatabase.LoadSourceMetadata(record.metadataPath);
+                if (metadata && !metadata.GetValue().importer.empty())
+                {
+                    return metadata.GetValue().importer;
+                }
+            }
+
+            return CanImportAssetRecord(record) ? "ObjModel" : "Unknown";
+        }
+
+        void DrawAssetInspectorField(const char* label, const std::string& value)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(label);
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextWrapped("%s", value.c_str());
+        }
+
         [[nodiscard]] Float32 ReadJsonFloat(const boost::json::value& jsonValue,
                                             Float32 fallback = 0.0f) noexcept
         {
@@ -222,19 +325,125 @@ namespace ve
         }
     } // namespace
 
+    void WindowsEditorPanels::DrawSelectedAssetInspector(EditorProjectService& projectService,
+                                                         std::string& statusMessage,
+                                                         const AssetRecord& record)
+    {
+        (void)statusMessage;
+
+        const AssetDatabase& assetDatabase = projectService.GetAssetDatabase();
+        const Path displayPath = GetAssetSelectionPath(record);
+
+        ImGui::TextUnformatted("Asset");
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", ToString(record.assetType));
+        ImGui::Separator();
+
+        constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                               ImGuiTableFlags_SizingStretchProp;
+        if (ImGui::BeginTable("AssetInspectorFields", 2, tableFlags))
+        {
+            ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthFixed, 88.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+            DrawAssetInspectorField("Path", displayPath.GetString());
+            DrawAssetInspectorField("Type", ToString(record.assetType));
+            DrawAssetInspectorField("GUID", FormatGuidForUi(record.guid));
+            DrawAssetInspectorField("Importer", GetImporterName(assetDatabase, record));
+            DrawAssetInspectorField("Artifact", ToDisplayString(GetArtifactStatus(assetDatabase, record)));
+
+            if (!record.source.IsEmpty() && record.source != displayPath)
+            {
+                DrawAssetInspectorField("Source", record.source.GetString());
+            }
+
+            if (!record.metadataPath.IsEmpty())
+            {
+                DrawAssetInspectorField("Metadata", record.metadataPath.GetString());
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        if (ImGui::CollapsingHeader("Generated Artifacts", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (record.artifacts.empty())
+            {
+                ImGui::TextDisabled("None");
+            }
+            else if (ImGui::BeginTable("AssetInspectorArtifacts", 3, tableFlags))
+            {
+                ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+                ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+                ImGui::TableHeadersRow();
+
+                for (const AssetArtifact& artifact : record.artifacts)
+                {
+                    const bool artifactReady =
+                        !artifact.path.IsEmpty() && FileSystem::IsFile(assetDatabase.ResolveProjectPath(artifact.path));
+
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(artifact.type.c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::TextWrapped("%s", artifact.path.GetString().c_str());
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::TextUnformatted(artifactReady ? "Ready" : "Missing");
+                }
+
+                ImGui::EndTable();
+            }
+        }
+
+        if (!record.dependencies.empty() &&
+            ImGui::CollapsingHeader("Dependencies", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::BeginTable("AssetInspectorDependencies", 3, tableFlags))
+            {
+                ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+                ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("GUID", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
+
+                for (const AssetDependency& dependency : record.dependencies)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(dependency.type.c_str());
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::TextWrapped("%s", dependency.path.GetString().c_str());
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::TextWrapped("%s", FormatGuidForUi(dependency.guid).c_str());
+                }
+
+                ImGui::EndTable();
+            }
+        }
+    }
+
     void WindowsEditorPanels::DrawInspector(EditorProjectService& projectService,
                                             EngineRuntime& runtime,
                                             std::string& statusMessage)
     {
-        ImGui::TextUnformatted("Inspector");
-        ImGui::Separator();
+        if (const AssetRecord* selectedAsset = FindSelectedAssetRecord(projectService))
+        {
+            DrawSelectedAssetInspector(projectService, statusMessage, *selectedAsset);
+            return;
+        }
 
         GameObject* selected = projectService.GetActiveScene().FindGameObject(selectedGameObjectId_);
         if (selected == nullptr)
         {
+            ImGui::TextUnformatted("Inspector");
+            ImGui::Separator();
             ImGui::TextDisabled("No GameObject selected");
             return;
         }
+
+        ImGui::TextUnformatted("Inspector");
+        ImGui::Separator();
 
         std::array<char, 256> nameBuffer = {};
         std::snprintf(nameBuffer.data(), nameBuffer.size(), "%s", selected->GetName().c_str());

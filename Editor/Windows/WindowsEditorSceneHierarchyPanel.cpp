@@ -38,7 +38,7 @@ namespace ve
                 PrepareSceneMutation(projectService, runtime);
                 GameObject& gameObject = projectService.GetActiveScene().CreateGameObject("GameObject");
                 gameObject.AddComponent<TransformComponent>();
-                selectedGameObjectId_ = gameObject.GetId();
+                SelectGameObject(gameObject.GetId());
                 FinishSceneMutation(projectService);
                 statusMessage = "Created GameObject.";
             }
@@ -49,7 +49,7 @@ namespace ve
                 {
                     PrepareSceneMutation(projectService, runtime);
                     (void)projectService.GetActiveScene().DestroyGameObject(*selected);
-                    selectedGameObjectId_ = InvalidSceneObjectId;
+                    ResetSelection();
                     FinishSceneMutation(projectService);
                     statusMessage = "Deleted GameObject.";
                 }
@@ -81,7 +81,7 @@ namespace ve
                                          ImGui::IsItemClicked(ImGuiMouseButton_Right);
         if (clickedForSelection && !ImGui::IsItemToggledOpen())
         {
-            selectedGameObjectId_ = gameObject.GetId();
+            SelectGameObject(gameObject.GetId());
         }
 
         if (opened && !gameObject.GetChildren().empty())
