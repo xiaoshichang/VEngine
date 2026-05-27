@@ -70,7 +70,7 @@ namespace ve
                                const ImVec2& imageSize,
                                const char* overlayText,
                                bool showOverlayText);
-        void HandleSceneViewCameraInput(const ImVec2& imageSize);
+        void HandleSceneViewCameraInput(const ImVec2& imageSize, bool imageHovered);
         void SelectGameObject(SceneObjectId gameObjectId) noexcept;
         void DrawGameObjectNode(GameObject& gameObject);
 

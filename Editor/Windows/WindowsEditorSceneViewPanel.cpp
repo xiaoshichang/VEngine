@@ -6,15 +6,22 @@
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Quaternion.h"
+#include "Engine/Runtime/Math/Vector4.h"
+#include "Engine/Runtime/Scene/GameObject.h"
+#include "Engine/Runtime/Scene/RenderComponents.h"
+#include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/SceneRenderExtractor.h"
+#include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <imgui.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ve
 {
@@ -28,6 +35,10 @@ namespace ve
         constexpr Float32 AxisGizmoMinimumProjectedScale = 0.24f;
         constexpr Float32 AxisGizmoEndpointRadius = 7.0f;
         constexpr Float32 AxisGizmoNegativeEndpointRadius = 3.0f;
+        constexpr Float32 SceneViewObjectIconHitSize = 28.0f;
+        constexpr Float32 SceneViewObjectIconCameraWidth = 19.0f;
+        constexpr Float32 SceneViewObjectIconCameraHeight = 13.0f;
+        constexpr Float32 SceneViewObjectIconLightRadius = 5.5f;
 
         struct SceneViewAxis
         {
@@ -45,6 +56,22 @@ namespace ve
             Float32 length = 0.0f;
             Float32 endpointRadius = 0.0f;
             bool drawLabel = false;
+        };
+
+        enum class SceneViewObjectIconKind
+        {
+            Camera,
+            DirectionalLight,
+        };
+
+        struct SceneViewObjectIcon
+        {
+            SceneObjectId objectId = InvalidSceneObjectId;
+            SceneViewObjectIconKind kind = SceneViewObjectIconKind::Camera;
+            ImVec2 screenPosition;
+            ImVec2 screenDirection;
+            Float32 depth = 1.0f;
+            std::string label;
         };
 
         [[nodiscard]] ImVec2 GetViewportImageSize()
@@ -76,6 +103,37 @@ namespace ve
             return matrix;
         }
 
+        [[nodiscard]] bool ProjectWorldToSceneView(const ImVec2& imageMin,
+                                                   const ImVec2& imageMax,
+                                                   const Matrix44& viewMatrix,
+                                                   const Matrix44& projectionMatrix,
+                                                   const Vector3& worldPosition,
+                                                   ImVec2& outScreenPosition,
+                                                   Float32& outDepth)
+        {
+            const Vector4 clip = (projectionMatrix * viewMatrix) * Vector4(worldPosition, 1.0f);
+            if (clip.GetW() <= 0.0001f)
+            {
+                return false;
+            }
+
+            const Float32 ndcX = clip.GetX() / clip.GetW();
+            const Float32 ndcY = clip.GetY() / clip.GetW();
+            const Float32 ndcZ = clip.GetZ() / clip.GetW();
+            if (ndcX < -1.0f || ndcX > 1.0f || ndcY < -1.0f || ndcY > 1.0f || ndcZ < 0.0f ||
+                ndcZ > 1.0f)
+            {
+                return false;
+            }
+
+            const Float32 width = imageMax.x - imageMin.x;
+            const Float32 height = imageMax.y - imageMin.y;
+            outScreenPosition.x = imageMin.x + ((ndcX * 0.5f) + 0.5f) * width;
+            outScreenPosition.y = imageMin.y + (1.0f - ((ndcY * 0.5f) + 0.5f)) * height;
+            outDepth = ndcZ;
+            return true;
+        }
+
         [[nodiscard]] Quaternion BuildSceneViewCameraRotation(Float32 pitchRadians, Float32 yawRadians) noexcept
         {
             return Quaternion::FromEulerXYZ(pitchRadians, yawRadians, 0.0f);
@@ -87,6 +145,23 @@ namespace ve
         {
             const Quaternion rotation = BuildSceneViewCameraRotation(pitchRadians, yawRadians);
             return rotation.Conjugated().ToMatrix44() * Matrix44::Translation(-position);
+        }
+
+        [[nodiscard]] ImVec2 ProjectWorldDirectionToSceneView(const Matrix44& viewMatrix,
+                                                              const Vector3& worldDirection) noexcept
+        {
+            const Vector3 viewDirection = viewMatrix.TransformDirection(worldDirection).Normalized();
+            ImVec2 screenDirection(viewDirection.GetX(), -viewDirection.GetY());
+            const Float32 length =
+                std::sqrt((screenDirection.x * screenDirection.x) + (screenDirection.y * screenDirection.y));
+            if (length <= 0.001f)
+            {
+                return ImVec2(0.0f, 1.0f);
+            }
+
+            screenDirection.x /= length;
+            screenDirection.y /= length;
+            return screenDirection;
         }
 
         [[nodiscard]] ImU32 ColorWithAlpha(ImU32 color, UInt8 alpha) noexcept
@@ -216,6 +291,237 @@ namespace ve
 
             drawList->PopClipRect();
         }
+
+        void CollectSceneViewObjectIcons(const GameObject& gameObject,
+                                         const ImVec2& imageMin,
+                                         const ImVec2& imageMax,
+                                         const Matrix44& viewMatrix,
+                                         const Matrix44& projectionMatrix,
+                                         std::vector<SceneViewObjectIcon>& icons)
+        {
+            const TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+            if (transform != nullptr)
+            {
+                ImVec2 screenPosition;
+                Float32 depth = 1.0f;
+                if (ProjectWorldToSceneView(imageMin,
+                                            imageMax,
+                                            viewMatrix,
+                                            projectionMatrix,
+                                            transform->GetWorldPosition(),
+                                            screenPosition,
+                                            depth))
+                {
+                    if (gameObject.GetComponent<CameraComponent>() != nullptr)
+                    {
+                        SceneViewObjectIcon icon;
+                        icon.objectId = gameObject.GetId();
+                        icon.kind = SceneViewObjectIconKind::Camera;
+                        icon.screenPosition = screenPosition;
+                        icon.screenDirection =
+                            ProjectWorldDirectionToSceneView(viewMatrix, transform->GetForward().Normalized());
+                        icon.depth = depth;
+                        icon.label = gameObject.GetName().empty() ? "Camera" : gameObject.GetName();
+                        icons.push_back(std::move(icon));
+                    }
+
+                    const LightComponent* light = gameObject.GetComponent<LightComponent>();
+                    if (light != nullptr && light->GetLightType() == LightType::Directional)
+                    {
+                        SceneViewObjectIcon icon;
+                        icon.objectId = gameObject.GetId();
+                        icon.kind = SceneViewObjectIconKind::DirectionalLight;
+                        icon.screenPosition = screenPosition;
+                        icon.screenDirection =
+                            ProjectWorldDirectionToSceneView(viewMatrix, light->GetDirection().Normalized());
+                        icon.depth = depth;
+                        icon.label = gameObject.GetName().empty() ? "Directional Light" : gameObject.GetName();
+                        icons.push_back(std::move(icon));
+                    }
+                }
+            }
+
+            for (const GameObject* child : gameObject.GetChildren())
+            {
+                if (child != nullptr)
+                {
+                    CollectSceneViewObjectIcons(*child, imageMin, imageMax, viewMatrix, projectionMatrix, icons);
+                }
+            }
+        }
+
+        [[nodiscard]] std::vector<SceneViewObjectIcon> BuildSceneViewObjectIcons(const Scene& scene,
+                                                                                 const ImVec2& imageMin,
+                                                                                 const ImVec2& imageMax,
+                                                                                 const Matrix44& viewMatrix,
+                                                                                 const Matrix44& projectionMatrix)
+        {
+            std::vector<SceneViewObjectIcon> icons;
+            icons.reserve(scene.GetGameObjectCount());
+
+            for (const GameObject* root : scene.GetRootGameObjects())
+            {
+                if (root != nullptr)
+                {
+                    CollectSceneViewObjectIcons(*root, imageMin, imageMax, viewMatrix, projectionMatrix, icons);
+                }
+            }
+
+            std::sort(icons.begin(),
+                      icons.end(),
+                      [](const SceneViewObjectIcon& left, const SceneViewObjectIcon& right)
+                      {
+                          return left.depth > right.depth;
+                      });
+            return icons;
+        }
+
+        void DrawCameraSceneViewIcon(ImDrawList& drawList,
+                                     const ImVec2& center,
+                                     bool highlighted,
+                                     const ImVec2& screenDirection)
+        {
+            const ImU32 lineColor =
+                highlighted ? IM_COL32(255, 214, 92, 255) : IM_COL32(126, 196, 255, 245);
+            const ImU32 fillColor = highlighted ? IM_COL32(75, 58, 24, 225) : IM_COL32(18, 30, 44, 220);
+            const ImU32 shadowColor = IM_COL32(0, 0, 0, 92);
+
+            drawList.AddCircleFilled(center, 15.0f, shadowColor, 24);
+
+            const Float32 halfWidth = SceneViewObjectIconCameraWidth * 0.5f;
+            const Float32 halfHeight = SceneViewObjectIconCameraHeight * 0.5f;
+            const ImVec2 bodyMin(center.x - halfWidth, center.y - halfHeight);
+            const ImVec2 bodyMax(center.x + halfWidth - 4.0f, center.y + halfHeight);
+            drawList.AddRectFilled(bodyMin, bodyMax, fillColor, 2.0f);
+            drawList.AddRect(bodyMin, bodyMax, lineColor, 2.0f, 0, 1.6f);
+
+            const ImVec2 lensA(bodyMax.x, center.y - 4.6f);
+            const ImVec2 lensB(center.x + halfWidth + 5.5f, center.y - 8.0f);
+            const ImVec2 lensC(center.x + halfWidth + 5.5f, center.y + 8.0f);
+            const ImVec2 lensD(bodyMax.x, center.y + 4.6f);
+            drawList.AddQuadFilled(lensA, lensB, lensC, lensD, fillColor);
+            drawList.AddQuad(lensA, lensB, lensC, lensD, lineColor, 1.6f);
+
+            const ImVec2 directionEnd(center.x + screenDirection.x * 16.0f, center.y + screenDirection.y * 16.0f);
+            drawList.AddLine(center, directionEnd, ColorWithAlpha(lineColor, 170), 1.2f);
+            drawList.AddCircleFilled(directionEnd, 2.2f, ColorWithAlpha(lineColor, 190), 12);
+        }
+
+        void DrawDirectionalLightSceneViewIcon(ImDrawList& drawList,
+                                               const ImVec2& center,
+                                               bool highlighted,
+                                               const ImVec2& screenDirection)
+        {
+            const ImU32 lineColor =
+                highlighted ? IM_COL32(255, 225, 96, 255) : IM_COL32(255, 205, 78, 245);
+            const ImU32 fillColor = highlighted ? IM_COL32(86, 65, 18, 230) : IM_COL32(48, 36, 14, 220);
+            const ImU32 shadowColor = IM_COL32(0, 0, 0, 92);
+
+            drawList.AddCircleFilled(center, 15.0f, shadowColor, 24);
+            drawList.AddCircleFilled(center, SceneViewObjectIconLightRadius, fillColor, 24);
+            drawList.AddCircle(center, SceneViewObjectIconLightRadius, lineColor, 24, 1.6f);
+
+            constexpr Float32 TwoPi = 6.28318530718f;
+            for (Int32 index = 0; index < 8; ++index)
+            {
+                const Float32 angle = (TwoPi / 8.0f) * static_cast<Float32>(index);
+                const ImVec2 direction(std::cos(angle), std::sin(angle));
+                const ImVec2 rayStart(center.x + direction.x * 8.5f, center.y + direction.y * 8.5f);
+                const ImVec2 rayEnd(center.x + direction.x * 13.2f, center.y + direction.y * 13.2f);
+                drawList.AddLine(rayStart, rayEnd, lineColor, 1.45f);
+            }
+
+            const ImVec2 arrowStart(center.x + screenDirection.x * 15.0f, center.y + screenDirection.y * 15.0f);
+            const ImVec2 arrowEnd(center.x + screenDirection.x * 23.0f, center.y + screenDirection.y * 23.0f);
+            const ImVec2 normal(-screenDirection.y, screenDirection.x);
+            drawList.AddLine(arrowStart, arrowEnd, ColorWithAlpha(lineColor, 190), 1.4f);
+            drawList.AddTriangleFilled(arrowEnd,
+                                       ImVec2(arrowEnd.x - screenDirection.x * 5.0f + normal.x * 3.0f,
+                                              arrowEnd.y - screenDirection.y * 5.0f + normal.y * 3.0f),
+                                       ImVec2(arrowEnd.x - screenDirection.x * 5.0f - normal.x * 3.0f,
+                                              arrowEnd.y - screenDirection.y * 5.0f - normal.y * 3.0f),
+                                       ColorWithAlpha(lineColor, 210));
+        }
+
+        void DrawSceneViewObjectIcon(ImDrawList& drawList,
+                                     const SceneViewObjectIcon& icon,
+                                     bool highlighted)
+        {
+            switch (icon.kind)
+            {
+            case SceneViewObjectIconKind::Camera:
+                DrawCameraSceneViewIcon(drawList, icon.screenPosition, highlighted, icon.screenDirection);
+                break;
+            case SceneViewObjectIconKind::DirectionalLight:
+                DrawDirectionalLightSceneViewIcon(drawList, icon.screenPosition, highlighted, icon.screenDirection);
+                break;
+            }
+        }
+
+        [[nodiscard]] const char* GetSceneViewObjectIconTypeName(SceneViewObjectIconKind kind) noexcept
+        {
+            switch (kind)
+            {
+            case SceneViewObjectIconKind::Camera:
+                return "Camera";
+            case SceneViewObjectIconKind::DirectionalLight:
+                return "Directional Light";
+            }
+
+            return "Object";
+        }
+
+        [[nodiscard]] SceneObjectId DrawSceneViewObjectIcons(const ImVec2& imageMin,
+                                                             const ImVec2& imageMax,
+                                                             const std::vector<SceneViewObjectIcon>& icons,
+                                                             SceneObjectId selectedGameObjectId,
+                                                             bool inputLocked)
+        {
+            if (icons.empty())
+            {
+                return InvalidSceneObjectId;
+            }
+
+            SceneObjectId clickedObjectId = InvalidSceneObjectId;
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImVec2 restoreCursorPosition = ImGui::GetCursorScreenPos();
+            drawList->PushClipRect(imageMin, imageMax, true);
+
+            for (const SceneViewObjectIcon& icon : icons)
+            {
+                const ImVec2 hitMin(icon.screenPosition.x - SceneViewObjectIconHitSize * 0.5f,
+                                    icon.screenPosition.y - SceneViewObjectIconHitSize * 0.5f);
+                ImGui::SetCursorScreenPos(hitMin);
+                ImGui::PushID("SceneViewObjectIcon");
+                ImGui::PushID(static_cast<int>(icon.kind));
+                ImGui::PushID(reinterpret_cast<void*>(static_cast<uintptr_t>(icon.objectId)));
+                ImGui::InvisibleButton("Hit",
+                                       ImVec2(SceneViewObjectIconHitSize, SceneViewObjectIconHitSize),
+                                       ImGuiButtonFlags_MouseButtonLeft);
+                const bool hovered = ImGui::IsItemHovered();
+                if (!inputLocked && ImGui::IsItemClicked(ImGuiMouseButton_Left))
+                {
+                    clickedObjectId = icon.objectId;
+                }
+
+                if (hovered)
+                {
+                    ImGui::SetTooltip("%s: %s", GetSceneViewObjectIconTypeName(icon.kind), icon.label.c_str());
+                }
+
+                ImGui::PopID();
+                ImGui::PopID();
+                ImGui::PopID();
+
+                DrawSceneViewObjectIcon(*drawList,
+                                        icon,
+                                        hovered || selectedGameObjectId == icon.objectId);
+            }
+
+            drawList->PopClipRect();
+            ImGui::SetCursorScreenPos(restoreCursorPosition);
+            return clickedObjectId;
+        }
     } // namespace
 
     void WindowsEditorPanels::DrawViewportImage(UInt64 textureId,
@@ -247,12 +553,12 @@ namespace ve
         }
     }
 
-    void WindowsEditorPanels::HandleSceneViewCameraInput(const ImVec2& imageSize)
+    void WindowsEditorPanels::HandleSceneViewCameraInput(const ImVec2& imageSize, bool imageHovered)
     {
         (void)imageSize;
 
         ImGuiIO& io = ImGui::GetIO();
-        const bool hovered = ImGui::IsItemHovered();
+        const bool hovered = imageHovered;
         if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         {
             sceneViewLookActive_ = true;
@@ -358,12 +664,30 @@ namespace ve
     {
         const ImVec2 imageSize = GetViewportImageSize();
         DrawViewportImage(SceneViewTextureId, imageSize, nullptr, false);
+        const bool imageHovered = ImGui::IsItemHovered();
         const ImVec2 imageMin = ImGui::GetItemRectMin();
         const ImVec2 imageMax = ImGui::GetItemRectMax();
         const Quaternion cameraRotation =
             BuildSceneViewCameraRotation(sceneViewCamera_.pitchRadians, sceneViewCamera_.yawRadians);
+        const Matrix44 viewMatrix =
+            BuildSceneViewMatrix(sceneViewCamera_.position, sceneViewCamera_.pitchRadians, sceneViewCamera_.yawRadians);
+        const Float32 aspectRatio = imageSize.y > 0.0f ? imageSize.x / imageSize.y : (16.0f / 9.0f);
+        const Matrix44 projectionMatrix = Perspective(ToRadians(60.0f), aspectRatio, 0.05f, 1000.0f);
+
+        const std::vector<SceneViewObjectIcon> objectIcons = BuildSceneViewObjectIcons(projectService.GetActiveScene(),
+                                                                                       imageMin,
+                                                                                       imageMax,
+                                                                                       viewMatrix,
+                                                                                       projectionMatrix);
+        const SceneObjectId clickedObjectId = DrawSceneViewObjectIcons(
+            imageMin, imageMax, objectIcons, selectedGameObjectId_, sceneViewLookActive_);
+        if (clickedObjectId != InvalidSceneObjectId)
+        {
+            SelectGameObject(clickedObjectId);
+        }
+
         DrawSceneViewAxisGizmo(imageMin, imageMax, cameraRotation);
-        HandleSceneViewCameraInput(imageSize);
+        HandleSceneViewCameraInput(imageSize, imageHovered);
 
         const ImGuiIO& io = ImGui::GetIO();
         const UInt32 width = ToTextureExtent(imageSize.x, io.DisplayFramebufferScale.x);
