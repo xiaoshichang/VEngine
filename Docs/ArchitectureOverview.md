@@ -581,7 +581,8 @@ Dear ImGui is used only for Editor and debug UI, not as the game runtime UI syst
 
 ### 7.16 Script
 
-`Script` hosts C# scripts on Windows.
+`Script` hosts C# scripts on Windows through runtime .NET hosting. Future iOS C# support should use an AOT-compiled
+gameplay module model instead of Windows-style runtime script assembly loading.
 
 First-stage Windows scope:
 
@@ -593,13 +594,15 @@ First-stage Windows scope:
 - Dispatch lifecycle methods such as `OnCreate`, `OnUpdate`, and `OnDestroy`.
 - Support reloading after stopping the scene in Editor.
 
-First-stage iOS scope:
+Milestone 10 iOS scope:
 
-- Do not run C# scripts.
+- Do not run C# gameplay code.
 - Run native demo logic.
-- Keep the architecture open for future AOT-based investigation.
+- Keep the architecture open for future AOT-compiled C# gameplay modules.
 
-The iOS C# path should be treated as a separate research milestone because iOS has stricter runtime and dynamic-code constraints than Windows.
+Future iOS C# support should be treated as a separate research milestone because iOS has stricter runtime and
+dynamic-code constraints than Windows. The expected shape is build-time AOT compilation and static or framework linking
+into the iOS app bundle, not runtime loading of arbitrary managed script DLLs.
 
 ### 7.17 Physics
 
@@ -901,6 +904,8 @@ Reflection registration can be explicit in the first stage. Code generation can 
 
 Windows scripting uses `.NET` native hosting.
 
+The Milestone 8 implementation plan is refined in [C# Scripting Windows MVP](CSharpScriptingWindowsMVP.md).
+
 Recommended native hosting route:
 
 ```text
@@ -944,11 +949,12 @@ Editor reload policy:
 - Standard architecture target: allow Editor to rebuild C# project and reload script domain while preserving serialized scene data.
 - Advanced runtime state-preserving hot reload is not a first-stage requirement.
 
-iOS first-stage policy:
+iOS policy:
 
-- C# scripting is disabled.
-- Demo logic is native.
-- Future support requires a separate AOT and runtime feasibility milestone.
+- Milestone 10 keeps C# disabled and uses native demo logic.
+- Future iOS C# support should be an AOT gameplay-module feasibility milestone.
+- iOS script modules are expected to be known at build time, compiled ahead of time, linked into the app, and packaged
+  with the normal iOS bundle rather than loaded from `Content/Scripts/Windows/`.
 
 ## 15. Editor Architecture
 

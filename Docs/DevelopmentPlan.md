@@ -321,14 +321,40 @@ Implementation order:
 
 ### Milestone 8: C# Scripting Windows MVP
 
-- Integrate `nethost` and `hostfxr`.
-- Load managed script assembly.
-- Add C ABI native bridge.
-- Handwrite core `VEngine.ScriptAPI`.
-- Implement ScriptComponent.
-- Dispatch `OnCreate`, `OnUpdate`, and `OnDestroy`.
-- Support reload after stopping scene in Editor.
-- Add script host smoke test.
+Detailed design:
+
+- See [C# Scripting Windows MVP](CSharpScriptingWindowsMVP.md).
+
+Implementation order:
+
+- Add CMake discovery for .NET native hosting and make the existing `VE_ENABLE_SCRIPTING` option control all native and
+  managed scripting targets.
+- Integrate `nethost` and `hostfxr` behind a small Windows-only `DotNetHost` wrapper with explicit diagnostics for
+  missing SDK/runtime files, runtime config files, assemblies, and bootstrap entry points.
+- Add non-scripting stubs or compile guards so `VE_ENABLE_SCRIPTING=OFF` remains a supported native build mode.
+- Create the handwritten managed `VEngine.ScriptAPI` project with minimal wrappers for `GameObject`, `Component`,
+  `ScriptBehaviour`, `Transform`, `Time`, and `Log`.
+- Add a C ABI `ScriptBridge` that exposes only opaque handles and narrow native calls for logging, time reads, object
+  names, and Transform mutation.
+- Add `ScriptHost` and `ScriptContext` to load one project script assembly, create managed script instances, dispatch
+  lifecycle methods, catch managed exceptions, and tear down instances deterministically.
+- Implement native `ScriptComponent`, register it through Reflection, and serialize `scriptTypeName` plus optional
+  `assemblyName` in `.vescene` files.
+- Dispatch `OnCreate`, `OnDestroy`, `OnEnable`, `OnDisable`, and `OnUpdate(float deltaTime)` through the existing scene
+  lifecycle on the Game Thread.
+- Extend `.veproject` with an optional script section that identifies the Windows C# project and assembly name without
+  storing generated output paths in authored project data.
+- Add generated script output folders under `Generated/Scripts/Windows/<Configuration>/` and route Editor build output
+  there.
+- Support Editor rebuild and script-context reload only after Play mode is stopped; do not preserve live managed state
+  across reload.
+- Bind Windows Player startup to the configured project script assembly when scripts are present, and leave
+  `ScriptComponent` inert with warnings when scripting is disabled.
+- Extend Windows package staging to include managed script artifacts under `Content/Scripts/Windows/` and validate
+  missing or mismatched script payloads.
+- Add focused tests for host initialization failure diagnostics, managed lifecycle order, bridge logging, time access,
+  Transform mutation, `ScriptComponent` serialization, managed exception handling, and reload-after-stop behavior.
+- Add a bundled sample script project that drives one simple object in the existing sample project.
 
 ### Milestone 9: Runtime UI And Lightweight Physics
 
@@ -352,6 +378,31 @@ Implementation order:
 - Use HLSL to MSL shader flow.
 - Draw simple 3D demo in iOS Simulator.
 - Add touch input demo.
+- Keep C# gameplay disabled in this milestone; validate native iOS platform, Metal rendering, shader artifacts, and
+  package `Content/` layout first.
+
+### Future Milestone: iOS C# AOT Feasibility
+
+Goal:
+
+- Determine whether VEngine can support C# gameplay on iOS as an ahead-of-time compiled module without adopting
+  Windows-style runtime script assembly loading.
+
+Expected direction:
+
+- Keep `ScriptComponent` as the cross-platform scene concept, but use a platform-specific iOS script host.
+- Build project C# gameplay code during the iOS package/archive step instead of loading arbitrary managed DLLs at
+  runtime.
+- Compile managed code ahead of time for `iossimulator-arm64`, `iossimulator-x64`, and `ios-arm64` as needed.
+- Generate or register a build-time script type table so serialized `scriptTypeName` values resolve to known AOT script
+  factories.
+- Link the AOT script output into `VEngineIOSPlayer.app` either statically or as an embedded framework, depending on
+  what proves simplest for CMake/Xcode, code signing, and symbol/debug-file handling.
+- Stage the normal VEngine `Content/` folder into the app bundle with project metadata, asset manifests, native assets,
+  imported asset caches, and Metal shader artifacts.
+- Do not package iOS gameplay as `Content/Scripts/Windows/*.dll`, `.deps.json`, or `.runtimeconfig.json`.
+- Treat hot reload and runtime script replacement on iOS as non-goals unless a later Apple-compliant workflow is proven.
+- Add simulator smoke coverage first, then device archive/signing/package validation once the simulator path is stable.
 
 ## 4. Recommended Implementation Order
 
@@ -371,6 +422,7 @@ CMake skeleton
   -> C# scripting
   -> Runtime UI / lightweight physics
   -> Metal / iOS Simulator
+  -> iOS C# AOT feasibility
 ```
 
 D3D11, D3D12, and Metal should be considered together during RHI design. However, each backend should be implemented through small smoke-tested vertical slices instead of attempting a complete renderer immediately.
