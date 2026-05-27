@@ -155,9 +155,11 @@ namespace ve::rhi
         public:
             D3D11Texture(ComPtr<ID3D11Texture2D> texture,
                          ComPtr<ID3D11ShaderResourceView> shaderResourceView,
+                         ComPtr<ID3D11RenderTargetView> renderTargetView,
                          RhiTextureDesc desc)
                 : texture_(std::move(texture))
                 , shaderResourceView_(std::move(shaderResourceView))
+                , renderTargetView_(std::move(renderTargetView))
                 , desc_(desc)
             {
             }
@@ -192,9 +194,15 @@ namespace ve::rhi
                 return shaderResourceView_.Get();
             }
 
+            [[nodiscard]] ID3D11RenderTargetView* GetRenderTargetView() const noexcept
+            {
+                return renderTargetView_.Get();
+            }
+
         private:
             ComPtr<ID3D11Texture2D> texture_;
             ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
+            ComPtr<ID3D11RenderTargetView> renderTargetView_;
             RhiTextureDesc desc_ = {};
         };
 
@@ -455,6 +463,31 @@ namespace ve::rhi
                 }
 
                 ID3D11RenderTargetView* renderTargetView = d3dSwapchain->GetRenderTargetView();
+                context_->OMSetRenderTargets(1, &renderTargetView, nullptr);
+
+                if (desc.colorLoadAction == RhiLoadAction::Clear)
+                {
+                    const float clearColor[4] = {
+                        desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a};
+                    context_->ClearRenderTargetView(renderTargetView, clearColor);
+                }
+
+                return true;
+            }
+
+            [[nodiscard]] bool BeginRenderPass(RhiTexture& texture, const RhiRenderPassDesc& desc) override
+            {
+                auto* d3dTexture = dynamic_cast<D3D11Texture*>(&texture);
+                if (d3dTexture == nullptr || d3dTexture->GetRenderTargetView() == nullptr)
+                {
+                    return false;
+                }
+
+                ID3D11ShaderResourceView* nullShaderResourceView = nullptr;
+                context_->VSSetShaderResources(0, 1, &nullShaderResourceView);
+                context_->PSSetShaderResources(0, 1, &nullShaderResourceView);
+
+                ID3D11RenderTargetView* renderTargetView = d3dTexture->GetRenderTargetView();
                 context_->OMSetRenderTargets(1, &renderTargetView, nullptr);
 
                 if (desc.colorLoadAction == RhiLoadAction::Clear)
@@ -809,7 +842,18 @@ namespace ve::rhi
                     }
                 }
 
-                return std::make_unique<D3D11Texture>(texture, shaderResourceView, desc);
+                ComPtr<ID3D11RenderTargetView> renderTargetView;
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
+                {
+                    result = device_->CreateRenderTargetView(texture.Get(), nullptr, &renderTargetView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateRenderTargetView texture", result));
+                        return nullptr;
+                    }
+                }
+
+                return std::make_unique<D3D11Texture>(texture, shaderResourceView, renderTargetView, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override

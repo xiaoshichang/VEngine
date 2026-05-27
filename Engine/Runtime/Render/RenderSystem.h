@@ -13,6 +13,7 @@
 #include <new>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ve
 {
@@ -74,6 +75,27 @@ namespace ve
 
         /// RHI device creation options used by Application after the Render Thread starts.
         RenderDeviceDesc device;
+    };
+
+    /// One editor viewport render target update. The texture id is the ImGui texture id that will sample the result in
+    /// a later EditorUiFrameData submission.
+    struct EditorViewportRenderRequest
+    {
+        UInt64 textureId = 0;
+        UInt32 width = 0;
+        UInt32 height = 0;
+        SceneRenderSnapshot snapshot;
+    };
+
+    /// Immutable editor viewport frame data submitted from the Editor main thread.
+    struct EditorViewportFrameData
+    {
+        std::vector<EditorViewportRenderRequest> viewports;
+
+        [[nodiscard]] bool IsEmpty() const noexcept
+        {
+            return viewports.empty();
+        }
     };
 
     /// Context passed to commands executing on the Render Thread.
@@ -208,6 +230,10 @@ namespace ve
         /// Thread. This path is used for Editor-owned UI surfaces such as the Project Launcher; the UI draw data must
         /// already be detached from Dear ImGui before submission.
         void SubmitEditorUiFrame(EditorUiFrameData frameData);
+
+        /// Renders editor viewport scene snapshots into sampled offscreen textures. The resulting texture ids can be
+        /// referenced by ImGui draw commands submitted through SubmitEditorUiFrame().
+        void SubmitEditorViewportFrame(EditorViewportFrameData frameData, const ResourceManager& resourceManager);
 
         /// Synchronizes ResourceManager mesh/material resources into the Render Thread resource registry.
         ///

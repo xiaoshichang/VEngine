@@ -329,7 +329,11 @@ namespace
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
 
+            projectService.TickPlayMode();
+            editorPanels_.BeginFrame();
             DrawEditor(owner, window, projectService, runtime);
+            runtime.GetRenderSystem().SubmitEditorViewportFrame(editorPanels_.ConsumeViewportFrameData(),
+                                                                 runtime.GetResourceManager());
 
             ImGui::Render();
             ve::EditorUiFrameData frameData = CaptureEditorUiFrame(!fontAtlasSubmitted_);
@@ -546,6 +550,7 @@ namespace
             ImGui::Begin("VEngineEditorMain", nullptr, windowFlags);
 
             DrawEditorMenu(owner, window, projectService, runtime);
+            DrawEditorToolbar(projectService, runtime);
 
             const ImVec2 available = ImGui::GetContentRegionAvail();
             const float spacing = ImGui::GetStyle().ItemSpacing.x;
@@ -566,13 +571,13 @@ namespace
             {
                 if (ImGui::BeginTabItem("SceneView"))
                 {
-                    editorPanels_.DrawSceneView(projectService);
+                    editorPanels_.DrawSceneView(projectService, runtime);
                     ImGui::EndTabItem();
                 }
 
                 if (ImGui::BeginTabItem("GameView"))
                 {
-                    editorPanels_.DrawGameView(projectService);
+                    editorPanels_.DrawGameView(projectService, runtime);
                     ImGui::EndTabItem();
                 }
 
@@ -598,6 +603,40 @@ namespace
 
             ImGui::End();
             ImGui::PopStyleVar();
+        }
+
+        void DrawEditorToolbar(ve::EditorProjectService& projectService, ve::EngineRuntime& runtime)
+        {
+            const bool playing = projectService.IsPlaying();
+
+            ImGui::BeginDisabled(playing);
+            if (ImGui::Button("Play"))
+            {
+                const ve::ErrorCode playResult = projectService.StartPlayMode(runtime.GetResourceManager());
+                if (playResult == ve::ErrorCode::None)
+                {
+                    statusMessage_ = "Play mode started.";
+                }
+                else
+                {
+                    statusMessage_ = MakeProjectOpenError("Play failed", playResult);
+                }
+            }
+            ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!playing);
+            if (ImGui::Button("Stop"))
+            {
+                projectService.StopPlayMode();
+                editorPanels_.ResetSelection();
+                statusMessage_ = "Play mode stopped.";
+            }
+            ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", playing ? "Playing" : "Editing");
+            ImGui::Separator();
         }
 
         void DrawEditorMenu(HWND owner,
@@ -665,6 +704,7 @@ namespace
                        ve::EngineRuntime& runtime,
                        const ve::Path& scenePath)
         {
+            projectService.StopPlayMode();
             runtime.GetGameThreadSystem().ClearActiveScene();
             const ve::ErrorCode openResult = projectService.OpenScene(scenePath, runtime.GetResourceManager());
             if (openResult == ve::ErrorCode::None)
@@ -687,6 +727,11 @@ namespace
                                 projectService.GetDescriptor().displayName.c_str(),
                                 sceneText.c_str(),
                                 projectService.IsDirty() ? " *" : "");
+            if (projectService.IsPlaying())
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("| Playing");
+            }
             if (!statusMessage_.empty())
             {
                 ImGui::SameLine();

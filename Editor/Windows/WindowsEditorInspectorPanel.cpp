@@ -229,7 +229,7 @@ namespace ve
         ImGui::TextUnformatted("Inspector");
         ImGui::Separator();
 
-        GameObject* selected = projectService.GetCurrentEditScene().FindGameObject(selectedGameObjectId_);
+        GameObject* selected = projectService.GetActiveScene().FindGameObject(selectedGameObjectId_);
         if (selected == nullptr)
         {
             ImGui::TextDisabled("No GameObject selected");

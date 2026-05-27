@@ -70,6 +70,14 @@ namespace ve
             ResourceRevision revision = 0;
         };
 
+        struct EditorViewportTexture
+        {
+            std::unique_ptr<rhi::RhiTexture> colorTexture;
+            UInt32 width = 0;
+            UInt32 height = 0;
+            rhi::RhiFormat format = rhi::RhiFormat::Unknown;
+        };
+
         struct RenderMeshResourceUpdate
         {
             ResourceId resourceId = InvalidResourceId;
@@ -352,6 +360,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
             ScenePipelineResources scenePipeline;
             EditorUiPipelineResources editorUiPipeline;
+            std::unordered_map<UInt64, EditorViewportTexture> editorViewportTextures;
             std::unordered_map<ResourceId, RenderSceneMeshResource> sceneMeshes;
             std::unordered_map<ResourceId, RenderSceneMaterialResource> sceneMaterials;
         };
@@ -441,6 +450,12 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             rhiDesc.bufferCount = desc.bufferCount;
             rhiDesc.debugName = "VEngineMainSwapchain";
             return rhiDesc;
+        }
+
+        [[nodiscard]] rhi::RhiTextureUsage CombineTextureUsage(rhi::RhiTextureUsage left,
+                                                               rhi::RhiTextureUsage right) noexcept
+        {
+            return static_cast<rhi::RhiTextureUsage>(static_cast<uint32_t>(left) | static_cast<uint32_t>(right));
         }
 
         [[nodiscard]] std::unique_ptr<rhi::RhiDevice> CreateRhiDevice(const RenderDeviceDesc& desc)
@@ -648,6 +663,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
 
         void DestroyEditorUiPipelineResources(RenderSystemImpl& impl)
         {
+            impl.rhi.editorViewportTextures.clear();
             impl.rhi.editorUiPipeline.fontTexture.reset();
             impl.rhi.editorUiPipeline.pipelineState.reset();
             impl.rhi.editorUiPipeline.fragmentShader.reset();
@@ -1041,11 +1057,14 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                                                                            const SceneRenderSnapshot& snapshot)
         {
             std::vector<SceneDrawCommand> drawCommands;
+            if (!snapshot.hasMainCamera)
+            {
+                return drawCommands;
+            }
+
             drawCommands.reserve(snapshot.drawItems.size());
 
-            const Matrix44 viewProjection = snapshot.hasMainCamera ? snapshot.mainCamera.projectionMatrix *
-                                                                         snapshot.mainCamera.viewMatrix
-                                                                   : Matrix44::Identity();
+            const Matrix44 viewProjection = snapshot.mainCamera.projectionMatrix * snapshot.mainCamera.viewMatrix;
 
             for (const SceneRenderDrawItem& drawItem : snapshot.drawItems)
             {
@@ -1231,6 +1250,170 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             }
         }
 
+        [[nodiscard]] const rhi::RhiTexture* ResolveEditorUiTexture(RenderSystemImpl& impl, UInt64 textureId) noexcept
+        {
+            if (textureId <= 1)
+            {
+                return impl.rhi.editorUiPipeline.fontTexture.get();
+            }
+
+            const auto iter = impl.rhi.editorViewportTextures.find(textureId);
+            if (iter == impl.rhi.editorViewportTextures.end())
+            {
+                return impl.rhi.editorUiPipeline.fontTexture.get();
+            }
+
+            return iter->second.colorTexture != nullptr ? iter->second.colorTexture.get()
+                                                        : impl.rhi.editorUiPipeline.fontTexture.get();
+        }
+
+        [[nodiscard]] EditorViewportTexture& EnsureEditorViewportTexture(RenderSystemImpl& impl,
+                                                                         UInt64 textureId,
+                                                                         UInt32 width,
+                                                                         UInt32 height)
+        {
+            VE_ASSERT_MESSAGE(impl.rhi.device != nullptr,
+                              "EnsureEditorViewportTexture requires an initialized RHI device.");
+            VE_ASSERT_MESSAGE(impl.rhi.mainSwapchain != nullptr,
+                              "EnsureEditorViewportTexture requires an initialized main swapchain.");
+
+            const rhi::RhiFormat format = impl.rhi.mainSwapchain->GetColorFormat();
+            EditorViewportTexture& viewportTexture = impl.rhi.editorViewportTextures[textureId];
+            if (viewportTexture.colorTexture != nullptr && viewportTexture.width == width &&
+                viewportTexture.height == height && viewportTexture.format == format)
+            {
+                return viewportTexture;
+            }
+
+            rhi::RhiTextureDesc textureDesc = {};
+            textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
+            textureDesc.width = width;
+            textureDesc.height = height;
+            textureDesc.format = format;
+            textureDesc.usage =
+                CombineTextureUsage(rhi::RhiTextureUsage::Sampled, rhi::RhiTextureUsage::RenderTarget);
+            textureDesc.debugName = "RenderSystemEditorViewportTexture";
+
+            viewportTexture.colorTexture = impl.rhi.device->CreateTexture(textureDesc);
+            if (viewportTexture.colorTexture == nullptr)
+            {
+                TerminateRenderSystem("Editor viewport texture creation failed", ErrorCode::PlatformError);
+            }
+
+            viewportTexture.width = width;
+            viewportTexture.height = height;
+            viewportTexture.format = format;
+            return viewportTexture;
+        }
+
+        void RenderSceneViewport(RenderSystemImpl& impl, const EditorViewportRenderRequest& request)
+        {
+            if (impl.rhi.device == nullptr || impl.rhi.mainSwapchain == nullptr)
+            {
+                TerminateRenderSystem("viewport execution failed in RenderSceneViewport", ErrorCode::InvalidState);
+            }
+
+            if (impl.rhi.scenePipeline.pipelineState == nullptr)
+            {
+                TerminateRenderSystem("viewport execution failed in RenderSceneViewport", ErrorCode::InvalidState);
+            }
+
+            if (request.textureId == 0 || request.width == 0 || request.height == 0)
+            {
+                return;
+            }
+
+            EditorViewportTexture& viewportTexture =
+                EnsureEditorViewportTexture(impl, request.textureId, request.width, request.height);
+
+            std::vector<SceneDrawCommand> drawCommands = BuildSceneDrawCommands(impl, request.snapshot);
+
+            std::vector<std::unique_ptr<rhi::RhiBuffer>> drawUniformBuffers;
+            drawUniformBuffers.reserve(drawCommands.size());
+            for (const SceneDrawCommand& drawCommand : drawCommands)
+            {
+                const DrawUniformData uniforms = BuildSceneDrawUniformData(impl, request.snapshot, drawCommand);
+                std::unique_ptr<rhi::RhiBuffer> uniformBuffer =
+                    CreateDrawUniformBuffer(impl, uniforms, "RenderSystemEditorViewportDrawUniformBuffer");
+                if (uniformBuffer == nullptr)
+                {
+                    TerminateRenderSystem("viewport execution failed in RenderSceneViewport uniform buffer",
+                                          ErrorCode::PlatformError);
+                }
+
+                drawUniformBuffers.push_back(std::move(uniformBuffer));
+            }
+
+            rhi::RhiRenderPassDesc renderPassDesc = {};
+            renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
+            renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
+            if (request.snapshot.hasMainCamera)
+            {
+                const Vector4 clearColor = request.snapshot.mainCamera.clearColor;
+                renderPassDesc.clearColor = {
+                    clearColor.GetX(), clearColor.GetY(), clearColor.GetZ(), clearColor.GetW()};
+            }
+            else
+            {
+                renderPassDesc.clearColor = {0.05f, 0.07f, 0.10f, 1.0f};
+            }
+
+            std::unique_ptr<rhi::RhiCommandList> commandList = impl.rhi.device->CreateCommandList();
+            if (commandList == nullptr)
+            {
+                TerminateRenderSystem("Editor viewport command list creation failed", ErrorCode::PlatformError);
+            }
+
+            if (!commandList->Begin() ||
+                !commandList->BeginRenderPass(*viewportTexture.colorTexture, renderPassDesc))
+            {
+                TerminateRenderSystem("Editor viewport command list begin failed", ErrorCode::PlatformError);
+            }
+
+            commandList->SetViewport(rhi::RhiViewport{0.0f,
+                                                      0.0f,
+                                                      static_cast<Float32>(request.width),
+                                                      static_cast<Float32>(request.height),
+                                                      0.0f,
+                                                      1.0f});
+            commandList->SetScissor(rhi::RhiScissorRect{0, 0, request.width, request.height});
+            commandList->SetPipeline(*impl.rhi.scenePipeline.pipelineState);
+            for (SizeT index = 0; index < drawCommands.size(); ++index)
+            {
+                const SceneDrawCommand& drawCommand = drawCommands[index];
+                commandList->SetVertexBuffer(0, *drawCommand.mesh->vertexBuffer, sizeof(RenderVertex), 0);
+                commandList->SetUniformBuffer(
+                    rhi::RhiShaderStage::Vertex, 0, *drawUniformBuffers[index], 0, sizeof(DrawUniformData));
+                commandList->Draw(drawCommand.mesh->vertexCount, 0);
+            }
+            commandList->EndRenderPass();
+
+            if (!commandList->End() || !impl.rhi.device->Submit(*commandList))
+            {
+                TerminateRenderSystem("Editor viewport frame submit failed", ErrorCode::PlatformError);
+            }
+        }
+
+        void RenderEditorViewportFrame(RenderSystemImpl& impl,
+                                       const EditorViewportFrameData& frameData,
+                                       const RenderResourceRegistryUpdate& resourceUpdate)
+        {
+            if (resourceUpdate.IsEmpty() && frameData.IsEmpty())
+            {
+                return;
+            }
+
+            if (!resourceUpdate.IsEmpty())
+            {
+                ApplyRenderResourceRegistryUpdate(impl, resourceUpdate);
+            }
+
+            for (const EditorViewportRenderRequest& request : frameData.viewports)
+            {
+                RenderSceneViewport(impl, request);
+            }
+        }
+
         void RenderEditorUiFrame(RenderSystemImpl& impl, const EditorUiFrameData& frameData)
         {
             if (impl.rhi.device == nullptr || impl.rhi.mainSwapchain == nullptr)
@@ -1321,7 +1504,6 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             commandList->SetPipeline(*impl.rhi.editorUiPipeline.pipelineState);
             commandList->SetUniformBuffer(
                 rhi::RhiShaderStage::Vertex, 0, *uniformBuffer, 0, sizeof(EditorUiUniformData));
-            commandList->SetTexture(rhi::RhiShaderStage::Fragment, 0, *impl.rhi.editorUiPipeline.fontTexture);
 
             for (const EditorUiDrawListResources& resources : drawListResources)
             {
@@ -1342,6 +1524,13 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                     }
 
                     commandList->SetScissor(scissor);
+                    const rhi::RhiTexture* texture = ResolveEditorUiTexture(impl, drawCommand.textureId);
+                    if (texture == nullptr)
+                    {
+                        continue;
+                    }
+
+                    commandList->SetTexture(rhi::RhiShaderStage::Fragment, 0, *texture);
                     commandList->DrawIndexed(drawCommand.elementCount,
                                              drawCommand.indexOffset,
                                              static_cast<int32_t>(drawCommand.vertexOffset));
@@ -1863,6 +2052,27 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                        [this, frameData = std::move(frameData), completed](RenderThreadContext&)
                        {
                            RenderEditorUiFrame(*impl_, frameData);
+                           completed->Set();
+                       });
+
+        completed->Wait();
+    }
+
+    void RenderSystem::SubmitEditorViewportFrame(EditorViewportFrameData frameData,
+                                                 const ResourceManager& resourceManager)
+    {
+        RenderResourceRegistryUpdate resourceUpdate = BuildRenderResourceRegistryUpdate(*impl_, resourceManager);
+        if (frameData.IsEmpty() && resourceUpdate.IsEmpty())
+        {
+            return;
+        }
+
+        auto completed = std::make_shared<ManualResetEvent>(false);
+        SubmitFunction("RenderSystemSubmitEditorViewportFrame",
+                       [this, frameData = std::move(frameData), resourceUpdate = std::move(resourceUpdate), completed](
+                           RenderThreadContext&)
+                       {
+                           RenderEditorViewportFrame(*impl_, frameData, resourceUpdate);
                            completed->Set();
                        });
 

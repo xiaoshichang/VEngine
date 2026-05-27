@@ -21,22 +21,22 @@ namespace ve
         ImGui::SameLine();
         ImGui::TextDisabled("%llu object(s)",
                             static_cast<unsigned long long>(
-                                projectService.GetCurrentEditScene().GetGameObjectCount()));
+                                projectService.GetActiveScene().GetGameObjectCount()));
         ImGui::Separator();
 
-        for (GameObject* root : projectService.GetCurrentEditScene().GetRootGameObjects())
+        for (GameObject* root : projectService.GetActiveScene().GetRootGameObjects())
         {
             DrawGameObjectNode(*root);
         }
 
         const bool hasSelection =
-            projectService.GetCurrentEditScene().FindGameObject(selectedGameObjectId_) != nullptr;
+            projectService.GetActiveScene().FindGameObject(selectedGameObjectId_) != nullptr;
         if (ImGui::BeginPopupContextWindow("SceneHierarchyContextMenu", ImGuiPopupFlags_MouseButtonRight))
         {
             if (ImGui::MenuItem("Create Empty"))
             {
                 PrepareSceneMutation(runtime);
-                GameObject& gameObject = projectService.GetCurrentEditScene().CreateGameObject("GameObject");
+                GameObject& gameObject = projectService.GetActiveScene().CreateGameObject("GameObject");
                 gameObject.AddComponent<TransformComponent>();
                 selectedGameObjectId_ = gameObject.GetId();
                 FinishSceneMutation(projectService);
@@ -45,10 +45,10 @@ namespace ve
 
             if (ImGui::MenuItem("Delete Selected", nullptr, false, hasSelection))
             {
-                if (GameObject* selected = projectService.GetCurrentEditScene().FindGameObject(selectedGameObjectId_))
+                if (GameObject* selected = projectService.GetActiveScene().FindGameObject(selectedGameObjectId_))
                 {
                     PrepareSceneMutation(runtime);
-                    (void)projectService.GetCurrentEditScene().DestroyGameObject(*selected);
+                    (void)projectService.GetActiveScene().DestroyGameObject(*selected);
                     selectedGameObjectId_ = InvalidSceneObjectId;
                     FinishSceneMutation(projectService);
                     statusMessage = "Deleted GameObject.";

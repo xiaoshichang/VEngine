@@ -101,6 +101,9 @@ namespace ve::rhi
         /// Begins rendering into the current back buffer of a swapchain.
         [[nodiscard]] virtual bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassDesc& desc) = 0;
 
+        /// Begins rendering into a texture created with RhiTextureUsage::RenderTarget.
+        [[nodiscard]] virtual bool BeginRenderPass(RhiTexture& texture, const RhiRenderPassDesc& desc) = 0;
+
         /// Ends the active render pass.
         virtual void EndRenderPass() = 0;
 

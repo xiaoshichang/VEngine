@@ -966,6 +966,13 @@ Editor principles:
 - Editor edits scene through public Scene and Reflection APIs.
 - Editor imports assets through AssetDatabase and AssetImporter.
 - Editor Viewport renders through the engine Render and RHI layers.
+- SceneView and GameView submit immutable viewport snapshots to `RenderSystem`, which renders them on the Render Thread
+  into RHI render-target textures. ImGui samples those textures through engine-owned texture ids; ImGui does not own
+  viewport rendering or call a native graphics backend directly.
+- First-stage Play mode uses a separate play scene instance so runtime edits and component updates do not mutate the
+  authored edit scene. The first implementation ticks this play scene from the editor frame; a later game-thread
+  viewport extraction path should move play-scene ticking back under `GameThreadSystem` without changing the edit/play
+  scene ownership rule.
 - Windows Editor uses the engine-owned Win32 debug console for log output and command input. This console remains
   available in both Debug and Release Editor builds.
 

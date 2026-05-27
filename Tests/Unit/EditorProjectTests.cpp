@@ -244,6 +244,52 @@ namespace
         return passed;
     }
 
+    bool TestPlayModeUsesDiscardableSceneInstance()
+    {
+        bool passed = true;
+
+        CleanTestRoot();
+
+        const ve::Path projectRoot = GetTestRoot() / "PlayModeSceneInstance";
+        passed &= ExpectOk(ve::EditorProjectService::CreateProjectSkeleton(projectRoot, "PlayModeSceneInstance"),
+                           "CreateProjectSkeleton should create a play mode test project");
+
+        ve::ResourceManager resourceManager;
+        ve::EditorProjectService projectService;
+        passed &= ExpectOk(projectService.OpenProject(projectRoot, resourceManager),
+                           "EditorProjectService should open play mode test project");
+
+        ve::GameObject& editObject = projectService.GetCurrentEditScene().CreateGameObject("EditObject");
+        editObject.AddComponent<ve::TransformComponent>();
+        projectService.GetCurrentEditScene().UpdateTransforms();
+        projectService.ClearDirty();
+
+        passed &= ExpectOk(projectService.StartPlayMode(resourceManager), "StartPlayMode should clone the edit scene");
+        passed &= Expect(projectService.IsPlaying(), "Project service should report play mode");
+        passed &= Expect(projectService.GetActiveScene().GetGameObjectCount() == 1,
+                         "Play scene should start as a clone of the edit scene");
+
+        ve::GameObject& playObject = projectService.GetActiveScene().CreateGameObject("PlayOnlyObject");
+        playObject.AddComponent<ve::TransformComponent>();
+        const ve::SceneObjectId playObjectId = playObject.GetId();
+        projectService.MarkActiveSceneEdited();
+        passed &= Expect(!projectService.IsDirty(), "Play scene edits should not dirty the authored edit scene");
+        passed &= Expect(projectService.GetActiveScene().GetGameObjectCount() == 2,
+                         "Play scene should accept runtime edits");
+        passed &= Expect(projectService.GetCurrentEditScene().GetGameObjectCount() == 1,
+                         "Edit scene should not receive play mode objects");
+
+        projectService.StopPlayMode();
+        passed &= Expect(!projectService.IsPlaying(), "StopPlayMode should leave play mode");
+        passed &= Expect(projectService.GetActiveScene().GetGameObjectCount() == 1,
+                         "Stopping play mode should restore the edit scene as active");
+        passed &= Expect(projectService.GetCurrentEditScene().FindGameObject(playObjectId) == nullptr,
+                         "Stopping play mode should discard play scene objects");
+
+        CleanTestRoot();
+        return passed;
+    }
+
     bool TestRejectsMissingDescriptor()
     {
         bool passed = true;
@@ -270,6 +316,7 @@ int main()
 
     passed &= TestCreateAndOpenProject();
     passed &= TestMeshRendererAuthoredReferences();
+    passed &= TestPlayModeUsesDiscardableSceneInstance();
     passed &= TestRejectsMissingDescriptor();
 
     if (passed)

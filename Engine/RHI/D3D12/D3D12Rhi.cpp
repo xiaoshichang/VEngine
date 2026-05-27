@@ -182,9 +182,13 @@ namespace ve::rhi
         public:
             D3D12Texture(ComPtr<ID3D12Resource> resource,
                          ComPtr<ID3D12DescriptorHeap> shaderResourceHeap,
+                         ComPtr<ID3D12DescriptorHeap> renderTargetHeap,
+                         D3D12_RESOURCE_STATES resourceState,
                          RhiTextureDesc desc)
                 : resource_(std::move(resource))
                 , shaderResourceHeap_(std::move(shaderResourceHeap))
+                , renderTargetHeap_(std::move(renderTargetHeap))
+                , resourceState_(resourceState)
                 , desc_(desc)
             {
             }
@@ -229,9 +233,42 @@ namespace ve::rhi
                 return shaderResourceHeap_->GetGPUDescriptorHandleForHeapStart();
             }
 
+            [[nodiscard]] bool HasRenderTargetView() const noexcept
+            {
+                return renderTargetHeap_ != nullptr;
+            }
+
+            [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetRenderTargetHandle() const noexcept
+            {
+                if (renderTargetHeap_ == nullptr)
+                {
+                    return {};
+                }
+
+                return renderTargetHeap_->GetCPUDescriptorHandleForHeapStart();
+            }
+
+            [[nodiscard]] D3D12_RESOURCE_STATES GetResourceState() const noexcept
+            {
+                return resourceState_;
+            }
+
+            void SetResourceState(D3D12_RESOURCE_STATES resourceState) noexcept
+            {
+                resourceState_ = resourceState;
+            }
+
+            [[nodiscard]] bool IsSampled() const noexcept
+            {
+                const auto usageValue = static_cast<uint32_t>(desc_.usage);
+                return (usageValue & static_cast<uint32_t>(RhiTextureUsage::Sampled)) != 0;
+            }
+
         private:
             ComPtr<ID3D12Resource> resource_;
             ComPtr<ID3D12DescriptorHeap> shaderResourceHeap_;
+            ComPtr<ID3D12DescriptorHeap> renderTargetHeap_;
+            D3D12_RESOURCE_STATES resourceState_ = D3D12_RESOURCE_STATE_COMMON;
             RhiTextureDesc desc_ = {};
         };
 
@@ -533,6 +570,7 @@ namespace ve::rhi
                 }
 
                 activeSwapchain_ = d3dSwapchain;
+                activeRenderTargetTexture_ = nullptr;
 
                 D3D12_RESOURCE_BARRIER barrier = {};
                 barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -556,8 +594,69 @@ namespace ve::rhi
                 return true;
             }
 
+            [[nodiscard]] bool BeginRenderPass(RhiTexture& texture, const RhiRenderPassDesc& desc) override
+            {
+                auto* d3dTexture = dynamic_cast<D3D12Texture*>(&texture);
+                if (d3dTexture == nullptr || !d3dTexture->HasRenderTargetView())
+                {
+                    return false;
+                }
+
+                activeSwapchain_ = nullptr;
+                activeRenderTargetTexture_ = d3dTexture;
+
+                const D3D12_RESOURCE_STATES beforeState = d3dTexture->GetResourceState();
+                if (beforeState != D3D12_RESOURCE_STATE_RENDER_TARGET)
+                {
+                    D3D12_RESOURCE_BARRIER barrier = {};
+                    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+                    barrier.Transition.pResource = d3dTexture->GetNativeResource();
+                    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                    barrier.Transition.StateBefore = beforeState;
+                    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+                    commandList_->ResourceBarrier(1, &barrier);
+                    d3dTexture->SetResourceState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+                }
+
+                D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = d3dTexture->GetRenderTargetHandle();
+                commandList_->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+
+                if (desc.colorLoadAction == RhiLoadAction::Clear)
+                {
+                    const float clearColor[4] = {
+                        desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a};
+                    commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+                }
+
+                return true;
+            }
+
             void EndRenderPass() override
             {
+                if (activeRenderTargetTexture_ != nullptr)
+                {
+                    const D3D12_RESOURCE_STATES afterState = activeRenderTargetTexture_->IsSampled()
+                                                                 ? D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
+                                                                 : D3D12_RESOURCE_STATE_COMMON;
+                    const D3D12_RESOURCE_STATES beforeState = activeRenderTargetTexture_->GetResourceState();
+                    if (beforeState != afterState)
+                    {
+                        D3D12_RESOURCE_BARRIER barrier = {};
+                        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+                        barrier.Transition.pResource = activeRenderTargetTexture_->GetNativeResource();
+                        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                        barrier.Transition.StateBefore = beforeState;
+                        barrier.Transition.StateAfter = afterState;
+                        commandList_->ResourceBarrier(1, &barrier);
+                        activeRenderTargetTexture_->SetResourceState(afterState);
+                    }
+
+                    activeRenderTargetTexture_ = nullptr;
+                    return;
+                }
+
                 if (activeSwapchain_ == nullptr)
                 {
                     return;
@@ -698,6 +797,7 @@ namespace ve::rhi
             ComPtr<ID3D12CommandAllocator> commandAllocator_;
             ComPtr<ID3D12GraphicsCommandList> commandList_;
             D3D12Swapchain* activeSwapchain_ = nullptr;
+            D3D12Texture* activeRenderTargetTexture_ = nullptr;
             const D3D12PipelineState* activePipelineState_ = nullptr;
         };
 
@@ -947,6 +1047,7 @@ namespace ve::rhi
                 {
                     initialState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
                 }
+                D3D12_RESOURCE_STATES resourceState = initialState;
 
                 ComPtr<ID3D12Resource> resource;
                 HRESULT result = device_->CreateCommittedResource(&heapProperties,
@@ -1085,6 +1186,7 @@ namespace ve::rhi
                     {
                         return nullptr;
                     }
+                    resourceState = finalState;
                 }
 
                 ComPtr<ID3D12DescriptorHeap> shaderResourceHeap;
@@ -1113,7 +1215,27 @@ namespace ve::rhi
                                                       shaderResourceHeap->GetCPUDescriptorHandleForHeapStart());
                 }
 
-                return std::make_unique<D3D12Texture>(resource, shaderResourceHeap, desc);
+                ComPtr<ID3D12DescriptorHeap> renderTargetHeap;
+                if (HasTextureUsage(desc.usage, RhiTextureUsage::RenderTarget))
+                {
+                    D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+                    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+                    heapDesc.NumDescriptors = 1;
+                    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+                    result = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&renderTargetHeap));
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Device::CreateDescriptorHeap RTV", result));
+                        return nullptr;
+                    }
+
+                    device_->CreateRenderTargetView(
+                        resource.Get(), nullptr, renderTargetHeap->GetCPUDescriptorHandleForHeapStart());
+                }
+
+                return std::make_unique<D3D12Texture>(
+                    resource, shaderResourceHeap, renderTargetHeap, resourceState, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override

@@ -366,6 +366,27 @@ namespace ve::rhi
                 return renderCommandEncoder_ != nil;
             }
 
+            [[nodiscard]] bool BeginRenderPass(RhiTexture& texture, const RhiRenderPassDesc& desc) override
+            {
+                auto* metalTexture = dynamic_cast<MetalTexture*>(&texture);
+                if (metalTexture == nullptr || commandBuffer_ == nil)
+                {
+                    return false;
+                }
+
+                MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
+                renderPassDescriptor.colorAttachments[0].texture = metalTexture->GetNativeTexture();
+                renderPassDescriptor.colorAttachments[0].loadAction =
+                    desc.colorLoadAction == RhiLoadAction::Clear ? MTLLoadActionClear : MTLLoadActionLoad;
+                renderPassDescriptor.colorAttachments[0].storeAction =
+                    desc.colorStoreAction == RhiStoreAction::Store ? MTLStoreActionStore : MTLStoreActionDontCare;
+                renderPassDescriptor.colorAttachments[0].clearColor =
+                    MTLClearColorMake(desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a);
+
+                renderCommandEncoder_ = [commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor];
+                return renderCommandEncoder_ != nil;
+            }
+
             void EndRenderPass() override
             {
                 [renderCommandEncoder_ endEncoding];

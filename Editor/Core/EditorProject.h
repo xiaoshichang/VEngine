@@ -83,11 +83,18 @@ namespace ve
         [[nodiscard]] const AssetDatabase& GetAssetDatabase() const noexcept;
         [[nodiscard]] Scene& GetCurrentEditScene() noexcept;
         [[nodiscard]] const Scene& GetCurrentEditScene() const noexcept;
+        [[nodiscard]] Scene& GetActiveScene() noexcept;
+        [[nodiscard]] const Scene& GetActiveScene() const noexcept;
         [[nodiscard]] bool HasCurrentScene() const noexcept;
         [[nodiscard]] const Path& GetCurrentScenePath() const noexcept;
         [[nodiscard]] const AssetGuid& GetCurrentSceneGuid() const noexcept;
+        [[nodiscard]] bool IsPlaying() const noexcept;
+        [[nodiscard]] ErrorCode StartPlayMode(ResourceManager& resourceManager);
+        void StopPlayMode();
+        void TickPlayMode();
         [[nodiscard]] bool IsDirty() const noexcept;
         void MarkDirty() noexcept;
+        void MarkActiveSceneEdited() noexcept;
         void ClearDirty() noexcept;
 
         [[nodiscard]] Path GetGeneratedRoot() const;
@@ -119,11 +126,13 @@ namespace ve
         EditorProjectDescriptor descriptor_;
         AssetDatabase assetDatabase_;
         Scene currentEditScene_;
+        Scene playScene_;
         Path currentScenePath_;
         AssetGuid currentSceneGuid_;
         std::vector<EditorMeshRendererAssetReferences> meshRendererAssetReferences_;
         std::vector<EditorProjectDiagnostic> diagnostics_;
         bool hasOpenProject_ = false;
+        bool isPlaying_ = false;
         bool dirty_ = false;
     };
 } // namespace ve

@@ -1001,6 +1001,16 @@ namespace ve
         return currentEditScene_;
     }
 
+    Scene& EditorProjectService::GetActiveScene() noexcept
+    {
+        return isPlaying_ ? playScene_ : currentEditScene_;
+    }
+
+    const Scene& EditorProjectService::GetActiveScene() const noexcept
+    {
+        return isPlaying_ ? playScene_ : currentEditScene_;
+    }
+
     bool EditorProjectService::HasCurrentScene() const noexcept
     {
         return !currentScenePath_.IsEmpty() && currentSceneGuid_.IsValid();
@@ -1016,6 +1026,63 @@ namespace ve
         return currentSceneGuid_;
     }
 
+    bool EditorProjectService::IsPlaying() const noexcept
+    {
+        return isPlaying_;
+    }
+
+    ErrorCode EditorProjectService::StartPlayMode(ResourceManager& resourceManager)
+    {
+        (void)resourceManager;
+
+        if (!hasOpenProject_ || isPlaying_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        ReflectionRegistry reflectionRegistry;
+        RegisterSceneReflectionTypes(reflectionRegistry);
+
+        const std::string editSceneJson = SerializeSceneToJson(currentEditScene_, reflectionRegistry);
+        ErrorCode cloneResult = DeserializeSceneFromJson(playScene_, reflectionRegistry, editSceneJson);
+        if (cloneResult != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Failed to create play scene instance: " + std::string(ToString(cloneResult)));
+            playScene_.Clear();
+            return cloneResult;
+        }
+
+        playScene_.UpdateTransforms();
+        isPlaying_ = true;
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Play mode started.");
+        return ErrorCode::None;
+    }
+
+    void EditorProjectService::StopPlayMode()
+    {
+        if (!isPlaying_)
+        {
+            return;
+        }
+
+        playScene_.Clear();
+        isPlaying_ = false;
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Play mode stopped.");
+    }
+
+    void EditorProjectService::TickPlayMode()
+    {
+        if (!isPlaying_)
+        {
+            return;
+        }
+
+        playScene_.Update();
+        playScene_.LateUpdate();
+        playScene_.UpdateTransforms();
+    }
+
     bool EditorProjectService::IsDirty() const noexcept
     {
         return dirty_;
@@ -1024,6 +1091,14 @@ namespace ve
     void EditorProjectService::MarkDirty() noexcept
     {
         dirty_ = true;
+    }
+
+    void EditorProjectService::MarkActiveSceneEdited() noexcept
+    {
+        if (!isPlaying_)
+        {
+            MarkDirty();
+        }
     }
 
     void EditorProjectService::ClearDirty() noexcept
@@ -1073,12 +1148,14 @@ namespace ve
         projectRoot_ = {};
         descriptor_ = {};
         assetDatabase_ = {};
+        playScene_.Clear();
         currentEditScene_.Clear();
         currentScenePath_ = {};
         currentSceneGuid_ = {};
         meshRendererAssetReferences_.clear();
         diagnostics_.clear();
         hasOpenProject_ = false;
+        isPlaying_ = false;
         dirty_ = false;
     }
 
