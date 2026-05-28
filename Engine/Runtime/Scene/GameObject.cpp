@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Scene/GameObject.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Physics/ColliderComponent.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
@@ -157,6 +158,14 @@ namespace ve
     {
         GetScene().ValidateMutationAccess();
         VE_ASSERT_MESSAGE(component != nullptr, "Cannot add a null Component.");
+
+        if (dynamic_cast<ColliderComponent*>(component.get()) != nullptr)
+        {
+            if (ColliderComponent* existingCollider = GetComponent<ColliderComponent>())
+            {
+                return *existingCollider;
+            }
+        }
 
         Component& componentRef = *component;
         componentRef.AttachToGameObject(*this);

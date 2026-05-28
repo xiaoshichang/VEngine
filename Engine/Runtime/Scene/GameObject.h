@@ -41,9 +41,7 @@ namespace ve
         {
             static_assert(std::is_base_of_v<Component, T>, "T must derive from Component.");
             auto component = std::make_unique<T>(std::forward<Args>(args)...);
-            T& componentRef = *component;
-            AddComponent(std::move(component));
-            return componentRef;
+            return static_cast<T&>(AddComponent(std::move(component)));
         }
 
         template<typename T>

@@ -1,6 +1,10 @@
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Math/Quaternion.h"
+#include "Engine/Runtime/Physics/ColliderComponent.h"
 #include "Engine/Runtime/Physics/PhysicsGeometry.h"
+#include "Engine/Runtime/Scene/GameObject.h"
+#include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <iostream>
 
@@ -24,6 +28,18 @@ namespace
     bool ExpectVectorNearlyEqual(const ve::Vector3& actual, const ve::Vector3& expected, const char* message)
     {
         return Expect(actual.IsNearlyEqual(expected, 1.0e-4f), message);
+    }
+
+    bool ExpectOrthonormalAxes(const ve::OrientedBox& box, const char* message)
+    {
+        bool passed = true;
+        passed &= ExpectNearlyEqual(box.axes[0].Length(), 1.0f, message);
+        passed &= ExpectNearlyEqual(box.axes[1].Length(), 1.0f, message);
+        passed &= ExpectNearlyEqual(box.axes[2].Length(), 1.0f, message);
+        passed &= ExpectNearlyEqual(ve::Vector3::Dot(box.axes[0], box.axes[1]), 0.0f, message);
+        passed &= ExpectNearlyEqual(ve::Vector3::Dot(box.axes[0], box.axes[2]), 0.0f, message);
+        passed &= ExpectNearlyEqual(ve::Vector3::Dot(box.axes[1], box.axes[2]), 0.0f, message);
+        return passed;
     }
 
     bool TestRayGetPointUsesNormalizedDirectionAfterMutation()
@@ -294,6 +310,149 @@ namespace
         return Expect(!ve::Overlaps(first, second),
                       "Skewed boxes should separate on a cross-product edge axis");
     }
+
+    bool TestColliderDefaultsAndSetters()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("Collider");
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+
+        bool passed = true;
+        passed &= Expect(collider.GetShape() == ve::ColliderShape::Box, "Collider default shape should be box");
+        passed &= Expect(collider.GetCenter().IsNearlyEqual(ve::Vector3::Zero()),
+                         "Collider default center should be zero");
+        passed &= Expect(collider.GetBoxSize().IsNearlyEqual(ve::Vector3::One()),
+                         "Collider default box size should be one");
+        passed &= Expect(ve::NearlyEqual(collider.GetSphereRadius(), 0.5f),
+                         "Collider default sphere radius should be 0.5");
+        passed &= Expect(collider.GetLayer() == 1ull, "Collider default layer should be bit 0");
+        passed &= Expect(collider.GetCollidesWith() == ~0ull,
+                         "Collider default collision mask should include all layers");
+        passed &= Expect(!collider.IsTrigger(), "Collider should not be trigger by default");
+        passed &= Expect(collider.IsColliderEnabled(), "Collider should be enabled by default");
+
+        collider.SetShape(ve::ColliderShape::Sphere);
+        collider.SetCenter(ve::Vector3(1.0f, 2.0f, 3.0f));
+        collider.SetBoxSize(ve::Vector3(2.0f, 4.0f, 6.0f));
+        collider.SetSphereRadius(2.5f);
+        collider.SetLayer(1ull << 40);
+        collider.SetCollidesWith((1ull << 40) | (1ull << 7));
+        collider.SetTrigger(true);
+        collider.SetColliderEnabled(false);
+
+        passed &= Expect(collider.GetShape() == ve::ColliderShape::Sphere, "Collider shape setter should persist");
+        passed &= Expect(collider.GetCenter().IsNearlyEqual(ve::Vector3(1.0f, 2.0f, 3.0f)),
+                         "Collider center setter should persist");
+        passed &= Expect(collider.GetBoxSize().IsNearlyEqual(ve::Vector3(2.0f, 4.0f, 6.0f)),
+                         "Collider box size setter should persist");
+        passed &= Expect(ve::NearlyEqual(collider.GetSphereRadius(), 2.5f), "Collider radius setter should persist");
+        passed &= Expect(collider.GetLayer() == (1ull << 40), "Collider should preserve 64-bit layer");
+        passed &= Expect(collider.GetCollidesWith() == ((1ull << 40) | (1ull << 7)),
+                         "Collider should preserve 64-bit mask");
+        passed &= Expect(collider.IsTrigger(), "Collider trigger setter should persist");
+        passed &= Expect(!collider.IsColliderEnabled(), "Collider enabled setter should persist");
+
+        return passed;
+    }
+
+    bool TestOneColliderPerGameObject()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("Object");
+        ve::ColliderComponent& first = object.AddComponent<ve::ColliderComponent>();
+        first.SetLayer(1ull << 3);
+        ve::ColliderComponent& second = object.AddComponent<ve::ColliderComponent>();
+
+        bool passed = true;
+        passed &= Expect(&first == &second, "Adding a second collider should return the existing collider");
+        passed &= Expect(object.GetComponents().size() == 1, "Object should still own one component");
+        passed &= Expect(object.GetComponent<ve::ColliderComponent>() == &first,
+                         "Existing collider should remain attached");
+        passed &= Expect(first.GetLayer() == (1ull << 3), "Duplicate add should not reset existing collider state");
+        return passed;
+    }
+
+    bool TestBuildWorldSphereUsesTransformScaleAndCenter()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("Sphere");
+        ve::TransformComponent& transform = object.AddComponent<ve::TransformComponent>();
+        transform.SetLocalPosition(ve::Vector3(10.0f, 20.0f, 30.0f));
+        transform.SetLocalRotation(ve::Quaternion::FromAxisAngle(ve::Vector3::UnitZ(), ve::ToRadians(90.0f)));
+        transform.SetLocalScale(ve::Vector3(2.0f, 3.0f, 4.0f));
+
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        collider.SetCenter(ve::Vector3(1.0f, 2.0f, 3.0f));
+        collider.SetSphereRadius(1.5f);
+        scene.UpdateTransforms();
+
+        const ve::Sphere sphere = collider.BuildWorldSphere(transform);
+
+        bool passed = true;
+        passed &= ExpectVectorNearlyEqual(sphere.center, ve::Vector3(4.0f, 22.0f, 42.0f),
+                                          "World sphere should transform local center by TRS");
+        passed &= ExpectNearlyEqual(sphere.radius, 6.0f,
+                                    "World sphere radius should use the maximum non-uniform axis scale");
+        return passed;
+    }
+
+    bool TestBuildWorldBoxUsesTransformScaleRotationAndCenter()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("Box");
+        ve::TransformComponent& transform = object.AddComponent<ve::TransformComponent>();
+        transform.SetLocalPosition(ve::Vector3(5.0f, -1.0f, 2.0f));
+        transform.SetLocalRotation(ve::Quaternion::FromAxisAngle(ve::Vector3::UnitZ(), ve::ToRadians(90.0f)));
+        transform.SetLocalScale(ve::Vector3(2.0f, 3.0f, 4.0f));
+
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        collider.SetCenter(ve::Vector3(1.0f, 2.0f, 0.5f));
+        collider.SetBoxSize(ve::Vector3(2.0f, 4.0f, 6.0f));
+        scene.UpdateTransforms();
+
+        const ve::OrientedBox box = collider.BuildWorldBox(transform);
+        const ve::Aabb bounds = ve::BuildAabb(box);
+
+        bool passed = true;
+        passed &= ExpectVectorNearlyEqual(box.center, ve::Vector3(-1.0f, 1.0f, 4.0f),
+                                          "World box should transform local center by TRS");
+        passed &= ExpectVectorNearlyEqual(box.halfExtents, ve::Vector3(2.0f, 6.0f, 12.0f),
+                                          "World box half extents should include local size and scale");
+        passed &= ExpectVectorNearlyEqual(box.axes[0], ve::Vector3(0.0f, 1.0f, 0.0f),
+                                          "World box X axis should include rotation without scale");
+        passed &= ExpectVectorNearlyEqual(box.axes[1], ve::Vector3(-1.0f, 0.0f, 0.0f),
+                                          "World box Y axis should include rotation without scale");
+        passed &= ExpectVectorNearlyEqual(box.axes[2], ve::Vector3(0.0f, 0.0f, 1.0f),
+                                          "World box Z axis should include rotation without scale");
+        passed &= ExpectOrthonormalAxes(box, "World box axes should be orthonormal");
+        passed &= ExpectVectorNearlyEqual(bounds.minimum, ve::Vector3(-7.0f, -1.0f, -8.0f),
+                                          "World box AABB should consume normalized axes and half extents");
+        passed &= ExpectVectorNearlyEqual(bounds.maximum, ve::Vector3(5.0f, 3.0f, 16.0f),
+                                          "World box AABB should consume normalized axes and half extents");
+        return passed;
+    }
+
+    bool TestBuildWorldBoxKeepsAxesOrthonormalWithScaledParent()
+    {
+        ve::Scene scene;
+        ve::GameObject& parent = scene.CreateGameObject("Parent");
+        ve::TransformComponent& parentTransform = parent.AddComponent<ve::TransformComponent>();
+        parentTransform.SetLocalScale(ve::Vector3(2.0f, 1.0f, 3.0f));
+
+        ve::GameObject& object = scene.CreateGameObject("Child");
+        object.SetParent(&parent);
+        ve::TransformComponent& transform = object.AddComponent<ve::TransformComponent>();
+        transform.SetLocalRotation(ve::Quaternion::FromAxisAngle(ve::Vector3::UnitZ(), ve::ToRadians(45.0f)));
+
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        scene.UpdateTransforms();
+
+        const ve::OrientedBox box = collider.BuildWorldBox(transform);
+
+        bool passed = true;
+        passed &= ExpectOrthonormalAxes(box, "World box axes should stay orthonormal with inherited non-uniform scale");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -315,5 +474,10 @@ int main()
     passed &= TestBuildRotatedOrientedBoxAabb();
     passed &= TestOrientedBoxSatAndAabb();
     passed &= TestOrientedBoxCrossProductAxisSeparates();
+    passed &= TestColliderDefaultsAndSetters();
+    passed &= TestOneColliderPerGameObject();
+    passed &= TestBuildWorldSphereUsesTransformScaleAndCenter();
+    passed &= TestBuildWorldBoxUsesTransformScaleRotationAndCenter();
+    passed &= TestBuildWorldBoxKeepsAxesOrthonormalWithScaledParent();
     return passed ? 0 : 1;
 }
