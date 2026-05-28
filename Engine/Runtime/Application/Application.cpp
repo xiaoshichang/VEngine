@@ -8,6 +8,9 @@
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/ScriptContext.h"
+#include "Engine/Runtime/Scripting/ScriptHost.h"
+#include "Engine/Runtime/Scripting/ScriptProject.h"
 
 #include <boost/json.hpp>
 #include <boost/system/error_code.hpp>
@@ -19,6 +22,10 @@
 
 #ifndef VE_DEFAULT_PROJECT_DIR
 #define VE_DEFAULT_PROJECT_DIR ""
+#endif
+
+#ifndef VE_BUILD_CONFIGURATION
+#define VE_BUILD_CONFIGURATION "Debug"
 #endif
 
 namespace ve
@@ -92,6 +99,12 @@ namespace ve
             }
 
             return Path(DefaultSampleScenePath);
+        }
+
+        [[nodiscard]] ScriptBuildConfiguration GetApplicationScriptConfiguration()
+        {
+            Result<ScriptBuildConfiguration> configuration = ParseScriptBuildConfiguration(VE_BUILD_CONFIGURATION);
+            return configuration ? configuration.GetValue() : ScriptBuildConfiguration::Debug;
         }
     } // namespace
 
@@ -250,6 +263,66 @@ namespace ve
                 RegisterSceneReflectionTypes(reflectionRegistry);
 
                 const Path scenePath = assetDatabase.ResolveProjectPath(startupScenePath);
+
+                Result<ScriptProjectConfig> scriptConfig = LoadScriptProjectConfig(projectRoot);
+                if (scriptConfig && scriptConfig.GetValue().HasWindowsScripts())
+                {
+                    const WindowsScriptProjectConfig& windowsScripts = scriptConfig.GetValue().windows;
+                    const ScriptBuildConfiguration scriptConfiguration = GetApplicationScriptConfiguration();
+                    WindowsScriptBuildArtifacts artifacts =
+                        GetWindowsPackagedScriptBuildArtifacts(projectRoot, windowsScripts.assemblyName);
+                    if (ValidateWindowsScriptBuildArtifacts(artifacts) != ErrorCode::None)
+                    {
+                        artifacts = GetWindowsGeneratedScriptBuildArtifacts(projectRoot,
+                                                                            scriptConfiguration,
+                                                                            windowsScripts.assemblyName);
+                    }
+
+                    const ErrorCode scriptArtifactsResult = ValidateWindowsScriptBuildArtifacts(artifacts);
+                    if (scriptArtifactsResult != ErrorCode::None)
+                    {
+                        VE_LOG_ERROR_CATEGORY("Script",
+                                              "Configured Windows scripts are missing required output files for '{}'.",
+                                              windowsScripts.assemblyName);
+                        return scriptArtifactsResult;
+                    }
+
+                    scriptHost_ = std::make_unique<ScriptHost>();
+                    Result<ScriptHostInfo> hostInfo =
+                        scriptHost_->Initialize(ScriptHostDesc{artifacts.projectRuntimeConfigPath,
+                                                               artifacts.scriptApiAssemblyPath});
+                    if (!hostInfo)
+                    {
+                        VE_LOG_ERROR_CATEGORY("Script",
+                                              "Failed to initialize ScriptHost: {}",
+                                              hostInfo.GetError().GetMessage());
+                        scriptHost_.reset();
+                        return hostInfo.GetError().GetCode();
+                    }
+
+                    scriptContext_ = std::make_unique<ScriptContext>(*scriptHost_);
+                    Result<ScriptOperationResult> loadScripts =
+                        scriptContext_->LoadProjectAssembly(artifacts.projectAssemblyPath);
+                    if (!loadScripts)
+                    {
+                        VE_LOG_ERROR_CATEGORY("Script",
+                                              "Failed to load project script assembly: {}",
+                                              loadScripts.GetError().GetMessage());
+                        scriptContext_.reset();
+                        scriptHost_.reset();
+                        return loadScripts.GetError().GetCode();
+                    }
+
+                    sampleScene_->SetScriptContext(scriptContext_.get());
+                    VE_LOG_INFO_CATEGORY("Script", "Loaded Windows script assembly '{}'.", windowsScripts.assemblyName);
+                }
+                else if (!scriptConfig)
+                {
+                    VE_LOG_WARN_CATEGORY("Script",
+                                         "Project scripting configuration could not be read: {}",
+                                         scriptConfig.GetError().GetMessage());
+                }
+
                 const ErrorCode sceneLoadResult =
                     LoadSceneAsset(*sampleScene_, reflectionRegistry, resourceManager, assetDatabase, scenePath);
                 if (sceneLoadResult == ErrorCode::None)
@@ -316,6 +389,8 @@ namespace ve
         }
 
         sampleScene_.reset();
+        scriptContext_.reset();
+        scriptHost_.reset();
     }
 
     int Application::RunMainLoop(Window& mainWindow)

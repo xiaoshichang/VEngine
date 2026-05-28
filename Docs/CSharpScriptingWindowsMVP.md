@@ -49,6 +49,8 @@ Engine/Runtime/Scripting/
   ScriptContext.cpp
   ScriptHost.h
   ScriptHost.cpp
+  ScriptProject.h
+  ScriptProject.cpp
   ScriptTypes.h
 ```
 
@@ -60,13 +62,16 @@ Managed/VEngine.ScriptAPI/
   Component.cs
   GameObject.cs
   Log.cs
+  Quaternion.cs
   ScriptBehaviour.cs
   Time.cs
   Transform.cs
+  Vector3.cs
 
 Examples/AssetPipelineSample/Scripts/
-  VEngine.SampleScripts.csproj
-  Rotator.cs
+  VEngine.SampleScripts/
+    VEngine.SampleScripts.csproj
+    RotateAndLog.cs
 ```
 
 Tests should keep tiny managed test assemblies out of runtime source:
@@ -109,20 +114,22 @@ of the descriptor:
 
 ```json
 {
-  "scripts": {
-    "windowsProject": "Scripts/VEngine.SampleScripts.csproj",
-    "assemblyName": "VEngine.SampleScripts"
+  "scripting": {
+    "windows": {
+      "project": "Scripts/VEngine.SampleScripts/VEngine.SampleScripts.csproj",
+      "assemblyName": "VEngine.SampleScripts"
+    }
   }
 }
 ```
 
 Rules:
 
-- `windowsProject` points to the authored C# project file under the project root.
-- `assemblyName` is the managed assembly name used to resolve generated output.
-- Missing `scripts` means the project has no user scripts.
-- Invalid script configuration is an Editor or Player diagnostic, not a project-open failure unless Play mode requires
-  scripts to start.
+- `scripting.windows.project` points to the authored C# project file under the project root.
+- `scripting.windows.assemblyName` is the managed assembly name used to resolve generated output.
+- Missing `scripting` means the project has no user scripts.
+- Malformed script configuration is a project descriptor error. Missing build outputs are Editor, Player, or Package
+  diagnostics at the point scripts are required.
 - Generated script output belongs under `Generated/Scripts/Windows/<Configuration>/`.
 - Windows package staging copies script output into `Content/Scripts/Windows/`.
 
@@ -185,10 +192,11 @@ SDK, runtime config, managed DLL, or bootstrap method is missing.
 Minimum native entry points requested from managed code:
 
 - `InitializeHost`
+- `LoadProjectAssembly`
 - `CreateScriptInstance`
 - `DestroyScriptInstance`
-- `InvokeScriptLifecycle`
-- `UnloadScriptAssembly`
+- `InvokeLifecycle`
+- `UnloadProjectAssembly`
 
 Minimum native bridge calls exposed to managed code:
 
@@ -363,7 +371,7 @@ Content/
 
 Package validation should report:
 
-- Missing `scripts.windowsProject` when the scene has script components that require a project assembly.
+- Missing `scripting.windows.project` when the scene has script components that require a project assembly.
 - Missing generated script DLL.
 - Missing runtime config.
 - Script assembly name mismatch.
@@ -373,12 +381,12 @@ Package validation should report:
 
 Add script-host tests only when the required .NET hosting files are available.
 
-Recommended CTest targets:
+Recommended CTest coverage:
 
-- `VEngineScriptHostTests` for native host path, missing file diagnostics, bridge table setup, and clean shutdown.
-- `VEngineScriptComponentTests` for component reflection, serialization, lifecycle order, invalid type handling, and
-  exception disabling.
-- `VEngineScriptReloadTests` for stop-scene reload and second-play lifecycle dispatch.
+- `VEngineScriptingTests` for native host path, missing file diagnostics, bridge table setup, lifecycle dispatch,
+  exception disabling, and reload-after-stop behavior.
+- Editor project tests for descriptor parsing and the rule that scripts cannot rebuild while Play mode is running.
+- Package tests for Windows script payload staging, manifest metadata, iOS exclusion, and missing payload diagnostics.
 - A managed smoke project under `Tests/Scripting/SmokeScripts` that logs from C#, increments lifecycle counters, and
   mutates a Transform through `VEngine.ScriptAPI`.
 

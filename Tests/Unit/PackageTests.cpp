@@ -16,6 +16,7 @@ namespace
     constexpr const char* SourceGuid = "22222222-2222-4222-8222-222222222222";
     constexpr const char* MaterialGuid = "33333333-3333-4333-8333-333333333333";
     constexpr const char* SceneGuid = "44444444-4444-4444-8444-444444444444";
+    constexpr const char* ScriptAssemblyName = "VEngine.PackageScripts";
 
     using boost::json::array;
     using boost::json::object;
@@ -152,10 +153,17 @@ namespace
     "guid": "$SCENE_GUID$",
     "path": "Assets/Samples/Scenes/TestScene.vescene"
   },
+  "scripting": {
+    "windows": {
+      "project": "Scripts/PackageScripts/VEngine.PackageScripts.csproj",
+      "assemblyName": "$SCRIPT_ASSEMBLY_NAME$"
+    }
+  },
   "targetPlatforms": ["Windows", "iOS"]
 })json";
         ReplaceAll(project, "$PROJECT_GUID$", ProjectGuid);
         ReplaceAll(project, "$SCENE_GUID$", SceneGuid);
+        ReplaceAll(project, "$SCRIPT_ASSEMBLY_NAME$", ScriptAssemblyName);
 
         std::string metadata = R"json({
   "format": "VEngine.AssetMetadata",
@@ -213,6 +221,9 @@ namespace
                            "Material asset should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Assets/Samples/Scenes/TestScene.vescene", scene),
                            "Scene asset should be written");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Scripts/PackageScripts/VEngine.PackageScripts.csproj",
+                                                         "<Project Sdk=\"Microsoft.NET.Sdk\" />\n"),
+                           "Script project file should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Generated/Assets/ImportCache" / SourceGuid /
                                                              "TestQuad.vemesh",
                                                          "mesh artifact\n"),
@@ -223,6 +234,25 @@ namespace
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Generated/Shaders/iOS/Metal/Basic/Basic.metallib",
                                                          "metal shader\n"),
                            "iOS shader artifact should be written");
+        const ve::Path scriptOutput = root / "Generated/Scripts/Windows/Debug" / ScriptAssemblyName;
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.dll",
+                                                         "project assembly\n"),
+                           "Generated script assembly should be written");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.deps.json",
+                                                         "{}\n"),
+                           "Generated script deps file should be written");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.runtimeconfig.json",
+                                                         "{}\n"),
+                           "Generated script runtimeconfig should be written");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.ScriptAPI.dll",
+                                                         "script api assembly\n"),
+                           "Generated ScriptAPI assembly should be written");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.pdb",
+                                                         "project symbols\n"),
+                           "Generated script symbols should be written");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.ScriptAPI.pdb",
+                                                         "script api symbols\n"),
+                           "Generated ScriptAPI symbols should be written");
         return passed;
     }
 
@@ -264,6 +294,15 @@ namespace
                          "Windows package should contain D3D11 shader root");
         passed &= Expect(ve::FileSystem::IsDirectory(contentRoot / "Generated/Shaders/Windows/D3D12"),
                          "Windows package should contain D3D12 shader root");
+        passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VEngine.PackageScripts.dll"),
+                         "Windows package should contain the project script assembly");
+        passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VEngine.PackageScripts.deps.json"),
+                         "Windows package should contain the project script deps file");
+        passed &= Expect(ve::FileSystem::IsFile(contentRoot /
+                                                    "Scripts/Windows/VEngine.PackageScripts.runtimeconfig.json"),
+                         "Windows package should contain the project script runtimeconfig");
+        passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VEngine.ScriptAPI.dll"),
+                         "Windows package should contain the managed ScriptAPI assembly");
 
         ve::Result<std::string> manifest = ve::FileSystem::ReadTextFile(contentRoot / "AssetManifest.veassetmanifest");
         passed &= ExpectOk(manifest, "Windows package manifest should be readable");
@@ -288,6 +327,23 @@ namespace
                                      "Manifest should list the D3D11 shader root");
                     passed &= Expect(ArrayContainsString(shaderRoots->as_array(), "Generated/Shaders/Windows/D3D12"),
                                      "Manifest should list the D3D12 shader root");
+                }
+
+                const value* scripting = FindMember(manifestObject, "scripting");
+                passed &= Expect(scripting != nullptr && scripting->is_object(),
+                                 "Windows manifest should contain scripting metadata");
+                if (scripting != nullptr && scripting->is_object())
+                {
+                    const value* windows = FindMember(scripting->as_object(), "windows");
+                    passed &= Expect(windows != nullptr && windows->is_object(),
+                                     "Windows manifest should contain Windows scripting metadata");
+                    if (windows != nullptr && windows->is_object())
+                    {
+                        passed &= Expect(ReadString(windows->as_object(), "assemblyName") == ScriptAssemblyName,
+                                         "Windows manifest should record the script assembly name");
+                        passed &= Expect(ReadString(windows->as_object(), "path") == "Scripts/Windows",
+                                         "Windows manifest should record the staged script path");
+                    }
                 }
             }
             else
@@ -325,6 +381,8 @@ namespace
                          "iOS bundle Content should contain asset manifest");
         passed &= Expect(ve::FileSystem::IsDirectory(result.GetValue().contentRoot / "Generated/Shaders/iOS/Metal"),
                          "iOS bundle Content should contain Metal shader root");
+        passed &= Expect(!ve::FileSystem::Exists(result.GetValue().contentRoot / "Scripts/Windows"),
+                         "iOS bundle should not stage Windows script payloads");
 
         ve::Result<std::string> manifest =
             ve::FileSystem::ReadTextFile(result.GetValue().contentRoot / "AssetManifest.veassetmanifest");
@@ -347,11 +405,45 @@ namespace
                     passed &= Expect(ArrayContainsString(shaderRoots->as_array(), "Generated/Shaders/iOS/Metal"),
                                      "Manifest should list the Metal shader root");
                 }
+
+                passed &= Expect(FindMember(manifestObject, "scripting") == nullptr,
+                                 "iOS package manifest should not advertise Windows scripting");
             }
             else
             {
                 passed = false;
             }
+        }
+
+        return passed;
+    }
+
+    bool TestWindowsPackageRejectsMissingScriptPayload()
+    {
+        bool passed = true;
+
+        const ve::Path missingScriptApi = GetProjectRoot() / "Generated/Scripts/Windows/Debug" / ScriptAssemblyName /
+                                         "VEngine.ScriptAPI.dll";
+        passed &= ExpectOk(ve::FileSystem::RemoveFile(missingScriptApi),
+                           "Generated ScriptAPI payload should be removed for validation test");
+
+        ve::PackageRequest request;
+        request.projectRoot = GetProjectRoot();
+        request.outputRoot = GetProjectRoot() / "Generated/Build/Windows/MissingScripts";
+        request.platform = ve::PackagePlatform::Windows;
+        request.configuration = ve::PackageConfiguration::Debug;
+        request.includeRuntimeBinaries = false;
+
+        ve::Result<ve::PackageResult> result = ve::StagePackage(request);
+        passed &= Expect(!result, "Windows package should reject missing script payloads");
+        if (!result)
+        {
+            passed &= Expect(result.GetError().GetCode() == ve::ErrorCode::NotFound,
+                             "Missing script payload should report NotFound");
+            passed &= Expect(result.GetError().GetMessage().find("Windows script payload") != std::string::npos,
+                             "Missing script payload diagnostic should name Windows script payloads");
+            passed &= Expect(result.GetError().GetMessage().find("VEngine.ScriptAPI.dll") != std::string::npos,
+                             "Missing script payload diagnostic should name the missing file");
         }
 
         return passed;
@@ -366,6 +458,7 @@ int main()
     passed &= WritePackageProject();
     passed &= TestWindowsPackageLayout();
     passed &= TestIosPackageLayout();
+    passed &= TestWindowsPackageRejectsMissingScriptPayload();
 
     RemoveTestRoot();
 

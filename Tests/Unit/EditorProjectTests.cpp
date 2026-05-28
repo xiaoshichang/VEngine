@@ -244,6 +244,50 @@ namespace
         return passed;
     }
 
+    bool TestProjectDescriptorScriptingSection()
+    {
+        bool passed = true;
+
+        CleanTestRoot();
+
+        const ve::Path projectRoot = GetTestRoot() / "ScriptingDescriptor";
+        passed &= ExpectOk(ve::EditorProjectService::CreateProjectSkeleton(projectRoot, "ScriptingDescriptor"),
+                           "CreateProjectSkeleton should create a scripting descriptor test project");
+
+        ve::Result<std::string> projectText = ve::FileSystem::ReadTextFile(projectRoot / ".veproject");
+        passed &= ExpectOk(projectText, "Project descriptor should be readable");
+        if (!projectText)
+        {
+            CleanTestRoot();
+            return false;
+        }
+
+        std::string descriptor = projectText.GetValue();
+        ReplaceAll(descriptor,
+                   "\"targetPlatforms\"",
+                   "\"scripting\":{\"windows\":{\"project\":\"Scripts/Game/Game.csproj\","
+                   "\"assemblyName\":\"GameScripts\"}},\"targetPlatforms\"");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(projectRoot / ".veproject", descriptor),
+                           "Project descriptor with scripting should be written");
+
+        ve::Result<ve::EditorProjectDescriptor> parsed =
+            ve::EditorProjectService::LoadProjectDescriptor(projectRoot);
+        passed &= ExpectOk(parsed, "Project descriptor with scripting should parse");
+        if (parsed)
+        {
+            passed &= Expect(parsed.GetValue().scripting.HasWindowsScripts(),
+                             "Descriptor should report Windows scripts");
+            passed &= Expect(parsed.GetValue().scripting.windows.projectPath ==
+                                 ve::Path("Scripts/Game/Game.csproj"),
+                             "Descriptor should preserve the Windows script project path");
+            passed &= Expect(parsed.GetValue().scripting.windows.assemblyName == "GameScripts",
+                             "Descriptor should preserve the Windows script assembly name");
+        }
+
+        CleanTestRoot();
+        return passed;
+    }
+
     bool TestPlayModeUsesDiscardableSceneInstance()
     {
         bool passed = true;
@@ -268,6 +312,9 @@ namespace
         passed &= Expect(projectService.IsPlaying(), "Project service should report play mode");
         passed &= Expect(projectService.GetActiveScene().GetGameObjectCount() == 1,
                          "Play scene should start as a clone of the edit scene");
+        passed &= Expect(projectService.BuildScripts(ve::ScriptBuildConfiguration::Debug) ==
+                             ve::ErrorCode::InvalidState,
+                         "BuildScripts should be blocked while Play mode is running");
 
         ve::GameObject& playObject = projectService.GetActiveScene().CreateGameObject("PlayOnlyObject");
         playObject.AddComponent<ve::TransformComponent>();
@@ -316,6 +363,7 @@ int main()
 
     passed &= TestCreateAndOpenProject();
     passed &= TestMeshRendererAuthoredReferences();
+    passed &= TestProjectDescriptorScriptingSection();
     passed &= TestPlayModeUsesDiscardableSceneInstance();
     passed &= TestRejectsMissingDescriptor();
 

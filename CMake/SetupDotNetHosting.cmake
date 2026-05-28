@@ -112,6 +112,7 @@ function(ve_setup_dotnet_hosting targetName)
         "${dotnetNativeHostDir}/hostfxr.h"
         "${dotnetNativeHostDir}/coreclr_delegates.h"
         "${dotnetNativeHostDir}/nethost.lib"
+        "${dotnetNativeHostDir}/nethost.dll"
     )
     foreach(requiredFile IN LISTS requiredDotNetHostingFiles)
         if(NOT EXISTS "${requiredFile}")
@@ -147,6 +148,12 @@ function(ve_setup_dotnet_hosting targetName)
         )
         set(VE_DOTNET_HOST_RID "${dotnetHostRid}" CACHE STRING "Runtime identifier for .NET native hosting" FORCE)
         set(VE_DOTNET_HOST_PACK_VERSION "${dotnetHostPackVersion}" CACHE STRING "Version of the .NET host pack" FORCE)
+        set(VE_DOTNET_NETHOST_DLL
+            "${dotnetNativeHostDir}/nethost.dll"
+            CACHE FILEPATH
+            "nethost runtime library used by VEngine scripting"
+            FORCE
+        )
 
         message(STATUS "VEngine scripting uses .NET SDK ${dotnetSdkVersion}, "
                        "target framework ${VE_DOTNET_TARGET_FRAMEWORK}, "
@@ -161,6 +168,7 @@ function(ve_setup_dotnet_hosting targetName)
     target_compile_definitions(${targetName}
         PUBLIC
             VE_DOTNET_TARGET_FRAMEWORK="${VE_DOTNET_TARGET_FRAMEWORK}"
+            VE_DOTNET_EXECUTABLE="${VE_DOTNET_EXECUTABLE}"
     )
 endfunction()
 

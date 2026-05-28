@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Asset/AssetDatabase.h"
 #include "Engine/Runtime/Core/Version.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Scripting/ScriptProject.h"
 
 #include <boost/json.hpp>
 #include <boost/system/error_code.hpp>
@@ -30,6 +31,7 @@ namespace ve
             AssetGuid guid;
             AssetGuid startupSceneGuid;
             Path startupScenePath;
+            ScriptProjectConfig scripting;
             std::string displayName;
             std::string engineVersion;
         };
@@ -240,6 +242,13 @@ namespace ve
                 return Result<PackageProjectDescriptor>::Failure(
                     MakeError(ErrorCode::InvalidArgument, "Project descriptor is missing name or startup scene."));
             }
+
+            Result<ScriptProjectConfig> scripting = LoadScriptProjectConfig(projectRoot);
+            if (!scripting)
+            {
+                return Result<PackageProjectDescriptor>::Failure(scripting.GetError());
+            }
+            descriptor.scripting = scripting.MoveValue();
 
             return Result<PackageProjectDescriptor>::Success(std::move(descriptor));
         }
@@ -494,12 +503,174 @@ namespace ve
                 shaderRoots.push_back("Generated/Shaders/iOS/Metal");
             }
             root["shaderRoots"] = std::move(shaderRoots);
+
+            if (request.platform == PackagePlatform::Windows && descriptor.scripting.HasWindowsScripts())
+            {
+                object windowsScripts;
+                windowsScripts["assemblyName"] = descriptor.scripting.windows.assemblyName;
+                windowsScripts["path"] = "Scripts/Windows";
+
+                object scripting;
+                scripting["windows"] = std::move(windowsScripts);
+                root["scripting"] = std::move(scripting);
+            }
             return root;
         }
 
+        [[nodiscard]] ErrorCode CopyOptionalFileTracked(const Path& source,
+                                                        const Path& destination,
+                                                        PackageResult& result)
+        {
+            if (!FileSystem::IsFile(source))
+            {
+                return ErrorCode::None;
+            }
+
+            return CopyFileTracked(source, destination, result);
+        }
+
+        [[nodiscard]] ErrorCode RequireWindowsScriptArtifact(const Path& path,
+                                                             std::string_view label,
+                                                             std::string& errorMessage)
+        {
+            if (FileSystem::IsFile(path))
+            {
+                return ErrorCode::None;
+            }
+
+            errorMessage = "Windows script payload is missing " + std::string(label) + ": " + path.GetString();
+            return ErrorCode::NotFound;
+        }
+
+        [[nodiscard]] ErrorCode CopyWindowsScriptArtifacts(const PackageRequest& request,
+                                                           const PackageProjectDescriptor& descriptor,
+                                                           PackageResult& result,
+                                                           std::string& errorMessage)
+        {
+            if (request.platform != PackagePlatform::Windows || !descriptor.scripting.HasWindowsScripts())
+            {
+                return ErrorCode::None;
+            }
+
+            Result<ScriptBuildConfiguration> scriptConfiguration =
+                ParseScriptBuildConfiguration(ToString(request.configuration));
+            if (!scriptConfiguration)
+            {
+                errorMessage = scriptConfiguration.GetError().GetMessage();
+                return scriptConfiguration.GetError().GetCode();
+            }
+
+            const WindowsScriptProjectConfig& scripts = descriptor.scripting.windows;
+            const WindowsScriptBuildArtifacts sourceArtifacts =
+                GetWindowsGeneratedScriptBuildArtifacts(request.projectRoot,
+                                                        scriptConfiguration.GetValue(),
+                                                        scripts.assemblyName);
+            ErrorCode validateResult =
+                RequireWindowsScriptArtifact(sourceArtifacts.projectAssemblyPath, "project assembly", errorMessage);
+            if (validateResult != ErrorCode::None)
+            {
+                return validateResult;
+            }
+
+            validateResult =
+                RequireWindowsScriptArtifact(sourceArtifacts.projectDepsJsonPath, "project deps.json", errorMessage);
+            if (validateResult != ErrorCode::None)
+            {
+                return validateResult;
+            }
+
+            validateResult = RequireWindowsScriptArtifact(sourceArtifacts.projectRuntimeConfigPath,
+                                                          "project runtimeconfig.json",
+                                                          errorMessage);
+            if (validateResult != ErrorCode::None)
+            {
+                return validateResult;
+            }
+
+            validateResult = RequireWindowsScriptArtifact(sourceArtifacts.scriptApiAssemblyPath,
+                                                          "VEngine.ScriptAPI.dll",
+                                                          errorMessage);
+            if (validateResult != ErrorCode::None)
+            {
+                return validateResult;
+            }
+
+            const Path destinationRoot = GetWindowsPackagedScriptDirectory(result.contentRoot);
+            ErrorCode directoryResult = FileSystem::CreateDirectories(destinationRoot);
+            if (directoryResult != ErrorCode::None)
+            {
+                errorMessage = "Failed to create Windows script package directory: " + destinationRoot.GetString();
+                return directoryResult;
+            }
+
+            const WindowsScriptBuildArtifacts destinationArtifacts =
+                GetWindowsPackagedScriptBuildArtifacts(result.contentRoot, scripts.assemblyName);
+
+            ErrorCode copyResult =
+                CopyFileTracked(sourceArtifacts.projectAssemblyPath, destinationArtifacts.projectAssemblyPath, result);
+            if (copyResult != ErrorCode::None)
+            {
+                errorMessage = "Failed to stage Windows script project assembly: " +
+                               sourceArtifacts.projectAssemblyPath.GetString();
+                return copyResult;
+            }
+
+            copyResult =
+                CopyFileTracked(sourceArtifacts.projectDepsJsonPath, destinationArtifacts.projectDepsJsonPath, result);
+            if (copyResult != ErrorCode::None)
+            {
+                errorMessage = "Failed to stage Windows script deps.json: " +
+                               sourceArtifacts.projectDepsJsonPath.GetString();
+                return copyResult;
+            }
+
+            copyResult = CopyFileTracked(sourceArtifacts.projectRuntimeConfigPath,
+                                         destinationArtifacts.projectRuntimeConfigPath,
+                                         result);
+            if (copyResult != ErrorCode::None)
+            {
+                errorMessage = "Failed to stage Windows script runtimeconfig.json: " +
+                               sourceArtifacts.projectRuntimeConfigPath.GetString();
+                return copyResult;
+            }
+
+            copyResult = CopyFileTracked(sourceArtifacts.scriptApiAssemblyPath,
+                                         destinationArtifacts.scriptApiAssemblyPath,
+                                         result);
+            if (copyResult != ErrorCode::None)
+            {
+                errorMessage = "Failed to stage VEngine.ScriptAPI.dll: " +
+                               sourceArtifacts.scriptApiAssemblyPath.GetString();
+                return copyResult;
+            }
+
+            copyResult = CopyOptionalFileTracked(sourceArtifacts.projectPdbPath,
+                                                 destinationArtifacts.projectPdbPath,
+                                                 result);
+            if (copyResult != ErrorCode::None)
+            {
+                errorMessage = "Failed to stage Windows script symbols: " +
+                               sourceArtifacts.projectPdbPath.GetString();
+                return copyResult;
+            }
+
+            copyResult = CopyOptionalFileTracked(sourceArtifacts.scriptApiPdbPath,
+                                                 destinationArtifacts.scriptApiPdbPath,
+                                                 result);
+            if (copyResult != ErrorCode::None)
+            {
+                errorMessage = "Failed to stage VEngine.ScriptAPI symbols: " +
+                               sourceArtifacts.scriptApiPdbPath.GetString();
+            }
+
+            return copyResult;
+        }
+
         [[nodiscard]] ErrorCode CopyPackageContent(const PackageRequest& request,
+                                                   const PackageProjectDescriptor& descriptor,
                                                    const AssetDatabase& assetDatabase,
-                                                   PackageResult& result)
+                                                   PackageResult& result,
+                                                   std::string& errorMessage)
         {
             const ErrorCode descriptorResult =
                 CopyFileTracked(request.projectRoot / ProjectDescriptorFileName,
@@ -563,7 +734,20 @@ namespace ve
                     return d3d11Result;
                 }
 
-                return FileSystem::CreateDirectories(destinationShaders / "Windows/D3D12");
+                ErrorCode d3d12Result = FileSystem::CreateDirectories(destinationShaders / "Windows/D3D12");
+                if (d3d12Result != ErrorCode::None)
+                {
+                    return d3d12Result;
+                }
+
+                const ErrorCode scriptCopyResult =
+                    CopyWindowsScriptArtifacts(request, descriptor, result, errorMessage);
+                if (scriptCopyResult != ErrorCode::None)
+                {
+                    return scriptCopyResult;
+                }
+
+                return ErrorCode::None;
             }
 
             const ErrorCode shaderCopyResult = CopyDirectoryRecursive(request.projectRoot / "Generated/Shaders/iOS",
@@ -729,10 +913,14 @@ namespace ve
                 MakeError(contentDirectoryResult, "Failed to create package Content directory."));
         }
 
-        const ErrorCode contentCopyResult = CopyPackageContent(request, assetDatabase, result);
+        std::string contentCopyError;
+        const ErrorCode contentCopyResult =
+            CopyPackageContent(request, descriptor.GetValue(), assetDatabase, result, contentCopyError);
         if (contentCopyResult != ErrorCode::None)
         {
-            return Result<PackageResult>::Failure(MakeError(contentCopyResult, "Failed to stage package content."));
+            const std::string message =
+                contentCopyError.empty() ? "Failed to stage package content." : std::move(contentCopyError);
+            return Result<PackageResult>::Failure(MakeError(contentCopyResult, message));
         }
 
         const object manifest = WriteManifestJson(request, descriptor.GetValue(), assetDatabase, result);

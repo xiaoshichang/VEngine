@@ -35,7 +35,7 @@ namespace ve
 
     private:
         [[nodiscard]] ScriptContext* GetActiveScriptContext() noexcept;
-        [[nodiscard]] bool EnsureManagedInstance();
+        [[nodiscard]] bool EnsureManagedInstance(bool reportMissingContext);
         [[nodiscard]] bool InvokeManagedLifecycle(ScriptLifecycleMethod lifecycle, float deltaSeconds = 0.0f);
         void DestroyManagedInstance() noexcept;
         void ReportFailure(std::string message);

@@ -12,6 +12,12 @@ function(ve_add_example_projects)
     ve_add_asset_tool()
 
     set(veAssetPipelineSampleRoot "${PROJECT_SOURCE_DIR}/Examples/AssetPipelineSample")
+    set(veAssetPipelineSampleScriptsProject
+        "${veAssetPipelineSampleRoot}/Scripts/VEngine.SampleScripts/VEngine.SampleScripts.csproj")
+    set(veAssetPipelineSampleScriptsOutput
+        "${veAssetPipelineSampleRoot}/Generated/Scripts/Windows/$<CONFIG>/VEngine.SampleScripts")
+    set(veAssetPipelineSampleScriptsIntermediate
+        "${veAssetPipelineSampleRoot}/Generated/Intermediates/Scripts/Windows/$<CONFIG>/VEngine.SampleScripts/")
 
     add_custom_target(VEngineExampleAssetPipelineSample ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -38,6 +44,29 @@ function(ve_add_example_projects)
             FOLDER "Examples"
     )
 
+    if(TARGET VEngineScriptAPI)
+        add_custom_target(VEngineExampleAssetPipelineSampleScripts ALL
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "${veAssetPipelineSampleScriptsOutput}"
+            COMMAND "${VE_DOTNET_EXECUTABLE}"
+                build "${veAssetPipelineSampleScriptsProject}"
+                --configuration $<CONFIG>
+                --framework "${VE_DOTNET_TARGET_FRAMEWORK}"
+                --output "${veAssetPipelineSampleScriptsOutput}"
+                -p:BaseIntermediateOutputPath="${veAssetPipelineSampleScriptsIntermediate}"
+            DEPENDS
+                VEngineScriptAPI
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+            COMMENT "Building VEngine sample scripts: AssetPipelineSample"
+            VERBATIM
+        )
+
+        set_target_properties(VEngineExampleAssetPipelineSampleScripts
+            PROPERTIES
+                FOLDER "Examples"
+        )
+    endif()
+
     if(TARGET VEnginePlayer)
         add_dependencies(VEnginePlayer VEngineExampleAssetPipelineSample)
 
@@ -55,6 +84,7 @@ function(ve_add_example_projects)
                 VEnginePackageTool
                 VEnginePlayer
                 VEngineExampleAssetPipelineSample
+                VEngineExampleAssetPipelineSampleScripts
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
             COMMENT "Packaging VEngine example project: AssetPipelineSample"
             VERBATIM

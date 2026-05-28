@@ -202,6 +202,27 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineSceneTests>
     )
 
+    add_executable(VEngineScriptingTests
+        Tests/Unit/ScriptingTests.cpp
+    )
+
+    target_compile_definitions(VEngineScriptingTests
+        PRIVATE
+            VE_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    )
+
+    target_link_libraries(VEngineScriptingTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineScriptingTests)
+
+    add_test(
+        NAME VEngineScriptingTests
+        COMMAND $<TARGET_FILE:VEngineScriptingTests>
+    )
+
     add_executable(VEngineAssetPipelineTests
         Tests/Unit/AssetPipelineTests.cpp
         Tools/AssetTool/ObjImporter.cpp

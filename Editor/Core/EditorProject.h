@@ -6,15 +6,19 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scripting/ScriptProject.h"
 
 #include <string>
 #include <string_view>
+#include <memory>
 #include <vector>
 
 namespace ve
 {
     class GameThreadSystem;
     class ResourceManager;
+    class ScriptContext;
+    class ScriptHost;
 
     struct EditorProjectSceneReference
     {
@@ -30,6 +34,7 @@ namespace ve
         std::string engineVersion;
         std::vector<std::string> targetPlatforms;
         EditorProjectSceneReference startupScene;
+        ScriptProjectConfig scripting;
     };
 
     enum class EditorProjectDiagnosticSeverity
@@ -66,6 +71,9 @@ namespace ve
     class EditorProjectService
     {
     public:
+        EditorProjectService();
+        ~EditorProjectService();
+
         [[nodiscard]] static Result<EditorProjectDescriptor> LoadProjectDescriptor(const Path& projectRoot);
         [[nodiscard]] static ErrorCode CreateProjectSkeleton(const Path& projectRoot, std::string_view displayName);
 
@@ -89,6 +97,8 @@ namespace ve
         [[nodiscard]] const Path& GetCurrentScenePath() const noexcept;
         [[nodiscard]] const AssetGuid& GetCurrentSceneGuid() const noexcept;
         [[nodiscard]] bool IsPlaying() const noexcept;
+        [[nodiscard]] bool HasWindowsScripts() const noexcept;
+        [[nodiscard]] ErrorCode BuildScripts(ScriptBuildConfiguration configuration);
         [[nodiscard]] ErrorCode StartPlayMode(ResourceManager& resourceManager);
         void StopPlayMode();
         void TickPlayMode();
@@ -121,12 +131,16 @@ namespace ve
         [[nodiscard]] ErrorCode OpenStartupScene(ResourceManager& resourceManager);
         [[nodiscard]] ErrorCode LoadSceneFromRecord(const AssetRecord& record, ResourceManager& resourceManager);
         void OpenEmptyEditScene();
+        [[nodiscard]] ErrorCode PreparePlayModeScripts(ScriptBuildConfiguration configuration);
+        void ClearPlayModeScripts() noexcept;
 
         Path projectRoot_;
         EditorProjectDescriptor descriptor_;
         AssetDatabase assetDatabase_;
         Scene currentEditScene_;
         Scene playScene_;
+        std::unique_ptr<ScriptHost> scriptHost_;
+        std::unique_ptr<ScriptContext> scriptContext_;
         Path currentScenePath_;
         AssetGuid currentSceneGuid_;
         std::vector<EditorMeshRendererAssetReferences> meshRendererAssetReferences_;

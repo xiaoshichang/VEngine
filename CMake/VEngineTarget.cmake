@@ -29,4 +29,15 @@ function(ve_configure_target targetName)
                 -Wpedantic
         )
     endif()
+
+    get_target_property(targetType ${targetName} TYPE)
+    if(WIN32 AND VE_DOTNET_NETHOST_DLL AND targetType STREQUAL "EXECUTABLE")
+        add_custom_command(TARGET ${targetName} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${VE_DOTNET_NETHOST_DLL}"
+                "$<TARGET_FILE_DIR:${targetName}>"
+            COMMENT "Copying .NET nethost runtime for ${targetName}"
+            VERBATIM
+        )
+    endif()
 endfunction()

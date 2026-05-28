@@ -11,8 +11,10 @@
 #include <Windows.h>
 
 #include <cstddef>
+#include <filesystem>
 #include <sstream>
 #include <string_view>
+#include <utility>
 
 namespace ve
 {
@@ -30,6 +32,11 @@ namespace ve
             std::ostringstream stream;
             stream << action << " failed with Win32 error " << GetLastError() << ".";
             return stream.str();
+        }
+
+        [[nodiscard]] bool IsHostFxrInitializeSuccess(int status) noexcept
+        {
+            return status == 0 || status == 1 || status == 2;
         }
 
         [[nodiscard]] Result<std::wstring> ToWideString(std::string_view text, std::string_view label)
@@ -65,6 +72,31 @@ namespace ve
             }
 
             return Result<std::wstring>::Success(std::move(result));
+        }
+
+        [[nodiscard]] Result<std::wstring> GetCurrentExecutablePath()
+        {
+            std::wstring path(32768, L'\0');
+            const DWORD size = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+            if (size == 0 || size >= static_cast<DWORD>(path.size()))
+            {
+                return Result<std::wstring>::Failure(
+                    Error(ErrorCode::PlatformError, MakeWin32Message("GetModuleFileNameW")));
+            }
+
+            path.resize(size);
+            return Result<std::wstring>::Success(std::move(path));
+        }
+
+        [[nodiscard]] std::wstring GetDotNetRootFromHostFxrPath(const std::wstring& hostFxrPath)
+        {
+            std::filesystem::path dotnetRoot = std::filesystem::path(hostFxrPath);
+            for (int depth = 0; depth < 4 && !dotnetRoot.empty(); ++depth)
+            {
+                dotnetRoot = dotnetRoot.parent_path();
+            }
+
+            return dotnetRoot.native();
         }
 
         [[nodiscard]] Result<std::string> ToUtf8String(std::wstring_view text, std::string_view label)
@@ -149,18 +181,20 @@ namespace ve
 
             return Result<TFunction>::Success(reinterpret_cast<TFunction>(proc));
         }
+
+        struct SharedDotNetRuntime
+        {
+            HMODULE hostFxrModule = nullptr;
+            load_assembly_and_get_function_pointer_fn loadAssemblyAndGetFunctionPointer = nullptr;
+            Path hostFxrPath;
+        };
+
+        SharedDotNetRuntime gSharedRuntime;
     } // namespace
 
     struct DotNetHost::Impl
     {
-        ~Impl()
-        {
-            if (hostFxrModule != nullptr)
-            {
-                FreeLibrary(hostFxrModule);
-                hostFxrModule = nullptr;
-            }
-        }
+        ~Impl() = default;
 
         HMODULE hostFxrModule = nullptr;
         hostfxr_initialize_for_runtime_config_fn initializeForRuntimeConfig = nullptr;
@@ -199,6 +233,18 @@ namespace ve
                       "DotNetHost runtimeconfig.json was not found: " + desc.runtimeConfigPath.GetString()));
         }
 
+        if (gSharedRuntime.loadAssemblyAndGetFunctionPointer != nullptr)
+        {
+            impl_->hostFxrModule = gSharedRuntime.hostFxrModule;
+            impl_->loadAssemblyAndGetFunctionPointer = gSharedRuntime.loadAssemblyAndGetFunctionPointer;
+            impl_->hostFxrPath = gSharedRuntime.hostFxrPath;
+            impl_->initialized = true;
+
+            DotNetHostInfo info;
+            info.hostFxrPath = impl_->hostFxrPath;
+            return Result<DotNetHostInfo>::Success(std::move(info));
+        }
+
         Result<std::wstring> runtimeConfigPath = ToWideString(desc.runtimeConfigPath.GetString(), "runtimeconfig path");
         if (!runtimeConfigPath)
         {
@@ -209,6 +255,12 @@ namespace ve
         if (!hostFxrPath)
         {
             return Result<DotNetHostInfo>::Failure(hostFxrPath.GetError());
+        }
+
+        Result<std::wstring> currentExecutablePath = GetCurrentExecutablePath();
+        if (!currentExecutablePath)
+        {
+            return Result<DotNetHostInfo>::Failure(currentExecutablePath.GetError());
         }
 
         impl_->hostFxrModule = LoadLibraryW(hostFxrPath.GetValue().c_str());
@@ -242,9 +294,17 @@ namespace ve
         impl_->getRuntimeDelegate = getRuntimeDelegate.GetValue();
         impl_->close = close.GetValue();
 
+        hostfxr_initialize_parameters initializeParameters{};
+        initializeParameters.size = sizeof(initializeParameters);
+        initializeParameters.host_path = currentExecutablePath.GetValue().c_str();
+        const std::wstring dotnetRoot = GetDotNetRootFromHostFxrPath(hostFxrPath.GetValue());
+        initializeParameters.dotnet_root = dotnetRoot.empty() ? nullptr : dotnetRoot.c_str();
+
         hostfxr_handle hostContext = nullptr;
-        int result = impl_->initializeForRuntimeConfig(runtimeConfigPath.GetValue().c_str(), nullptr, &hostContext);
-        if (result != 0 || hostContext == nullptr)
+        int result = impl_->initializeForRuntimeConfig(runtimeConfigPath.GetValue().c_str(),
+                                                       &initializeParameters,
+                                                       &hostContext);
+        if (!IsHostFxrInitializeSuccess(result) || hostContext == nullptr)
         {
             return Result<DotNetHostInfo>::Failure(
                 Error(ErrorCode::PlatformError, MakeStatusMessage("hostfxr_initialize_for_runtime_config", result)));
@@ -272,6 +332,9 @@ namespace ve
         }
 
         impl_->hostFxrPath = Path(hostFxrPathUtf8.MoveValue());
+        gSharedRuntime.hostFxrModule = impl_->hostFxrModule;
+        gSharedRuntime.loadAssemblyAndGetFunctionPointer = impl_->loadAssemblyAndGetFunctionPointer;
+        gSharedRuntime.hostFxrPath = impl_->hostFxrPath;
         impl_->initialized = true;
 
         DotNetHostInfo info;

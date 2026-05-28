@@ -42,6 +42,7 @@ function(ve_add_engine)
             Engine/Runtime/Scripting/ScriptComponent.cpp
             Engine/Runtime/Scripting/ScriptContext.cpp
             Engine/Runtime/Scripting/ScriptHost.cpp
+            Engine/Runtime/Scripting/ScriptProject.cpp
             Engine/Runtime/Threading/Synchronization.cpp
             Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
@@ -101,6 +102,7 @@ function(ve_add_engine)
             Engine/Runtime/Scripting/ScriptComponent.h
             Engine/Runtime/Scripting/ScriptContext.h
             Engine/Runtime/Scripting/ScriptHost.h
+            Engine/Runtime/Scripting/ScriptProject.h
             Engine/Runtime/Threading/Atomic.h
             Engine/Runtime/Threading/LockFreeMpscQueue.h
             Engine/Runtime/Threading/LockFreeSpscQueue.h
@@ -128,6 +130,7 @@ function(ve_add_engine)
             VE_ENABLE_D3D11=$<BOOL:${VE_ENABLE_D3D11}>
             VE_ENABLE_D3D12=$<BOOL:${VE_ENABLE_D3D12}>
             VE_ENABLE_METAL=$<BOOL:${VE_ENABLE_METAL}>
+            VE_BUILD_CONFIGURATION="$<CONFIG>"
             VE_DEFAULT_PROJECT_DIR="${PROJECT_SOURCE_DIR}/Examples/AssetPipelineSample"
     )
 

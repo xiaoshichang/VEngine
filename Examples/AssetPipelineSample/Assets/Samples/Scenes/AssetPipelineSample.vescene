@@ -127,6 +127,13 @@
             }
           },
           {
+            "type": "ScriptComponent",
+            "properties": {
+              "scriptTypeName": "VEngine.SampleScripts.RotateAndLog",
+              "assemblyName": "VEngine.SampleScripts"
+            }
+          },
+          {
             "type": "MeshRendererComponent",
             "properties": {
               "mesh": {

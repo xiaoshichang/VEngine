@@ -27,6 +27,18 @@ namespace ve
         }
 
         activeInstances_.clear();
+        if (projectAssemblyLoaded_)
+        {
+            Result<ScriptOperationResult> unloadResult = host_->UnloadProjectAssembly();
+            if (!unloadResult)
+            {
+                VE_LOG_WARN_CATEGORY("Script",
+                                     "Failed to unload project script assembly during ScriptContext teardown: {}",
+                                     unloadResult.GetError().GetMessage());
+            }
+
+            projectAssemblyLoaded_ = false;
+        }
     }
 
     Result<ScriptOperationResult> ScriptContext::LoadProjectAssembly(const Path& assemblyPath)

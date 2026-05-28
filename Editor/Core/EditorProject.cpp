@@ -8,6 +8,8 @@
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Scene/Serialization/SceneSerialization.h"
+#include "Engine/Runtime/Scripting/ScriptContext.h"
+#include "Engine/Runtime/Scripting/ScriptHost.h"
 
 #include <boost/json.hpp>
 #include <boost/system/error_code.hpp>
@@ -139,6 +141,13 @@ namespace ve
                 projectRoot / "Generated/Shaders/Windows/D3D12",
                 projectRoot / "Generated/Shaders/iOS",
                 projectRoot / "Generated/Shaders/iOS/Metal",
+                projectRoot / "Generated/Scripts",
+                projectRoot / "Generated/Scripts/Windows",
+                projectRoot / "Generated/Scripts/Windows/Debug",
+                projectRoot / "Generated/Scripts/Windows/Release",
+                projectRoot / "Generated/Intermediates",
+                projectRoot / "Generated/Intermediates/Scripts",
+                projectRoot / "Generated/Intermediates/Scripts/Windows",
                 projectRoot / "Generated/Build",
                 projectRoot / "Generated/Build/Windows",
                 projectRoot / "Generated/Build/iOS",
@@ -171,6 +180,17 @@ namespace ve
             root["name"] = descriptor.displayName;
             root["engineVersion"] = descriptor.engineVersion;
             root["startupScene"] = WriteSceneReference(descriptor.startupScene);
+
+            if (descriptor.scripting.HasWindowsScripts())
+            {
+                object windowsScripting;
+                windowsScripting["project"] = descriptor.scripting.windows.projectPath.GetString();
+                windowsScripting["assemblyName"] = descriptor.scripting.windows.assemblyName;
+
+                object scripting;
+                scripting["windows"] = std::move(windowsScripting);
+                root["scripting"] = std::move(scripting);
+            }
 
             array platforms;
             for (const std::string& platform : descriptor.targetPlatforms)
@@ -620,6 +640,10 @@ namespace ve
         }
     } // namespace
 
+    EditorProjectService::EditorProjectService() = default;
+
+    EditorProjectService::~EditorProjectService() = default;
+
     Result<EditorProjectDescriptor> EditorProjectService::LoadProjectDescriptor(const Path& projectRoot)
     {
         if (projectRoot.IsEmpty())
@@ -696,6 +720,14 @@ namespace ve
             return Result<EditorProjectDescriptor>::Failure(
                 Error(ErrorCode::InvalidArgument, "Project startup scene must be a project-relative Assets/ path."));
         }
+
+        Result<ScriptProjectConfig> scripting = LoadScriptProjectConfig(projectRoot);
+        if (!scripting)
+        {
+            return Result<EditorProjectDescriptor>::Failure(scripting.GetError());
+        }
+
+        descriptor.scripting = scripting.MoveValue();
 
         return Result<EditorProjectDescriptor>::Success(std::move(descriptor));
     }
@@ -1031,6 +1063,45 @@ namespace ve
         return isPlaying_;
     }
 
+    bool EditorProjectService::HasWindowsScripts() const noexcept
+    {
+        return descriptor_.scripting.HasWindowsScripts();
+    }
+
+    ErrorCode EditorProjectService::BuildScripts(ScriptBuildConfiguration configuration)
+    {
+        if (!hasOpenProject_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (isPlaying_)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Scripts can be rebuilt only after Play mode is stopped.");
+            return ErrorCode::InvalidState;
+        }
+
+        if (!descriptor_.scripting.HasWindowsScripts())
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Project has no Windows scripting configuration.");
+            return ErrorCode::None;
+        }
+
+        Result<WindowsScriptBuildArtifacts> buildResult =
+            BuildWindowsScriptProject(projectRoot_, descriptor_.scripting.windows, configuration);
+        if (!buildResult)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Script build failed: " + buildResult.GetError().GetMessage());
+            return buildResult.GetError().GetCode();
+        }
+
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
+                      "Script build output: " + buildResult.GetValue().outputDirectory.GetString());
+        return ErrorCode::None;
+    }
+
     ErrorCode EditorProjectService::StartPlayMode(ResourceManager& resourceManager)
     {
         (void)resourceManager;
@@ -1043,6 +1114,13 @@ namespace ve
         ReflectionRegistry reflectionRegistry;
         RegisterSceneReflectionTypes(reflectionRegistry);
 
+        ErrorCode scriptResult = PreparePlayModeScripts(ScriptBuildConfiguration::Debug);
+        if (scriptResult != ErrorCode::None)
+        {
+            ClearPlayModeScripts();
+            return scriptResult;
+        }
+
         const std::string editSceneJson = SerializeSceneToJson(currentEditScene_, reflectionRegistry);
         ErrorCode cloneResult = DeserializeSceneFromJson(playScene_, reflectionRegistry, editSceneJson);
         if (cloneResult != ErrorCode::None)
@@ -1050,6 +1128,8 @@ namespace ve
             AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
                           "Failed to create play scene instance: " + std::string(ToString(cloneResult)));
             playScene_.Clear();
+            playScene_.SetScriptContext(nullptr);
+            ClearPlayModeScripts();
             return cloneResult;
         }
 
@@ -1067,6 +1147,8 @@ namespace ve
         }
 
         playScene_.Clear();
+        playScene_.SetScriptContext(nullptr);
+        ClearPlayModeScripts();
         isPlaying_ = false;
         AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Play mode stopped.");
     }
@@ -1149,6 +1231,8 @@ namespace ve
         descriptor_ = {};
         assetDatabase_ = {};
         playScene_.Clear();
+        playScene_.SetScriptContext(nullptr);
+        ClearPlayModeScripts();
         currentEditScene_.Clear();
         currentScenePath_ = {};
         currentSceneGuid_ = {};
@@ -1294,5 +1378,72 @@ namespace ve
         currentScenePath_ = {};
         currentSceneGuid_ = {};
         meshRendererAssetReferences_.clear();
+    }
+
+    ErrorCode EditorProjectService::PreparePlayModeScripts(ScriptBuildConfiguration configuration)
+    {
+        if (!descriptor_.scripting.HasWindowsScripts())
+        {
+            return ErrorCode::None;
+        }
+
+        WindowsScriptBuildArtifacts artifacts =
+            GetWindowsGeneratedScriptBuildArtifacts(projectRoot_,
+                                                    configuration,
+                                                    descriptor_.scripting.windows.assemblyName);
+        if (ValidateWindowsScriptBuildArtifacts(artifacts) != ErrorCode::None)
+        {
+            ErrorCode buildResult = BuildScripts(configuration);
+            if (buildResult != ErrorCode::None)
+            {
+                return buildResult;
+            }
+
+            artifacts = GetWindowsGeneratedScriptBuildArtifacts(projectRoot_,
+                                                                configuration,
+                                                                descriptor_.scripting.windows.assemblyName);
+        }
+
+        const ErrorCode validateResult = ValidateWindowsScriptBuildArtifacts(artifacts);
+        if (validateResult != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Script output is missing required runtime files.");
+            return validateResult;
+        }
+
+        scriptHost_ = std::make_unique<ScriptHost>();
+        Result<ScriptHostInfo> hostInfo =
+            scriptHost_->Initialize(ScriptHostDesc{artifacts.projectRuntimeConfigPath,
+                                                   artifacts.scriptApiAssemblyPath});
+        if (!hostInfo)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "ScriptHost initialization failed: " + hostInfo.GetError().GetMessage());
+            scriptHost_.reset();
+            return hostInfo.GetError().GetCode();
+        }
+
+        scriptContext_ = std::make_unique<ScriptContext>(*scriptHost_);
+        Result<ScriptOperationResult> loadResult =
+            scriptContext_->LoadProjectAssembly(artifacts.projectAssemblyPath);
+        if (!loadResult)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Project script assembly load failed: " + loadResult.GetError().GetMessage());
+            ClearPlayModeScripts();
+            return loadResult.GetError().GetCode();
+        }
+
+        playScene_.SetScriptContext(scriptContext_.get());
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
+                      "Script context loaded: " + descriptor_.scripting.windows.assemblyName);
+        return ErrorCode::None;
+    }
+
+    void EditorProjectService::ClearPlayModeScripts() noexcept
+    {
+        scriptContext_.reset();
+        scriptHost_.reset();
     }
 } // namespace ve

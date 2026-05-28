@@ -12,6 +12,7 @@ namespace VEngine.Scripting;
 public static unsafe class ScriptApiBootstrap
 {
     private static readonly Dictionary<ulong, ScriptInstanceState> Instances = new();
+    private static ProjectScriptLoadContext? s_projectLoadContext;
     private static Assembly? s_projectAssembly;
     private static ulong s_nextInstanceId = 1;
     private static string s_lastError = string.Empty;
@@ -57,7 +58,8 @@ public static unsafe class ScriptApiBootstrap
                 throw new FileNotFoundException("Project script assembly was not found.", fullPath);
             }
 
-            s_projectAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
+            s_projectLoadContext = new ProjectScriptLoadContext(fullPath);
+            s_projectAssembly = s_projectLoadContext.LoadFromAssemblyPath(fullPath);
             s_lastError = string.Empty;
             return 0;
         }
@@ -173,6 +175,33 @@ public static unsafe class ScriptApiBootstrap
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
+    public static int UnloadProjectAssembly()
+    {
+        try
+        {
+            foreach (ScriptInstanceState state in Instances.Values)
+            {
+                state.Behaviour.DetachNativeHandle();
+                if (state.Behaviour is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+
+            Instances.Clear();
+            s_projectAssembly = null;
+            s_projectLoadContext?.Unload();
+            s_projectLoadContext = null;
+            s_lastError = string.Empty;
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            return CaptureException(exception);
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
     public static int GetLastError(byte* buffer, int bufferSizeInBytes)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(s_lastError);
@@ -261,6 +290,28 @@ public static unsafe class ScriptApiBootstrap
         public ScriptBehaviour Behaviour { get; }
 
         public string TypeName { get; }
+    }
+
+    private sealed class ProjectScriptLoadContext : AssemblyLoadContext
+    {
+        private readonly AssemblyDependencyResolver _resolver;
+
+        public ProjectScriptLoadContext(string mainAssemblyPath)
+            : base(isCollectible: true)
+        {
+            _resolver = new AssemblyDependencyResolver(mainAssemblyPath);
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            if (assemblyName.Name == "VEngine.ScriptAPI")
+            {
+                return typeof(ScriptBehaviour).Assembly;
+            }
+
+            string? assemblyPath = _resolver.ResolveAssemblyToPath(assemblyName);
+            return assemblyPath != null ? LoadFromAssemblyPath(assemblyPath) : null;
+        }
     }
 }
 

@@ -740,6 +740,33 @@ namespace
                 ImGui::EndMenu();
             }
 
+            if (ImGui::BeginMenu("Scripting"))
+            {
+                const bool canBuildScripts = projectService.HasOpenProject() && !projectService.IsPlaying() &&
+                                             projectService.HasWindowsScripts();
+                ImGui::BeginDisabled(!canBuildScripts);
+                if (ImGui::MenuItem("Build Windows Scripts"))
+                {
+                    const ve::ErrorCode buildResult =
+                        projectService.BuildScripts(ve::ScriptBuildConfiguration::Debug);
+                    statusMessage_ = buildResult == ve::ErrorCode::None
+                                         ? "Windows scripts built."
+                                         : MakeProjectOpenError("Script build failed", buildResult);
+                }
+                ImGui::EndDisabled();
+
+                if (!projectService.HasWindowsScripts())
+                {
+                    ImGui::TextDisabled("No Windows scripts configured");
+                }
+                else if (projectService.IsPlaying())
+                {
+                    ImGui::TextDisabled("Stop Play mode before rebuilding");
+                }
+
+                ImGui::EndMenu();
+            }
+
             ImGui::EndMenuBar();
         }
 

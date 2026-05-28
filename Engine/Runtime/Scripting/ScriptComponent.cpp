@@ -67,7 +67,8 @@ namespace ve
         lastError_.clear();
         failed_ = false;
 
-        if (nativeLifecycleCreated_ && !scriptTypeName_.empty() && EnsureManagedInstance() && IsActiveAndEnabled())
+        if (nativeLifecycleCreated_ && !scriptTypeName_.empty() && EnsureManagedInstance(false) &&
+            IsActiveAndEnabled())
         {
             (void)InvokeManagedLifecycle(ScriptLifecycleMethod::OnEnable);
         }
@@ -99,7 +100,7 @@ namespace ve
         nativeLifecycleCreated_ = true;
         if (!scriptTypeName_.empty())
         {
-            (void)EnsureManagedInstance();
+            (void)EnsureManagedInstance(false);
         }
     }
 
@@ -116,7 +117,7 @@ namespace ve
 
     void ScriptComponent::OnEnable()
     {
-        if (EnsureManagedInstance() && scriptValid_)
+        if (EnsureManagedInstance(false) && scriptValid_)
         {
             (void)InvokeManagedLifecycle(ScriptLifecycleMethod::OnEnable);
         }
@@ -141,7 +142,7 @@ namespace ve
             return;
         }
 
-        if (EnsureManagedInstance() && scriptValid_)
+        if (EnsureManagedInstance(true) && scriptValid_)
         {
             (void)InvokeManagedLifecycle(ScriptLifecycleMethod::OnUpdate, Time::GetDeltaSeconds());
         }
@@ -152,7 +153,7 @@ namespace ve
         return GetScene().GetScriptContext();
     }
 
-    bool ScriptComponent::EnsureManagedInstance()
+    bool ScriptComponent::EnsureManagedInstance(bool reportMissingContext)
     {
         if (instanceId_ != InvalidScriptInstanceId)
         {
@@ -172,8 +173,11 @@ namespace ve
         ScriptContext* context = GetActiveScriptContext();
         if (context == nullptr)
         {
-            ReportFailure("ScriptComponent cannot create '" + scriptTypeName_ + "' because the Scene has no "
-                          "ScriptContext.");
+            if (reportMissingContext)
+            {
+                ReportFailure("ScriptComponent cannot create '" + scriptTypeName_ + "' because the Scene has no "
+                              "ScriptContext.");
+            }
             return false;
         }
 

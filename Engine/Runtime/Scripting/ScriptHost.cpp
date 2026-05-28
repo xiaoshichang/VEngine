@@ -80,17 +80,21 @@ namespace ve
         Result<void*> loadProjectAssembly = LoadBootstrapFunction(desc.scriptApiAssemblyPath, "LoadProjectAssembly");
         Result<void*> createScriptInstance = LoadBootstrapFunction(desc.scriptApiAssemblyPath, "CreateScriptInstance");
         Result<void*> invokeLifecycle = LoadBootstrapFunction(desc.scriptApiAssemblyPath, "InvokeLifecycle");
-        Result<void*> destroyScriptInstance = LoadBootstrapFunction(desc.scriptApiAssemblyPath, "DestroyScriptInstance");
+        Result<void*> destroyScriptInstance =
+            LoadBootstrapFunction(desc.scriptApiAssemblyPath, "DestroyScriptInstance");
+        Result<void*> unloadProjectAssembly =
+            LoadBootstrapFunction(desc.scriptApiAssemblyPath, "UnloadProjectAssembly");
         Result<void*> getLastError = LoadBootstrapFunction(desc.scriptApiAssemblyPath, "GetLastError");
 
         if (!initializeHost || !loadProjectAssembly || !createScriptInstance || !invokeLifecycle ||
-            !destroyScriptInstance || !getLastError)
+            !destroyScriptInstance || !unloadProjectAssembly || !getLastError)
         {
             const Error error = !initializeHost      ? initializeHost.GetError()
                                 : !loadProjectAssembly ? loadProjectAssembly.GetError()
                                 : !createScriptInstance ? createScriptInstance.GetError()
                                 : !invokeLifecycle      ? invokeLifecycle.GetError()
                                 : !destroyScriptInstance ? destroyScriptInstance.GetError()
+                                : !unloadProjectAssembly ? unloadProjectAssembly.GetError()
                                                          : getLastError.GetError();
             Shutdown();
             return Result<ScriptHostInfo>::Failure(error);
@@ -101,10 +105,12 @@ namespace ve
         createScriptInstance_ = reinterpret_cast<CreateScriptInstanceFunction>(createScriptInstance.GetValue());
         invokeLifecycle_ = reinterpret_cast<InvokeLifecycleFunction>(invokeLifecycle.GetValue());
         destroyScriptInstance_ = reinterpret_cast<DestroyScriptInstanceFunction>(destroyScriptInstance.GetValue());
+        unloadProjectAssembly_ = reinterpret_cast<UnloadProjectAssemblyFunction>(unloadProjectAssembly.GetValue());
         getLastError_ = reinterpret_cast<GetLastErrorFunction>(getLastError.GetValue());
 
         bridgeApi_ = CreateScriptBridgeApi(bridgeRegistry_);
-        const std::int32_t initializeResult = initializeHost_(&bridgeApi_, static_cast<std::int32_t>(sizeof(bridgeApi_)));
+        const std::int32_t initializeResult =
+            initializeHost_(&bridgeApi_, static_cast<std::int32_t>(sizeof(bridgeApi_)));
         if (initializeResult != 0)
         {
             Error error = MakeManagedError("ScriptApiBootstrap.InitializeHost", initializeResult);
@@ -126,6 +132,7 @@ namespace ve
         createScriptInstance_ = nullptr;
         invokeLifecycle_ = nullptr;
         destroyScriptInstance_ = nullptr;
+        unloadProjectAssembly_ = nullptr;
         getLastError_ = nullptr;
         bridgeRegistry_.Clear();
         dotNetHost_.Shutdown();
@@ -172,6 +179,23 @@ namespace ve
         {
             return Result<ScriptOperationResult>::Failure(
                 MakeManagedError("ScriptApiBootstrap.LoadProjectAssembly", result));
+        }
+
+        return Result<ScriptOperationResult>::Success(ScriptOperationResult{});
+    }
+
+    Result<ScriptOperationResult> ScriptHost::UnloadProjectAssembly()
+    {
+        if (!initialized_ || unloadProjectAssembly_ == nullptr)
+        {
+            return Result<ScriptOperationResult>::Failure(MakeInvalidStateError("ScriptHost is not initialized."));
+        }
+
+        const std::int32_t result = unloadProjectAssembly_();
+        if (result != 0)
+        {
+            return Result<ScriptOperationResult>::Failure(
+                MakeManagedError("ScriptApiBootstrap.UnloadProjectAssembly", result));
         }
 
         return Result<ScriptOperationResult>::Success(ScriptOperationResult{});

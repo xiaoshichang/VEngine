@@ -60,6 +60,7 @@ namespace ve
         [[nodiscard]] const ScriptBridgeRegistry& GetBridgeRegistry() const noexcept;
 
         [[nodiscard]] Result<ScriptOperationResult> LoadProjectAssembly(const Path& assemblyPath);
+        [[nodiscard]] Result<ScriptOperationResult> UnloadProjectAssembly();
         [[nodiscard]] Result<ScriptInstanceId> CreateScriptInstance(std::string_view scriptTypeName,
                                                                     ScriptObjectHandle nativeHandle);
         [[nodiscard]] Result<ScriptOperationResult> InvokeLifecycle(ScriptInstanceId instanceId,
@@ -80,6 +81,7 @@ namespace ve
                                                    float deltaSeconds);
         using DestroyScriptInstanceFunction =
             std::int32_t(VE_SCRIPT_HOST_CALLTYPE*)(ScriptInstanceId instanceId);
+        using UnloadProjectAssemblyFunction = std::int32_t(VE_SCRIPT_HOST_CALLTYPE*)();
         using GetLastErrorFunction =
             std::int32_t(VE_SCRIPT_HOST_CALLTYPE*)(char* buffer, std::int32_t bufferSizeInBytes);
 
@@ -95,6 +97,7 @@ namespace ve
         CreateScriptInstanceFunction createScriptInstance_ = nullptr;
         InvokeLifecycleFunction invokeLifecycle_ = nullptr;
         DestroyScriptInstanceFunction destroyScriptInstance_ = nullptr;
+        UnloadProjectAssemblyFunction unloadProjectAssembly_ = nullptr;
         GetLastErrorFunction getLastError_ = nullptr;
         bool initialized_ = false;
     };

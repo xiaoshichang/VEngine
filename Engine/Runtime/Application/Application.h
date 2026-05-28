@@ -14,6 +14,9 @@
 
 namespace ve
 {
+    class ScriptContext;
+    class ScriptHost;
+
     using ApplicationSceneStartupFunction = std::function<ErrorCode(EngineRuntime&)>;
     using ApplicationSceneShutdownFunction = std::function<void(EngineRuntime&)>;
     using ApplicationWindowConfigureFunction = std::function<void(Window&, EngineRuntime&)>;
@@ -64,6 +67,8 @@ namespace ve
         ApplicationDesc desc_;
         EngineRuntime engineRuntime_;
         std::unique_ptr<Scene> sampleScene_;
+        std::unique_ptr<ScriptHost> scriptHost_;
+        std::unique_ptr<ScriptContext> scriptContext_;
         int exitCode_ = 0;
     };
 } // namespace ve
