@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 
 #include <array>
