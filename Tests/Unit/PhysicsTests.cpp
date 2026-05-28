@@ -2,6 +2,7 @@
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Physics/ColliderComponent.h"
 #include "Engine/Runtime/Physics/PhysicsGeometry.h"
+#include "Engine/Runtime/Physics/PhysicsWorld.h"
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/Scene.h"
@@ -559,6 +560,67 @@ namespace
                          "Skipped duplicate should not overwrite first collider properties");
         return passed;
     }
+
+    bool TestPhysicsWorldSyncBuildsColliderProxies()
+    {
+        ve::Scene scene;
+        ve::GameObject& sphereObject = scene.CreateGameObject("Sphere");
+        ve::TransformComponent& sphereTransform = sphereObject.AddComponent<ve::TransformComponent>();
+        sphereTransform.SetLocalPosition(ve::Vector3(2.0f, 0.0f, 0.0f));
+        sphereTransform.SetLocalScale(ve::Vector3(2.0f, 3.0f, 4.0f));
+        ve::ColliderComponent& sphereCollider = sphereObject.AddComponent<ve::ColliderComponent>();
+        sphereCollider.SetShape(ve::ColliderShape::Sphere);
+        sphereCollider.SetCenter(ve::Vector3(1.0f, 0.0f, 0.0f));
+        sphereCollider.SetSphereRadius(0.5f);
+        sphereCollider.SetLayer(1ull << 9);
+
+        ve::GameObject& boxObject = scene.CreateGameObject("Box");
+        ve::TransformComponent& boxTransform = boxObject.AddComponent<ve::TransformComponent>();
+        boxTransform.SetLocalPosition(ve::Vector3(-1.0f, 0.0f, 0.0f));
+        boxTransform.SetLocalRotation(ve::Quaternion::FromAxisAngle(ve::Vector3::UnitY(), ve::ToRadians(90.0f)));
+        ve::ColliderComponent& boxCollider = boxObject.AddComponent<ve::ColliderComponent>();
+        boxCollider.SetBoxSize(ve::Vector3(2.0f, 4.0f, 6.0f));
+
+        scene.UpdateTransforms();
+
+        ve::PhysicsWorld world;
+        world.SyncFromScene(scene);
+
+        bool passed = true;
+        passed &= Expect(world.GetColliderCount() == 2, "PhysicsWorld should sync active collider proxies");
+        world.Clear();
+        passed &= Expect(world.GetColliderCount() == 0, "PhysicsWorld::Clear should remove synced proxies");
+        return passed;
+    }
+
+    bool TestPhysicsWorldSyncSkipsInactiveDisabledAndMissingTransform()
+    {
+        ve::Scene scene;
+        ve::GameObject& active = scene.CreateGameObject("Active");
+        active.AddComponent<ve::TransformComponent>();
+        active.AddComponent<ve::ColliderComponent>();
+
+        ve::GameObject& inactive = scene.CreateGameObject("Inactive");
+        inactive.AddComponent<ve::TransformComponent>();
+        inactive.AddComponent<ve::ColliderComponent>();
+        inactive.SetActive(false);
+
+        ve::GameObject& disabled = scene.CreateGameObject("Disabled");
+        disabled.AddComponent<ve::TransformComponent>();
+        disabled.AddComponent<ve::ColliderComponent>().SetColliderEnabled(false);
+
+        ve::GameObject& missingTransform = scene.CreateGameObject("MissingTransform");
+        missingTransform.AddComponent<ve::ColliderComponent>();
+
+        scene.UpdateTransforms();
+        ve::PhysicsWorld world;
+        world.SyncFromScene(scene);
+
+        bool passed = true;
+        passed &= Expect(world.GetColliderCount() == 1,
+                         "Sync should skip inactive, disabled, and missing-transform colliders");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -587,5 +649,7 @@ int main()
     passed &= TestBuildWorldBoxKeepsAxesOrthonormalWithScaledParent();
     passed &= TestColliderSerializationRoundTrip();
     passed &= TestDuplicateColliderDeserializationSkipsSecondCollider();
+    passed &= TestPhysicsWorldSyncBuildsColliderProxies();
+    passed &= TestPhysicsWorldSyncSkipsInactiveDisabledAndMissingTransform();
     return passed ? 0 : 1;
 }
