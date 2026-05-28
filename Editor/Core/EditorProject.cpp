@@ -397,6 +397,12 @@ namespace ve
             return Path(VE_ENGINE_SOURCE_DIR) / "Managed/VEngine.ScriptAPI/VEngine.ScriptAPI.csproj";
         }
 
+        [[nodiscard]] std::string ToSolutionPath(std::string text)
+        {
+            std::replace(text.begin(), text.end(), '/', '\\');
+            return text;
+        }
+
         [[nodiscard]] std::string WriteWindowsScriptProjectFile()
         {
             std::ostringstream stream;
@@ -412,9 +418,12 @@ namespace ve
             stream << "    <OutputType>Library</OutputType>\n";
             stream << "    <EnableDynamicLoading>true</EnableDynamicLoading>\n";
             stream << "    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>\n";
+            stream << "    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>\n";
             stream << "    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>\n";
             stream << "  </PropertyGroup>\n\n";
             stream << "  <ItemGroup>\n";
+            stream << "    <Compile Include=\"../../../" << GetWindowsScriptSourceRelativeDirectory().GetString()
+                   << "/**/*.cs\" Link=\"Scripts/%(RecursiveDir)%(Filename)%(Extension)\" />\n";
             stream << "    <ProjectReference Include=\""
                    << EscapeXmlAttribute(GetScriptApiProjectPath().GetString()) << "\" />\n";
             stream << "  </ItemGroup>\n";
@@ -422,21 +431,67 @@ namespace ve
             return stream.str();
         }
 
-        [[nodiscard]] ErrorCode EnsureWindowsScriptProjectFile(const Path& projectRoot)
+        [[nodiscard]] std::string WriteWindowsScriptSolutionFile()
         {
+            constexpr std::string_view csharpProjectTypeGuid = "{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}";
+            constexpr std::string_view scriptProjectGuid = "{4D779A8E-A1F8-4D8E-A1A3-F1F4A10A8E01}";
+            constexpr std::string_view scriptApiProjectGuid = "{16AE4D74-21E2-41C4-8B28-E0824C1C7F41}";
+
+            std::ostringstream stream;
+            stream << "Microsoft Visual Studio Solution File, Format Version 12.00\n";
+            stream << "# Visual Studio Version 17\n";
+            stream << "VisualStudioVersion = 17.0.31903.59\n";
+            stream << "MinimumVisualStudioVersion = 10.0.40219.1\n";
+            stream << "Project(\"" << csharpProjectTypeGuid << "\") = \"" << GetWindowsScriptAssemblyName()
+                   << "\", \"VE.Scripting.csproj\", \"" << scriptProjectGuid << "\"\n";
+            stream << "EndProject\n";
+            stream << "Project(\"" << csharpProjectTypeGuid << "\") = \"VEngine.ScriptAPI\", \""
+                   << ToSolutionPath(GetScriptApiProjectPath().GetString()) << "\", \"" << scriptApiProjectGuid
+                   << "\"\n";
+            stream << "EndProject\n";
+            stream << "Global\n";
+            stream << "\tGlobalSection(SolutionConfigurationPlatforms) = preSolution\n";
+            stream << "\t\tDebug|Any CPU = Debug|Any CPU\n";
+            stream << "\t\tRelease|Any CPU = Release|Any CPU\n";
+            stream << "\tEndGlobalSection\n";
+            stream << "\tGlobalSection(ProjectConfigurationPlatforms) = postSolution\n";
+            stream << "\t\t" << scriptProjectGuid << ".Debug|Any CPU.ActiveCfg = Debug|Any CPU\n";
+            stream << "\t\t" << scriptProjectGuid << ".Debug|Any CPU.Build.0 = Debug|Any CPU\n";
+            stream << "\t\t" << scriptProjectGuid << ".Release|Any CPU.ActiveCfg = Release|Any CPU\n";
+            stream << "\t\t" << scriptProjectGuid << ".Release|Any CPU.Build.0 = Release|Any CPU\n";
+            stream << "\t\t" << scriptApiProjectGuid << ".Debug|Any CPU.ActiveCfg = Debug|Any CPU\n";
+            stream << "\t\t" << scriptApiProjectGuid << ".Debug|Any CPU.Build.0 = Debug|Any CPU\n";
+            stream << "\t\t" << scriptApiProjectGuid << ".Release|Any CPU.ActiveCfg = Release|Any CPU\n";
+            stream << "\t\t" << scriptApiProjectGuid << ".Release|Any CPU.Build.0 = Release|Any CPU\n";
+            stream << "\tEndGlobalSection\n";
+            stream << "EndGlobal\n";
+            return stream.str();
+        }
+
+        [[nodiscard]] ErrorCode EnsureWindowsScriptWorkspace(const Path& projectRoot)
+        {
+            const Path sourceDirectory = GetWindowsScriptSourceDirectory(projectRoot);
+            ErrorCode sourceDirectoryResult = EnsureDirectory(sourceDirectory);
+            if (sourceDirectoryResult != ErrorCode::None)
+            {
+                return sourceDirectoryResult;
+            }
+
             const Path scriptProjectPath = GetWindowsScriptProjectPath(projectRoot);
-            if (FileSystem::Exists(scriptProjectPath))
+            ErrorCode workspaceDirectoryResult = EnsureDirectory(scriptProjectPath.GetParentPath());
+            if (workspaceDirectoryResult != ErrorCode::None)
             {
-                return FileSystem::IsFile(scriptProjectPath) ? ErrorCode::None : ErrorCode::InvalidArgument;
+                return workspaceDirectoryResult;
             }
 
-            ErrorCode scriptDirectoryResult = EnsureDirectory(scriptProjectPath.GetParentPath());
-            if (scriptDirectoryResult != ErrorCode::None)
+            ErrorCode projectResult = FileSystem::WriteTextFile(scriptProjectPath, WriteWindowsScriptProjectFile());
+            if (projectResult != ErrorCode::None)
             {
-                return scriptDirectoryResult;
+                return projectResult;
             }
 
-            return FileSystem::WriteTextFile(scriptProjectPath, WriteWindowsScriptProjectFile());
+            return FileSystem::WriteTextFile(GetWindowsScriptSolutionPath(projectRoot),
+                                             WriteWindowsScriptSolutionFile());
         }
 
         [[nodiscard]] object WriteEmptySceneAsset(const AssetGuid& sceneGuid, std::string_view name)
@@ -1011,10 +1066,10 @@ namespace ve
             }
         }
 
-        ErrorCode scriptProjectResult = EnsureWindowsScriptProjectFile(projectRoot);
-        if (scriptProjectResult != ErrorCode::None)
+        ErrorCode scriptWorkspaceResult = EnsureWindowsScriptWorkspace(projectRoot);
+        if (scriptWorkspaceResult != ErrorCode::None)
         {
-            return scriptProjectResult;
+            return scriptWorkspaceResult;
         }
 
         const AssetGuid sceneGuid = AssetGuid::Generate();
@@ -1066,13 +1121,13 @@ namespace ve
             return directoryResult;
         }
 
-        ErrorCode scriptProjectResult = EnsureWindowsScriptProjectFile(projectRoot);
-        if (scriptProjectResult != ErrorCode::None)
+        ErrorCode scriptWorkspaceResult = EnsureWindowsScriptWorkspace(projectRoot);
+        if (scriptWorkspaceResult != ErrorCode::None)
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Failed to create fixed C# project: " +
-                              GetWindowsScriptProjectPath(projectRoot).GetString());
-            return scriptProjectResult;
+                          "Failed to create generated C# workspace: " +
+                              GetWindowsScriptSolutionPath(projectRoot).GetString());
+            return scriptWorkspaceResult;
         }
 
         Result<EditorProjectDescriptor> descriptorResult = LoadProjectDescriptor(projectRoot);
@@ -1166,6 +1221,27 @@ namespace ve
 
         AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
                       "AssetDatabase refreshed " + std::to_string(assetDatabase_.GetRecords().size()) + " asset(s).");
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectService::GenerateScriptWorkspace()
+    {
+        if (!hasOpenProject_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        ErrorCode result = EnsureWindowsScriptWorkspace(projectRoot_);
+        if (result != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Failed to generate C# workspace: " +
+                              GetWindowsScriptSolutionPath(projectRoot_).GetString());
+            return result;
+        }
+
+        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
+                      "Generated C# workspace: " + GetWindowsScriptSolutionPath(projectRoot_).GetString());
         return ErrorCode::None;
     }
 
@@ -1338,6 +1414,12 @@ namespace ve
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Project has no Windows scripting configuration.");
             return ErrorCode::None;
+        }
+
+        const ErrorCode workspaceResult = GenerateScriptWorkspace();
+        if (workspaceResult != ErrorCode::None)
+        {
+            return workspaceResult;
         }
 
         Result<WindowsScriptBuildArtifacts> buildResult =

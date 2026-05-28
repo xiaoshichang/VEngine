@@ -346,10 +346,7 @@ namespace ve
                 return scriptTypes;
             }
 
-            const Path projectFilePath = scripts.projectPath.IsAbsolute()
-                                             ? scripts.projectPath
-                                             : projectService.GetProjectRoot() / scripts.projectPath;
-            const Path sourceRoot = projectFilePath.GetParentPath();
+            const Path sourceRoot = GetWindowsScriptSourceDirectory(projectService.GetProjectRoot());
             std::vector<Path> sourceFiles;
             CollectCSharpSourceFiles(sourceRoot, sourceFiles);
 

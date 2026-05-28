@@ -51,8 +51,12 @@ namespace ve
     [[nodiscard]] Result<ScriptBuildConfiguration> ParseScriptBuildConfiguration(std::string_view text);
 
     [[nodiscard]] std::string_view GetWindowsScriptAssemblyName() noexcept;
+    [[nodiscard]] Path GetWindowsScriptSourceRelativeDirectory();
+    [[nodiscard]] Path GetWindowsScriptSourceDirectory(const Path& projectRoot);
     [[nodiscard]] Path GetWindowsScriptProjectRelativePath();
     [[nodiscard]] Path GetWindowsScriptProjectPath(const Path& projectRoot);
+    [[nodiscard]] Path GetWindowsScriptSolutionRelativePath();
+    [[nodiscard]] Path GetWindowsScriptSolutionPath(const Path& projectRoot);
     [[nodiscard]] WindowsScriptProjectConfig GetWindowsScriptProjectConfig();
 
     [[nodiscard]] Result<ScriptProjectConfig> LoadScriptProjectConfig(const Path& projectRoot);

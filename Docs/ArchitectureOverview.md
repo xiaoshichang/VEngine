@@ -41,7 +41,7 @@ The first stage should avoid over-expanding the scope. These systems are not fir
 - Shadow system.
 - Post-processing pipeline.
 - Skeletal animation.
-- Full rigid body physics.
+- Full production-grade rigid body physics.
 - Terrain system.
 - Material graph editor.
 - Visual scripting.
@@ -444,6 +444,7 @@ VEngine world and authoring coordinates follow the Unity-style left-handed scene
 Geometry math types should be added with the systems that first need them:
 
 - `AABB`.
+- `Box` for oriented physics/query volumes.
 - `Sphere`.
 - `Ray`.
 - `Plane`.
@@ -608,15 +609,24 @@ into the iOS app bundle, not runtime loading of arbitrary managed script DLLs.
 
 First-stage physics is intentionally lightweight.
 
+Detailed fixed-step timing and first-stage rigid body scope are described in
+[Lightweight Physics And Fixed Update Design](LightweightPhysicsFixedUpdateDesign.md).
+
 Supported features:
 
-- `AABB`.
+- Oriented `Box`.
 - `Sphere`.
 - `Raycast`.
+- Fixed-step simulation.
 - Basic `ColliderComponent`.
+- Basic `RigidBodyComponent`.
 - Simple overlap tests.
+- Simple linear and angular rigid body dynamics for box and sphere colliders, including torque, shape-derived inertia,
+  and off-center contact response.
 
-Full rigid body simulation can be added later, either through a dedicated physics library or a custom lightweight physics layer.
+Advanced simulation features can be added later, either through a dedicated physics library or a custom physics layer:
+constraints, joints, character controllers, continuous collision detection, sleeping islands, physics materials, mesh
+colliders, capsules, convex hulls, and broad-phase acceleration structures are not first-stage requirements.
 
 ## 8. Multithreaded Runtime Model
 

@@ -19,7 +19,9 @@ namespace ve
 
         constexpr std::string_view ProjectDescriptorFileName = ".veproject";
         constexpr std::string_view ProjectFormatName = "VEngine.Project";
-        constexpr std::string_view WindowsScriptProjectRelativePath = "Scripts/VE.Scripting/VE.Scripting.csproj";
+        constexpr std::string_view WindowsScriptSourceRelativeDirectory = "Scripts/VE.Scripting";
+        constexpr std::string_view WindowsScriptProjectRelativePath = "Generated/Editor/Workspace/VE.Scripting.csproj";
+        constexpr std::string_view WindowsScriptSolutionRelativePath = "Generated/Editor/Workspace/VE.Scripting.sln";
         constexpr std::string_view WindowsScriptAssemblyName = "VE.Scripting";
 
 #ifndef VE_DOTNET_EXECUTABLE
@@ -125,6 +127,16 @@ namespace ve
         return WindowsScriptAssemblyName;
     }
 
+    Path GetWindowsScriptSourceRelativeDirectory()
+    {
+        return Path(WindowsScriptSourceRelativeDirectory);
+    }
+
+    Path GetWindowsScriptSourceDirectory(const Path& projectRoot)
+    {
+        return projectRoot / GetWindowsScriptSourceRelativeDirectory();
+    }
+
     Path GetWindowsScriptProjectRelativePath()
     {
         return Path(WindowsScriptProjectRelativePath);
@@ -133,6 +145,16 @@ namespace ve
     Path GetWindowsScriptProjectPath(const Path& projectRoot)
     {
         return projectRoot / GetWindowsScriptProjectRelativePath();
+    }
+
+    Path GetWindowsScriptSolutionRelativePath()
+    {
+        return Path(WindowsScriptSolutionRelativePath);
+    }
+
+    Path GetWindowsScriptSolutionPath(const Path& projectRoot)
+    {
+        return projectRoot / GetWindowsScriptSolutionRelativePath();
     }
 
     WindowsScriptProjectConfig GetWindowsScriptProjectConfig()
@@ -170,16 +192,16 @@ namespace ve
             return Result<ScriptProjectConfig>::Failure(
                 MakeError(ErrorCode::InvalidArgument,
                           "Project descriptor scripting section is no longer supported. Remove it and use "
-                          "Scripts/VE.Scripting/VE.Scripting.csproj."));
+                          "Scripts/VE.Scripting/ for C# source files."));
         }
 
         const WindowsScriptProjectConfig windowsConfig = GetWindowsScriptProjectConfig();
-        const bool hasSourceProject = FileSystem::IsFile(projectRoot / windowsConfig.projectPath);
+        const bool hasSourceScripts = FileSystem::IsDirectory(GetWindowsScriptSourceDirectory(projectRoot));
         const bool hasPackagedAssembly =
             FileSystem::IsFile(GetWindowsPackagedScriptBuildArtifacts(projectRoot,
                                                                       windowsConfig.assemblyName)
                                    .projectAssemblyPath);
-        if (!hasSourceProject && !hasPackagedAssembly)
+        if (!hasSourceScripts && !hasPackagedAssembly)
         {
             return Result<ScriptProjectConfig>::Success({});
         }
@@ -278,7 +300,8 @@ namespace ve
         if (!FileSystem::IsFile(scriptProjectPath))
         {
             return Result<WindowsScriptBuildArtifacts>::Failure(
-                MakeError(ErrorCode::NotFound, "Script project was not found: " + config.projectPath.GetString()));
+                MakeError(ErrorCode::NotFound,
+                          "Generated script project was not found: " + config.projectPath.GetString()));
         }
 
         ErrorCode directoryResult =

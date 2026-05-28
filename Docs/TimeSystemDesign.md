@@ -235,5 +235,6 @@ Likely future changes:
 - Add World or Scene time separate from global engine time.
 - Add pause and time scale at the World/Scene layer.
 - Move custom timestep policy out of the Time module if needed.
-- Have TickScheduler or PhysicsScheduler consume `fixedStepCount`.
+- Have TickScheduler or PhysicsScheduler consume `fixedStepCount`. The first detailed plan for this is documented in
+  [Lightweight Physics And Fixed Update Design](LightweightPhysicsFixedUpdateDesign.md).
 - Add platform timer facade only if `std::chrono::steady_clock` proves insufficient.

@@ -215,9 +215,10 @@ namespace
                            "Material asset should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Assets/Samples/Scenes/TestScene.vescene", scene),
                            "Scene asset should be written");
-        passed &= ExpectOk(ve::FileSystem::WriteTextFile(ve::GetWindowsScriptProjectPath(root),
-                                                         "<Project Sdk=\"Microsoft.NET.Sdk\" />\n"),
-                           "Script project file should be written");
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(ve::GetWindowsScriptSourceDirectory(root) /
+                                                             "PackageScript.cs",
+                                                         "namespace VE.Scripting;\n"),
+                           "Script source file should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Generated/Assets/ImportCache" / SourceGuid /
                                                              "TestQuad.vemesh",
                                                          "mesh artifact\n"),

@@ -342,8 +342,9 @@ Implementation order:
   `assemblyName` in `.vescene` files.
 - Dispatch `OnCreate`, `OnDestroy`, `OnEnable`, `OnDisable`, and `OnUpdate(float deltaTime)` through the existing scene
   lifecycle on the Game Thread.
-- Standardize each scripting project on a single fixed Windows C# project at `Scripts/VE.Scripting/VE.Scripting.csproj`
-  with assembly name `VE.Scripting`; do not allow custom user C# project graphs in the first scripting milestone.
+- Standardize each scripting project on a single fixed Windows C# source folder at `Scripts/VE.Scripting/` with assembly
+  name `VE.Scripting`; generate IDE `.sln` and `.csproj` files under `Generated/Editor/Workspace/` and do not allow
+  custom user C# project graphs in the first scripting milestone.
 - Add generated script output folders under `Generated/Scripts/Windows/<Configuration>/` and route Editor build output
   there.
 - Support Editor rebuild and script-context reload only after Play mode is stopped; do not preserve live managed state
@@ -356,17 +357,113 @@ Implementation order:
   Transform mutation, `ScriptComponent` serialization, managed exception handling, and reload-after-stop behavior.
 - Add a bundled sample script project that drives one simple object in the existing sample project.
 
-### Milestone 9: Runtime UI And Lightweight Physics
+### Milestone 9A: Runtime UI
 
-- Implement Canvas.
-- Implement RectTransform.
-- Implement Image.
-- Implement Label with FreeType.
-- Implement Button.
-- Implement UI event routing.
-- Implement AABB, Sphere, and Raycast for picking and lightweight physics.
-- Implement ColliderComponent.
-- Add simple UI and picking demo.
+Detailed design:
+
+- Follow the runtime UI direction in [Architecture Overview](ArchitectureOverview.md): runtime UI is game-facing and
+  separate from Dear ImGui.
+- Keep the first UI pass screen-space only. World-space UI, animations, rich text, complex layout systems, editable UI
+  prefabs, and visual UI authoring tools are non-goals for this milestone.
+
+Implementation order:
+
+- Add a small `Engine/Runtime/UI` module with runtime UI data structures, layout code, input dispatch, and render
+  extraction kept separate from Editor ImGui code.
+- Define the first component set and register it through Reflection: `Canvas`, `RectTransform`, `Image`, `Label`, and
+  `Button`.
+- Serialize and deserialize runtime UI components in `.vescene` files using the same reflection and scene asset path as
+  existing native components.
+- Implement the screen-space Canvas contract: viewport size, reference resolution, scale mode, draw order, and a clear
+  mapping from UI coordinates to render target pixels.
+- Implement `RectTransform` hierarchy evaluation with anchored position, size, pivot, anchors, local scale, parent-child
+  propagation, and deterministic layout invalidation.
+- Implement simple layout helpers only where needed for the first demo, such as horizontal/vertical stacking or fixed
+  padding. Avoid a full flexbox or constraint solver in this milestone.
+- Implement `Image` as textured or solid-color quad rendering with tint, UV rectangle, and basic alpha blending.
+- Add FreeType-backed font loading and a first font atlas cache for `Label`. Route font file reads through Resource or
+  FileSystem facades rather than letting UI code own platform file access.
+- Implement `Label` text measurement, glyph placement, color, alignment, and single-line plus simple multiline
+  rendering. Leave shaping, fallback font chains, bidirectional text, and advanced typography for later.
+- Implement `Button` as a lightweight interaction component over an `Image` or `Label` hierarchy, including normal,
+  hovered, pressed, disabled state, and click dispatch.
+- Route mouse input from the current Windows input snapshot into UI hit testing and pointer events. Keep touch support
+  structurally ready, but let the iOS milestone validate real touch delivery.
+- Add UI event routing rules: hit test order, pointer capture for press/release, event consumption, and predictable
+  behavior when UI overlaps world interaction.
+- Integrate UI rendering with `RenderSystem` through extracted render commands or snapshots. Game Thread UI code must
+  not call RHI directly, and Render Thread must not inspect live UI components.
+- Add minimal built-in UI shader/material resources and package any authored font assets needed by the sample project.
+- Add Editor inspection support through Reflection so UI components can be added, edited, saved, and reloaded like other
+  scene components.
+- Add a runtime UI sample scene or sample overlay with label, image, and button interaction in the existing sample
+  project.
+- Add focused tests for `RectTransform` layout math, UI hit testing order, button state transitions, component
+  serialization, font atlas/glyph lookup basics, and render command extraction shape.
+
+### Milestone 9B: Lightweight Physics And Picking
+
+Detailed design:
+
+- See [Lightweight Physics And Fixed Update Design](LightweightPhysicsFixedUpdateDesign.md).
+- Follow the lightweight physics direction in [Architecture Overview](ArchitectureOverview.md): this milestone owns
+  basic collider queries, scene picking, and simple fixed-step rigid body dynamics.
+- Supported collider shapes are oriented box and sphere only. Mesh colliders, capsules, convex hulls, terrain collision,
+  and custom compound collider authoring are non-goals for this milestone.
+- Keep the rigid body model intentionally small but complete enough for a box-drop demo: gravity, linear and angular
+  velocity integration, force and torque accumulation, shape-derived inertia, trigger handling, and basic linear/angular
+  contact response for box and sphere colliders. Constraints, joints, character controllers, continuous collision
+  detection, sleeping islands, physics materials, and broad third-party physics integration are non-goals for this
+  milestone.
+
+Implementation order:
+
+- Add geometry primitives and query helpers to the math/runtime layer: `Ray`, oriented `Box`, `Sphere`, `AABB` bounds,
+  overlap tests, ray vs. box, ray vs. sphere, sphere vs. sphere, oriented box vs. oriented box, sphere vs. oriented box,
+  and transform-aware bounds helpers.
+- Define `RaycastHit` with object identity, component identity where useful, hit distance, world position, world normal,
+  and enough stable data for Editor selection and gameplay queries.
+- Add a lightweight `ColliderComponent` registered through Reflection and scene serialization.
+- Support first collider shapes: box and sphere, with local center, box size, sphere radius, layer mask, trigger flag,
+  and enabled state.
+- Add `RigidBodyComponent` registered through Reflection and scene serialization, with body type, mass, gravity scale,
+  linear velocity, angular velocity, linear damping, angular damping, kinematic flag, and freeze constraints only if
+  needed by the sample.
+- Add a fixed update phase to `GameThreadSystem` or a small physics scheduler using the existing time fixed-step
+  budget. Physics must advance with a stable fixed delta, and scripts should have a clear future hook for
+  `FixedUpdate`.
+- Define the first physics world/service ownership model under `EngineRuntime` or the Game Thread runtime layer. The
+  physics step reads live scene state on the Game Thread, integrates rigid bodies, resolves simple collisions, then
+  writes resulting transforms back through normal scene mutation rules.
+- Build a simple scene query path owned by the Game Thread. Start with a deterministic linear scan over active collider
+  components; leave BVH, grids, sweep-and-prune, and other acceleration structures for a later scale milestone.
+- Update collider world bounds after transform updates and make query results respect current `TransformComponent`
+  state.
+- Add query APIs such as closest raycast, raycast-all, oriented overlap box, overlap AABB, and overlap sphere with layer
+  masks and optional trigger inclusion.
+- Add simple collision detection and response for dynamic-vs-static and dynamic-vs-dynamic sphere/box pairs. Prefer
+  stable, easy-to-debug positional correction plus linear/angular impulse response over physical completeness. Box
+  response must respect Transform rotation so off-center contacts can generate visible angular velocity.
+- Add trigger overlap events or a first event queue shape if it can be kept small. If event dispatch grows, defer
+  managed/native event surfacing and keep overlap queries as the supported API.
+- Keep query calls read-only from the caller's perspective. Queries may return object/component identifiers, but
+  mutation still goes through normal scene/Game Thread paths.
+- Integrate Editor scene picking by converting viewport mouse coordinates to a world ray, querying colliders, and
+  selecting the nearest hit. Keep mesh-triangle picking and gizmo editing as later refinements unless a fallback is
+  needed for the first demo.
+- Add runtime picking support for Player and scripts at the native API level. Expose C# `Physics.Raycast` only after the
+  native query path is stable and the bridge shape stays narrow. Expose C# force/velocity APIs only after native rigid
+  bodies are stable.
+- Define behavior when UI and world picking overlap: runtime UI should be able to consume pointer events before physics
+  picking runs.
+- Add debug visualization hooks for colliders, rigid body state, and raycast hits in the Editor viewport without making
+  debug drawing part of the runtime package contract.
+- Add a sample scene that demonstrates selecting or clicking a collider, displaying hit information, and a dynamic box
+  falling onto static ground, rotating from off-center contacts, colliding, and settling.
+- Add focused tests for primitive intersection math, transform-aware bounds, collider serialization, scene raycast
+  ordering, layer mask filtering, trigger filtering, overlap queries, fixed-step accumulation, rigid body integration,
+  torque accumulation, shape-derived inertia, rotated box inverse inertia, off-center angular contact response, simple
+  collision response, the tilted box drop demo behavior, and Editor-style screen-ray picking math.
 
 ### Milestone 10: iOS Simulator Demo
 
@@ -420,7 +517,8 @@ CMake skeleton
   -> Scene / Resource
   -> Editor MVP
   -> C# scripting
-  -> Runtime UI / lightweight physics
+  -> Runtime UI
+  -> Lightweight physics / picking
   -> Metal / iOS Simulator
   -> iOS C# AOT feasibility
 ```

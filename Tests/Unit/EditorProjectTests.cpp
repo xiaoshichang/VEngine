@@ -81,8 +81,12 @@ namespace
                          "Generated/Build should be created");
         passed &= Expect(ve::FileSystem::IsDirectory(projectRoot / "Generated/Editor/Workspace"),
                          "Generated/Editor/Workspace should be created");
+        passed &= Expect(ve::FileSystem::IsDirectory(ve::GetWindowsScriptSourceDirectory(projectRoot)),
+                         "Fixed VE.Scripting source directory should be created");
         passed &= Expect(ve::FileSystem::IsFile(ve::GetWindowsScriptProjectPath(projectRoot)),
-                         "Fixed VE.Scripting project should be created");
+                         "Generated VE.Scripting project should be created");
+        passed &= Expect(ve::FileSystem::IsFile(ve::GetWindowsScriptSolutionPath(projectRoot)),
+                         "Generated VE.Scripting solution should be created");
 
         ve::Result<ve::EditorProjectDescriptor> descriptor =
             ve::EditorProjectService::LoadProjectDescriptor(projectRoot);
@@ -99,10 +103,10 @@ namespace
             passed &= Expect(descriptor.GetValue().startupScene.path == ve::Path("Assets/Scenes/Main.vescene"),
                              "Project descriptor should point at startup scene");
             passed &= Expect(descriptor.GetValue().scripting.HasWindowsScripts(),
-                             "Fixed VE.Scripting project should enable Windows scripts");
+                             "Fixed VE.Scripting source folder should enable Windows scripts");
             passed &= Expect(descriptor.GetValue().scripting.windows.projectPath ==
                                  ve::GetWindowsScriptProjectRelativePath(),
-                             "Descriptor should use the fixed Windows script project path");
+                             "Descriptor should use the generated Windows script project path");
             passed &= Expect(descriptor.GetValue().scripting.windows.assemblyName ==
                                  std::string(ve::GetWindowsScriptAssemblyName()),
                              "Descriptor should use the fixed Windows script assembly name");
@@ -113,14 +117,21 @@ namespace
         std::error_code scriptProjectRemoveError;
         std::filesystem::remove(std::filesystem::path(ve::GetWindowsScriptProjectPath(projectRoot).GetString()),
                                 scriptProjectRemoveError);
+        std::error_code scriptSolutionRemoveError;
+        std::filesystem::remove(std::filesystem::path(ve::GetWindowsScriptSolutionPath(projectRoot).GetString()),
+                                scriptSolutionRemoveError);
         passed &= Expect(!ve::FileSystem::IsFile(ve::GetWindowsScriptProjectPath(projectRoot)),
-                         "Test setup should remove the fixed script project");
+                         "Test setup should remove the generated script project");
+        passed &= Expect(!ve::FileSystem::IsFile(ve::GetWindowsScriptSolutionPath(projectRoot)),
+                         "Test setup should remove the generated script solution");
         passed &= ExpectOk(projectService.OpenProject(projectRoot, resourceManager),
                            "EditorProjectService should open created project");
         passed &= Expect(projectService.HasOpenProject(), "Project service should report an open project");
         passed &= Expect(projectService.GetProjectRoot() == projectRoot, "Project root should be stored");
         passed &= Expect(ve::FileSystem::IsFile(ve::GetWindowsScriptProjectPath(projectRoot)),
-                         "OpenProject should restore the fixed VE.Scripting project");
+                         "OpenProject should restore the generated VE.Scripting project");
+        passed &= Expect(ve::FileSystem::IsFile(ve::GetWindowsScriptSolutionPath(projectRoot)),
+                         "OpenProject should restore the generated VE.Scripting solution");
         passed &= Expect(projectService.HasWindowsScripts(), "Opened project should report fixed Windows scripts");
         passed &= Expect(projectService.GetAssetDatabase().GetRecords().size() == 1,
                          "AssetDatabase should discover the startup scene");
@@ -297,7 +308,7 @@ namespace
         std::string descriptor = projectText.GetValue();
         ReplaceAll(descriptor,
                    "\"targetPlatforms\"",
-                   "\"scripting\":{\"windows\":{\"project\":\"Scripts/VE.Scripting/VE.Scripting.csproj\","
+                   "\"scripting\":{\"windows\":{\"project\":\"Generated/Editor/Workspace/VE.Scripting.csproj\","
                    "\"assemblyName\":\"VE.Scripting\"}},\"targetPlatforms\"");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(projectRoot / ".veproject", descriptor),
                            "Project descriptor with legacy scripting config should be written");

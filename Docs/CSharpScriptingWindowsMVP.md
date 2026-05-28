@@ -70,8 +70,11 @@ Managed/VEngine.ScriptAPI/
 
 Examples/AssetPipelineSample/Scripts/
   VE.Scripting/
-    VE.Scripting.csproj
     RotateAndLog.cs
+
+Examples/AssetPipelineSample/Generated/Editor/Workspace/
+  VE.Scripting.sln
+  VE.Scripting.csproj
 ```
 
 Tests should keep tiny managed test assemblies out of runtime source:
@@ -109,18 +112,20 @@ packaging milestone can evaluate app-local runtime deployment after the MVP host
 
 ## 5. Project Script Contract
 
-Each project uses exactly one authored C# project at a fixed path:
+Each project uses exactly one authored C# source folder at a fixed path:
 
 ```text
-Scripts/VE.Scripting/VE.Scripting.csproj
+Scripts/VE.Scripting/
 ```
 
 Rules:
 
 - The managed project assembly name is fixed to `VE.Scripting`.
-- `.veproject` does not store custom script project paths or script assembly names.
+- `.veproject` does not store custom script project paths, solution paths, or script assembly names.
 - Any `.veproject` `scripting` section is considered obsolete project data and should be rejected.
-- If `Scripts/VE.Scripting/VE.Scripting.csproj` exists, the Editor treats the project as a Windows scripting project.
+- The Editor generates `Generated/Editor/Workspace/VE.Scripting.sln` and `VE.Scripting.csproj` for IDE use.
+- Generated `.sln` and `.csproj` files are not authored project data and should not be version controlled.
+- If `Scripts/VE.Scripting/` exists, the Editor treats the project as a Windows scripting project.
 - Custom user C# project graphs are not supported in this milestone.
 - Missing build outputs are Editor, Player, or Package diagnostics at the point scripts are required.
 - Generated script output belongs under `Generated/Scripts/Windows/<Configuration>/`.
@@ -364,8 +369,7 @@ Content/
 
 Package validation should report:
 
-- Missing `Scripts/VE.Scripting/VE.Scripting.csproj` when a source project has ScriptComponents that require Windows
-  scripts.
+- Missing `Scripts/VE.Scripting/` when a source project has ScriptComponents that require Windows scripts.
 - Missing generated script DLL.
 - Missing runtime config.
 - Script assembly name mismatch.

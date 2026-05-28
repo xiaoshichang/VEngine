@@ -756,13 +756,15 @@ namespace
             {
                 const bool hasScriptProject = projectService.HasOpenProject() && projectService.HasWindowsScripts();
                 ImGui::BeginDisabled(!hasScriptProject);
-                if (ImGui::MenuItem("Open C# Project"))
+                if (ImGui::MenuItem("Open C# Solution"))
                 {
-                    const ve::Path scriptProjectPath =
-                        ve::GetWindowsScriptProjectPath(projectService.GetProjectRoot());
-                    statusMessage_ = OpenExternalFile(window_, scriptProjectPath)
-                                         ? "Opened C# project: " + scriptProjectPath.GetString()
-                                         : "Failed to open C# project: " + scriptProjectPath.GetString();
+                    const ve::ErrorCode workspaceResult = projectService.GenerateScriptWorkspace();
+                    const ve::Path scriptSolutionPath =
+                        ve::GetWindowsScriptSolutionPath(projectService.GetProjectRoot());
+                    statusMessage_ = workspaceResult == ve::ErrorCode::None &&
+                                             OpenExternalFile(window_, scriptSolutionPath)
+                                         ? "Opened C# solution: " + scriptSolutionPath.GetString()
+                                         : "Failed to open C# solution: " + scriptSolutionPath.GetString();
                 }
                 ImGui::EndDisabled();
 
@@ -780,7 +782,7 @@ namespace
 
                 if (!hasScriptProject)
                 {
-                    ImGui::TextDisabled("No VE.Scripting project found");
+                    ImGui::TextDisabled("No VE.Scripting source folder found");
                 }
                 else if (projectService.IsPlaying())
                 {

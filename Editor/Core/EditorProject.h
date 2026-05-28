@@ -81,6 +81,7 @@ namespace ve
         void CloseProject(GameThreadSystem* gameThreadSystem = nullptr) noexcept;
         [[nodiscard]] ErrorCode BindActiveScene(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager);
         [[nodiscard]] ErrorCode RefreshAssetDatabase();
+        [[nodiscard]] ErrorCode GenerateScriptWorkspace();
         [[nodiscard]] ErrorCode OpenScene(const Path& projectRelativeScenePath, ResourceManager& resourceManager);
         [[nodiscard]] ErrorCode SaveCurrentScene();
 

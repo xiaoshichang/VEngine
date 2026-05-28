@@ -25,6 +25,10 @@ Managed/**/bin/
 Managed/**/obj/
 Tests/Scripting/**/bin/
 Tests/Scripting/**/obj/
+Examples/*/Scripts/**/*.csproj
+Examples/*/Scripts/**/*.sln
+Examples/*/Scripts/**/bin/
+Examples/*/Scripts/**/obj/
 
 cmake-build-debug/
 Generated/
