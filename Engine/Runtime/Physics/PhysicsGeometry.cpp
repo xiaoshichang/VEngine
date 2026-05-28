@@ -103,12 +103,35 @@ namespace ve
 
     Vector3 Ray::GetPoint(Float32 distance) const noexcept
     {
-        return origin + (direction * distance);
+        const Vector3 normalizedDirection = GetNormalizedDirection();
+        if (normalizedDirection == Vector3::Zero())
+        {
+            return origin;
+        }
+
+        return origin + (normalizedDirection * distance);
+    }
+
+    Vector3 Ray::GetNormalizedDirection() const noexcept
+    {
+        return direction.Normalized();
+    }
+
+    OrientedBox MakeOrientedBox(const Vector3& center,
+                                const Vector3& halfExtents,
+                                const Quaternion& rotation) noexcept
+    {
+        const Quaternion normalizedRotation = rotation.Normalized();
+        return OrientedBox{center,
+                           halfExtents,
+                           {normalizedRotation.RotateVector(Vector3::UnitX()),
+                            normalizedRotation.RotateVector(Vector3::UnitY()),
+                            normalizedRotation.RotateVector(Vector3::UnitZ())}};
     }
 
     std::optional<ShapeRaycastHit> RaycastSphere(const Ray& ray, const Sphere& sphere) noexcept
     {
-        const Vector3 direction = ray.direction.Normalized();
+        const Vector3 direction = ray.GetNormalizedDirection();
         if (direction == Vector3::Zero())
         {
             return std::nullopt;
@@ -139,14 +162,14 @@ namespace ve
 
         ShapeRaycastHit hit;
         hit.distance = distance;
-        hit.position = ray.origin + (direction * distance);
+        hit.position = ray.GetPoint(distance);
         hit.normal = (hit.position - sphere.center).Normalized();
         return hit;
     }
 
     std::optional<ShapeRaycastHit> RaycastOrientedBox(const Ray& ray, const OrientedBox& box) noexcept
     {
-        const Vector3 direction = ray.direction.Normalized();
+        const Vector3 direction = ray.GetNormalizedDirection();
         if (direction == Vector3::Zero())
         {
             return std::nullopt;
@@ -210,7 +233,7 @@ namespace ve
 
         ShapeRaycastHit hit;
         hit.distance = enterDistance >= 0.0f ? enterDistance : exitDistance;
-        hit.position = ray.origin + (direction * hit.distance);
+        hit.position = ray.GetPoint(hit.distance);
         hit.normal = (enterDistance >= 0.0f ? enterNormal : exitNormal).Normalized();
         if (hit.normal == Vector3::Zero())
         {
