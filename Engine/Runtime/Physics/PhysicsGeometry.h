@@ -46,4 +46,11 @@ namespace ve
     };
 
     [[nodiscard]] std::optional<ShapeRaycastHit> RaycastSphere(const Ray& ray, const Sphere& sphere) noexcept;
+    [[nodiscard]] std::optional<ShapeRaycastHit> RaycastOrientedBox(const Ray& ray,
+                                                                    const OrientedBox& box) noexcept;
+    [[nodiscard]] bool Overlaps(const Sphere& left, const Sphere& right) noexcept;
+    [[nodiscard]] bool Overlaps(const Sphere& sphere, const OrientedBox& box) noexcept;
+    [[nodiscard]] bool Overlaps(const OrientedBox& left, const OrientedBox& right) noexcept;
+    [[nodiscard]] Aabb BuildAabb(const Sphere& sphere) noexcept;
+    [[nodiscard]] Aabb BuildAabb(const OrientedBox& box) noexcept;
 } // namespace ve
