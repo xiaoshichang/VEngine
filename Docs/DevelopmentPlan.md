@@ -348,8 +348,8 @@ Implementation order:
   there.
 - Support Editor rebuild and script-context reload only after Play mode is stopped; do not preserve live managed state
   across reload.
-- Bind Windows Player startup to the configured project script assembly when scripts are present, and leave
-  `ScriptComponent` inert with warnings when scripting is disabled.
+- Bind Windows Player startup to the configured project script assembly when scripts are present, and report clear
+  errors if a `ScriptComponent` runs without a bound `ScriptContext`.
 - Extend Windows package staging to include managed script artifacts under `Content/Scripts/Windows/` and validate
   missing or mismatched script payloads.
 - Add focused tests for host initialization failure diagnostics, managed lifecycle order, bridge logging, time access,

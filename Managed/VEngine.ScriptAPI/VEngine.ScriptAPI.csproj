@@ -9,5 +9,7 @@
     <OutputType>Library</OutputType>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

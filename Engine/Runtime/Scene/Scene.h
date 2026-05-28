@@ -13,10 +13,12 @@
 namespace ve
 {
     class GameThreadSystem;
+    class ScriptContext;
 
     struct SceneDesc
     {
         GameThreadSystem* gameThreadSystem = nullptr;
+        ScriptContext* scriptContext = nullptr;
     };
 
     class Scene : public NonMovable
@@ -41,6 +43,9 @@ namespace ve
         void UpdateTransforms();
 
         void ValidateMutationAccess() const noexcept;
+        [[nodiscard]] ScriptContext* GetScriptContext() noexcept;
+        [[nodiscard]] const ScriptContext* GetScriptContext() const noexcept;
+        void SetScriptContext(ScriptContext* scriptContext);
 
     private:
         friend class GameObject;
@@ -56,6 +61,7 @@ namespace ve
         void UpdateTransformTree(GameObject& gameObject, const Matrix44& parentWorld);
 
         GameThreadSystem* gameThreadSystem_ = nullptr;
+        ScriptContext* scriptContext_ = nullptr;
         SceneObjectId nextObjectId_ = 1;
         std::vector<std::unique_ptr<GameObject>> gameObjects_;
         std::vector<GameObject*> rootGameObjects_;

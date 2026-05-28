@@ -11,6 +11,7 @@ namespace ve
 {
     Scene::Scene(const SceneDesc& desc)
         : gameThreadSystem_(desc.gameThreadSystem)
+        , scriptContext_(desc.scriptContext)
     {
     }
 
@@ -137,6 +138,22 @@ namespace ve
         {
             gameThreadSystem_->ValidateGameThreadAccess();
         }
+    }
+
+    ScriptContext* Scene::GetScriptContext() noexcept
+    {
+        return scriptContext_;
+    }
+
+    const ScriptContext* Scene::GetScriptContext() const noexcept
+    {
+        return scriptContext_;
+    }
+
+    void Scene::SetScriptContext(ScriptContext* scriptContext)
+    {
+        ValidateMutationAccess();
+        scriptContext_ = scriptContext;
     }
 
     SceneObjectId Scene::AllocateObjectId() noexcept

@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/ScriptComponent.h"
 
 #include <boost/json.hpp>
 
@@ -340,5 +341,7 @@ namespace ve
                 }
             }});
         registry.RegisterType(std::move(light));
+
+        RegisterScriptReflectionTypes(registry);
     }
 } // namespace ve

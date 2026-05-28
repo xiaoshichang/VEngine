@@ -38,6 +38,10 @@ function(ve_add_engine)
             Engine/Runtime/Scene/SceneRenderExtractor.cpp
             Engine/Runtime/Scene/Serialization/SceneSerialization.cpp
             Engine/Runtime/Scene/TransformComponent.cpp
+            Engine/Runtime/Scripting/ScriptBridge.cpp
+            Engine/Runtime/Scripting/ScriptComponent.cpp
+            Engine/Runtime/Scripting/ScriptContext.cpp
+            Engine/Runtime/Scripting/ScriptHost.cpp
             Engine/Runtime/Threading/Synchronization.cpp
             Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
@@ -93,6 +97,10 @@ function(ve_add_engine)
             Engine/Runtime/Scene/SceneTypes.h
             Engine/Runtime/Scene/Serialization/SceneSerialization.h
             Engine/Runtime/Scene/TransformComponent.h
+            Engine/Runtime/Scripting/ScriptBridge.h
+            Engine/Runtime/Scripting/ScriptComponent.h
+            Engine/Runtime/Scripting/ScriptContext.h
+            Engine/Runtime/Scripting/ScriptHost.h
             Engine/Runtime/Threading/Atomic.h
             Engine/Runtime/Threading/LockFreeMpscQueue.h
             Engine/Runtime/Threading/LockFreeSpscQueue.h

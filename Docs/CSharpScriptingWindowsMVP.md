@@ -79,8 +79,8 @@ Tests/Scripting/
 ```
 
 Keep `VEngine` as a static library. The scripting module is part of `VEngine`, but its Windows hosting files are only
-compiled on Windows. Non-Windows builds compile a small disabled stub behind the same public facade until each platform
-gets its own script host.
+compiled on Windows. Non-Windows builds compile a small unsupported host stub behind the same public facade until each
+platform gets its own script host.
 
 ## 4. Build And Dependency Discovery
 
@@ -334,8 +334,9 @@ Open project or Content/
 
 Failure policy:
 
-- If scripting is disabled and the scene contains `ScriptComponent`, log a warning and leave those components inert.
-- If scripting is enabled but required runtime files are missing, Player startup should fail with a clear error.
+- If a scene contains `ScriptComponent` but no `ScriptContext` is bound, report a clear component error instead of
+  silently leaving the component inert.
+- If required runtime files are missing, Player startup should fail with a clear error.
 - If one script type fails, keep the scene running where possible and disable only the failed component.
 - Unhandled managed exceptions should be caught at the native boundary, logged with managed stack text, and disable the
   throwing script instance to avoid logging the same exception every frame.
