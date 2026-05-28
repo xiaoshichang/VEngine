@@ -604,8 +604,8 @@ namespace
             const float statusHeight = 24.0f;
             const float assetHeight = std::min(std::max(available.y * 0.30f, 190.0f), 310.0f);
             const float topHeight = std::max(120.0f, available.y - assetHeight - statusHeight - spacing * 2.0f);
-            const float hierarchyWidth = std::min(std::max(available.x * 0.20f, 240.0f), 360.0f);
-            const float inspectorWidth = std::min(std::max(available.x * 0.24f, 300.0f), 430.0f);
+            const float hierarchyWidth = std::min(std::max(available.x * 0.18f, 220.0f), 340.0f);
+            const float inspectorWidth = std::min(std::max(available.x * 0.32f, 420.0f), 620.0f);
             const float centerWidth = std::max(240.0f, available.x - hierarchyWidth - inspectorWidth - spacing * 2.0f);
 
             ImGui::BeginChild("SceneHierarchyPanel", ImVec2(hierarchyWidth, topHeight), true);

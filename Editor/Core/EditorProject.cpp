@@ -15,6 +15,9 @@
 #include <boost/system/error_code.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <utility>
 
 namespace ve
@@ -65,6 +68,165 @@ namespace ve
         {
             const std::string& text = path.GetString();
             return !path.IsAbsolute() && (text == "Assets" || text.starts_with("Assets/"));
+        }
+
+        void WriteIndent(std::ostringstream& stream, SizeT indent)
+        {
+            for (SizeT index = 0; index < indent; ++index)
+            {
+                stream << ' ';
+            }
+        }
+
+        [[nodiscard]] std::string QuoteJsonString(std::string_view text)
+        {
+            return boost::json::serialize(value(boost::json::string(text)));
+        }
+
+        [[nodiscard]] std::string FormatSceneJsonDouble(double number)
+        {
+            if (!std::isfinite(number))
+            {
+                return boost::json::serialize(value(number));
+            }
+
+            if (std::fabs(number) < 0.0000005)
+            {
+                number = 0.0;
+            }
+
+            const double absoluteNumber = std::fabs(number);
+            std::ostringstream stream;
+            if (absoluteNumber >= 10000000.0 || (absoluteNumber > 0.0 && absoluteNumber < 0.000001))
+            {
+                stream << std::defaultfloat << std::setprecision(7) << number;
+                return stream.str();
+            }
+
+            stream << std::fixed << std::setprecision(6) << number;
+            std::string text = stream.str();
+            const std::string::size_type decimalPosition = text.find('.');
+            if (decimalPosition == std::string::npos)
+            {
+                text += ".0";
+                return text;
+            }
+
+            while (text.size() > decimalPosition + 2 && text.back() == '0')
+            {
+                text.pop_back();
+            }
+
+            if (text.back() == '.')
+            {
+                text += '0';
+            }
+
+            return text;
+        }
+
+        void WritePrettyJsonValue(std::ostringstream& stream, const value& jsonValue, SizeT indent);
+
+        void WritePrettyJsonObject(std::ostringstream& stream, const object& jsonObject, SizeT indent)
+        {
+            if (jsonObject.empty())
+            {
+                stream << "{}";
+                return;
+            }
+
+            stream << "{\n";
+            SizeT index = 0;
+            for (const auto& member : jsonObject)
+            {
+                WriteIndent(stream, indent + 2);
+                stream << QuoteJsonString(std::string_view(member.key().data(), member.key().size())) << ": ";
+                WritePrettyJsonValue(stream, member.value(), indent + 2);
+                stream << (++index < jsonObject.size() ? ",\n" : "\n");
+            }
+
+            WriteIndent(stream, indent);
+            stream << '}';
+        }
+
+        [[nodiscard]] bool CanWriteJsonArrayInline(const array& jsonArray) noexcept
+        {
+            for (const value& item : jsonArray)
+            {
+                if (item.is_object() || item.is_array())
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void WritePrettyJsonArray(std::ostringstream& stream, const array& jsonArray, SizeT indent)
+        {
+            if (jsonArray.empty())
+            {
+                stream << "[]";
+                return;
+            }
+
+            if (CanWriteJsonArrayInline(jsonArray))
+            {
+                stream << '[';
+                for (SizeT index = 0; index < jsonArray.size(); ++index)
+                {
+                    WritePrettyJsonValue(stream, jsonArray[index], indent);
+                    if (index + 1 < jsonArray.size())
+                    {
+                        stream << ", ";
+                    }
+                }
+
+                stream << ']';
+                return;
+            }
+
+            stream << "[\n";
+            for (SizeT index = 0; index < jsonArray.size(); ++index)
+            {
+                WriteIndent(stream, indent + 2);
+                WritePrettyJsonValue(stream, jsonArray[index], indent + 2);
+                stream << (index + 1 < jsonArray.size() ? ",\n" : "\n");
+            }
+
+            WriteIndent(stream, indent);
+            stream << ']';
+        }
+
+        void WritePrettyJsonValue(std::ostringstream& stream, const value& jsonValue, SizeT indent)
+        {
+            if (jsonValue.is_object())
+            {
+                WritePrettyJsonObject(stream, jsonValue.as_object(), indent);
+                return;
+            }
+
+            if (jsonValue.is_array())
+            {
+                WritePrettyJsonArray(stream, jsonValue.as_array(), indent);
+                return;
+            }
+
+            if (jsonValue.is_double())
+            {
+                stream << FormatSceneJsonDouble(jsonValue.as_double());
+                return;
+            }
+
+            stream << boost::json::serialize(jsonValue);
+        }
+
+        [[nodiscard]] std::string SerializePrettyJsonObject(const object& jsonObject)
+        {
+            std::ostringstream stream;
+            WritePrettyJsonObject(stream, jsonObject, 0);
+            stream << '\n';
+            return stream.str();
         }
 
         [[nodiscard]] Result<object> ReadJsonObject(const Path& path)
@@ -787,7 +949,7 @@ namespace ve
 
         ErrorCode sceneWriteResult =
             FileSystem::WriteTextFile(absoluteStartupScenePath,
-                                      boost::json::serialize(WriteEmptySceneAsset(sceneGuid, "Main")));
+                                      SerializePrettyJsonObject(WriteEmptySceneAsset(sceneGuid, "Main")));
         if (sceneWriteResult != ErrorCode::None)
         {
             return sceneWriteResult;
@@ -976,7 +1138,7 @@ namespace ve
         ApplyMeshRendererAssetReferences(sceneAsset.GetValue(), meshRendererAssetReferences_);
 
         const ErrorCode writeResult =
-            FileSystem::WriteTextFile(scenePath, boost::json::serialize(sceneAsset.GetValue()));
+            FileSystem::WriteTextFile(scenePath, SerializePrettyJsonObject(sceneAsset.GetValue()));
         if (writeResult != ErrorCode::None)
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Error,

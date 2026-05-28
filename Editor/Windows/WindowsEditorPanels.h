@@ -82,17 +82,21 @@ namespace ve
         void DrawSelectedAssetInspector(EditorProjectService& projectService,
                                         std::string& statusMessage,
                                         const AssetRecord& record);
-        void DrawComponentInspector(EditorProjectService& projectService,
-                                    EngineRuntime& runtime,
-                                    std::string& statusMessage,
-                                    SizeT componentIndex,
-                                    Component& component);
+        [[nodiscard]] bool DrawComponentInspector(EditorProjectService& projectService,
+                                                  EngineRuntime& runtime,
+                                                  std::string& statusMessage,
+                                                  SizeT componentIndex,
+                                                  Component& component);
         void DrawReflectedProperty(EditorProjectService& projectService,
                                    EngineRuntime& runtime,
                                    std::string& statusMessage,
                                    SizeT componentIndex,
                                    Component& component,
                                    const ReflectedPropertyInfo& property);
+        void DrawAddComponentButton(EditorProjectService& projectService,
+                                    EngineRuntime& runtime,
+                                    std::string& statusMessage,
+                                    GameObject& gameObject);
 
         void DrawAssetTree(EditorProjectService& projectService,
                            EngineRuntime& runtime,

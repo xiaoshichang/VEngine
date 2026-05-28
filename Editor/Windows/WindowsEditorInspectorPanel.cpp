@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Scene/Component.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
+#include "Engine/Runtime/Scripting/ScriptComponent.h"
 
 #include <boost/json.hpp>
 #include <imgui.h>
@@ -17,8 +18,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <regex>
 #include <string>
 #include <typeinfo>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace ve
@@ -31,6 +35,14 @@ namespace ve
             Ready,
             Missing,
             Unknown,
+        };
+
+        struct ScriptTypeCandidate
+        {
+            std::string displayName;
+            std::string typeName;
+            std::string assemblyName;
+            Path sourcePath;
         };
 
         [[nodiscard]] const char* ToDisplayString(AssetArtifactStatus status) noexcept
@@ -118,13 +130,26 @@ namespace ve
             return CanImportAssetRecord(record) ? "ObjModel" : "Unknown";
         }
 
+        void DrawDisabledTextWrapped(const std::string& value)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            ImGui::TextWrapped("%s", value.c_str());
+            ImGui::PopStyleColor();
+        }
+
         void DrawAssetInspectorField(const char* label, const std::string& value)
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::TextUnformatted(label);
             ImGui::TableSetColumnIndex(1);
-            ImGui::TextWrapped("%s", value.c_str());
+            DrawDisabledTextWrapped(value);
+        }
+
+        void DrawPropertyLabel(const std::string& label)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(label.c_str());
         }
 
         [[nodiscard]] Float32 ReadJsonFloat(const boost::json::value& jsonValue,
@@ -206,6 +231,160 @@ namespace ve
             }
 
             return nullptr;
+        }
+
+        [[nodiscard]] bool HasReflectedComponentType(const ReflectionRegistry& reflectionRegistry,
+                                                     const GameObject& gameObject,
+                                                     const std::string& typeName)
+        {
+            for (const std::unique_ptr<Component>& component : gameObject.GetComponents())
+            {
+                const ReflectedTypeInfo* existingType = FindReflectedTypeForComponent(reflectionRegistry, *component);
+                if (existingType != nullptr && existingType->name == typeName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        [[nodiscard]] bool IsCSharpSourceFile(const Path& path)
+        {
+            const std::string extension = path.GetExtension();
+            return extension == ".cs" || extension == ".CS";
+        }
+
+        [[nodiscard]] bool IsIgnoredScriptDirectory(const std::string& name)
+        {
+            return name == "bin" || name == "obj" || name == ".git" || name == ".vs";
+        }
+
+        void CollectCSharpSourceFiles(const Path& directory, std::vector<Path>& sourceFiles)
+        {
+            Result<std::vector<FileSystem::DirectoryEntry>> entries = FileSystem::ListDirectory(directory);
+            if (!entries)
+            {
+                return;
+            }
+
+            for (const FileSystem::DirectoryEntry& entry : entries.GetValue())
+            {
+                if (entry.type == FileSystem::DirectoryEntryType::Directory)
+                {
+                    if (!IsIgnoredScriptDirectory(entry.name))
+                    {
+                        CollectCSharpSourceFiles(entry.path, sourceFiles);
+                    }
+                    continue;
+                }
+
+                if (entry.type == FileSystem::DirectoryEntryType::File && IsCSharpSourceFile(entry.path))
+                {
+                    sourceFiles.push_back(entry.path);
+                }
+            }
+        }
+
+        [[nodiscard]] std::string ExtractCSharpNamespace(const std::string& source)
+        {
+            static const std::regex fileScopedNamespace(
+                R"(\bnamespace\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*;)");
+            static const std::regex blockScopedNamespace(
+                R"(\bnamespace\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\{)");
+
+            std::smatch match;
+            if (std::regex_search(source, match, fileScopedNamespace) && match.size() >= 2)
+            {
+                return match[1].str();
+            }
+
+            if (std::regex_search(source, match, blockScopedNamespace) && match.size() >= 2)
+            {
+                return match[1].str();
+            }
+
+            return {};
+        }
+
+        [[nodiscard]] std::vector<std::string> ExtractScriptClassNames(const std::string& source)
+        {
+            static const std::regex classDeclaration(
+                R"(\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^\{\;\r\n]+))");
+
+            std::vector<std::string> classNames;
+            for (std::sregex_iterator iter(source.begin(), source.end(), classDeclaration), end; iter != end; ++iter)
+            {
+                const std::smatch& match = *iter;
+                if (match.size() < 3)
+                {
+                    continue;
+                }
+
+                const std::string baseList = match[2].str();
+                if (baseList.find("ScriptBehaviour") != std::string::npos)
+                {
+                    classNames.push_back(match[1].str());
+                }
+            }
+
+            return classNames;
+        }
+
+        [[nodiscard]] std::vector<ScriptTypeCandidate>
+        DiscoverProjectScriptTypes(const EditorProjectService& projectService)
+        {
+            std::vector<ScriptTypeCandidate> scriptTypes;
+            if (!projectService.HasOpenProject())
+            {
+                return scriptTypes;
+            }
+
+            const WindowsScriptProjectConfig& scripts = projectService.GetDescriptor().scripting.windows;
+            if (!scripts.IsConfigured())
+            {
+                return scriptTypes;
+            }
+
+            const Path projectFilePath = scripts.projectPath.IsAbsolute()
+                                             ? scripts.projectPath
+                                             : projectService.GetProjectRoot() / scripts.projectPath;
+            const Path sourceRoot = projectFilePath.GetParentPath();
+            std::vector<Path> sourceFiles;
+            CollectCSharpSourceFiles(sourceRoot, sourceFiles);
+
+            std::unordered_set<std::string> seenTypes;
+            for (const Path& sourcePath : sourceFiles)
+            {
+                Result<std::string> sourceText = FileSystem::ReadTextFile(sourcePath);
+                if (!sourceText)
+                {
+                    continue;
+                }
+
+                const std::string namespaceName = ExtractCSharpNamespace(sourceText.GetValue());
+                for (const std::string& className : ExtractScriptClassNames(sourceText.GetValue()))
+                {
+                    const std::string typeName = namespaceName.empty() ? className : namespaceName + "." + className;
+                    if (!seenTypes.insert(typeName).second)
+                    {
+                        continue;
+                    }
+
+                    ScriptTypeCandidate candidate;
+                    candidate.displayName = typeName;
+                    candidate.typeName = typeName;
+                    candidate.assemblyName = scripts.assemblyName;
+                    candidate.sourcePath = sourcePath;
+                    scriptTypes.push_back(std::move(candidate));
+                }
+            }
+
+            std::sort(scriptTypes.begin(),
+                      scriptTypes.end(),
+                      [](const ScriptTypeCandidate& left, const ScriptTypeCandidate& right)
+                      { return left.typeName < right.typeName; });
+            return scriptTypes;
         }
 
         [[nodiscard]] std::string MakeResourceDisplayText(const char* resourceKind,
@@ -309,8 +488,10 @@ namespace ve
             std::array<char, 512> resourceBuffer = {};
             std::snprintf(resourceBuffer.data(), resourceBuffer.size(), "%s", displayText.c_str());
             ImGui::SetNextItemWidth(fieldWidth);
+            ImGui::BeginDisabled();
             ImGui::InputText("##Resource", resourceBuffer.data(), resourceBuffer.size(), ImGuiInputTextFlags_ReadOnly);
-            if (ImGui::IsItemHovered())
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             {
                 DrawAuthoredReferenceTooltip(authoredReference, runtimeText);
             }
@@ -322,6 +503,22 @@ namespace ve
             }
 
             return true;
+        }
+
+        void DrawReadOnlyStringProperty(const std::string& label, const std::string& value)
+        {
+            DrawPropertyLabel(label);
+
+            std::array<char, 512> textBuffer = {};
+            std::snprintf(textBuffer.data(), textBuffer.size(), "%s", value.c_str());
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::BeginDisabled();
+            ImGui::InputText("##Value", textBuffer.data(), textBuffer.size(), ImGuiInputTextFlags_ReadOnly);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && textBuffer[0] != '\0')
+            {
+                ImGui::SetTooltip("%s", textBuffer.data());
+            }
         }
     } // namespace
 
@@ -386,11 +583,11 @@ namespace ve
 
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::TextUnformatted(artifact.type.c_str());
+                    ImGui::TextDisabled("%s", artifact.type.c_str());
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::TextWrapped("%s", artifact.path.GetString().c_str());
+                    DrawDisabledTextWrapped(artifact.path.GetString());
                     ImGui::TableSetColumnIndex(2);
-                    ImGui::TextUnformatted(artifactReady ? "Ready" : "Missing");
+                    ImGui::TextDisabled("%s", artifactReady ? "Ready" : "Missing");
                 }
 
                 ImGui::EndTable();
@@ -411,11 +608,11 @@ namespace ve
                 {
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::TextUnformatted(dependency.type.c_str());
+                    ImGui::TextDisabled("%s", dependency.type.c_str());
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::TextWrapped("%s", dependency.path.GetString().c_str());
+                    DrawDisabledTextWrapped(dependency.path.GetString());
                     ImGui::TableSetColumnIndex(2);
-                    ImGui::TextWrapped("%s", FormatGuidForUi(dependency.guid).c_str());
+                    DrawDisabledTextWrapped(FormatGuidForUi(dependency.guid));
                 }
 
                 ImGui::EndTable();
@@ -447,8 +644,9 @@ namespace ve
 
         std::array<char, 256> nameBuffer = {};
         std::snprintf(nameBuffer.data(), nameBuffer.size(), "%s", selected->GetName().c_str());
+        ImGui::TextUnformatted("Name");
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size()))
+        if (ImGui::InputText("##GameObjectName", nameBuffer.data(), nameBuffer.size()))
         {
             PrepareSceneMutation(projectService, runtime);
             selected->SetName(nameBuffer.data());
@@ -469,11 +667,17 @@ namespace ve
         const std::vector<std::unique_ptr<Component>>& components = selected->GetComponents();
         for (SizeT componentIndex = 0; componentIndex < components.size(); ++componentIndex)
         {
-            DrawComponentInspector(projectService, runtime, statusMessage, componentIndex, *components[componentIndex]);
+            Component& component = *components[componentIndex];
+            if (DrawComponentInspector(projectService, runtime, statusMessage, componentIndex, component))
+            {
+                break;
+            }
         }
+
+        DrawAddComponentButton(projectService, runtime, statusMessage, *selected);
     }
 
-    void WindowsEditorPanels::DrawComponentInspector(EditorProjectService& projectService,
+    bool WindowsEditorPanels::DrawComponentInspector(EditorProjectService& projectService,
                                                      EngineRuntime& runtime,
                                                      std::string& statusMessage,
                                                      SizeT componentIndex,
@@ -481,12 +685,31 @@ namespace ve
     {
         const ReflectedTypeInfo* typeInfo = FindReflectedTypeForComponent(reflectionRegistry_, component);
         const char* header = typeInfo != nullptr ? typeInfo->name.c_str() : "Component";
-        if (!ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen))
+        ImGui::PushID(&component);
+
+        const bool isScriptComponent = dynamic_cast<ScriptComponent*>(&component) != nullptr;
+        const bool opened = ImGui::CollapsingHeader(header, ImGuiTreeNodeFlags_DefaultOpen);
+        bool removed = false;
+        if (isScriptComponent && ImGui::BeginPopupContextItem("ScriptComponentContextMenu"))
         {
-            return;
+            if (ImGui::MenuItem("Remove Component"))
+            {
+                GameObject& owner = component.GetGameObject();
+                PrepareSceneMutation(projectService, runtime);
+                removed = owner.RemoveComponent(component);
+                FinishSceneMutation(projectService);
+                statusMessage = removed ? "Removed ScriptComponent." : "Failed to remove ScriptComponent.";
+            }
+
+            ImGui::EndPopup();
         }
 
-        ImGui::PushID(&component);
+        if (removed || !opened)
+        {
+            ImGui::PopID();
+            return removed;
+        }
+
         bool enabled = component.IsEnabled();
         if (ImGui::Checkbox("Enabled", &enabled))
         {
@@ -500,7 +723,7 @@ namespace ve
         {
             ImGui::TextDisabled("No reflected properties");
             ImGui::PopID();
-            return;
+            return false;
         }
 
         for (const ReflectedPropertyInfo& property : typeInfo->properties)
@@ -512,6 +735,94 @@ namespace ve
         }
 
         ImGui::PopID();
+        return false;
+    }
+
+    void WindowsEditorPanels::DrawAddComponentButton(EditorProjectService& projectService,
+                                                     EngineRuntime& runtime,
+                                                     std::string& statusMessage,
+                                                     GameObject& gameObject)
+    {
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Add Component", ImVec2(-1.0f, 0.0f)))
+        {
+            ImGui::OpenPopup("AddComponentPopup");
+        }
+
+        if (!ImGui::BeginPopup("AddComponentPopup"))
+        {
+            return;
+        }
+
+        ImGui::TextDisabled("Components");
+        for (const ReflectedTypeInfo& typeInfo : reflectionRegistry_.GetTypes())
+        {
+            if (!typeInfo.componentFactory || typeInfo.name == "ScriptComponent")
+            {
+                continue;
+            }
+
+            const bool isTransform = typeInfo.name == "TransformComponent";
+            const bool alreadyHasType = isTransform &&
+                                        HasReflectedComponentType(reflectionRegistry_, gameObject, typeInfo.name);
+            if (ImGui::MenuItem(typeInfo.name.c_str(), nullptr, false, !alreadyHasType))
+            {
+                std::unique_ptr<Component> component = reflectionRegistry_.CreateComponent(typeInfo.name);
+                if (component != nullptr)
+                {
+                    PrepareSceneMutation(projectService, runtime);
+                    (void)gameObject.AddComponent(std::move(component));
+                    FinishSceneMutation(projectService);
+                    statusMessage = "Added " + typeInfo.name + ".";
+                }
+                else
+                {
+                    statusMessage = "Failed to create " + typeInfo.name + ".";
+                }
+
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        ImGui::Separator();
+        const std::vector<ScriptTypeCandidate> scriptTypes = DiscoverProjectScriptTypes(projectService);
+        if (ImGui::BeginMenu("Scripts", projectService.HasWindowsScripts() && !scriptTypes.empty()))
+        {
+            for (const ScriptTypeCandidate& scriptType : scriptTypes)
+            {
+                if (ImGui::MenuItem(scriptType.displayName.c_str()))
+                {
+                    PrepareSceneMutation(projectService, runtime);
+                    auto component = std::make_unique<ScriptComponent>();
+                    ScriptComponent& scriptComponent =
+                        static_cast<ScriptComponent&>(gameObject.AddComponent(std::move(component)));
+                    scriptComponent.SetAssemblyName(scriptType.assemblyName);
+                    scriptComponent.SetScriptTypeName(scriptType.typeName);
+                    FinishSceneMutation(projectService);
+                    statusMessage = "Added script " + scriptType.typeName + ".";
+                    ImGui::CloseCurrentPopup();
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("%s", scriptType.sourcePath.GetString().c_str());
+                }
+            }
+
+            ImGui::EndMenu();
+        }
+
+        if (!projectService.HasWindowsScripts())
+        {
+            ImGui::TextDisabled("No Windows scripts configured");
+        }
+        else if (scriptTypes.empty())
+        {
+            ImGui::TextDisabled("No ScriptBehaviour classes found");
+        }
+
+        ImGui::EndPopup();
     }
 
     void WindowsEditorPanels::DrawReflectedProperty(EditorProjectService& projectService,
@@ -541,7 +852,9 @@ namespace ve
         case ReflectedPropertyType::Float32:
         {
             float value = ReadJsonFloat(currentValue);
-            if (ImGui::DragFloat(property.name.c_str(), &value, 0.01f))
+            DrawPropertyLabel(property.name);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat("##Value", &value, 0.01f))
             {
                 nextValue = static_cast<double>(value);
                 changed = true;
@@ -550,6 +863,15 @@ namespace ve
         }
         case ReflectedPropertyType::String:
         {
+            if (dynamic_cast<ScriptComponent*>(&component) != nullptr &&
+                (property.name == "scriptTypeName" || property.name == "assemblyName"))
+            {
+                const std::string value =
+                    currentValue.is_string() ? std::string(currentValue.as_string()) : std::string();
+                DrawReadOnlyStringProperty(property.name, value);
+                break;
+            }
+
             std::array<char, 256> textBuffer = {};
             if (currentValue.is_string())
             {
@@ -559,11 +881,16 @@ namespace ve
                               std::string(currentValue.as_string()).c_str());
             }
 
+            DrawPropertyLabel(property.name);
             ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::InputText(property.name.c_str(), textBuffer.data(), textBuffer.size()))
+            if (ImGui::InputText("##Value", textBuffer.data(), textBuffer.size()))
             {
                 nextValue = std::string(textBuffer.data());
                 changed = true;
+            }
+            if (ImGui::IsItemHovered() && textBuffer[0] != '\0')
+            {
+                ImGui::SetTooltip("%s", textBuffer.data());
             }
             break;
         }
@@ -571,7 +898,9 @@ namespace ve
         {
             Float32 values[3] = {};
             (void)ReadJsonFloatArray(currentValue, values, 3);
-            if (ImGui::DragFloat3(property.name.c_str(), values, 0.01f))
+            DrawPropertyLabel(property.name);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat3("##Value", values, 0.01f))
             {
                 nextValue = MakeJsonFloatArray(values, 3);
                 changed = true;
@@ -583,7 +912,9 @@ namespace ve
         {
             Float32 values[4] = {};
             (void)ReadJsonFloatArray(currentValue, values, 4);
-            if (ImGui::DragFloat4(property.name.c_str(), values, 0.01f))
+            DrawPropertyLabel(property.name);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragFloat4("##Value", values, 0.01f))
             {
                 nextValue = MakeJsonFloatArray(values, 4);
                 changed = true;
@@ -605,7 +936,9 @@ namespace ve
             }
 
             UInt64 value = ReadJsonUInt64(currentValue);
-            if (ImGui::InputScalar(property.name.c_str(), ImGuiDataType_U64, &value))
+            DrawPropertyLabel(property.name);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::InputScalar("##Value", ImGuiDataType_U64, &value))
             {
                 nextValue = static_cast<std::uint64_t>(value);
                 changed = true;
@@ -617,7 +950,9 @@ namespace ve
             const std::string currentText =
                 currentValue.is_string() ? std::string(currentValue.as_string()) : std::string();
             const ReflectedEnumInfo* enumInfo = reflectionRegistry_.FindEnum(property.enumName);
-            if (enumInfo != nullptr && ImGui::BeginCombo(property.name.c_str(), currentText.c_str()))
+            DrawPropertyLabel(property.name);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (enumInfo != nullptr && ImGui::BeginCombo("##Value", currentText.c_str()))
             {
                 for (const ReflectedEnumValue& enumValue : enumInfo->values)
                 {

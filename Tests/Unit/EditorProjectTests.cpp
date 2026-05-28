@@ -124,7 +124,9 @@ namespace
         passed &= Expect(!projectService.IsDirty(), "ClearDirty should reset dirty state");
 
         ve::GameObject& gameObject = projectService.GetCurrentEditScene().CreateGameObject("SavedObject");
-        gameObject.AddComponent<ve::TransformComponent>();
+        ve::TransformComponent& transform = gameObject.AddComponent<ve::TransformComponent>();
+        transform.SetLocalPosition(ve::Vector3(2.1f, 0.425f, 3.15f));
+        transform.SetLocalScale(ve::Vector3(0.85f, 0.85f, 0.85f));
         projectService.GetCurrentEditScene().UpdateTransforms();
         projectService.MarkDirty();
         passed &= ExpectOk(projectService.SaveCurrentScene(), "SaveCurrentScene should write the current scene");
@@ -136,6 +138,18 @@ namespace
         {
             passed &= Expect(savedScene.GetValue().find("SavedObject") != std::string::npos,
                              "Saved scene should contain edited GameObject name");
+            passed &= Expect(savedScene.GetValue().ends_with('\n'), "Saved scene should end with a newline");
+            passed &= Expect(savedScene.GetValue().find("\n  \"format\": \"VEngine.Scene\"") != std::string::npos,
+                             "Saved scene should keep top-level indentation");
+            passed &= Expect(savedScene.GetValue().find("\n    \"gameObjects\": [") != std::string::npos,
+                             "Saved scene object list should be indented");
+            passed &= Expect(savedScene.GetValue().find("\"localPosition\": [2.1, 0.425, 3.15]") !=
+                                 std::string::npos,
+                             "Saved scene should use concise decimal transform values");
+            passed &= Expect(savedScene.GetValue().find("\"localScale\": [0.85, 0.85, 0.85]") != std::string::npos,
+                             "Saved scene should trim trailing decimal zeroes");
+            passed &= Expect(savedScene.GetValue().find("2.0999999046325684E0") == std::string::npos,
+                             "Saved scene should not use verbose Float32 round-trip text");
         }
 
         passed &= ExpectOk(projectService.OpenScene(ve::Path("Assets/Scenes/Main.vescene"), resourceManager),

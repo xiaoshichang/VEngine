@@ -23,7 +23,7 @@
             "type": "CameraComponent",
             "properties": {
               "projectionMode": "Perspective",
-              "fieldOfViewRadians": 1.0471976,
+              "fieldOfViewRadians": 1.047198,
               "clearColor": [0.04, 0.06, 0.09, 1.0]
             }
           }
@@ -39,7 +39,7 @@
             "type": "TransformComponent",
             "properties": {
               "localPosition": [0.0, 6.0, -4.0],
-              "localRotation": [0.440377, -0.266729, 0.13885, 0.845957],
+              "localRotation": [0.440377, -0.266729, 0.13885, 0.845958],
               "localScale": [1.0, 1.0, 1.0]
             }
           },
@@ -47,7 +47,7 @@
             "type": "LightComponent",
             "properties": {
               "color": [1.0, 1.0, 1.0],
-              "intensity": 1.4
+              "intensity": 1.18
             }
           }
         ]
@@ -79,6 +79,13 @@
               },
               "visible": true
             }
+          },
+          {
+            "type": "ScriptComponent",
+            "properties": {
+              "scriptTypeName": "VEngine.SampleScripts.RotateAndLog",
+              "assemblyName": "VEngine.SampleScripts"
+            }
           }
         ]
       },
@@ -108,6 +115,13 @@
                 "path": "Assets/Samples/Materials/CubeMaterial02.vematerial"
               },
               "visible": true
+            }
+          },
+          {
+            "type": "ScriptComponent",
+            "properties": {
+              "scriptTypeName": "VEngine.SampleScripts.RotateAndLog",
+              "assemblyName": "VEngine.SampleScripts"
             }
           }
         ]
