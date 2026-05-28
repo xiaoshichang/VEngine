@@ -13,11 +13,11 @@ function(ve_add_example_projects)
 
     set(veAssetPipelineSampleRoot "${PROJECT_SOURCE_DIR}/Examples/AssetPipelineSample")
     set(veAssetPipelineSampleScriptsProject
-        "${veAssetPipelineSampleRoot}/Scripts/VEngine.SampleScripts/VEngine.SampleScripts.csproj")
+        "${veAssetPipelineSampleRoot}/Scripts/VE.Scripting/VE.Scripting.csproj")
     set(veAssetPipelineSampleScriptsOutput
-        "${veAssetPipelineSampleRoot}/Generated/Scripts/Windows/$<CONFIG>/VEngine.SampleScripts")
+        "${veAssetPipelineSampleRoot}/Generated/Scripts/Windows/$<CONFIG>/VE.Scripting")
     set(veAssetPipelineSampleScriptsIntermediate
-        "${veAssetPipelineSampleRoot}/Generated/Intermediates/Scripts/Windows/$<CONFIG>/VEngine.SampleScripts/")
+        "${veAssetPipelineSampleRoot}/Generated/Intermediates/Scripts/Windows/$<CONFIG>/VE.Scripting/")
 
     add_custom_target(VEngineExampleAssetPipelineSample ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory

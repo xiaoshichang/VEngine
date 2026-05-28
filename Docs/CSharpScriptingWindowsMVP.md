@@ -69,8 +69,8 @@ Managed/VEngine.ScriptAPI/
   Vector3.cs
 
 Examples/AssetPipelineSample/Scripts/
-  VEngine.SampleScripts/
-    VEngine.SampleScripts.csproj
+  VE.Scripting/
+    VE.Scripting.csproj
     RotateAndLog.cs
 ```
 
@@ -109,27 +109,20 @@ packaging milestone can evaluate app-local runtime deployment after the MVP host
 
 ## 5. Project Script Contract
 
-Extend `.veproject` with an optional script section. Keep authored paths project-relative, and keep generated paths out
-of the descriptor:
+Each project uses exactly one authored C# project at a fixed path:
 
-```json
-{
-  "scripting": {
-    "windows": {
-      "project": "Scripts/VEngine.SampleScripts/VEngine.SampleScripts.csproj",
-      "assemblyName": "VEngine.SampleScripts"
-    }
-  }
-}
+```text
+Scripts/VE.Scripting/VE.Scripting.csproj
 ```
 
 Rules:
 
-- `scripting.windows.project` points to the authored C# project file under the project root.
-- `scripting.windows.assemblyName` is the managed assembly name used to resolve generated output.
-- Missing `scripting` means the project has no user scripts.
-- Malformed script configuration is a project descriptor error. Missing build outputs are Editor, Player, or Package
-  diagnostics at the point scripts are required.
+- The managed project assembly name is fixed to `VE.Scripting`.
+- `.veproject` does not store custom script project paths or script assembly names.
+- Any `.veproject` `scripting` section is considered obsolete project data and should be rejected.
+- If `Scripts/VE.Scripting/VE.Scripting.csproj` exists, the Editor treats the project as a Windows scripting project.
+- Custom user C# project graphs are not supported in this milestone.
+- Missing build outputs are Editor, Player, or Package diagnostics at the point scripts are required.
 - Generated script output belongs under `Generated/Scripts/Windows/<Configuration>/`.
 - Windows package staging copies script output into `Content/Scripts/Windows/`.
 
@@ -363,15 +356,16 @@ Content/
     Windows/
       VEngine.ScriptAPI.dll
       VEngine.ScriptAPI.pdb
-      VEngine.SampleScripts.dll
-      VEngine.SampleScripts.pdb
-      VEngine.SampleScripts.deps.json
-      VEngine.SampleScripts.runtimeconfig.json
+      VE.Scripting.dll
+      VE.Scripting.pdb
+      VE.Scripting.deps.json
+      VE.Scripting.runtimeconfig.json
 ```
 
 Package validation should report:
 
-- Missing `scripting.windows.project` when the scene has script components that require a project assembly.
+- Missing `Scripts/VE.Scripting/VE.Scripting.csproj` when a source project has ScriptComponents that require Windows
+  scripts.
 - Missing generated script DLL.
 - Missing runtime config.
 - Script assembly name mismatch.
@@ -410,7 +404,7 @@ Smoke success criteria:
 6. Add `ScriptHost` and `ScriptContext` for project assembly load, instance creation, lifecycle dispatch, and teardown.
 7. Add `ScriptComponent` and register it with Reflection.
 8. Extend scene serialization tests to cover `ScriptComponent`.
-9. Add Editor project script configuration parsing and generated script directories.
+9. Add Editor fixed script project discovery and generated script directories.
 10. Add backend Editor rebuild/reload command that requires Play mode to be stopped.
 11. Add Player startup binding for configured script assemblies.
 12. Extend Windows package staging to include script artifacts.

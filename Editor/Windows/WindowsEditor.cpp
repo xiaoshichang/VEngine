@@ -123,6 +123,18 @@ namespace
         MessageBoxW(owner, wideMessage.c_str(), L"VEngine Editor", MB_OK | MB_ICONERROR);
     }
 
+    [[nodiscard]] bool OpenExternalFile(HWND owner, const ve::Path& path)
+    {
+        const std::wstring widePath = Utf8ToWide(path.GetString());
+        if (widePath.empty())
+        {
+            return false;
+        }
+
+        HINSTANCE result = ShellExecuteW(owner, L"open", widePath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        return reinterpret_cast<INT_PTR>(result) > 32;
+    }
+
     [[nodiscard]] ve::Path ParseProjectArgument(PWSTR commandLine)
     {
         int argumentCount = 0;
@@ -742,8 +754,19 @@ namespace
 
             if (ImGui::BeginMenu("Scripting"))
             {
-                const bool canBuildScripts = projectService.HasOpenProject() && !projectService.IsPlaying() &&
-                                             projectService.HasWindowsScripts();
+                const bool hasScriptProject = projectService.HasOpenProject() && projectService.HasWindowsScripts();
+                ImGui::BeginDisabled(!hasScriptProject);
+                if (ImGui::MenuItem("Open C# Project"))
+                {
+                    const ve::Path scriptProjectPath =
+                        ve::GetWindowsScriptProjectPath(projectService.GetProjectRoot());
+                    statusMessage_ = OpenExternalFile(window_, scriptProjectPath)
+                                         ? "Opened C# project: " + scriptProjectPath.GetString()
+                                         : "Failed to open C# project: " + scriptProjectPath.GetString();
+                }
+                ImGui::EndDisabled();
+
+                const bool canBuildScripts = hasScriptProject && !projectService.IsPlaying();
                 ImGui::BeginDisabled(!canBuildScripts);
                 if (ImGui::MenuItem("Build Windows Scripts"))
                 {
@@ -755,9 +778,9 @@ namespace
                 }
                 ImGui::EndDisabled();
 
-                if (!projectService.HasWindowsScripts())
+                if (!hasScriptProject)
                 {
-                    ImGui::TextDisabled("No Windows scripts configured");
+                    ImGui::TextDisabled("No VE.Scripting project found");
                 }
                 else if (projectService.IsPlaying())
                 {

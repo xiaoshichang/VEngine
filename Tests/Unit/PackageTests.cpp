@@ -1,4 +1,5 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Scripting/ScriptProject.h"
 #include "Tools/Package/PackageService.h"
 
 #include <boost/json.hpp>
@@ -16,7 +17,7 @@ namespace
     constexpr const char* SourceGuid = "22222222-2222-4222-8222-222222222222";
     constexpr const char* MaterialGuid = "33333333-3333-4333-8333-333333333333";
     constexpr const char* SceneGuid = "44444444-4444-4444-8444-444444444444";
-    constexpr const char* ScriptAssemblyName = "VEngine.PackageScripts";
+    constexpr const char* ScriptAssemblyName = "VE.Scripting";
 
     using boost::json::array;
     using boost::json::object;
@@ -153,17 +154,10 @@ namespace
     "guid": "$SCENE_GUID$",
     "path": "Assets/Samples/Scenes/TestScene.vescene"
   },
-  "scripting": {
-    "windows": {
-      "project": "Scripts/PackageScripts/VEngine.PackageScripts.csproj",
-      "assemblyName": "$SCRIPT_ASSEMBLY_NAME$"
-    }
-  },
   "targetPlatforms": ["Windows", "iOS"]
 })json";
         ReplaceAll(project, "$PROJECT_GUID$", ProjectGuid);
         ReplaceAll(project, "$SCENE_GUID$", SceneGuid);
-        ReplaceAll(project, "$SCRIPT_ASSEMBLY_NAME$", ScriptAssemblyName);
 
         std::string metadata = R"json({
   "format": "VEngine.AssetMetadata",
@@ -221,7 +215,7 @@ namespace
                            "Material asset should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Assets/Samples/Scenes/TestScene.vescene", scene),
                            "Scene asset should be written");
-        passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Scripts/PackageScripts/VEngine.PackageScripts.csproj",
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(ve::GetWindowsScriptProjectPath(root),
                                                          "<Project Sdk=\"Microsoft.NET.Sdk\" />\n"),
                            "Script project file should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(root / "Generated/Assets/ImportCache" / SourceGuid /
@@ -235,19 +229,19 @@ namespace
                                                          "metal shader\n"),
                            "iOS shader artifact should be written");
         const ve::Path scriptOutput = root / "Generated/Scripts/Windows/Debug" / ScriptAssemblyName;
-        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.dll",
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VE.Scripting.dll",
                                                          "project assembly\n"),
                            "Generated script assembly should be written");
-        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.deps.json",
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VE.Scripting.deps.json",
                                                          "{}\n"),
                            "Generated script deps file should be written");
-        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.runtimeconfig.json",
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VE.Scripting.runtimeconfig.json",
                                                          "{}\n"),
                            "Generated script runtimeconfig should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.ScriptAPI.dll",
                                                          "script api assembly\n"),
                            "Generated ScriptAPI assembly should be written");
-        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.PackageScripts.pdb",
+        passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VE.Scripting.pdb",
                                                          "project symbols\n"),
                            "Generated script symbols should be written");
         passed &= ExpectOk(ve::FileSystem::WriteTextFile(scriptOutput / "VEngine.ScriptAPI.pdb",
@@ -294,12 +288,12 @@ namespace
                          "Windows package should contain D3D11 shader root");
         passed &= Expect(ve::FileSystem::IsDirectory(contentRoot / "Generated/Shaders/Windows/D3D12"),
                          "Windows package should contain D3D12 shader root");
-        passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VEngine.PackageScripts.dll"),
+        passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VE.Scripting.dll"),
                          "Windows package should contain the project script assembly");
-        passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VEngine.PackageScripts.deps.json"),
+        passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VE.Scripting.deps.json"),
                          "Windows package should contain the project script deps file");
         passed &= Expect(ve::FileSystem::IsFile(contentRoot /
-                                                    "Scripts/Windows/VEngine.PackageScripts.runtimeconfig.json"),
+                                                    "Scripts/Windows/VE.Scripting.runtimeconfig.json"),
                          "Windows package should contain the project script runtimeconfig");
         passed &= Expect(ve::FileSystem::IsFile(contentRoot / "Scripts/Windows/VEngine.ScriptAPI.dll"),
                          "Windows package should contain the managed ScriptAPI assembly");

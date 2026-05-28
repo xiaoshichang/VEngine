@@ -1,7 +1,7 @@
 using VEngine;
 using VEngine.Scripting;
 
-namespace VEngine.SampleScripts;
+namespace VE.Scripting;
 
 public sealed class RotateAndLog : ScriptBehaviour
 {

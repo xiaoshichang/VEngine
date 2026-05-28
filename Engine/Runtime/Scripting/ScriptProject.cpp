@@ -19,6 +19,8 @@ namespace ve
 
         constexpr std::string_view ProjectDescriptorFileName = ".veproject";
         constexpr std::string_view ProjectFormatName = "VEngine.Project";
+        constexpr std::string_view WindowsScriptProjectRelativePath = "Scripts/VE.Scripting/VE.Scripting.csproj";
+        constexpr std::string_view WindowsScriptAssemblyName = "VE.Scripting";
 
 #ifndef VE_DOTNET_EXECUTABLE
 #define VE_DOTNET_EXECUTABLE "dotnet"
@@ -62,53 +64,6 @@ namespace ve
             }
 
             return Result<object>::Success(std::move(root.as_object()));
-        }
-
-        [[nodiscard]] bool IsGeneratedPath(const Path& path) noexcept
-        {
-            const std::string& text = path.GetString();
-            return text == "Generated" || text.starts_with("Generated/");
-        }
-
-        [[nodiscard]] Result<WindowsScriptProjectConfig> ReadWindowsScriptConfig(const object& scriptingObject)
-        {
-            const value* windowsValue = FindMember(scriptingObject, "windows");
-            if (windowsValue == nullptr)
-            {
-                return Result<WindowsScriptProjectConfig>::Success({});
-            }
-
-            if (!windowsValue->is_object())
-            {
-                return Result<WindowsScriptProjectConfig>::Failure(
-                    MakeError(ErrorCode::InvalidArgument, "Project scripting.windows must be an object."));
-            }
-
-            const object& windowsObject = windowsValue->as_object();
-            WindowsScriptProjectConfig config;
-            config.projectPath = Path(ReadString(windowsObject, "project"));
-            config.assemblyName = ReadString(windowsObject, "assemblyName");
-
-            if (config.projectPath.IsEmpty() && config.assemblyName.empty())
-            {
-                return Result<WindowsScriptProjectConfig>::Success({});
-            }
-
-            if (config.projectPath.IsEmpty() || config.assemblyName.empty())
-            {
-                return Result<WindowsScriptProjectConfig>::Failure(
-                    MakeError(ErrorCode::InvalidArgument,
-                              "Project scripting.windows requires both project and assemblyName."));
-            }
-
-            if (config.projectPath.IsAbsolute() || IsGeneratedPath(config.projectPath))
-            {
-                return Result<WindowsScriptProjectConfig>::Failure(
-                    MakeError(ErrorCode::InvalidArgument,
-                              "Project scripting.windows.project must be an authored project-relative path."));
-            }
-
-            return Result<WindowsScriptProjectConfig>::Success(std::move(config));
         }
 
         [[nodiscard]] std::string QuoteCommandArgument(std::string_view argument)
@@ -165,6 +120,29 @@ namespace ve
             MakeError(ErrorCode::InvalidArgument, "Unsupported script build configuration."));
     }
 
+    std::string_view GetWindowsScriptAssemblyName() noexcept
+    {
+        return WindowsScriptAssemblyName;
+    }
+
+    Path GetWindowsScriptProjectRelativePath()
+    {
+        return Path(WindowsScriptProjectRelativePath);
+    }
+
+    Path GetWindowsScriptProjectPath(const Path& projectRoot)
+    {
+        return projectRoot / GetWindowsScriptProjectRelativePath();
+    }
+
+    WindowsScriptProjectConfig GetWindowsScriptProjectConfig()
+    {
+        WindowsScriptProjectConfig config;
+        config.projectPath = GetWindowsScriptProjectRelativePath();
+        config.assemblyName = std::string(WindowsScriptAssemblyName);
+        return config;
+    }
+
     Result<ScriptProjectConfig> LoadScriptProjectConfig(const Path& projectRoot)
     {
         const Path descriptorPath = projectRoot / ProjectDescriptorFileName;
@@ -187,26 +165,27 @@ namespace ve
                 MakeError(ErrorCode::InvalidArgument, "Unsupported project descriptor format."));
         }
 
-        const value* scriptingValue = FindMember(root, "scripting");
-        if (scriptingValue == nullptr)
+        if (FindMember(root, "scripting") != nullptr)
+        {
+            return Result<ScriptProjectConfig>::Failure(
+                MakeError(ErrorCode::InvalidArgument,
+                          "Project descriptor scripting section is no longer supported. Remove it and use "
+                          "Scripts/VE.Scripting/VE.Scripting.csproj."));
+        }
+
+        const WindowsScriptProjectConfig windowsConfig = GetWindowsScriptProjectConfig();
+        const bool hasSourceProject = FileSystem::IsFile(projectRoot / windowsConfig.projectPath);
+        const bool hasPackagedAssembly =
+            FileSystem::IsFile(GetWindowsPackagedScriptBuildArtifacts(projectRoot,
+                                                                      windowsConfig.assemblyName)
+                                   .projectAssemblyPath);
+        if (!hasSourceProject && !hasPackagedAssembly)
         {
             return Result<ScriptProjectConfig>::Success({});
         }
 
-        if (!scriptingValue->is_object())
-        {
-            return Result<ScriptProjectConfig>::Failure(
-                MakeError(ErrorCode::InvalidArgument, "Project scripting section must be an object."));
-        }
-
-        Result<WindowsScriptProjectConfig> windowsConfig = ReadWindowsScriptConfig(scriptingValue->as_object());
-        if (!windowsConfig)
-        {
-            return Result<ScriptProjectConfig>::Failure(windowsConfig.GetError());
-        }
-
         ScriptProjectConfig config;
-        config.windows = windowsConfig.MoveValue();
+        config.windows = windowsConfig;
         return Result<ScriptProjectConfig>::Success(std::move(config));
     }
 

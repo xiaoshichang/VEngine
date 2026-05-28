@@ -132,6 +132,7 @@ function(ve_add_engine)
             VE_ENABLE_METAL=$<BOOL:${VE_ENABLE_METAL}>
             VE_BUILD_CONFIGURATION="$<CONFIG>"
             VE_DEFAULT_PROJECT_DIR="${PROJECT_SOURCE_DIR}/Examples/AssetPipelineSample"
+            VE_ENGINE_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     )
 
     if(WIN32)

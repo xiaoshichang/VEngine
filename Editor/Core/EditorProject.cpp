@@ -20,6 +20,14 @@
 #include <sstream>
 #include <utility>
 
+#ifndef VE_ENGINE_SOURCE_DIR
+#define VE_ENGINE_SOURCE_DIR ""
+#endif
+
+#ifndef VE_DOTNET_TARGET_FRAMEWORK
+#define VE_DOTNET_TARGET_FRAMEWORK "net10.0"
+#endif
+
 namespace ve
 {
     namespace
@@ -343,17 +351,6 @@ namespace ve
             root["engineVersion"] = descriptor.engineVersion;
             root["startupScene"] = WriteSceneReference(descriptor.startupScene);
 
-            if (descriptor.scripting.HasWindowsScripts())
-            {
-                object windowsScripting;
-                windowsScripting["project"] = descriptor.scripting.windows.projectPath.GetString();
-                windowsScripting["assemblyName"] = descriptor.scripting.windows.assemblyName;
-
-                object scripting;
-                scripting["windows"] = std::move(windowsScripting);
-                root["scripting"] = std::move(scripting);
-            }
-
             array platforms;
             for (const std::string& platform : descriptor.targetPlatforms)
             {
@@ -362,6 +359,84 @@ namespace ve
             root["targetPlatforms"] = std::move(platforms);
 
             return root;
+        }
+
+        [[nodiscard]] std::string EscapeXmlAttribute(std::string_view text)
+        {
+            std::string escaped;
+            for (const char value : text)
+            {
+                switch (value)
+                {
+                case '&':
+                    escaped += "&amp;";
+                    break;
+                case '"':
+                    escaped += "&quot;";
+                    break;
+                case '\'':
+                    escaped += "&apos;";
+                    break;
+                case '<':
+                    escaped += "&lt;";
+                    break;
+                case '>':
+                    escaped += "&gt;";
+                    break;
+                default:
+                    escaped.push_back(value);
+                    break;
+                }
+            }
+
+            return escaped;
+        }
+
+        [[nodiscard]] Path GetScriptApiProjectPath()
+        {
+            return Path(VE_ENGINE_SOURCE_DIR) / "Managed/VEngine.ScriptAPI/VEngine.ScriptAPI.csproj";
+        }
+
+        [[nodiscard]] std::string WriteWindowsScriptProjectFile()
+        {
+            std::ostringstream stream;
+            stream << "<Project Sdk=\"Microsoft.NET.Sdk\">\n";
+            stream << "  <PropertyGroup>\n";
+            stream << "    <TargetFramework Condition=\"'$(TargetFramework)' == ''\">"
+                   << VE_DOTNET_TARGET_FRAMEWORK << "</TargetFramework>\n";
+            stream << "    <AssemblyName>" << GetWindowsScriptAssemblyName() << "</AssemblyName>\n";
+            stream << "    <RootNamespace>" << GetWindowsScriptAssemblyName() << "</RootNamespace>\n";
+            stream << "    <ImplicitUsings>disable</ImplicitUsings>\n";
+            stream << "    <LangVersion>latest</LangVersion>\n";
+            stream << "    <Nullable>enable</Nullable>\n";
+            stream << "    <OutputType>Library</OutputType>\n";
+            stream << "    <EnableDynamicLoading>true</EnableDynamicLoading>\n";
+            stream << "    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>\n";
+            stream << "    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>\n";
+            stream << "  </PropertyGroup>\n\n";
+            stream << "  <ItemGroup>\n";
+            stream << "    <ProjectReference Include=\""
+                   << EscapeXmlAttribute(GetScriptApiProjectPath().GetString()) << "\" />\n";
+            stream << "  </ItemGroup>\n";
+            stream << "</Project>\n";
+            return stream.str();
+        }
+
+        [[nodiscard]] ErrorCode EnsureWindowsScriptProjectFile(const Path& projectRoot)
+        {
+            const Path scriptProjectPath = GetWindowsScriptProjectPath(projectRoot);
+            if (FileSystem::Exists(scriptProjectPath))
+            {
+                return FileSystem::IsFile(scriptProjectPath) ? ErrorCode::None : ErrorCode::InvalidArgument;
+            }
+
+            ErrorCode scriptDirectoryResult = EnsureDirectory(scriptProjectPath.GetParentPath());
+            if (scriptDirectoryResult != ErrorCode::None)
+            {
+                return scriptDirectoryResult;
+            }
+
+            return FileSystem::WriteTextFile(scriptProjectPath, WriteWindowsScriptProjectFile());
         }
 
         [[nodiscard]] object WriteEmptySceneAsset(const AssetGuid& sceneGuid, std::string_view name)
@@ -936,6 +1011,12 @@ namespace ve
             }
         }
 
+        ErrorCode scriptProjectResult = EnsureWindowsScriptProjectFile(projectRoot);
+        if (scriptProjectResult != ErrorCode::None)
+        {
+            return scriptProjectResult;
+        }
+
         const AssetGuid sceneGuid = AssetGuid::Generate();
         const Path startupScenePath("Assets/Scenes/Main.vescene");
         const Path absoluteStartupScenePath = projectRoot / startupScenePath;
@@ -983,6 +1064,15 @@ namespace ve
         if (directoryResult != ErrorCode::None)
         {
             return directoryResult;
+        }
+
+        ErrorCode scriptProjectResult = EnsureWindowsScriptProjectFile(projectRoot);
+        if (scriptProjectResult != ErrorCode::None)
+        {
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Failed to create fixed C# project: " +
+                              GetWindowsScriptProjectPath(projectRoot).GetString());
+            return scriptProjectResult;
         }
 
         Result<EditorProjectDescriptor> descriptorResult = LoadProjectDescriptor(projectRoot);

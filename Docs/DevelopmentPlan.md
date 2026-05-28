@@ -342,8 +342,8 @@ Implementation order:
   `assemblyName` in `.vescene` files.
 - Dispatch `OnCreate`, `OnDestroy`, `OnEnable`, `OnDisable`, and `OnUpdate(float deltaTime)` through the existing scene
   lifecycle on the Game Thread.
-- Extend `.veproject` with an optional script section that identifies the Windows C# project and assembly name without
-  storing generated output paths in authored project data.
+- Standardize each scripting project on a single fixed Windows C# project at `Scripts/VE.Scripting/VE.Scripting.csproj`
+  with assembly name `VE.Scripting`; do not allow custom user C# project graphs in the first scripting milestone.
 - Add generated script output folders under `Generated/Scripts/Windows/<Configuration>/` and route Editor build output
   there.
 - Support Editor rebuild and script-context reload only after Play mode is stopped; do not preserve live managed state
