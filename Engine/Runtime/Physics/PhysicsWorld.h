@@ -55,6 +55,10 @@ namespace ve
         RaycastClosest(const Ray& ray, UInt64 queryMask = ~0ull, bool includeTriggers = false) const;
         [[nodiscard]] std::vector<RaycastHit>
         RaycastAll(const Ray& ray, UInt64 queryMask = ~0ull, bool includeTriggers = false) const;
+        [[nodiscard]] std::vector<OverlapHit>
+        OverlapSphere(const Sphere& sphere, UInt64 queryMask = ~0ull, bool includeTriggers = false) const;
+        [[nodiscard]] std::vector<OverlapHit>
+        OverlapBox(const OrientedBox& box, UInt64 queryMask = ~0ull, bool includeTriggers = false) const;
 
     private:
         std::vector<ColliderProxy> colliderProxies_;

@@ -37,6 +37,26 @@ namespace ve
             return hit;
         }
 
+        [[nodiscard]] bool OverlapsProxy(const Sphere& sphere, const ColliderProxy& proxy) noexcept
+        {
+            return proxy.shape == ColliderShape::Sphere ? Overlaps(sphere, proxy.sphere) : Overlaps(sphere, proxy.box);
+        }
+
+        [[nodiscard]] bool OverlapsProxy(const OrientedBox& box, const ColliderProxy& proxy) noexcept
+        {
+            return proxy.shape == ColliderShape::Sphere ? Overlaps(proxy.sphere, box) : Overlaps(box, proxy.box);
+        }
+
+        [[nodiscard]] OverlapHit MakeOverlapHit(const ColliderProxy& proxy) noexcept
+        {
+            OverlapHit hit;
+            hit.gameObjectId = proxy.gameObjectId;
+            hit.collider = proxy.collider;
+            hit.layer = proxy.layer;
+            hit.isTrigger = proxy.isTrigger;
+            return hit;
+        }
+
         void SyncGameObject(const GameObject& gameObject, std::vector<ColliderProxy>& proxies)
         {
             if (!gameObject.IsActiveInHierarchy())
@@ -150,6 +170,34 @@ namespace ve
                       }
                       return left.gameObjectId < right.gameObjectId;
                   });
+        return hits;
+    }
+
+    std::vector<OverlapHit>
+    PhysicsWorld::OverlapSphere(const Sphere& sphere, UInt64 queryMask, bool includeTriggers) const
+    {
+        std::vector<OverlapHit> hits;
+        for (const ColliderProxy& proxy : colliderProxies_)
+        {
+            if (PassesFilter(proxy, queryMask, includeTriggers) && OverlapsProxy(sphere, proxy))
+            {
+                hits.push_back(MakeOverlapHit(proxy));
+            }
+        }
+        return hits;
+    }
+
+    std::vector<OverlapHit>
+    PhysicsWorld::OverlapBox(const OrientedBox& box, UInt64 queryMask, bool includeTriggers) const
+    {
+        std::vector<OverlapHit> hits;
+        for (const ColliderProxy& proxy : colliderProxies_)
+        {
+            if (PassesFilter(proxy, queryMask, includeTriggers) && OverlapsProxy(box, proxy))
+            {
+                hits.push_back(MakeOverlapHit(proxy));
+            }
+        }
         return hits;
     }
 } // namespace ve

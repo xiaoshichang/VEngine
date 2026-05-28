@@ -687,6 +687,62 @@ namespace
                          "Raycast should observe transform change after sync");
         return passed;
     }
+
+    bool TestPhysicsWorldOverlapSphereAndBox()
+    {
+        ve::Scene scene;
+        ve::GameObject& sphereObject = scene.CreateGameObject("Sphere");
+        sphereObject.AddComponent<ve::TransformComponent>().SetLocalPosition(ve::Vector3(0.0f, 0.0f, 0.0f));
+        ve::ColliderComponent& sphereCollider = sphereObject.AddComponent<ve::ColliderComponent>();
+        sphereCollider.SetShape(ve::ColliderShape::Sphere);
+
+        ve::GameObject& boxObject = scene.CreateGameObject("Box");
+        boxObject.AddComponent<ve::TransformComponent>().SetLocalPosition(ve::Vector3(2.0f, 0.0f, 0.0f));
+        boxObject.AddComponent<ve::ColliderComponent>();
+
+        scene.UpdateTransforms();
+        ve::PhysicsWorld world;
+        world.SyncFromScene(scene);
+
+        const std::vector<ve::OverlapHit> sphereHits =
+            world.OverlapSphere(ve::Sphere{ve::Vector3(0.75f, 0.0f, 0.0f), 1.0f});
+        ve::OrientedBox overlapBox;
+        overlapBox.center = ve::Vector3(2.0f, 0.0f, 0.0f);
+        overlapBox.halfExtents = ve::Vector3(0.75f, 0.75f, 0.75f);
+        const std::vector<ve::OverlapHit> boxHits = world.OverlapBox(overlapBox);
+
+        bool passed = true;
+        passed &= Expect(sphereHits.size() == 2, "OverlapSphere should return sphere and box hits");
+        passed &= Expect(sphereHits[0].gameObjectId == sphereObject.GetId(),
+                         "OverlapSphere should preserve sync order");
+        passed &= Expect(sphereHits[1].gameObjectId == boxObject.GetId(), "OverlapSphere should include box hit");
+        passed &= Expect(boxHits.size() == 1 && boxHits[0].gameObjectId == boxObject.GetId(),
+                         "OverlapBox should return overlapping box");
+        return passed;
+    }
+
+    bool TestPhysicsWorldOverlapFiltering()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("TriggerLayer");
+        object.AddComponent<ve::TransformComponent>();
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        collider.SetLayer(1ull << 55);
+        collider.SetTrigger(true);
+
+        scene.UpdateTransforms();
+        ve::PhysicsWorld world;
+        world.SyncFromScene(scene);
+        const ve::Sphere query{ve::Vector3::Zero(), 2.0f};
+
+        bool passed = true;
+        passed &= Expect(world.OverlapSphere(query).empty(), "OverlapSphere should exclude triggers by default");
+        passed &= Expect(world.OverlapSphere(query, 1ull << 55, true).size() == 1,
+                         "OverlapSphere should include trigger with matching 64-bit mask");
+        passed &= Expect(world.OverlapSphere(query, 1ull << 2, true).empty(),
+                         "OverlapSphere should filter non-matching 64-bit mask");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -719,5 +775,7 @@ int main()
     passed &= TestPhysicsWorldSyncSkipsInactiveDisabledAndMissingTransform();
     passed &= TestPhysicsWorldRaycastClosestAndAll();
     passed &= TestPhysicsWorldRaycastFilteringAndSyncBoundary();
+    passed &= TestPhysicsWorldOverlapSphereAndBox();
+    passed &= TestPhysicsWorldOverlapFiltering();
     return passed ? 0 : 1;
 }
