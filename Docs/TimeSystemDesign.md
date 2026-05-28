@@ -143,6 +143,8 @@ This means:
 
 - `fixedStepCount` is the number of fixed steps that a future scheduler may run for this frame.
 - `fixedAccumulatorSeconds` stores only the fractional remainder after budgeting steps.
+- Systems that need render presentation interpolation can derive
+  `fixedInterpolationAlpha = fixedAccumulatorSeconds / fixedDeltaSeconds` from the snapshot after fixed-step budgeting.
 - The Time module does not expose `ConsumeFixedStep()` and does not own fixed-step execution state.
 
 This is intentionally a small design adjustment: fixed-step execution should belong to a future Tick Scheduler,

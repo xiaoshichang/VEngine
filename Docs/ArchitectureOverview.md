@@ -623,6 +623,7 @@ Supported features:
 - Simple overlap tests.
 - Simple linear and angular rigid body dynamics for box and sphere colliders, including torque, shape-derived inertia,
   and off-center contact response.
+- Fixed-step simulation pose history and render-only presentation interpolation for dynamic rigid bodies.
 
 Advanced simulation features can be added later, either through a dedicated physics library or a custom physics layer:
 constraints, joints, character controllers, continuous collision detection, sleeping islands, physics materials, mesh

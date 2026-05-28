@@ -88,6 +88,8 @@ First-stage serialized properties:
 - `angularVelocity`: world-space angular velocity in radians per second.
 - `linearDamping`: linear velocity damping per fixed step.
 - `angularDamping`: angular velocity damping per fixed step.
+- `interpolationMode`: `None`, `Interpolate`, or `Extrapolate` for render presentation, defaulting to `Interpolate`
+  for dynamic bodies.
 - `isKinematic`: compatibility alias or editor-facing shorthand for `bodyType == Kinematic` if useful.
 - `freezePositionX/Y/Z`: optional per-axis position freeze flags if the sample needs them.
 - `freezeRotationX/Y/Z`: optional per-axis rotation freeze flags if the sample needs them.
@@ -139,7 +141,10 @@ Rules:
 - Game Thread owns fixed-step scheduling and scene mutation.
 - Physics reads `TransformComponent`, `ColliderComponent`, and `RigidBodyComponent` state only on the Game Thread.
 - Physics writes simulation results back through normal Transform mutation rules.
+- Physics keeps transient previous/current simulation pose history for rigid bodies that need render interpolation.
 - Render Thread sees physics results only through the normal render extraction/snapshot path.
+- Render extraction may use a presentation pose for physics-driven objects; that pose is render-only and must not be
+  written back into `TransformComponent`.
 - Worker jobs may be used later for broad phase or narrow phase work, but they must not directly mutate live scene
   state.
 
@@ -188,6 +193,7 @@ GameThreadSystem::TickFrame()
     Scene::UpdateTransforms()
 
   RenderExtraction
+    Build physics presentation poses from fixed-step remainder
     Extract render/UI/debug snapshots for RenderSystem
 
   EndFrame
@@ -255,12 +261,70 @@ step boundaries:
 - Transform writes after physics write-back should be treated like normal gameplay writes and may be overwritten by the
   next dynamic body simulation step unless the body is kinematic.
 
+### 6.7 Simulation, Transform, And Presentation Poses
+
+Fixed-step physics and variable-rate rendering must not be treated as one pose stream. Otherwise a dynamic body updates
+only at the physics rate while the renderer samples every frame, which causes visible stepping when the render frame
+rate is higher than the fixed rate.
+
+The first physics implementation should use three pose concepts:
+
+- Simulation pose: the current fixed-step pose owned by physics and used for collision response, contacts, rigid body
+  integration, and gameplay physics queries.
+- Scene Transform: the normal `TransformComponent` state visible to gameplay. For dynamic rigid bodies, physics writes
+  the completed simulation pose into `TransformComponent` after each fixed step.
+- Presentation pose: a render-only pose computed during `RenderExtraction`. It is used by render, UI/debug extraction,
+  and optionally visual editor picking, but is never serialized and is not visible to scripts as `Transform`.
+
+`PhysicsSystem` should retain two transient pose samples for each active rigid body:
+
+```text
+previousSimulationPose
+currentSimulationPose
+```
+
+Pose history rules:
+
+- When a fixed step begins, copy the body's current simulation pose to `previousSimulationPose`.
+- After integration and collision response, store the completed pose in `currentSimulationPose`;
+  `PhysicsSystem::WriteBackTransforms()` then writes it back to `TransformComponent`.
+- If multiple fixed steps run in one rendered frame, `previousSimulationPose` and `currentSimulationPose` should span
+  the last completed fixed step.
+- If zero fixed steps run, `TransformComponent` remains at the last completed simulation pose, while presentation may
+  still advance visually between the two latest simulation samples.
+- On creation, teleport, scene load, body type changes, or direct non-kinematic Transform correction, reset
+  `previousSimulationPose = currentSimulationPose` so interpolation does not sweep across a discontinuity.
+
+Presentation modes:
+
+- `None`: use `currentSimulationPose` directly. This is useful for debugging exact physics state.
+- `Interpolate`: use the last two completed simulation samples and
+  `alpha = clamp(fixedAccumulatorSeconds / fixedDeltaSeconds, 0, 1)`. Position uses linear interpolation, rotation uses
+  spherical interpolation, and scale uses the current `TransformComponent` scale. This is the default mode for dynamic
+  bodies because it is stable around contacts and avoids visual jitter at the cost of one fixed-step of visual latency.
+- `Extrapolate`: advance `currentSimulationPose` by linear and angular velocity using the fixed-step remainder, clamped
+  to at most one fixed delta. This mode can reduce visual latency, but it must be explicit because collision correction
+  can make extrapolated poses overshoot, penetrate, or visibly snap back. Extrapolation should be disabled for a frame
+  after contact correction, teleport, or sleeping/waking transitions if those are later added.
+
+Gameplay and rendering visibility:
+
+- Native components, C# scripts, collision detection, and gameplay `Physics.Raycast` should read the simulation pose or
+  the `TransformComponent` written from the latest completed physics step, not the presentation pose.
+- Render extraction should prefer the presentation pose for dynamic rigid bodies with interpolation enabled.
+- Editor viewport selection can use presentation collider snapshots when selecting what the user currently sees, but
+  gameplay queries should stay simulation-state based.
+- Kinematic bodies moved from `FixedUpdate` can use the same history and presentation path as dynamic bodies. Kinematic
+  bodies moved from variable `Update` should present their current `TransformComponent` directly unless a later API adds
+  explicit kinematic interpolation samples.
+
 ## 7. Physics Step Details
 
 The first `PhysicsSystem::Step(fixedDeltaSeconds)` should be deliberately small:
 
 ```text
 Sync active colliders and rigid bodies from Scene
+Store previous simulation poses for active rigid bodies
 Apply gravity to dynamic bodies
 Apply accumulated forces, torques, impulses, and angular impulses
 Compute or refresh inverse mass and world inverse inertia tensors
@@ -274,6 +338,7 @@ Run narrow phase for sphere/sphere, box/box, and sphere/box
 Generate contact points, normals, penetration depth, and contact arms
 Resolve non-trigger contacts with positional correction and linear/angular impulses
 Record trigger overlaps and contact diagnostics
+Publish current simulation poses for transform write-back
 Clear per-step forces and torques
 ```
 
@@ -410,6 +475,9 @@ Focused test coverage:
 - Fixed-step budget consumption by the scheduler.
 - Zero, one, and multiple `FixedUpdate` calls per rendered frame.
 - `FixedUpdate` before physics step ordering.
+- Physics pose history across zero, one, and multiple fixed steps.
+- Interpolated presentation pose generation without mutating `TransformComponent`.
+- Teleport and scene-load pose history reset.
 - Dynamic body gravity integration.
 - Dynamic body angular velocity integration.
 - Torque accumulation and clearing.

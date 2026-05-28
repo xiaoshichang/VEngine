@@ -415,6 +415,8 @@ Detailed design:
   contact response for box and sphere colliders. Constraints, joints, character controllers, continuous collision
   detection, sleeping islands, physics materials, and broad third-party physics integration are non-goals for this
   milestone.
+- Separate fixed-step simulation poses from render presentation poses. Dynamic rigid bodies should default to
+  interpolation for rendering so a box falling at a fixed physics rate appears smooth at variable render frame rates.
 
 Implementation order:
 
@@ -435,6 +437,8 @@ Implementation order:
 - Define the first physics world/service ownership model under `EngineRuntime` or the Game Thread runtime layer. The
   physics step reads live scene state on the Game Thread, integrates rigid bodies, resolves simple collisions, then
   writes resulting transforms back through normal scene mutation rules.
+- Add transient rigid body pose history and render extraction support for `None`, `Interpolate`, and optionally
+  `Extrapolate` presentation modes. Presentation poses must not be written back to authored `TransformComponent` state.
 - Build a simple scene query path owned by the Game Thread. Start with a deterministic linear scan over active collider
   components; leave BVH, grids, sweep-and-prune, and other acceleration structures for a later scale milestone.
 - Update collider world bounds after transform updates and make query results respect current `TransformComponent`
@@ -462,7 +466,8 @@ Implementation order:
   falling onto static ground, rotating from off-center contacts, colliding, and settling.
 - Add focused tests for primitive intersection math, transform-aware bounds, collider serialization, scene raycast
   ordering, layer mask filtering, trigger filtering, overlap queries, fixed-step accumulation, rigid body integration,
-  torque accumulation, shape-derived inertia, rotated box inverse inertia, off-center angular contact response, simple
+  physics pose history, presentation interpolation without Transform mutation, teleport interpolation reset, torque
+  accumulation, shape-derived inertia, rotated box inverse inertia, off-center angular contact response, simple
   collision response, the tilted box drop demo behavior, and Editor-style screen-ray picking math.
 
 ### Milestone 10: iOS Simulator Demo
