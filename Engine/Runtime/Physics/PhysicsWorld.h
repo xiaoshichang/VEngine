@@ -51,6 +51,10 @@ namespace ve
         void SyncFromScene(const Scene& scene);
 
         [[nodiscard]] SizeT GetColliderCount() const noexcept;
+        [[nodiscard]] std::optional<RaycastHit>
+        RaycastClosest(const Ray& ray, UInt64 queryMask = ~0ull, bool includeTriggers = false) const;
+        [[nodiscard]] std::vector<RaycastHit>
+        RaycastAll(const Ray& ray, UInt64 queryMask = ~0ull, bool includeTriggers = false) const;
 
     private:
         std::vector<ColliderProxy> colliderProxies_;

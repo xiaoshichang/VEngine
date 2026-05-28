@@ -11,6 +11,7 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -621,6 +622,71 @@ namespace
                          "Sync should skip inactive, disabled, and missing-transform colliders");
         return passed;
     }
+
+    bool TestPhysicsWorldRaycastClosestAndAll()
+    {
+        ve::Scene scene;
+        ve::GameObject& nearObject = scene.CreateGameObject("Near");
+        nearObject.AddComponent<ve::TransformComponent>().SetLocalPosition(ve::Vector3(0.0f, 0.0f, -2.0f));
+        nearObject.AddComponent<ve::ColliderComponent>();
+
+        ve::GameObject& farObject = scene.CreateGameObject("Far");
+        farObject.AddComponent<ve::TransformComponent>().SetLocalPosition(ve::Vector3(0.0f, 0.0f, 2.0f));
+        farObject.AddComponent<ve::ColliderComponent>();
+
+        scene.UpdateTransforms();
+        ve::PhysicsWorld world;
+        world.SyncFromScene(scene);
+
+        const ve::Ray ray(ve::Vector3(0.0f, 0.0f, -5.0f), ve::Vector3::UnitZ());
+        const auto closest = world.RaycastClosest(ray);
+        const std::vector<ve::RaycastHit> allHits = world.RaycastAll(ray);
+
+        bool passed = true;
+        passed &= Expect(closest.has_value(), "Closest raycast should hit");
+        passed &= Expect(closest && closest->gameObjectId == nearObject.GetId(),
+                         "Closest raycast should return nearest object");
+        passed &= Expect(allHits.size() == 2, "RaycastAll should return both hits");
+        passed &= Expect(allHits.size() == 2 && allHits[0].gameObjectId == nearObject.GetId(),
+                         "RaycastAll should sort nearest first");
+        passed &= Expect(allHits.size() == 2 && allHits[1].gameObjectId == farObject.GetId(),
+                         "RaycastAll should include farther hit second");
+        return passed;
+    }
+
+    bool TestPhysicsWorldRaycastFilteringAndSyncBoundary()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("Layered");
+        ve::TransformComponent& transform = object.AddComponent<ve::TransformComponent>();
+        transform.SetLocalPosition(ve::Vector3(0.0f, 0.0f, 0.0f));
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        collider.SetLayer(1ull << 50);
+        collider.SetTrigger(true);
+
+        scene.UpdateTransforms();
+        ve::PhysicsWorld world;
+        world.SyncFromScene(scene);
+
+        const ve::Ray ray(ve::Vector3(0.0f, 0.0f, -5.0f), ve::Vector3::UnitZ());
+
+        bool passed = true;
+        passed &= Expect(!world.RaycastClosest(ray, ~0ull, false).has_value(),
+                         "Raycast should exclude triggers by default");
+        passed &= Expect(world.RaycastClosest(ray, 1ull << 50, true).has_value(),
+                         "Raycast should include trigger when requested");
+        passed &= Expect(!world.RaycastClosest(ray, 1ull << 3, true).has_value(),
+                         "Raycast should respect 64-bit query mask");
+
+        transform.SetLocalPosition(ve::Vector3(10.0f, 0.0f, 0.0f));
+        scene.UpdateTransforms();
+        passed &= Expect(world.RaycastClosest(ray, 1ull << 50, true).has_value(),
+                         "Raycast should use previous sync state after transform changes");
+        world.SyncFromScene(scene);
+        passed &= Expect(!world.RaycastClosest(ray, 1ull << 50, true).has_value(),
+                         "Raycast should observe transform change after sync");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -651,5 +717,7 @@ int main()
     passed &= TestDuplicateColliderDeserializationSkipsSecondCollider();
     passed &= TestPhysicsWorldSyncBuildsColliderProxies();
     passed &= TestPhysicsWorldSyncSkipsInactiveDisabledAndMissingTransform();
+    passed &= TestPhysicsWorldRaycastClosestAndAll();
+    passed &= TestPhysicsWorldRaycastFilteringAndSyncBoundary();
     return passed ? 0 : 1;
 }
