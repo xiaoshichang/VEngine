@@ -207,7 +207,17 @@ namespace ve
                     continue;
                 }
 
+                Component* requestedComponent = component.get();
                 Component& componentRef = gameObject.AddComponent(std::move(component));
+                if (&componentRef != requestedComponent)
+                {
+                    VE_LOG_WARN_CATEGORY("Scene",
+                                         "Skipping duplicate component type '{}' on GameObject '{}'.",
+                                         typeName,
+                                         gameObject.GetName());
+                    continue;
+                }
+
                 const value* propertiesValue = FindObjectMember(componentJson, "properties");
                 if (propertiesValue == nullptr || !propertiesValue->is_object())
                 {

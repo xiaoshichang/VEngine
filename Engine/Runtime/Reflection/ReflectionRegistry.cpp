@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Physics/ColliderComponent.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
@@ -87,6 +88,21 @@ namespace ve
             return fallback;
         }
 
+        [[nodiscard]] UInt64 ToUInt64(const value& jsonValue, UInt64 fallback) noexcept
+        {
+            if (jsonValue.is_uint64())
+            {
+                return jsonValue.as_uint64();
+            }
+
+            if (jsonValue.is_int64() && jsonValue.as_int64() >= 0)
+            {
+                return static_cast<UInt64>(jsonValue.as_int64());
+            }
+
+            return fallback;
+        }
+
         template<typename T>
         [[nodiscard]] ReflectedPropertyInfo
         MakeVector3Property(std::string name, Vector3 (T::*getter)() const, void (T::*setter)(const Vector3&))
@@ -155,6 +171,9 @@ namespace ve
                                {"Orthographic", static_cast<Int32>(CameraProjectionMode::Orthographic)}}});
         registry.RegisterEnum(
             ReflectedEnumInfo{"LightType", {{"Directional", static_cast<Int32>(LightType::Directional)}}});
+        registry.RegisterEnum(ReflectedEnumInfo{
+            "ColliderShape",
+            {{"Box", static_cast<Int32>(ColliderShape::Box)}, {"Sphere", static_cast<Int32>(ColliderShape::Sphere)}}});
 
         ReflectedTypeInfo transform;
         transform.name = "TransformComponent";
@@ -341,6 +360,129 @@ namespace ve
                 }
             }});
         registry.RegisterType(std::move(light));
+
+        ReflectedTypeInfo collider;
+        collider.name = "ColliderComponent";
+        collider.baseTypeName = "Component";
+        collider.componentFactory = []() { return std::make_unique<ColliderComponent>(); };
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "shape",
+            ReflectedPropertyType::Enum,
+            true,
+            true,
+            "ColliderShape",
+            [](const Component& component)
+            {
+                return static_cast<const ColliderComponent&>(component).GetShape() == ColliderShape::Sphere ? "Sphere"
+                                                                                                            : "Box";
+            },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_string())
+                {
+                    static_cast<ColliderComponent&>(component).SetShape(jsonValue.as_string() == "Sphere"
+                                                                             ? ColliderShape::Sphere
+                                                                             : ColliderShape::Box);
+                }
+            }});
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "center",
+            ReflectedPropertyType::Vector3,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return ToJson(static_cast<const ColliderComponent&>(component).GetCenter()); },
+            [](Component& component, const value& jsonValue)
+            {
+                auto& colliderComponent = static_cast<ColliderComponent&>(component);
+                colliderComponent.SetCenter(ToVector3(jsonValue, colliderComponent.GetCenter()));
+            }});
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "boxSize",
+            ReflectedPropertyType::Vector3,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return ToJson(static_cast<const ColliderComponent&>(component).GetBoxSize()); },
+            [](Component& component, const value& jsonValue)
+            {
+                auto& colliderComponent = static_cast<ColliderComponent&>(component);
+                colliderComponent.SetBoxSize(ToVector3(jsonValue, colliderComponent.GetBoxSize()));
+            }});
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "sphereRadius",
+            ReflectedPropertyType::Float32,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return static_cast<const ColliderComponent&>(component).GetSphereRadius(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_double())
+                {
+                    static_cast<ColliderComponent&>(component).SetSphereRadius(
+                        static_cast<Float32>(jsonValue.as_double()));
+                }
+            }});
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "layer",
+            ReflectedPropertyType::UInt64,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return static_cast<std::uint64_t>(static_cast<const ColliderComponent&>(component).GetLayer()); },
+            [](Component& component, const value& jsonValue)
+            {
+                auto& colliderComponent = static_cast<ColliderComponent&>(component);
+                colliderComponent.SetLayer(ToUInt64(jsonValue, colliderComponent.GetLayer()));
+            }});
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "collidesWith",
+            ReflectedPropertyType::UInt64,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return static_cast<std::uint64_t>(static_cast<const ColliderComponent&>(component).GetCollidesWith()); },
+            [](Component& component, const value& jsonValue)
+            {
+                auto& colliderComponent = static_cast<ColliderComponent&>(component);
+                colliderComponent.SetCollidesWith(ToUInt64(jsonValue, colliderComponent.GetCollidesWith()));
+            }});
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "isTrigger",
+            ReflectedPropertyType::Bool,
+            true,
+            true,
+            {},
+            [](const Component& component) { return static_cast<const ColliderComponent&>(component).IsTrigger(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_bool())
+                {
+                    static_cast<ColliderComponent&>(component).SetTrigger(jsonValue.as_bool());
+                }
+            }});
+        collider.properties.push_back(ReflectedPropertyInfo{
+            "enabled",
+            ReflectedPropertyType::Bool,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return static_cast<const ColliderComponent&>(component).IsColliderEnabled(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_bool())
+                {
+                    static_cast<ColliderComponent&>(component).SetColliderEnabled(jsonValue.as_bool());
+                }
+            }});
+        registry.RegisterType(std::move(collider));
 
         RegisterScriptReflectionTypes(registry);
     }

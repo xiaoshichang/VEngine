@@ -27,6 +27,7 @@ namespace ve
         Vector4,
         Quaternion,
         ResourceId,
+        UInt64,
         Enum,
     };
 

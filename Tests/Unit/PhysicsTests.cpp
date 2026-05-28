@@ -2,11 +2,14 @@
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Physics/ColliderComponent.h"
 #include "Engine/Runtime/Physics/PhysicsGeometry.h"
+#include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scene/Serialization/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <iostream>
+#include <string>
 
 namespace
 {
@@ -453,6 +456,109 @@ namespace
         passed &= ExpectOrthonormalAxes(box, "World box axes should stay orthonormal with inherited non-uniform scale");
         return passed;
     }
+
+    bool TestColliderSerializationRoundTrip()
+    {
+        ve::ReflectionRegistry registry;
+        ve::RegisterSceneReflectionTypes(registry);
+
+        ve::Scene source;
+        ve::GameObject& object = source.CreateGameObject("SerializedCollider");
+        object.AddComponent<ve::TransformComponent>();
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        collider.SetShape(ve::ColliderShape::Sphere);
+        collider.SetCenter(ve::Vector3(1.0f, 2.0f, 3.0f));
+        collider.SetBoxSize(ve::Vector3(2.0f, 3.0f, 4.0f));
+        collider.SetSphereRadius(2.5f);
+        collider.SetLayer(1ull << 45);
+        collider.SetCollidesWith((1ull << 45) | (1ull << 12));
+        collider.SetTrigger(true);
+        collider.SetColliderEnabled(false);
+
+        const std::string json = ve::SerializeSceneToJson(source, registry);
+
+        ve::Scene loaded;
+        bool passed = true;
+        passed &= Expect(ve::DeserializeSceneFromJson(loaded, registry, json) == ve::ErrorCode::None,
+                         "Collider scene should deserialize");
+        ve::GameObject* loadedObject = loaded.FindGameObject(object.GetId());
+        passed &= Expect(loadedObject != nullptr, "Loaded collider object should preserve id");
+        const ve::ColliderComponent* loadedCollider =
+            loadedObject != nullptr ? loadedObject->GetComponent<ve::ColliderComponent>() : nullptr;
+        passed &= Expect(loadedCollider != nullptr, "Loaded object should have collider");
+        if (loadedCollider)
+        {
+            passed &= Expect(loadedCollider->GetShape() == ve::ColliderShape::Sphere,
+                             "Collider shape should round-trip");
+            passed &= Expect(loadedCollider->GetCenter().IsNearlyEqual(ve::Vector3(1.0f, 2.0f, 3.0f)),
+                             "Collider center should round-trip");
+            passed &= Expect(loadedCollider->GetBoxSize().IsNearlyEqual(ve::Vector3(2.0f, 3.0f, 4.0f)),
+                             "Collider box size should round-trip");
+            passed &= Expect(ve::NearlyEqual(loadedCollider->GetSphereRadius(), 2.5f),
+                             "Collider sphere radius should round-trip");
+            passed &= Expect(loadedCollider->GetLayer() == (1ull << 45), "Collider 64-bit layer should round-trip");
+            passed &= Expect(loadedCollider->GetCollidesWith() == ((1ull << 45) | (1ull << 12)),
+                             "Collider 64-bit mask should round-trip");
+            passed &= Expect(loadedCollider->IsTrigger(), "Collider trigger flag should round-trip");
+            passed &= Expect(!loadedCollider->IsColliderEnabled(), "Collider enabled flag should round-trip");
+        }
+        return passed;
+    }
+
+    bool TestDuplicateColliderDeserializationSkipsSecondCollider()
+    {
+        ve::ReflectionRegistry registry;
+        ve::RegisterSceneReflectionTypes(registry);
+
+        const std::string json = R"({
+            "version": 1,
+            "scene": {"name": "Scene"},
+            "gameObjects": [
+                {
+                    "id": 100,
+                    "name": "DuplicateCollider",
+                    "active": true,
+                    "parent": 0,
+                    "components": [
+                        {
+                            "type": "ColliderComponent",
+                            "properties": {
+                                "shape": "Box",
+                                "layer": 8,
+                                "collidesWith": 18446744073709551615,
+                                "enabled": true
+                            }
+                        },
+                        {
+                            "type": "ColliderComponent",
+                            "properties": {
+                                "shape": "Sphere",
+                                "layer": 16,
+                                "collidesWith": 16,
+                                "enabled": true
+                            }
+                        }
+                    ]
+                }
+            ]
+        })";
+
+        ve::Scene scene;
+        bool passed = true;
+        passed &= Expect(ve::DeserializeSceneFromJson(scene, registry, json) == ve::ErrorCode::None,
+                         "Duplicate collider scene should still deserialize");
+        ve::GameObject* object = scene.FindGameObject(100);
+        passed &= Expect(object != nullptr, "Duplicate collider object should load");
+        passed &= Expect(object != nullptr && object->GetComponents().size() == 1,
+                         "Duplicate collider should be skipped");
+        const ve::ColliderComponent* collider =
+            object != nullptr ? object->GetComponent<ve::ColliderComponent>() : nullptr;
+        passed &= Expect(collider != nullptr && collider->GetShape() == ve::ColliderShape::Box,
+                         "First collider should be preserved");
+        passed &= Expect(collider != nullptr && collider->GetLayer() == 8ull,
+                         "Skipped duplicate should not overwrite first collider properties");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -479,5 +585,7 @@ int main()
     passed &= TestBuildWorldSphereUsesTransformScaleAndCenter();
     passed &= TestBuildWorldBoxUsesTransformScaleRotationAndCenter();
     passed &= TestBuildWorldBoxKeepsAxesOrthonormalWithScaledParent();
+    passed &= TestColliderSerializationRoundTrip();
+    passed &= TestDuplicateColliderDeserializationSkipsSecondCollider();
     return passed ? 0 : 1;
 }
