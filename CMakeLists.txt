@@ -11,6 +11,7 @@ include(CMake/VEngineTarget.cmake)
 
 include(CMake/SetupBoostLibrary.cmake)
 include(CMake/SetupDirectXShaderCompiler.cmake)
+include(CMake/SetupDotNetHosting.cmake)
 include(CMake/SetupImGui.cmake)
 include(CMake/SetupSpirvCross.cmake)
 

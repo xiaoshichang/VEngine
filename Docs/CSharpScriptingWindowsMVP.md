@@ -8,7 +8,7 @@ driven by native lifecycle dispatch on the Game Thread.
 
 ## 1. Goals
 
-- Host .NET from the Windows Player and Windows Editor when `VE_ENABLE_SCRIPTING` is enabled.
+- Host .NET from the Windows Player and Windows Editor as part of the always-built scripting module.
 - Load one project script assembly plus the handwritten `VEngine.ScriptAPI` managed wrapper.
 - Represent script behaviours through a native `ScriptComponent` that participates in Reflection and scene
   serialization.
@@ -39,7 +39,8 @@ Native scripting code should live under a new runtime module:
 ```text
 Engine/Runtime/Scripting/
   DotNetHost.h
-  DotNetHost.cpp
+  DotNetHostWindows.cpp
+  DotNetHostStub.cpp
   ScriptBridge.h
   ScriptBridge.cpp
   ScriptComponent.h
@@ -78,20 +79,21 @@ Tests/Scripting/
 ```
 
 Keep `VEngine` as a static library. The scripting module is part of `VEngine`, but its Windows hosting files are only
-compiled when both `WIN32` and `VE_ENABLE_SCRIPTING` are true. Non-Windows builds compile a small disabled stub or omit
-the module entirely behind the same public facade.
+compiled on Windows. Non-Windows builds compile a small disabled stub behind the same public facade until each platform
+gets its own script host.
 
 ## 4. Build And Dependency Discovery
 
-`VE_ENABLE_SCRIPTING` already exists in `CMake/VEngineOptions.cmake`. Milestone 8 should make that option meaningful:
+The scripting module is always part of the engine build. Milestone 8 should make Windows native hosting discovery
+explicit:
 
 - Add a CMake helper such as `CMake/SetupDotNetHosting.cmake`.
 - Find a Windows x64 .NET SDK through `DOTNET_ROOT`, the `dotnet` command, or an explicit cache variable such as
   `VE_DOTNET_ROOT`.
 - Locate native hosting headers and the `nethost` import library from the installed SDK or runtime packs.
 - Create an imported target, for example `VEngineDotNetHosting`, instead of adding global include or link directories.
-- Fail CMake configure with a clear diagnostic when `VE_ENABLE_SCRIPTING=ON` and required hosting files are missing.
-- Do not require .NET when `VE_ENABLE_SCRIPTING=OFF`.
+- Fail CMake configure with a clear diagnostic on Windows when required hosting files are missing.
+- Compile a non-Windows stub that reports `Unsupported` until the iOS AOT script-host milestone lands.
 - Add generated managed outputs under `Generated/Scripts/Windows/<Configuration>/`.
 - Copy managed `.dll`, `.pdb`, `.deps.json`, and `.runtimeconfig.json` files needed by the host into that generated
   output folder.
@@ -368,7 +370,7 @@ Package validation should report:
 
 ## 13. Testing
 
-Add tests only when `VE_ENABLE_SCRIPTING` is enabled and required .NET hosting files are available.
+Add script-host tests only when the required .NET hosting files are available.
 
 Recommended CTest targets:
 
@@ -391,8 +393,8 @@ Smoke success criteria:
 
 ## 14. Implementation Order
 
-1. Add CMake discovery for .NET native hosting and wire `VE_ENABLE_SCRIPTING`.
-2. Add disabled scripting stubs so non-scripting builds keep compiling cleanly.
+1. Add CMake discovery for .NET native hosting and build the managed scripting targets on Windows.
+2. Add platform stubs so non-Windows builds keep compiling cleanly.
 3. Add `DotNetHost` with explicit hostfxr loading and diagnostics.
 4. Add the `VEngine.ScriptAPI` managed project and bootstrap entry points.
 5. Add `ScriptBridge` and opaque native handle tables.
@@ -410,8 +412,9 @@ Smoke success criteria:
 
 Milestone 8 is complete when:
 
-- `VE_ENABLE_SCRIPTING=ON` builds the Windows engine, Player, Editor, tests, and managed API project.
-- `VE_ENABLE_SCRIPTING=OFF` builds the same native targets with script components inert or omitted behind clear guards.
+- Windows builds fail during configure with actionable diagnostics when .NET native hosting dependencies are missing.
+- Windows builds include the managed API project and native scripting host.
+- Non-Windows builds include scripting stubs until platform-specific hosts are implemented.
 - Windows Player can load a project scene with a `ScriptComponent` and run C# lifecycle methods.
 - Windows Editor can stop Play mode, rebuild scripts, reload the script context, and start Play mode again.
 - C# scripts can log, read time, and mutate Transform through the handwritten API.

@@ -28,8 +28,7 @@
                 "VE_BUILD_IOS_PLAYER": "OFF",
                 "VE_ENABLE_D3D11": "ON",
                 "VE_ENABLE_D3D12": "ON",
-                "VE_ENABLE_METAL": "OFF",
-                "VE_ENABLE_SCRIPTING": "ON"
+                "VE_ENABLE_METAL": "OFF"
             }
         },
         {
@@ -66,8 +65,7 @@
                 "VE_BUILD_IOS_PLAYER": "ON",
                 "VE_ENABLE_D3D11": "OFF",
                 "VE_ENABLE_D3D12": "OFF",
-                "VE_ENABLE_METAL": "ON",
-                "VE_ENABLE_SCRIPTING": "OFF"
+                "VE_ENABLE_METAL": "ON"
             }
         },
         {

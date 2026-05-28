@@ -21,6 +21,11 @@ CTestTestfile.cmake
 *.log
 *.tmp
 
+Managed/**/bin/
+Managed/**/obj/
+Tests/Scripting/**/bin/
+Tests/Scripting/**/obj/
+
 cmake-build-debug/
 Generated/
 Examples/*/Generated/

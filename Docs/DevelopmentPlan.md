@@ -327,11 +327,11 @@ Detailed design:
 
 Implementation order:
 
-- Add CMake discovery for .NET native hosting and make the existing `VE_ENABLE_SCRIPTING` option control all native and
-  managed scripting targets.
+- Add CMake discovery for .NET native hosting and make scripting an always-built engine module, with Windows managed
+  scripting targets built through the .NET SDK.
 - Integrate `nethost` and `hostfxr` behind a small Windows-only `DotNetHost` wrapper with explicit diagnostics for
   missing SDK/runtime files, runtime config files, assemblies, and bootstrap entry points.
-- Add non-scripting stubs or compile guards so `VE_ENABLE_SCRIPTING=OFF` remains a supported native build mode.
+- Add platform stubs so non-Windows builds keep compiling until platform-specific script hosts are implemented.
 - Create the handwritten managed `VEngine.ScriptAPI` project with minimal wrappers for `GameObject`, `Component`,
   `ScriptBehaviour`, `Transform`, `Time`, and `Log`.
 - Add a C ABI `ScriptBridge` that exposes only opaque handles and narrow native calls for logging, time reads, object

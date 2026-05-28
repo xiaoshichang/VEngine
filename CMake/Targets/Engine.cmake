@@ -120,7 +120,6 @@ function(ve_add_engine)
             VE_ENABLE_D3D11=$<BOOL:${VE_ENABLE_D3D11}>
             VE_ENABLE_D3D12=$<BOOL:${VE_ENABLE_D3D12}>
             VE_ENABLE_METAL=$<BOOL:${VE_ENABLE_METAL}>
-            VE_ENABLE_SCRIPTING=$<BOOL:${VE_ENABLE_SCRIPTING}>
             VE_DEFAULT_PROJECT_DIR="${PROJECT_SOURCE_DIR}/Examples/AssetPipelineSample"
     )
 
@@ -157,20 +156,33 @@ function(ve_add_engine)
     ve_setup_boost_library(VEngine)
 
     if(WIN32)
+        ve_setup_dotnet_hosting(VEngine)
+        ve_add_managed_scripting_targets()
+        add_dependencies(VEngine VEngineScriptAPI)
+
         target_sources(VEngine
             PRIVATE
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.cpp
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.cpp
                 Engine/Runtime/Platform/Windows/Win32Window.cpp
+                Engine/Runtime/Scripting/DotNetHostWindows.cpp
             PUBLIC
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.h
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.h
                 Engine/Runtime/Platform/Windows/Win32Window.h
+                Engine/Runtime/Scripting/DotNetHost.h
         )
 
         target_link_libraries(VEngine
             PUBLIC
                 user32
+        )
+    else()
+        target_sources(VEngine
+            PRIVATE
+                Engine/Runtime/Scripting/DotNetHostStub.cpp
+            PUBLIC
+                Engine/Runtime/Scripting/DotNetHost.h
         )
     endif()
 
