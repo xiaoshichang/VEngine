@@ -357,51 +357,7 @@ Implementation order:
   Transform mutation, `ScriptComponent` serialization, managed exception handling, and reload-after-stop behavior.
 - Add a bundled sample script project that drives one simple object in the existing sample project.
 
-### Milestone 9A: Runtime UI
-
-Detailed design:
-
-- Follow the runtime UI direction in [Architecture Overview](ArchitectureOverview.md): runtime UI is game-facing and
-  separate from Dear ImGui.
-- Keep the first UI pass screen-space only. World-space UI, animations, rich text, complex layout systems, editable UI
-  prefabs, and visual UI authoring tools are non-goals for this milestone.
-
-Implementation order:
-
-- Add a small `Engine/Runtime/UI` module with runtime UI data structures, layout code, input dispatch, and render
-  extraction kept separate from Editor ImGui code.
-- Define the first component set and register it through Reflection: `Canvas`, `RectTransform`, `Image`, `Label`, and
-  `Button`.
-- Serialize and deserialize runtime UI components in `.vescene` files using the same reflection and scene asset path as
-  existing native components.
-- Implement the screen-space Canvas contract: viewport size, reference resolution, scale mode, draw order, and a clear
-  mapping from UI coordinates to render target pixels.
-- Implement `RectTransform` hierarchy evaluation with anchored position, size, pivot, anchors, local scale, parent-child
-  propagation, and deterministic layout invalidation.
-- Implement simple layout helpers only where needed for the first demo, such as horizontal/vertical stacking or fixed
-  padding. Avoid a full flexbox or constraint solver in this milestone.
-- Implement `Image` as textured or solid-color quad rendering with tint, UV rectangle, and basic alpha blending.
-- Add FreeType-backed font loading and a first font atlas cache for `Label`. Route font file reads through Resource or
-  FileSystem facades rather than letting UI code own platform file access.
-- Implement `Label` text measurement, glyph placement, color, alignment, and single-line plus simple multiline
-  rendering. Leave shaping, fallback font chains, bidirectional text, and advanced typography for later.
-- Implement `Button` as a lightweight interaction component over an `Image` or `Label` hierarchy, including normal,
-  hovered, pressed, disabled state, and click dispatch.
-- Route mouse input from the current Windows input snapshot into UI hit testing and pointer events. Keep touch support
-  structurally ready, but let the iOS milestone validate real touch delivery.
-- Add UI event routing rules: hit test order, pointer capture for press/release, event consumption, and predictable
-  behavior when UI overlaps world interaction.
-- Integrate UI rendering with `RenderSystem` through extracted render commands or snapshots. Game Thread UI code must
-  not call RHI directly, and Render Thread must not inspect live UI components.
-- Add minimal built-in UI shader/material resources and package any authored font assets needed by the sample project.
-- Add Editor inspection support through Reflection so UI components can be added, edited, saved, and reloaded like other
-  scene components.
-- Add a runtime UI sample scene or sample overlay with label, image, and button interaction in the existing sample
-  project.
-- Add focused tests for `RectTransform` layout math, UI hit testing order, button state transitions, component
-  serialization, font atlas/glyph lookup basics, and render command extraction shape.
-
-### Milestone 9B: Lightweight Physics And Picking
+### Milestone 9: Lightweight Physics And Picking
 
 Detailed design:
 
@@ -458,8 +414,6 @@ Implementation order:
 - Add runtime picking support for Player and scripts at the native API level. Expose C# `Physics.Raycast` only after the
   native query path is stable and the bridge shape stays narrow. Expose C# force/velocity APIs only after native rigid
   bodies are stable.
-- Define behavior when UI and world picking overlap: runtime UI should be able to consume pointer events before physics
-  picking runs.
 - Add debug visualization hooks for colliders, rigid body state, and raycast hits in the Editor viewport without making
   debug drawing part of the runtime package contract.
 - Add a sample scene that demonstrates selecting or clicking a collider, displaying hit information, and a dynamic box
@@ -522,7 +476,6 @@ CMake skeleton
   -> Scene / Resource
   -> Editor MVP
   -> C# scripting
-  -> Runtime UI
   -> Lightweight physics / picking
   -> Metal / iOS Simulator
   -> iOS C# AOT feasibility
@@ -547,7 +500,7 @@ Later services should connect through this layer as their modules land:
 
 - Scene runtime state.
 - ResourceManager and asset loading.
-- Input, scripting, runtime UI, and lightweight physics.
+- Input, scripting, and lightweight physics.
 
 Later RenderSystem work should attach RHI device, swapchain, render resource, and viewport state to the existing runtime
 service boundary.

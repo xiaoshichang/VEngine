@@ -14,7 +14,7 @@ Primary goals:
 - Use a multithreaded architecture with Game Thread, Render Thread, Job System, and IO Thread.
 - Support lightweight 3D rendering through D3D11, D3D12, and Metal.
 - Use a traditional `GameObject + Component` scene model.
-- Provide reflection, resource management, C# scripting, runtime UI, and an editor foundation.
+- Provide reflection, resource management, C# scripting, lightweight physics, and an editor foundation.
 
 Target platforms:
 
@@ -64,7 +64,6 @@ Allowed dependency style:
 - Utility libraries.
 - Importers.
 - Logging backends.
-- Font libraries.
 - Shader compilation tools.
 - Editor immediate-mode UI library.
 
@@ -90,9 +89,6 @@ assimp
 
 Dear ImGui
   - Windows Editor UI only
-
-FreeType
-  - Runtime UI font rasterization
 
 DirectXShaderCompiler
   - HLSL compilation
@@ -219,7 +215,6 @@ VEngine/
       Resource/
       Render/
       Input/
-      UI/
       Script/
       Physics/
     RHI/
@@ -330,7 +325,7 @@ this application-level flow instead of duplicating service initialization in eac
 
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
 explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem, and
-RenderSystem; Scene, Resource, Input, Script, UI, and Physics should connect through this layer as their modules land.
+RenderSystem; Scene, Resource, Input, Script, and Physics should connect through this layer as their modules land.
 Milestone 5 introduces `GameThreadSystem` as the owner of the Game Thread execution context and frame tick contract.
 
 ### 7.4 FileSystem
@@ -491,7 +486,7 @@ OnUpdate
 OnLateUpdate
 ```
 
-`Scene` owns hierarchy, component storage, lifecycle dispatch, and serialization. Rendering, physics, UI, and script systems should observe or consume scene data through clear interfaces instead of freely coupling to scene internals.
+`Scene` owns hierarchy, component storage, lifecycle dispatch, and serialization. Rendering, physics, and script systems should observe or consume scene data through clear interfaces instead of freely coupling to scene internals.
 
 ### 7.11 Resource
 
@@ -562,25 +557,7 @@ iOS first stage:
 
 Input should be collected by the platform layer and consumed by the Game Thread through a stable input snapshot.
 
-### 7.15 Runtime UI
-
-Runtime UI is separate from Dear ImGui.
-
-First-stage features:
-
-- `Canvas`.
-- `RectTransform`.
-- `Image`.
-- `Label`.
-- `Button`.
-- Basic layout.
-- FreeType font rasterization.
-- Mouse and touch event dispatch.
-- Screen-space UI.
-
-Dear ImGui is used only for Editor and debug UI, not as the game runtime UI system.
-
-### 7.16 Script
+### 7.15 Script
 
 `Script` hosts C# scripts on Windows through runtime .NET hosting. Future iOS C# support should use an AOT-compiled
 gameplay module model instead of Windows-style runtime script assembly loading.
@@ -605,7 +582,7 @@ Future iOS C# support should be treated as a separate research milestone because
 dynamic-code constraints than Windows. The expected shape is build-time AOT compilation and static or framework linking
 into the iOS app bundle, not runtime loading of arbitrary managed script DLLs.
 
-### 7.17 Physics
+### 7.16 Physics
 
 First-stage physics is intentionally lightweight.
 
@@ -897,7 +874,6 @@ Recommended built-in first-stage components:
 - `MeshRendererComponent`.
 - `LightComponent`.
 - `ScriptComponent`.
-- `CanvasComponent`.
 - `ColliderComponent`.
 
 Reflection should support:
@@ -989,7 +965,6 @@ underlying settings and authoring contracts exist.
 Editor principles:
 
 - ImGui is only for Editor and debug UI.
-- Runtime UI remains separate.
 - Editor shell logic, ImGui panels, project selection, asset commands, dirty-scene prompts, and edit-scene selection
   state live on the Main Thread.
 - The Game Thread is not the editor UI or project-management thread. It owns runtime/play-scene update and future
@@ -1050,26 +1025,9 @@ Editor project structure:
   the executable, then falls back to the bundled sample project used by development builds.
 - Engine-owned built-in resources are addressed through stable `builtin:` locators and are not authored project assets.
 
-## 16. Runtime UI
+## 16. Platform Architecture
 
-Runtime UI is a game-facing UI system.
-
-First-stage features:
-
-- Screen-space Canvas.
-- Rect transform hierarchy.
-- Image rendering.
-- Label rendering with FreeType.
-- Button interaction.
-- Simple layout.
-- Mouse input on Windows.
-- Touch input on iOS.
-
-The runtime UI renderer should integrate with the Render system and RHI, not with ImGui.
-
-## 17. Platform Architecture
-
-### 17.1 Windows
+### 16.1 Windows
 
 Windows platform layer:
 
@@ -1083,7 +1041,7 @@ Windows platform layer:
 - Later supports dynamic library loading for scripting.
 - Later provides platform file path utilities.
 
-### 17.2 iOS
+### 16.2 iOS
 
 Milestone 10 iOS platform layer:
 
@@ -1097,7 +1055,7 @@ Milestone 10 iOS platform layer:
 The first iOS goal is an iOS Simulator demo. The current Milestone 1 runtime does not yet provide an iOS
 `Application::Run()` backend.
 
-## 18. Testing Strategy
+## 17. Testing Strategy
 
 Windows unit and smoke tests are registered through CMake/CTest.
 
@@ -1140,7 +1098,7 @@ RHI validation should stay focused on RenderSystem-owned runtime paths:
 - Exercise the minimal RenderFrame path.
 - Keep standalone D3D11/D3D12 triangle demo programs out of the normal milestone flow.
 
-## 19. CMake Build Plan
+## 18. CMake Build Plan
 
 Recommended options:
 
@@ -1173,6 +1131,6 @@ as an explicit new preset and rebuild or revalidate the third-party payloads aga
 
 iOS may be generated through CMake/Xcode, while keeping a small amount of iOS-specific template content such as `Info.plist`, app delegate, view controller, and entitlement files.
 
-## 20. Development Plan
+## 19. Development Plan
 
 The development roadmap, early technical validation items, and recommended implementation order are maintained separately in `Docs/DevelopmentPlan.md`.

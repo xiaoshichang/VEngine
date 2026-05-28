@@ -65,7 +65,6 @@ Approved first-stage dependencies:
 - Boost, including Boost.Log, Boost.JSON, Boost.UUID, Boost.Container, Boost.Lockfree, and Boost.Stacktrace.
 - assimp for source model import.
 - Dear ImGui for the Windows Editor only.
-- FreeType for runtime UI font rendering.
 - DirectXShaderCompiler for HLSL compilation.
 - SPIRV-Cross for SPIR-V to MSL conversion and shader reflection.
 
@@ -168,8 +167,6 @@ Large mesh and texture data may start simple, but leave room for binary cooked c
 ## Editor And UI Policy
 
 - Use Dear ImGui for the Windows Editor.
-- Keep Editor UI separate from runtime UI.
-- Runtime UI is engine-owned and should support Canvas, RectTransform, Image, Label, Button, FreeType text, and screen-space input.
 - Editor should operate through Scene, Reflection, AssetDatabase, Resource, Render, and logging facades instead of reaching into private runtime internals.
 
 ## Scripting Policy

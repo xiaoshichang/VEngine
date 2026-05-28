@@ -1,6 +1,6 @@
 # Lightweight Physics And Fixed Update Design
 
-This document refines `DevelopmentPlan.md` Milestone 9B. It defines the first lightweight physics slice for VEngine:
+This document refines `DevelopmentPlan.md` Milestone 9. It defines the first lightweight physics slice for VEngine:
 oriented box and sphere colliders, one collider and one rigid body per `GameObject`, fixed-step simulation, scene
 picking, and a small rigid body model.
 
@@ -67,7 +67,7 @@ First-stage rules:
 
 - A `GameObject` may have zero or one `ColliderComponent`.
 - A collider with no `RigidBodyComponent` is treated as a static collider.
-- Box colliders are the only box-like shape in Milestone 9B. Their simulation shape is an oriented box derived from
+- Box colliders are the only box-like shape in Milestone 9. Their simulation shape is an oriented box derived from
   Transform position, rotation, scale, local center, and box size. An enclosing `AABB` may be used for broad phase and
   fast bounds queries, but dynamic collision response must use the oriented box so a falling box can rotate against the
   ground without the collider visually drifting away from the mesh.
@@ -110,7 +110,7 @@ First-stage rules:
 - The first implementation may keep inertia diagonal in local body space and transform inverse inertia to world space
   each step from the current orientation.
 - Center of mass defaults to the body's world transform position plus the collider's transformed local center. A custom
-  center-of-mass authoring property is out of scope for Milestone 9B.
+  center-of-mass authoring property is out of scope for Milestone 9.
 
 ### 4.3 AddComponent Rules
 
@@ -188,13 +188,12 @@ GameThreadSystem::TickFrame()
   VariableUpdate
     Dispatch native Component::OnUpdate(deltaSeconds)
     Dispatch ScriptBehaviour.OnUpdate(deltaSeconds)
-    Runtime UI input dispatch
-    Runtime world picking, if UI did not consume pointer input
+    Runtime world picking, if enabled for the frame
     Scene::UpdateTransforms()
 
   RenderExtraction
     Build physics presentation poses from fixed-step remainder
-    Extract render/UI/debug snapshots for RenderSystem
+    Extract render and debug snapshots for RenderSystem
 
   EndFrame
 ```
@@ -247,8 +246,7 @@ and predictable:
 
 - Input is captured once near frame start.
 - Multiple fixed steps caused by catch-up do not each poll OS input again.
-- Runtime UI gets the same frame input during variable update.
-- World picking runs after UI has a chance to consume pointer input.
+- World picking consumes the frame input snapshot during variable update.
 
 ### 6.6 Scene Mutation During FixedUpdate
 
@@ -273,8 +271,8 @@ The first physics implementation should use three pose concepts:
   integration, and gameplay physics queries.
 - Scene Transform: the normal `TransformComponent` state visible to gameplay. For dynamic rigid bodies, physics writes
   the completed simulation pose into `TransformComponent` after each fixed step.
-- Presentation pose: a render-only pose computed during `RenderExtraction`. It is used by render, UI/debug extraction,
-  and optionally visual editor picking, but is never serialized and is not visible to scripts as `Transform`.
+- Presentation pose: a render-only pose computed during `RenderExtraction`. It is used by render/debug extraction and
+  optionally visual editor picking, but is never serialized and is not visible to scripts as `Transform`.
 
 `PhysicsSystem` should retain two transient pose samples for each active rigid body:
 

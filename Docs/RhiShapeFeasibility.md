@@ -386,7 +386,7 @@ Mitigation:
 - Should D3D11 deferred contexts be used in the first stage, or should the D3D11 backend begin with immediate-context execution on the Render Thread?
 - Should Metal argument buffers be planned from the start or introduced after the direct-slot implementation works?
 - Should `RhiResourceState` remain a single enum in the first stage or split into access/layout/synchronization concepts earlier?
-- Should `RhiBindGroup` support dynamic constant-buffer offsets in the first stage, or defer them until UI/material batching needs them?
+- Should `RhiBindGroup` support dynamic constant-buffer offsets in the first stage, or defer them until material batching needs them?
 
 ## 17. Reference URLs
 
