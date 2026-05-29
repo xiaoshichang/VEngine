@@ -1,6 +1,7 @@
 #include "Editor/Windows/WindowsEditorPanels.h"
 
 #include "Editor/Core/EditorProject.h"
+#include "Editor/Core/EditorReflection.h"
 
 #include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
@@ -216,37 +217,6 @@ namespace ve
             }
 
             return arrayValue;
-        }
-
-        [[nodiscard]] const ReflectedTypeInfo*
-        FindReflectedTypeForComponent(const ReflectionRegistry& reflectionRegistry, const Component& component)
-        {
-            for (const ReflectedTypeInfo& typeInfo : reflectionRegistry.GetTypes())
-            {
-                std::unique_ptr<Component> probe = typeInfo.componentFactory ? typeInfo.componentFactory() : nullptr;
-                if (probe != nullptr && typeid(*probe) == typeid(component))
-                {
-                    return &typeInfo;
-                }
-            }
-
-            return nullptr;
-        }
-
-        [[nodiscard]] bool HasReflectedComponentType(const ReflectionRegistry& reflectionRegistry,
-                                                     const GameObject& gameObject,
-                                                     const std::string& typeName)
-        {
-            for (const std::unique_ptr<Component>& component : gameObject.GetComponents())
-            {
-                const ReflectedTypeInfo* existingType = FindReflectedTypeForComponent(reflectionRegistry, *component);
-                if (existingType != nullptr && existingType->name == typeName)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         [[nodiscard]] bool IsCSharpSourceFile(const Path& path)
@@ -761,10 +731,9 @@ namespace ve
                 continue;
             }
 
-            const bool isTransform = typeInfo.name == "TransformComponent";
-            const bool alreadyHasType = isTransform &&
-                                        HasReflectedComponentType(reflectionRegistry_, gameObject, typeInfo.name);
-            if (ImGui::MenuItem(typeInfo.name.c_str(), nullptr, false, !alreadyHasType))
+            const bool canAddComponent =
+                CanAddReflectedComponentToGameObject(reflectionRegistry_, gameObject, typeInfo);
+            if (ImGui::MenuItem(typeInfo.name.c_str(), nullptr, false, canAddComponent))
             {
                 std::unique_ptr<Component> component = reflectionRegistry_.CreateComponent(typeInfo.name);
                 if (component != nullptr)
@@ -932,6 +901,18 @@ namespace ve
                 break;
             }
 
+            UInt64 value = ReadJsonUInt64(currentValue);
+            DrawPropertyLabel(property.name);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::InputScalar("##Value", ImGuiDataType_U64, &value))
+            {
+                nextValue = static_cast<std::uint64_t>(value);
+                changed = true;
+            }
+            break;
+        }
+        case ReflectedPropertyType::UInt64:
+        {
             UInt64 value = ReadJsonUInt64(currentValue);
             DrawPropertyLabel(property.name);
             ImGui::SetNextItemWidth(-1.0f);

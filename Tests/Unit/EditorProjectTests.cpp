@@ -1,8 +1,13 @@
 #include "Editor/Core/EditorProject.h"
+#include "Editor/Core/EditorReflection.h"
 
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Physics/ColliderComponent.h"
+#include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Resource/BuiltInResources.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
+#include "Engine/Runtime/Scene/GameObject.h"
+#include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <filesystem>
@@ -370,6 +375,64 @@ namespace
         return passed;
     }
 
+    bool TestEditorReflectionSupportsColliderAuthoring()
+    {
+        ve::ReflectionRegistry reflectionRegistry;
+        ve::RegisterSceneReflectionTypes(reflectionRegistry);
+
+        const ve::ReflectedTypeInfo* colliderType = reflectionRegistry.FindType("ColliderComponent");
+
+        bool passed = true;
+        passed &= Expect(colliderType != nullptr, "ColliderComponent should be available to editor reflection");
+        passed &= Expect(colliderType != nullptr && colliderType->componentFactory != nullptr,
+                         "ColliderComponent should be addable from reflected component factory");
+
+        bool sawLayer = false;
+        bool sawCollidesWith = false;
+        if (colliderType != nullptr)
+        {
+            for (const ve::ReflectedPropertyInfo& property : colliderType->properties)
+            {
+                if (property.name == "layer")
+                {
+                    sawLayer = true;
+                    passed &= Expect(property.type == ve::ReflectedPropertyType::UInt64,
+                                     "Collider layer should be a UInt64 reflected property");
+                    passed &= Expect(ve::IsEditorEditableReflectedPropertyType(property.type),
+                                     "Editor should edit Collider layer");
+                }
+                else if (property.name == "collidesWith")
+                {
+                    sawCollidesWith = true;
+                    passed &= Expect(property.type == ve::ReflectedPropertyType::UInt64,
+                                     "Collider collision mask should be a UInt64 reflected property");
+                    passed &= Expect(ve::IsEditorEditableReflectedPropertyType(property.type),
+                                     "Editor should edit Collider collision mask");
+                }
+            }
+        }
+
+        passed &= Expect(sawLayer, "Collider layer property should be reflected");
+        passed &= Expect(sawCollidesWith, "Collider collision mask property should be reflected");
+
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("ColliderAuthoring");
+        object.AddComponent<ve::TransformComponent>();
+        passed &= Expect(colliderType != nullptr &&
+                             ve::CanAddReflectedComponentToGameObject(reflectionRegistry, object, *colliderType),
+                         "Editor should allow adding the first ColliderComponent");
+        object.AddComponent<ve::ColliderComponent>();
+        passed &= Expect(colliderType != nullptr &&
+                             !ve::CanAddReflectedComponentToGameObject(reflectionRegistry, object, *colliderType),
+                         "Editor should disable adding a duplicate ColliderComponent");
+
+        const ve::ReflectedTypeInfo* transformType = reflectionRegistry.FindType("TransformComponent");
+        passed &= Expect(transformType != nullptr &&
+                             !ve::CanAddReflectedComponentToGameObject(reflectionRegistry, object, *transformType),
+                         "Editor should still disable adding a duplicate TransformComponent");
+        return passed;
+    }
+
     bool TestRejectsMissingDescriptor()
     {
         bool passed = true;
@@ -398,6 +461,7 @@ int main()
     passed &= TestMeshRendererAuthoredReferences();
     passed &= TestProjectDescriptorRejectsScriptingSection();
     passed &= TestPlayModeUsesDiscardableSceneInstance();
+    passed &= TestEditorReflectionSupportsColliderAuthoring();
     passed &= TestRejectsMissingDescriptor();
 
     if (passed)

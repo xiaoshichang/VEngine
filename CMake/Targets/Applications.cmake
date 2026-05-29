@@ -32,6 +32,8 @@ function(ve_add_windows_editor)
         add_executable(VEngineEditor WIN32
             Editor/Core/EditorProject.cpp
             Editor/Core/EditorProject.h
+            Editor/Core/EditorReflection.cpp
+            Editor/Core/EditorReflection.h
             Editor/Windows/WindowsEditor.cpp
             Editor/Windows/WindowsEditorAssetBrowserPanel.cpp
             Editor/Windows/WindowsEditorGameViewPanel.cpp

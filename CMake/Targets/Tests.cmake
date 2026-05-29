@@ -261,6 +261,8 @@ function(ve_add_tests)
         Tests/Unit/EditorProjectTests.cpp
         Editor/Core/EditorProject.cpp
         Editor/Core/EditorProject.h
+        Editor/Core/EditorReflection.cpp
+        Editor/Core/EditorReflection.h
     )
 
     target_link_libraries(VEngineEditorProjectTests
