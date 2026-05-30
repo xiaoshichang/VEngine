@@ -21,6 +21,8 @@ namespace ve::rhi
                 return MTLPixelFormatRGBA8Unorm;
             case RhiFormat::Bgra8Unorm:
                 return MTLPixelFormatBGRA8Unorm;
+            case RhiFormat::Depth32Float:
+                return MTLPixelFormatDepth32Float;
             case RhiFormat::Rg32Float:
             case RhiFormat::Rgb32Float:
             case RhiFormat::Unknown:
@@ -40,6 +42,11 @@ namespace ve::rhi
             }
 
             if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
+            {
+                metalUsage |= MTLTextureUsageRenderTarget;
+            }
+
+            if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
             {
                 metalUsage |= MTLTextureUsageRenderTarget;
             }
@@ -239,9 +246,11 @@ namespace ve::rhi
         public:
             MetalPipelineState(RhiPrimitiveTopology topology,
                                id<MTLRenderPipelineState> pipelineState,
+                               id<MTLDepthStencilState> depthStencilState,
                                RhiCullMode cullMode)
                 : topology_(topology)
                 , pipelineState_(pipelineState)
+                , depthStencilState_(depthStencilState)
                 , cullMode_(cullMode)
             {
             }
@@ -256,6 +265,11 @@ namespace ve::rhi
                 return pipelineState_;
             }
 
+            [[nodiscard]] id<MTLDepthStencilState> GetNativeDepthStencilState() const noexcept
+            {
+                return depthStencilState_;
+            }
+
             [[nodiscard]] RhiCullMode GetCullMode() const noexcept
             {
                 return cullMode_;
@@ -264,6 +278,7 @@ namespace ve::rhi
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
             id<MTLRenderPipelineState> pipelineState_ = nil;
+            id<MTLDepthStencilState> depthStencilState_ = nil;
             RhiCullMode cullMode_ = RhiCullMode::Back;
         };
 
@@ -363,6 +378,8 @@ namespace ve::rhi
                 renderPassDescriptor.colorAttachments[0].clearColor =
                     MTLClearColorMake(desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a);
 
+                ConfigureDepthAttachment(renderPassDescriptor, desc);
+
                 renderCommandEncoder_ = [commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor];
                 return renderCommandEncoder_ != nil;
             }
@@ -384,6 +401,8 @@ namespace ve::rhi
                 renderPassDescriptor.colorAttachments[0].clearColor =
                     MTLClearColorMake(desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a);
 
+                ConfigureDepthAttachment(renderPassDescriptor, desc);
+
                 renderCommandEncoder_ = [commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor];
                 return renderCommandEncoder_ != nil;
             }
@@ -398,6 +417,7 @@ namespace ve::rhi
             {
                 const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
+                [renderCommandEncoder_ setDepthStencilState:metalPipelineState.GetNativeDepthStencilState()];
                 [renderCommandEncoder_ setCullMode:ToMetalCullMode(metalPipelineState.GetCullMode())];
             }
 
@@ -527,6 +547,23 @@ namespace ve::rhi
             }
 
         private:
+            void ConfigureDepthAttachment(MTLRenderPassDescriptor* renderPassDescriptor,
+                                          const RhiRenderPassDesc& desc) const
+            {
+                auto* metalTexture = dynamic_cast<MetalTexture*>(desc.depthStencilAttachment);
+                if (metalTexture == nullptr)
+                {
+                    return;
+                }
+
+                renderPassDescriptor.depthAttachment.texture = metalTexture->GetNativeTexture();
+                renderPassDescriptor.depthAttachment.loadAction =
+                    desc.depthLoadAction == RhiLoadAction::Clear ? MTLLoadActionClear : MTLLoadActionLoad;
+                renderPassDescriptor.depthAttachment.storeAction =
+                    desc.depthStoreAction == RhiStoreAction::Store ? MTLStoreActionStore : MTLStoreActionDontCare;
+                renderPassDescriptor.depthAttachment.clearDepth = desc.clearDepth;
+            }
+
             id<MTLCommandQueue> commandQueue_ = nil;
             id<MTLCommandBuffer> commandBuffer_ = nil;
             id<MTLRenderCommandEncoder> renderCommandEncoder_ = nil;
@@ -738,6 +775,7 @@ namespace ve::rhi
                 pipelineDescriptor.fragmentFunction = fragmentShaderModule->GetFunction();
                 pipelineDescriptor.vertexDescriptor = vertexDescriptor;
                 pipelineDescriptor.colorAttachments[0].pixelFormat = ToMetalPixelFormat(desc.colorFormat);
+                pipelineDescriptor.depthAttachmentPixelFormat = ToMetalPixelFormat(desc.depthStencilFormat);
                 pipelineDescriptor.colorAttachments[0].blendingEnabled = desc.enableAlphaBlending ? YES : NO;
                 if (desc.enableAlphaBlending)
                 {
@@ -764,7 +802,22 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<MetalPipelineState>(desc.topology, pipelineState, desc.cullMode);
+                MTLDepthStencilDescriptor* depthStencilDescriptor = [[MTLDepthStencilDescriptor alloc] init];
+                depthStencilDescriptor.depthCompareFunction =
+                    desc.enableDepthTest ? MTLCompareFunctionLessEqual : MTLCompareFunctionAlways;
+                depthStencilDescriptor.depthWriteEnabled = desc.enableDepthWrite ? YES : NO;
+                id<MTLDepthStencilState> depthStencilState =
+                    [device_ newDepthStencilStateWithDescriptor:depthStencilDescriptor];
+                [depthStencilDescriptor release];
+
+                if (depthStencilState == nil)
+                {
+                    SetLastError("MTLDevice newDepthStencilStateWithDescriptor failed.");
+                    return nullptr;
+                }
+
+                return std::make_unique<MetalPipelineState>(
+                    desc.topology, pipelineState, depthStencilState, desc.cullMode);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

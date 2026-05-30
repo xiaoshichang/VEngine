@@ -80,6 +80,7 @@ namespace ve
         struct EditorViewportTexture
         {
             std::unique_ptr<rhi::RhiTexture> colorTexture;
+            std::unique_ptr<rhi::RhiTexture> depthTexture;
             std::unique_ptr<rhi::RhiCommandList> commandList;
             std::vector<ReusableRenderBuffer> drawUniformBuffers;
             UInt32 width = 0;
@@ -372,6 +373,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             Atomic<int> backendValue{-1};
             std::unique_ptr<rhi::RhiDevice> device;
             std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
+            std::unique_ptr<rhi::RhiTexture> mainDepthTexture;
             ScenePipelineResources scenePipeline;
             EditorUiPipelineResources editorUiPipeline;
             std::unordered_map<UInt64, EditorViewportTexture> editorViewportTextures;
@@ -464,6 +466,21 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             rhiDesc.bufferCount = desc.bufferCount;
             rhiDesc.debugName = "VEngineMainSwapchain";
             return rhiDesc;
+        }
+
+        [[nodiscard]] std::unique_ptr<rhi::RhiTexture> CreateDepthTexture(RenderSystemImpl& impl,
+                                                                          UInt32 width,
+                                                                          UInt32 height,
+                                                                          const char* debugName)
+        {
+            rhi::RhiTextureDesc textureDesc = {};
+            textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
+            textureDesc.width = width;
+            textureDesc.height = height;
+            textureDesc.format = rhi::RhiFormat::Depth32Float;
+            textureDesc.usage = rhi::RhiTextureUsage::DepthStencil;
+            textureDesc.debugName = debugName;
+            return impl.rhi.device->CreateTexture(textureDesc);
         }
 
         [[nodiscard]] rhi::RhiTextureUsage CombineTextureUsage(rhi::RhiTextureUsage left,
@@ -889,6 +906,9 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             pipelineDesc.uniformBufferBindingCount = 1;
             pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
             pipelineDesc.colorFormat = impl.rhi.mainSwapchain->GetColorFormat();
+            pipelineDesc.depthStencilFormat = rhi::RhiFormat::Depth32Float;
+            pipelineDesc.enableDepthTest = true;
+            pipelineDesc.enableDepthWrite = true;
             pipelineDesc.debugName = "RenderSystemScenePipeline";
 
             impl.rhi.scenePipeline.pipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
@@ -1192,6 +1212,10 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             rhi::RhiRenderPassDesc renderPassDesc = {};
             renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
             renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
+            renderPassDesc.depthStencilAttachment = impl.rhi.mainDepthTexture.get();
+            renderPassDesc.depthLoadAction = rhi::RhiLoadAction::Clear;
+            renderPassDesc.depthStoreAction = rhi::RhiStoreAction::DontCare;
+            renderPassDesc.clearDepth = 1.0f;
             if (snapshot.hasMainCamera)
             {
                 const Vector4 clearColor = snapshot.mainCamera.clearColor;
@@ -1344,6 +1368,14 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                 TerminateRenderSystem("Editor viewport texture creation failed", ErrorCode::PlatformError);
             }
 
+            viewportTexture.depthTexture =
+                CreateDepthTexture(impl, width, height, "RenderSystemEditorViewportDepthTexture");
+            if (viewportTexture.depthTexture == nullptr)
+            {
+                viewportTexture.colorTexture.reset();
+                TerminateRenderSystem("Editor viewport depth texture creation failed", ErrorCode::PlatformError);
+            }
+
             viewportTexture.width = width;
             viewportTexture.height = height;
             viewportTexture.format = format;
@@ -1392,6 +1424,10 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             rhi::RhiRenderPassDesc renderPassDesc = {};
             renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
             renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
+            renderPassDesc.depthStencilAttachment = viewportTexture.depthTexture.get();
+            renderPassDesc.depthLoadAction = rhi::RhiLoadAction::Clear;
+            renderPassDesc.depthStoreAction = rhi::RhiStoreAction::DontCare;
+            renderPassDesc.clearDepth = 1.0f;
             if (request.snapshot.hasMainCamera)
             {
                 const Vector4 clearColor = request.snapshot.mainCamera.clearColor;
@@ -1773,6 +1809,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
 
             DestroyEditorUiPipelineResources(impl);
             DestroyScenePipelineResources(impl);
+            impl.rhi.mainDepthTexture.reset();
             impl.rhi.mainSwapchain.reset();
 
             if (impl.rhi.device != nullptr)
@@ -2044,9 +2081,22 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                                       }
 
                                       impl_->rhi.mainSwapchain = std::move(swapchain);
+                                      const rhi::RhiExtent2D extent = impl_->rhi.mainSwapchain->GetExtent();
+                                      impl_->rhi.mainDepthTexture =
+                                          CreateDepthTexture(*impl_,
+                                                             extent.width,
+                                                             extent.height,
+                                                             "RenderSystemMainDepthTexture");
+                                      if (impl_->rhi.mainDepthTexture == nullptr)
+                                      {
+                                          impl_->rhi.mainSwapchain.reset();
+                                          return ErrorCode::PlatformError;
+                                      }
+
                                       ErrorCode pipelineResult = CreateScenePipelineResources(*impl_);
                                       if (pipelineResult != ErrorCode::None)
                                       {
+                                          impl_->rhi.mainDepthTexture.reset();
                                           impl_->rhi.mainSwapchain.reset();
                                           return pipelineResult;
                                       }
@@ -2055,6 +2105,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                                       if (pipelineResult != ErrorCode::None)
                                       {
                                           DestroyScenePipelineResources(*impl_);
+                                          impl_->rhi.mainDepthTexture.reset();
                                           impl_->rhi.mainSwapchain.reset();
                                           return pipelineResult;
                                       }
@@ -2080,6 +2131,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
 
                                                   DestroyEditorUiPipelineResources(*impl_);
                                                   DestroyScenePipelineResources(*impl_);
+                                                  impl_->rhi.mainDepthTexture.reset();
                                                   impl_->rhi.mainSwapchain.reset();
                                                   return ErrorCode::None;
                                               });

@@ -4,6 +4,8 @@
 
 namespace ve::rhi
 {
+    class RhiTexture;
+
     /// Identifies the native graphics backend used by an RHI device.
     enum class RhiBackend
     {
@@ -31,6 +33,7 @@ namespace ve::rhi
         Unknown,
         Rgba8Unorm,
         Bgra8Unorm,
+        Depth32Float,
         Rg32Float,
         Rgb32Float,
     };
@@ -82,6 +85,7 @@ namespace ve::rhi
     {
         Sampled = 1 << 0,
         RenderTarget = 1 << 1,
+        DepthStencil = 1 << 2,
     };
 
     /// Stores a two-dimensional unsigned extent.
@@ -138,6 +142,10 @@ namespace ve::rhi
         RhiLoadAction colorLoadAction = RhiLoadAction::Clear;
         RhiStoreAction colorStoreAction = RhiStoreAction::Store;
         RhiColor clearColor = {};
+        RhiTexture* depthStencilAttachment = nullptr;
+        RhiLoadAction depthLoadAction = RhiLoadAction::Clear;
+        RhiStoreAction depthStoreAction = RhiStoreAction::DontCare;
+        float clearDepth = 1.0f;
     };
 
     /// Describes initial data and usage for a GPU buffer.
@@ -219,7 +227,10 @@ namespace ve::rhi
         uint32_t textureBindingCount = 0;
         RhiPrimitiveTopology topology = RhiPrimitiveTopology::TriangleList;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
+        RhiFormat depthStencilFormat = RhiFormat::Unknown;
         RhiCullMode cullMode = RhiCullMode::Back;
+        bool enableDepthTest = false;
+        bool enableDepthWrite = false;
         bool enableAlphaBlending = false;
         bool enableScissor = false;
         const char* debugName = nullptr;

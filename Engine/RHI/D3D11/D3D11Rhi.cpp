@@ -33,6 +33,8 @@ namespace ve::rhi
                 return DXGI_FORMAT_R8G8B8A8_UNORM;
             case RhiFormat::Bgra8Unorm:
                 return DXGI_FORMAT_B8G8R8A8_UNORM;
+            case RhiFormat::Depth32Float:
+                return DXGI_FORMAT_D32_FLOAT;
             case RhiFormat::Rg32Float:
                 return DXGI_FORMAT_R32G32_FLOAT;
             case RhiFormat::Rgb32Float:
@@ -66,6 +68,11 @@ namespace ve::rhi
             if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
             {
                 flags |= D3D11_BIND_RENDER_TARGET;
+            }
+
+            if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
+            {
+                flags |= D3D11_BIND_DEPTH_STENCIL;
             }
 
             return flags;
@@ -156,10 +163,12 @@ namespace ve::rhi
             D3D11Texture(ComPtr<ID3D11Texture2D> texture,
                          ComPtr<ID3D11ShaderResourceView> shaderResourceView,
                          ComPtr<ID3D11RenderTargetView> renderTargetView,
+                         ComPtr<ID3D11DepthStencilView> depthStencilView,
                          RhiTextureDesc desc)
                 : texture_(std::move(texture))
                 , shaderResourceView_(std::move(shaderResourceView))
                 , renderTargetView_(std::move(renderTargetView))
+                , depthStencilView_(std::move(depthStencilView))
                 , desc_(desc)
             {
             }
@@ -199,10 +208,16 @@ namespace ve::rhi
                 return renderTargetView_.Get();
             }
 
+            [[nodiscard]] ID3D11DepthStencilView* GetDepthStencilView() const noexcept
+            {
+                return depthStencilView_.Get();
+            }
+
         private:
             ComPtr<ID3D11Texture2D> texture_;
             ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
             ComPtr<ID3D11RenderTargetView> renderTargetView_;
+            ComPtr<ID3D11DepthStencilView> depthStencilView_;
             RhiTextureDesc desc_ = {};
         };
 
@@ -314,13 +329,15 @@ namespace ve::rhi
                                ComPtr<ID3D11PixelShader> pixelShader,
                                ComPtr<ID3D11InputLayout> inputLayout,
                                ComPtr<ID3D11RasterizerState> rasterizerState,
-                               ComPtr<ID3D11BlendState> blendState)
+                               ComPtr<ID3D11BlendState> blendState,
+                               ComPtr<ID3D11DepthStencilState> depthStencilState)
                 : topology_(topology)
                 , vertexShader_(std::move(vertexShader))
                 , pixelShader_(std::move(pixelShader))
                 , inputLayout_(std::move(inputLayout))
                 , rasterizerState_(std::move(rasterizerState))
                 , blendState_(std::move(blendState))
+                , depthStencilState_(std::move(depthStencilState))
             {
             }
 
@@ -339,6 +356,7 @@ namespace ve::rhi
 
                 const float blendFactor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
                 context->OMSetBlendState(blendState_.Get(), blendFactor, 0xFFFFFFFFu);
+                context->OMSetDepthStencilState(depthStencilState_.Get(), 0);
             }
 
         private:
@@ -348,6 +366,7 @@ namespace ve::rhi
             ComPtr<ID3D11InputLayout> inputLayout_;
             ComPtr<ID3D11RasterizerState> rasterizerState_;
             ComPtr<ID3D11BlendState> blendState_;
+            ComPtr<ID3D11DepthStencilState> depthStencilState_;
         };
 
         class D3D11Swapchain final : public RhiSwapchain
@@ -462,14 +481,20 @@ namespace ve::rhi
                     return false;
                 }
 
+                ID3D11DepthStencilView* depthStencilView = GetDepthStencilView(desc.depthStencilAttachment);
                 ID3D11RenderTargetView* renderTargetView = d3dSwapchain->GetRenderTargetView();
-                context_->OMSetRenderTargets(1, &renderTargetView, nullptr);
+                context_->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
 
                 if (desc.colorLoadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
                         desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a};
                     context_->ClearRenderTargetView(renderTargetView, clearColor);
+                }
+
+                if (depthStencilView != nullptr && desc.depthLoadAction == RhiLoadAction::Clear)
+                {
+                    context_->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH, desc.clearDepth, 0);
                 }
 
                 return true;
@@ -483,18 +508,24 @@ namespace ve::rhi
                     return false;
                 }
 
+                ID3D11DepthStencilView* depthStencilView = GetDepthStencilView(desc.depthStencilAttachment);
                 ID3D11ShaderResourceView* nullShaderResourceView = nullptr;
                 context_->VSSetShaderResources(0, 1, &nullShaderResourceView);
                 context_->PSSetShaderResources(0, 1, &nullShaderResourceView);
 
                 ID3D11RenderTargetView* renderTargetView = d3dTexture->GetRenderTargetView();
-                context_->OMSetRenderTargets(1, &renderTargetView, nullptr);
+                context_->OMSetRenderTargets(1, &renderTargetView, depthStencilView);
 
                 if (desc.colorLoadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
                         desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a};
                     context_->ClearRenderTargetView(renderTargetView, clearColor);
+                }
+
+                if (depthStencilView != nullptr && desc.depthLoadAction == RhiLoadAction::Clear)
+                {
+                    context_->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH, desc.clearDepth, 0);
                 }
 
                 return true;
@@ -603,6 +634,12 @@ namespace ve::rhi
             }
 
         private:
+            [[nodiscard]] ID3D11DepthStencilView* GetDepthStencilView(RhiTexture* texture) const noexcept
+            {
+                auto* d3dTexture = dynamic_cast<D3D11Texture*>(texture);
+                return d3dTexture != nullptr ? d3dTexture->GetDepthStencilView() : nullptr;
+            }
+
             ComPtr<ID3D11DeviceContext> context_;
             ComPtr<ID3D11SamplerState> defaultSampler_;
         };
@@ -882,7 +919,19 @@ namespace ve::rhi
                     }
                 }
 
-                return std::make_unique<D3D11Texture>(texture, shaderResourceView, renderTargetView, desc);
+                ComPtr<ID3D11DepthStencilView> depthStencilView;
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
+                {
+                    result = device_->CreateDepthStencilView(texture.Get(), nullptr, &depthStencilView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateDepthStencilView texture", result));
+                        return nullptr;
+                    }
+                }
+
+                return std::make_unique<D3D11Texture>(
+                    texture, shaderResourceView, renderTargetView, depthStencilView, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
@@ -1034,8 +1083,29 @@ namespace ve::rhi
                     return nullptr;
                 }
 
+                D3D11_DEPTH_STENCIL_DESC depthStencilDesc = {};
+                depthStencilDesc.DepthEnable = desc.enableDepthTest ? TRUE : FALSE;
+                depthStencilDesc.DepthWriteMask =
+                    desc.enableDepthWrite ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+                depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+                depthStencilDesc.StencilEnable = FALSE;
+
+                ComPtr<ID3D11DepthStencilState> depthStencilState;
+                result = device_->CreateDepthStencilState(&depthStencilDesc, &depthStencilState);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateDepthStencilState", result));
+                    return nullptr;
+                }
+
                 return std::make_unique<D3D11PipelineState>(
-                    desc.topology, vertexShader, pixelShader, inputLayout, rasterizerState, blendState);
+                    desc.topology,
+                    vertexShader,
+                    pixelShader,
+                    inputLayout,
+                    rasterizerState,
+                    blendState,
+                    depthStencilState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override
