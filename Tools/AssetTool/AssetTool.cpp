@@ -109,7 +109,7 @@ namespace
 
     [[nodiscard]] int RunImportSource(ve::AssetDatabase& assetDatabase,
                                       const ve::Path& sourcePath,
-                                      bool force)
+                                      ve::ObjImportOptions options)
     {
         if (!IsSupportedImportSource(sourcePath))
         {
@@ -117,7 +117,7 @@ namespace
             return 1;
         }
 
-        ve::Result<ve::ObjImportResult> importResult = ve::ImportObjModel(assetDatabase, sourcePath, force);
+        ve::Result<ve::ObjImportResult> importResult = ve::ImportObjModel(assetDatabase, sourcePath, options);
         if (!importResult)
         {
             std::cerr << "Import failed: " << importResult.GetError().GetMessage() << '\n';
@@ -148,7 +148,9 @@ namespace
             return 1;
         }
 
-        return RunImportSource(assetDatabase, ve::Path(source), HasOption(commandLine, "--force"));
+        ve::ObjImportOptions options;
+        options.force = HasOption(commandLine, "--force");
+        return RunImportSource(assetDatabase, ve::Path(source), options);
     }
 
     [[nodiscard]] int RunReimport(const CommandLine& commandLine)
@@ -183,7 +185,9 @@ namespace
             return 1;
         }
 
-        return RunImportSource(assetDatabase, record->source, HasOption(commandLine, "--force"));
+        ve::ObjImportOptions options;
+        options.force = HasOption(commandLine, "--force");
+        return RunImportSource(assetDatabase, record->source, options);
     }
 } // namespace
 

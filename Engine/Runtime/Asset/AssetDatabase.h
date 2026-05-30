@@ -42,9 +42,9 @@ namespace ve
         AssetGuid guid;
         AssetType assetType = AssetType::Unknown;
         Path source;
-        std::string sourceHash;
         std::string importer;
         UInt32 importerVersion = 1;
+        std::string settingsJson = "{}";
         std::vector<AssetArtifact> artifacts;
         std::vector<AssetDependency> dependencies;
     };

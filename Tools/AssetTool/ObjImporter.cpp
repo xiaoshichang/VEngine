@@ -4,6 +4,8 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 
+#include <boost/json.hpp>
+#include <boost/system/error_code.hpp>
 #include <algorithm>
 #include <cstddef>
 #include <iomanip>
@@ -27,6 +29,50 @@ namespace ve
             std::vector<Vector3> normals;
             std::vector<MeshVertex> vertices;
         };
+
+        struct ImportState
+        {
+            std::string sourceHash;
+            std::string importer;
+            UInt32 importerVersion = 0;
+        };
+
+        [[nodiscard]] const boost::json::value* FindMember(const boost::json::object& jsonObject, const char* name)
+        {
+            const auto iter = jsonObject.find(name);
+            return iter == jsonObject.end() ? nullptr : &iter->value();
+        }
+
+        [[nodiscard]] std::string ReadJsonString(const boost::json::object& jsonObject,
+                                                 const char* name,
+                                                 std::string fallback = {})
+        {
+            const boost::json::value* member = FindMember(jsonObject, name);
+            return member != nullptr && member->is_string() ? std::string(member->as_string()) : std::move(fallback);
+        }
+
+        [[nodiscard]] UInt32 ReadJsonUInt32(const boost::json::object& jsonObject,
+                                            const char* name,
+                                            UInt32 fallback) noexcept
+        {
+            const boost::json::value* member = FindMember(jsonObject, name);
+            if (member == nullptr)
+            {
+                return fallback;
+            }
+
+            if (member->is_uint64())
+            {
+                return static_cast<UInt32>(member->as_uint64());
+            }
+
+            if (member->is_int64() && member->as_int64() >= 0)
+            {
+                return static_cast<UInt32>(member->as_int64());
+            }
+
+            return fallback;
+        }
 
         [[nodiscard]] std::string Trim(std::string_view text)
         {
@@ -343,9 +389,69 @@ namespace ve
             return metadata.artifacts.size() == 1 && metadata.artifacts[0].type == "Mesh" &&
                    metadata.artifacts[0].path == artifactPath;
         }
+
+        [[nodiscard]] Result<ImportState> LoadImportState(const Path& path)
+        {
+            Result<std::string> textResult = FileSystem::ReadTextFile(path);
+            if (!textResult)
+            {
+                return Result<ImportState>::Failure(textResult.GetError());
+            }
+
+            boost::system::error_code parseError;
+            boost::json::value root = boost::json::parse(textResult.GetValue(), parseError);
+            if (parseError || !root.is_object())
+            {
+                return Result<ImportState>::Failure(
+                    Error(ErrorCode::InvalidArgument, "Import state JSON root must be an object: " + path.GetString()));
+            }
+
+            const boost::json::object& rootObject = root.as_object();
+            if (ReadJsonString(rootObject, "format") != "VEngine.ImportState")
+            {
+                return Result<ImportState>::Failure(
+                    Error(ErrorCode::InvalidArgument, "Unsupported import state format: " + path.GetString()));
+            }
+
+            ImportState state;
+            state.sourceHash = ReadJsonString(rootObject, "sourceHash");
+            state.importer = ReadJsonString(rootObject, "importer");
+            state.importerVersion = ReadJsonUInt32(rootObject, "importerVersion", 0);
+            return Result<ImportState>::Success(std::move(state));
+        }
+
+        [[nodiscard]] bool IsImportStateCurrent(const Path& statePath,
+                                                std::string_view sourceHash,
+                                                std::string_view importer,
+                                                UInt32 importerVersion)
+        {
+            Result<ImportState> state = LoadImportState(statePath);
+            return state && state.GetValue().sourceHash == sourceHash && state.GetValue().importer == importer &&
+                   state.GetValue().importerVersion == importerVersion;
+        }
+
+        [[nodiscard]] ErrorCode SaveImportState(const Path& path,
+                                                std::string_view sourceHash,
+                                                std::string_view importer,
+                                                UInt32 importerVersion)
+        {
+            std::ostringstream stream;
+            stream << "{\n";
+            stream << "  \"format\": \"VEngine.ImportState\",\n";
+            stream << "  \"version\": 1,\n";
+            stream << "  \"sourceHash\": "
+                   << boost::json::serialize(boost::json::value(boost::json::string(sourceHash))) << ",\n";
+            stream << "  \"importer\": "
+                   << boost::json::serialize(boost::json::value(boost::json::string(importer))) << ",\n";
+            stream << "  \"importerVersion\": " << importerVersion << "\n";
+            stream << "}\n";
+            return FileSystem::WriteTextFile(path, stream.str());
+        }
     } // namespace
 
-    Result<ObjImportResult> ImportObjModel(AssetDatabase& assetDatabase, const Path& sourcePath, bool force)
+    Result<ObjImportResult> ImportObjModel(AssetDatabase& assetDatabase,
+                                           const Path& sourcePath,
+                                           ObjImportOptions options)
     {
         const Path relativeSource = assetDatabase.MakeProjectRelativePath(sourcePath);
         const Path absoluteSource = assetDatabase.ResolveProjectPath(relativeSource);
@@ -385,19 +491,22 @@ namespace ve
         const std::string stem = GetStem(relativeSource);
         const Path meshArtifactPath =
             Path("Generated/Assets/ImportCache") / metadata.guid.ToString() / (stem + ".vemesh");
+        const Path importStatePath =
+            Path("Generated/Assets/ImportCache") / metadata.guid.ToString() / "ImportState.veimportstate";
         const bool metadataAlreadyCurrent =
             metadata.assetType == AssetType::SourceModel && metadata.source == relativeSource &&
-            metadata.sourceHash == hash.GetValue() && metadata.importer == "ObjModel" &&
-            metadata.importerVersion == 1 && HasSingleMeshArtifact(metadata, meshArtifactPath);
+            metadata.importer == "ObjModel" && metadata.importerVersion == 1 &&
+            HasSingleMeshArtifact(metadata, meshArtifactPath);
 
-        if (!force && metadata.sourceHash == hash.GetValue() &&
+        if (!options.force && metadataAlreadyCurrent &&
+            IsImportStateCurrent(assetDatabase.ResolveProjectPath(importStatePath), hash.GetValue(), "ObjModel", 1) &&
             FileSystem::IsFile(assetDatabase.ResolveProjectPath(meshArtifactPath)))
         {
             ObjImportResult result;
             result.guid = metadata.guid;
             result.metadataPath = metadataPath;
             result.meshArtifactPath = meshArtifactPath;
-            result.sourceHash = metadata.sourceHash;
+            result.sourceHash = hash.GetValue();
             if (Result<MeshAssetData> cachedMesh = LoadMeshAsset(assetDatabase.ResolveProjectPath(meshArtifactPath)))
             {
                 result.vertexCount = cachedMesh.GetValue().vertices.size();
@@ -430,7 +539,6 @@ namespace ve
 
         metadata.assetType = AssetType::SourceModel;
         metadata.source = relativeSource;
-        metadata.sourceHash = hash.GetValue();
         metadata.importer = "ObjModel";
         metadata.importerVersion = 1;
         metadata.artifacts.clear();
@@ -446,6 +554,13 @@ namespace ve
             }
         }
 
+        const ErrorCode importStateSaveResult =
+            SaveImportState(assetDatabase.ResolveProjectPath(importStatePath), hash.GetValue(), "ObjModel", 1);
+        if (importStateSaveResult != ErrorCode::None)
+        {
+            return Result<ObjImportResult>::Failure(Error(importStateSaveResult, "Failed to write import state."));
+        }
+
         const ErrorCode refreshResult = assetDatabase.Refresh();
         if (refreshResult != ErrorCode::None)
         {
@@ -456,7 +571,7 @@ namespace ve
         result.guid = metadata.guid;
         result.metadataPath = metadataPath;
         result.meshArtifactPath = meshArtifactPath;
-        result.sourceHash = metadata.sourceHash;
+        result.sourceHash = hash.GetValue();
         result.vertexCount = mesh.vertices.size();
         return Result<ObjImportResult>::Success(std::move(result));
     }

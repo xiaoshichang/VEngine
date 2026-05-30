@@ -153,7 +153,6 @@ Required first-stage fields:
   "guid": "00000000-0000-0000-0000-000000000000",
   "assetType": "SourceModel",
   "source": "Assets/Samples/Models/Crate.obj",
-  "sourceHash": "sha256-or-placeholder",
   "importer": "ObjModel",
   "importerVersion": 1,
   "settings": {},
@@ -162,8 +161,9 @@ Required first-stage fields:
 }
 ```
 
-`sourceHash` may start with a simple content hash or a clearly named placeholder if hashing is deferred, but the
-importer API should already leave room for deterministic reimport checks.
+`.veasset` should remain stable source metadata: GUID, source path, importer identity, importer settings, generated
+artifact records, and dependency records. Build-time import state such as source hashes and importer-result freshness
+belongs under `Generated/Assets/ImportCache/<asset-guid>/`, not in the authored sidecar.
 
 Artifact records should describe generated native assets:
 
@@ -177,6 +177,21 @@ Artifact records should describe generated native assets:
 
 Dependency records should describe materials, texture paths, shader references, and other assets discovered by import.
 Texture dependencies can be metadata-only in the first version.
+
+Import state records describe the local generated cache:
+
+```json
+{
+  "format": "VEngine.ImportState",
+  "version": 1,
+  "sourceHash": "content-hash",
+  "importer": "ObjModel",
+  "importerVersion": 1
+}
+```
+
+These records are disposable generated files. Reimport may rewrite them and generated artifacts without changing
+authored `.veasset` files when GUID, importer settings, artifacts, and dependencies are unchanged.
 
 ### 5.2 `.vescene`
 
@@ -277,7 +292,8 @@ Required responsibilities:
 - Map GUID to asset path, asset type, and generated artifacts.
 - Map normalized project path to GUID.
 - Resolve asset references by GUID with optional path fallback.
-- Track importer id, importer version, import settings, source hash, generated artifacts, and dependency records.
+- Track importer id, importer version, import settings, generated artifacts, and dependency records in authored
+  metadata; track source hash and cache freshness in generated import state.
 - Validate missing sources, missing generated artifacts, unknown asset types, and unresolved dependencies.
 - Save updated metadata atomically enough for local development.
 
@@ -290,7 +306,7 @@ AssetDatabase::FindAsset(guid)
 AssetDatabase::FindAssetByPath(path)
 AssetDatabase::CreateSourceAssetMetadata(sourcePath, importerId, settings)
 AssetDatabase::CreateAuthoredAsset(path, assetType)
-AssetDatabase::UpdateImportResult(guid, artifacts, dependencies, sourceHash)
+AssetDatabase::UpdateImportResult(guid, artifacts, dependencies)
 AssetDatabase::ResolveArtifact(guid, resourceType)
 AssetDatabase::Validate()
 ```

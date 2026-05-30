@@ -412,9 +412,12 @@ namespace ve
         metadata.guid = guid.GetValue();
         metadata.assetType = ParseAssetType(ReadString(root, "assetType"));
         metadata.source = Path(ReadString(root, "source"));
-        metadata.sourceHash = ReadString(root, "sourceHash");
         metadata.importer = ReadString(root, "importer");
         metadata.importerVersion = ReadUInt32(root, "importerVersion", 1);
+        if (const value* settings = FindMember(root, "settings"))
+        {
+            metadata.settingsJson = boost::json::serialize(*settings);
+        }
         metadata.artifacts = ReadArtifacts(root);
         metadata.dependencies = ReadDependencies(root);
 
@@ -434,10 +437,11 @@ namespace ve
         root["guid"] = metadata.guid.ToString();
         root["assetType"] = ToString(metadata.assetType);
         root["source"] = metadata.source.GetString();
-        root["sourceHash"] = metadata.sourceHash;
         root["importer"] = metadata.importer;
         root["importerVersion"] = metadata.importerVersion;
-        root["settings"] = object();
+        boost::system::error_code settingsParseError;
+        value settings = boost::json::parse(metadata.settingsJson, settingsParseError);
+        root["settings"] = settingsParseError ? value(object()) : std::move(settings);
 
         array artifacts;
         for (const AssetArtifact& artifact : metadata.artifacts)

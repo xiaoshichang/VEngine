@@ -228,8 +228,9 @@ Implementation order:
   under `Generated/Assets/`.
 - Define the common JSON file contract rules for asset files: `format`, `version`, `guid`, `assetType`, project-relative
   paths, explicit version checks, and clear diagnostics for unsupported versions.
-- Define `.veasset` source metadata sidecars with GUID, source path, source hash placeholder or content hash, importer
-  id, importer version, import settings, generated artifacts, and dependency records.
+- Define `.veasset` source metadata sidecars with GUID, source path, importer id, importer version, import settings,
+  generated artifacts, and dependency records. Keep source hashes and import freshness in generated import state rather
+  than authored sidecars.
 - Promote the Milestone 5 scene serialization shape into the asset-level `.vescene` contract with scene metadata and
   asset-reference properties.
 - Define `.vematerial` with shader reference, base color parameters, and texture slots. Use base color in the first
@@ -256,7 +257,8 @@ Implementation order:
 - Track source material texture references as asset dependencies without requiring full texture decoding or GPU texture
   upload in this milestone.
 - Write generated import artifacts to stable GUID-based paths under `Generated/Assets/ImportCache/`.
-- Add deterministic reimport behavior based on source path, importer version, settings, and source hash when available.
+- Add deterministic reimport behavior based on source path, importer version, settings, and generated import-state
+  source hashes when available.
 - Expand `ResourceManager` with file-backed mesh and material loading APIs while keeping built-in fallback resources.
 - Route runtime file reads through `IOSystem` and CPU parse/conversion work through `JobSystem` where the runtime path
   can be asynchronous.

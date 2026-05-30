@@ -17,7 +17,21 @@ namespace ve
         SizeT vertexCount = 0;
     };
 
+    struct ObjImportOptions
+    {
+        bool force = false;
+    };
+
     [[nodiscard]] Result<ObjImportResult> ImportObjModel(AssetDatabase& assetDatabase,
                                                          const Path& sourcePath,
-                                                         bool force);
+                                                         ObjImportOptions options);
+
+    [[nodiscard]] inline Result<ObjImportResult> ImportObjModel(AssetDatabase& assetDatabase,
+                                                                const Path& sourcePath,
+                                                                bool force)
+    {
+        ObjImportOptions options;
+        options.force = force;
+        return ImportObjModel(assetDatabase, sourcePath, options);
+    }
 } // namespace ve

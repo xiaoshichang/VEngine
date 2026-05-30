@@ -98,7 +98,6 @@ f 1 2 3 4
   "guid": "$SOURCE_GUID$",
   "assetType": "SourceModel",
   "source": "Assets/Samples/Models/TestQuad.obj",
-  "sourceHash": "",
   "importer": "ObjModel",
   "importerVersion": 1,
   "settings": {
@@ -351,6 +350,48 @@ f 1 2 3 4
         RemoveTestRoot();
         return passed;
     }
+
+    bool TestImportPreservesSourceMetadataWhenOnlyImportStateChanges()
+    {
+        bool passed = true;
+        RemoveTestRoot();
+        passed &= WriteTestProject();
+
+        ve::AssetDatabase assetDatabase;
+        passed &= ExpectOk(assetDatabase.Open(GetTestProjectRoot()), "AssetDatabase should open test project");
+
+        const ve::Path metadataPath =
+            GetTestProjectRoot() / "Assets/Samples/Models/TestQuad.obj.veasset";
+        ve::Result<std::string> metadataBefore = ve::FileSystem::ReadTextFile(metadataPath);
+        passed &= ExpectOk(metadataBefore, "Source metadata should be readable before import");
+
+        ve::Result<ve::ObjImportResult> importResult =
+            ve::ImportObjModel(assetDatabase, ve::Path("Assets/Samples/Models/TestQuad.obj"), true);
+        passed &= ExpectOk(importResult, "OBJ import should update generated import state");
+
+        if (importResult)
+        {
+            const ve::Path generatedMeshPath =
+                assetDatabase.ResolveProjectPath(importResult.GetValue().meshArtifactPath);
+            passed &= Expect(ve::FileSystem::IsFile(generatedMeshPath),
+                             "Import should produce a .vemesh");
+
+            const ve::Path importStatePath = generatedMeshPath.GetParentPath() / "ImportState.veimportstate";
+            passed &= Expect(ve::FileSystem::IsFile(importStatePath),
+                             "Import should write source hash state beside generated artifacts");
+        }
+
+        ve::Result<std::string> metadataAfter = ve::FileSystem::ReadTextFile(metadataPath);
+        passed &= ExpectOk(metadataAfter, "Source metadata should be readable after import");
+        if (metadataBefore && metadataAfter)
+        {
+            passed &= Expect(metadataAfter.GetValue() == metadataBefore.GetValue(),
+                             "Import should preserve source metadata text when only generated state changes");
+        }
+
+        RemoveTestRoot();
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -359,6 +400,7 @@ int main()
     passed &= TestGuidParsing();
     passed &= TestSceneLoadFailsWhenMeshArtifactIsMissing();
     passed &= TestAssetPipelineRoundTrip();
+    passed &= TestImportPreservesSourceMetadataWhenOnlyImportStateChanges();
 
     if (!passed)
     {

@@ -165,7 +165,6 @@ namespace
   "guid": "$SOURCE_GUID$",
   "assetType": "SourceModel",
   "source": "Assets/Samples/Models/TestQuad.obj",
-  "sourceHash": "",
   "importer": "ObjModel",
   "importerVersion": 1,
   "settings": {},
