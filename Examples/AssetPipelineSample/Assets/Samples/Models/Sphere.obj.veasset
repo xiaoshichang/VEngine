@@ -1,0 +1,21 @@
+{
+  "format": "VEngine.AssetMetadata",
+  "version": 1,
+  "guid": "44444444-4444-4444-8444-444444444444",
+  "assetType": "SourceModel",
+  "source": "Assets/Samples/Models/Sphere.obj",
+  "importer": "ObjModel",
+  "importerVersion": 1,
+  "settings": {
+    "combineMeshes": true,
+    "unitScale": 1.0,
+    "generateNormals": "WhenMissing"
+  },
+  "artifacts": [
+    {
+      "type": "Mesh",
+      "path": "Generated/Assets/ImportCache/44444444-4444-4444-8444-444444444444/Sphere.vemesh"
+    }
+  ],
+  "dependencies": []
+}

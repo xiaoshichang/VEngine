@@ -1201,7 +1201,7 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        return gameThreadSystem.SetActiveScene(&currentEditScene_, &resourceManager);
+        return gameThreadSystem.SetActiveScene(&GetActiveScene(), &resourceManager);
     }
 
     ErrorCode EditorProjectService::RefreshAssetDatabase()
@@ -1436,14 +1436,15 @@ namespace ve
         return ErrorCode::None;
     }
 
-    ErrorCode EditorProjectService::StartPlayMode(ResourceManager& resourceManager)
+    ErrorCode
+    EditorProjectService::StartPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager)
     {
-        (void)resourceManager;
-
         if (!hasOpenProject_ || isPlaying_)
         {
             return ErrorCode::InvalidState;
         }
+
+        gameThreadSystem.ClearActiveScene();
 
         ReflectionRegistry reflectionRegistry;
         RegisterSceneReflectionTypes(reflectionRegistry);
@@ -1469,7 +1470,34 @@ namespace ve
 
         playScene_.UpdateTransforms();
         isPlaying_ = true;
+        const ErrorCode bindResult = BindActiveScene(gameThreadSystem, resourceManager);
+        if (bindResult != ErrorCode::None)
+        {
+            isPlaying_ = false;
+            playScene_.Clear();
+            playScene_.SetScriptContext(nullptr);
+            ClearPlayModeScripts();
+            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
+                          "Failed to bind play scene to the Game Thread: " + std::string(ToString(bindResult)));
+            return bindResult;
+        }
+
         AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Play mode started.");
+        return ErrorCode::None;
+    }
+
+    ErrorCode
+    EditorProjectService::StopPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager)
+    {
+        (void)resourceManager;
+
+        gameThreadSystem.ClearActiveScene();
+        StopPlayMode();
+        if (!hasOpenProject_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
         return ErrorCode::None;
     }
 
@@ -1489,14 +1517,7 @@ namespace ve
 
     void EditorProjectService::TickPlayMode()
     {
-        if (!isPlaying_)
-        {
-            return;
-        }
-
-        playScene_.Update();
-        playScene_.LateUpdate();
-        playScene_.UpdateTransforms();
+        // Play mode is advanced by GameThreadSystem so fixed-step physics and normal runtime updates stay together.
     }
 
     bool EditorProjectService::IsDirty() const noexcept

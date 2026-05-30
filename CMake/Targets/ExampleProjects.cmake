@@ -85,6 +85,10 @@ EndGlobal
             --project "${veAssetPipelineSampleRoot}"
             --source "Assets/Samples/Models/Cube.obj"
         COMMAND $<TARGET_FILE:VEngineAssetTool>
+            import
+            --project "${veAssetPipelineSampleRoot}"
+            --source "Assets/Samples/Models/Sphere.obj"
+        COMMAND $<TARGET_FILE:VEngineAssetTool>
             validate
             --project "${veAssetPipelineSampleRoot}"
         DEPENDS VEngineAssetTool
@@ -152,5 +156,8 @@ EndGlobal
 
     if(TARGET VEngineEditor)
         add_dependencies(VEngineEditor VEngineExampleAssetPipelineSample)
+        if(TARGET VEngineExampleAssetPipelineSampleScripts)
+            add_dependencies(VEngineEditor VEngineExampleAssetPipelineSampleScripts)
+        endif()
     endif()
 endfunction()

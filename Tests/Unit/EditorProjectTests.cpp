@@ -2,6 +2,7 @@
 #include "Editor/Core/EditorReflection.h"
 
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/GameThread/GameThreadSystem.h"
 #include "Engine/Runtime/Physics/ColliderComponent.h"
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Resource/BuiltInResources.h"
@@ -337,6 +338,12 @@ namespace
                            "CreateProjectSkeleton should create a play mode test project");
 
         ve::ResourceManager resourceManager;
+        ve::GameThreadSystem gameThreadSystem;
+        ve::GameThreadSystemDesc gameThreadDesc;
+        gameThreadDesc.threadName = "EditorProjectPlayModeTestThread";
+        passed &= ExpectOk(gameThreadSystem.Initialize(gameThreadDesc),
+                           "GameThreadSystem should initialize for play mode test");
+
         ve::EditorProjectService projectService;
         passed &= ExpectOk(projectService.OpenProject(projectRoot, resourceManager),
                            "EditorProjectService should open play mode test project");
@@ -346,7 +353,8 @@ namespace
         projectService.GetCurrentEditScene().UpdateTransforms();
         projectService.ClearDirty();
 
-        passed &= ExpectOk(projectService.StartPlayMode(resourceManager), "StartPlayMode should clone the edit scene");
+        passed &= ExpectOk(projectService.StartPlayMode(gameThreadSystem, resourceManager),
+                           "StartPlayMode should clone and bind the play scene");
         passed &= Expect(projectService.IsPlaying(), "Project service should report play mode");
         passed &= Expect(projectService.GetActiveScene().GetGameObjectCount() == 1,
                          "Play scene should start as a clone of the edit scene");
@@ -354,6 +362,7 @@ namespace
                              ve::ErrorCode::InvalidState,
                          "BuildScripts should be blocked while Play mode is running");
 
+        gameThreadSystem.ClearActiveScene();
         ve::GameObject& playObject = projectService.GetActiveScene().CreateGameObject("PlayOnlyObject");
         playObject.AddComponent<ve::TransformComponent>();
         const ve::SceneObjectId playObjectId = playObject.GetId();
@@ -364,13 +373,16 @@ namespace
         passed &= Expect(projectService.GetCurrentEditScene().GetGameObjectCount() == 1,
                          "Edit scene should not receive play mode objects");
 
-        projectService.StopPlayMode();
+        passed &= ExpectOk(projectService.StopPlayMode(gameThreadSystem, resourceManager),
+                           "StopPlayMode should clear the play scene binding");
         passed &= Expect(!projectService.IsPlaying(), "StopPlayMode should leave play mode");
         passed &= Expect(projectService.GetActiveScene().GetGameObjectCount() == 1,
                          "Stopping play mode should restore the edit scene as active");
         passed &= Expect(projectService.GetCurrentEditScene().FindGameObject(playObjectId) == nullptr,
                          "Stopping play mode should discard play scene objects");
 
+        gameThreadSystem.ClearActiveScene();
+        gameThreadSystem.Shutdown();
         CleanTestRoot();
         return passed;
     }

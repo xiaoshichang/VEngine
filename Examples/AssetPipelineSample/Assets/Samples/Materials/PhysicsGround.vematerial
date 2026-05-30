@@ -1,0 +1,14 @@
+{
+  "format": "VEngine.Material",
+  "version": 1,
+  "guid": "55555555-5555-4555-8555-555555555501",
+  "name": "PhysicsGround",
+  "shader": {
+    "guid": "00000000-0000-0000-0000-000000000000",
+    "path": "Shaders/Generated/Basic.shader"
+  },
+  "parameters": {
+    "baseColor": [0.36, 0.42, 0.40]
+  },
+  "textures": []
+}

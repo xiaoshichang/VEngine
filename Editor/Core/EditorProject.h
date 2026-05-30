@@ -100,7 +100,8 @@ namespace ve
         [[nodiscard]] bool IsPlaying() const noexcept;
         [[nodiscard]] bool HasWindowsScripts() const noexcept;
         [[nodiscard]] ErrorCode BuildScripts(ScriptBuildConfiguration configuration);
-        [[nodiscard]] ErrorCode StartPlayMode(ResourceManager& resourceManager);
+        [[nodiscard]] ErrorCode StartPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager);
+        [[nodiscard]] ErrorCode StopPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager);
         void StopPlayMode();
         void TickPlayMode();
         [[nodiscard]] bool IsDirty() const noexcept;

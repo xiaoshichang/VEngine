@@ -671,7 +671,8 @@ namespace
             ImGui::BeginDisabled(playing);
             if (ImGui::Button("Play"))
             {
-                const ve::ErrorCode playResult = projectService.StartPlayMode(runtime.GetResourceManager());
+                const ve::ErrorCode playResult =
+                    projectService.StartPlayMode(runtime.GetGameThreadSystem(), runtime.GetResourceManager());
                 if (playResult == ve::ErrorCode::None)
                 {
                     statusMessage_ = "Play mode started.";
@@ -687,9 +688,11 @@ namespace
             ImGui::BeginDisabled(!playing);
             if (ImGui::Button("Stop"))
             {
-                projectService.StopPlayMode();
+                const ve::ErrorCode stopResult =
+                    projectService.StopPlayMode(runtime.GetGameThreadSystem(), runtime.GetResourceManager());
                 editorPanels_.ResetSelection();
-                statusMessage_ = "Play mode stopped.";
+                statusMessage_ = stopResult == ve::ErrorCode::None ? "Play mode stopped."
+                                                                    : MakeProjectOpenError("Stop failed", stopResult);
             }
             ImGui::EndDisabled();
 
@@ -815,7 +818,7 @@ namespace
                        ve::EngineRuntime& runtime,
                        const ve::Path& scenePath)
         {
-            projectService.StopPlayMode();
+            (void)projectService.StopPlayMode(runtime.GetGameThreadSystem(), runtime.GetResourceManager());
             runtime.GetGameThreadSystem().ClearActiveScene();
             const ve::ErrorCode openResult = projectService.OpenScene(scenePath, runtime.GetResourceManager());
             if (openResult == ve::ErrorCode::None)
@@ -1179,6 +1182,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
 
     desc.sceneStartup = [&projectService, projectRoot](ve::EngineRuntime& runtime)
     {
+        // The Editor owns presentation through SubmitEditorUiFrame and offscreen viewport textures.
+        // Keep the Game Thread available for Play-mode scene updates without letting it submit main swapchain frames.
+        runtime.GetGameThreadSystem().ClearRenderSystem();
+
         if (projectRoot.IsEmpty())
         {
             VE_LOG_INFO_CATEGORY("Editor", "No project argument supplied. Opening Project Launcher.");
