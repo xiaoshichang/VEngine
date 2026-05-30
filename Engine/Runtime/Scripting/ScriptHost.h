@@ -29,6 +29,7 @@ namespace ve
         OnEnable = 2,
         OnDisable = 3,
         OnUpdate = 4,
+        OnFixedUpdate = 5,
     };
 
     struct ScriptOperationResult

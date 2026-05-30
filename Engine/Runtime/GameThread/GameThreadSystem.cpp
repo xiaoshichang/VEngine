@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/ScopeExit.h"
+#include "Engine/Runtime/Physics/PhysicsSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Scene/Scene.h"
@@ -81,6 +82,7 @@ namespace ve
             AtomicSize activeSceneFrameCount{0};
             Scene* activeScene = nullptr;
             ResourceManager* resourceManager = nullptr;
+            PhysicsSystem physicsSystem;
         };
 
         ThreadState thread;
@@ -162,6 +164,25 @@ namespace ve
 
             auto sceneGuard = MakeScopeExit([&impl]() { ReleaseActiveScene(impl); });
             scene->LateUpdate();
+        }
+
+        void FixedUpdateActiveScene(GameThreadSystemImpl& impl, Float32 fixedDeltaSeconds)
+        {
+            Scene* scene = nullptr;
+            ResourceManager* resourceManager = nullptr;
+            if (!AcquireActiveScene(impl, scene, resourceManager))
+            {
+                return;
+            }
+
+            auto sceneGuard = MakeScopeExit([&impl]() { ReleaseActiveScene(impl); });
+            scene->FixedUpdate(fixedDeltaSeconds);
+            SetPhase(impl.frame.phase, GameThreadPhase::Physics);
+            impl.scene.physicsSystem.SyncFromScene(*scene);
+            (void)impl.scene.physicsSystem.Step(fixedDeltaSeconds);
+            impl.scene.physicsSystem.WriteBackTransforms();
+            scene->UpdateTransforms();
+            impl.scene.physicsSystem.SyncQueriesFromScene(*scene);
         }
 
         void UpdateActiveSceneTransforms(GameThreadSystemImpl& impl)
@@ -259,8 +280,15 @@ namespace ve
 
             SetPhase(impl.frame.phase, GameThreadPhase::BeginFrame);
             Time::Tick();
+            const Time::TimeSnapshot timeSnapshot = Time::GetSnapshot();
 
             SetPhase(impl.frame.phase, GameThreadPhase::Lifecycle);
+            for (UInt32 stepIndex = 0; stepIndex < timeSnapshot.fixedStepCount; ++stepIndex)
+            {
+                SetPhase(impl.frame.phase, GameThreadPhase::FixedUpdate);
+                FixedUpdateActiveScene(impl, timeSnapshot.fixedDeltaSeconds);
+            }
+
             SetPhase(impl.frame.phase, GameThreadPhase::Update);
             UpdateActiveScene(impl);
             SetPhase(impl.frame.phase, GameThreadPhase::LateUpdate);
@@ -354,6 +382,7 @@ namespace ve
                 LockGuard<Mutex> lock(impl.scene.mutex);
                 impl.scene.activeScene = nullptr;
                 impl.scene.resourceManager = nullptr;
+                impl.scene.physicsSystem.Clear();
             }
 
             if (GetCurrentThreadId().value == impl.thread.gameThreadIdValue.load(std::memory_order_acquire))

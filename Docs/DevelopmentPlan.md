@@ -361,6 +361,14 @@ Implementation order:
 
 ### Milestone 9: Lightweight Physics And Picking
 
+Status:
+
+- Core runtime slice is implemented: box/sphere colliders, `PhysicsWorld` queries, reflected/serialized
+  `RigidBodyComponent`, fixed-step dispatch, native and C# `OnFixedUpdate`, a lightweight `PhysicsSystem`, pose history,
+  simple gravity/force/torque integration, basic deterministic contact response, and Editor SceneView collider picking.
+- Remaining refinement work: fuller angular contact quality for complex box stacks, trigger/contact event queues,
+  runtime player-facing picking helpers, debug collider/raycast visualization, and a polished sample scene.
+
 Detailed design:
 
 - See [Lightweight Physics And Fixed Update Design](LightweightPhysicsFixedUpdateDesign.md).

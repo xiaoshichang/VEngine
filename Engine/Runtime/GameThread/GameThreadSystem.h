@@ -22,6 +22,8 @@ namespace ve
         Idle,
         BeginFrame,
         Lifecycle,
+        FixedUpdate,
+        Physics,
         Update,
         LateUpdate,
         TransformUpdate,

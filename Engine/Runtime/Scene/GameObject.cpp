@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Physics/ColliderComponent.h"
+#include "Engine/Runtime/Physics/RigidBodyComponent.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
@@ -164,6 +165,13 @@ namespace ve
             if (ColliderComponent* existingCollider = GetComponent<ColliderComponent>())
             {
                 return *existingCollider;
+            }
+        }
+        if (dynamic_cast<RigidBodyComponent*>(component.get()) != nullptr)
+        {
+            if (RigidBodyComponent* existingRigidBody = GetComponent<RigidBodyComponent>())
+            {
+                return *existingRigidBody;
             }
         }
 

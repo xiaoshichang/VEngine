@@ -104,6 +104,20 @@ namespace ve
         }
     }
 
+    void Scene::FixedUpdate(Float32 fixedDeltaSeconds)
+    {
+        ValidateMutationAccess();
+
+        std::vector<GameObject*> roots = rootGameObjects_;
+        for (GameObject* root : roots)
+        {
+            if (FindGameObject(root->GetId()) != nullptr)
+            {
+                FixedUpdateGameObject(*root, fixedDeltaSeconds);
+            }
+        }
+    }
+
     void Scene::LateUpdate()
     {
         ValidateMutationAccess();
@@ -223,6 +237,23 @@ namespace ve
             if (FindGameObject(child->GetId()) != nullptr)
             {
                 UpdateGameObject(*child);
+            }
+        }
+    }
+
+    void Scene::FixedUpdateGameObject(GameObject& gameObject, Float32 fixedDeltaSeconds)
+    {
+        for (const std::unique_ptr<Component>& component : gameObject.components_)
+        {
+            component->DispatchFixedUpdate(fixedDeltaSeconds);
+        }
+
+        std::vector<GameObject*> children = gameObject.children_;
+        for (GameObject* child : children)
+        {
+            if (FindGameObject(child->GetId()) != nullptr)
+            {
+                FixedUpdateGameObject(*child, fixedDeltaSeconds);
             }
         }
     }

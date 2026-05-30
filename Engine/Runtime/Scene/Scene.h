@@ -39,6 +39,7 @@ namespace ve
         [[nodiscard]] SizeT GetGameObjectCount() const noexcept;
 
         void Update();
+        void FixedUpdate(Float32 fixedDeltaSeconds);
         void LateUpdate();
         void UpdateTransforms();
 
@@ -57,6 +58,7 @@ namespace ve
         void RemoveRootGameObject(GameObject& gameObject) noexcept;
         void DestroyGameObjectTree(GameObject& gameObject) noexcept;
         void UpdateGameObject(GameObject& gameObject);
+        void FixedUpdateGameObject(GameObject& gameObject, Float32 fixedDeltaSeconds);
         void LateUpdateGameObject(GameObject& gameObject);
         void UpdateTransformTree(GameObject& gameObject, const Matrix44& parentWorld);
 

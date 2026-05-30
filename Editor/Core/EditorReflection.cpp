@@ -28,7 +28,8 @@ namespace ve
 
     bool IsSingleInstanceEditorComponent(std::string_view typeName) noexcept
     {
-        return typeName == "TransformComponent" || typeName == "ColliderComponent";
+        return typeName == "TransformComponent" || typeName == "ColliderComponent" ||
+               typeName == "RigidBodyComponent";
     }
 
     const ReflectedTypeInfo*

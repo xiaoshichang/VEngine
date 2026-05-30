@@ -111,6 +111,14 @@ namespace ve
         }
     }
 
+    void Component::DispatchFixedUpdate(Float32 fixedDeltaSeconds)
+    {
+        if (activeAndEnabled_)
+        {
+            OnFixedUpdate(fixedDeltaSeconds);
+        }
+    }
+
     void Component::DispatchLateUpdate()
     {
         if (activeAndEnabled_)

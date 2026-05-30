@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Physics/ColliderComponent.h"
+#include "Engine/Runtime/Physics/RigidBodyComponent.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
@@ -174,6 +175,16 @@ namespace ve
         registry.RegisterEnum(ReflectedEnumInfo{
             "ColliderShape",
             {{"Box", static_cast<Int32>(ColliderShape::Box)}, {"Sphere", static_cast<Int32>(ColliderShape::Sphere)}}});
+        registry.RegisterEnum(ReflectedEnumInfo{
+            "RigidBodyType",
+            {{"Static", static_cast<Int32>(RigidBodyType::Static)},
+             {"Kinematic", static_cast<Int32>(RigidBodyType::Kinematic)},
+             {"Dynamic", static_cast<Int32>(RigidBodyType::Dynamic)}}});
+        registry.RegisterEnum(ReflectedEnumInfo{
+            "PhysicsInterpolationMode",
+            {{"None", static_cast<Int32>(PhysicsInterpolationMode::None)},
+             {"Interpolate", static_cast<Int32>(PhysicsInterpolationMode::Interpolate)},
+             {"Extrapolate", static_cast<Int32>(PhysicsInterpolationMode::Extrapolate)}}});
 
         ReflectedTypeInfo transform;
         transform.name = "TransformComponent";
@@ -483,6 +494,198 @@ namespace ve
                 }
             }});
         registry.RegisterType(std::move(collider));
+
+        ReflectedTypeInfo rigidBody;
+        rigidBody.name = "RigidBodyComponent";
+        rigidBody.baseTypeName = "Component";
+        rigidBody.componentFactory = []() { return std::make_unique<RigidBodyComponent>(); };
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "bodyType",
+            ReflectedPropertyType::Enum,
+            true,
+            true,
+            "RigidBodyType",
+            [](const Component& component)
+            {
+                switch (static_cast<const RigidBodyComponent&>(component).GetBodyType())
+                {
+                case RigidBodyType::Static:
+                    return value("Static");
+                case RigidBodyType::Kinematic:
+                    return value("Kinematic");
+                case RigidBodyType::Dynamic:
+                default:
+                    return value("Dynamic");
+                }
+            },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_string())
+                {
+                    RigidBodyType bodyType = RigidBodyType::Dynamic;
+                    if (jsonValue.as_string() == "Static")
+                    {
+                        bodyType = RigidBodyType::Static;
+                    }
+                    else if (jsonValue.as_string() == "Kinematic")
+                    {
+                        bodyType = RigidBodyType::Kinematic;
+                    }
+                    static_cast<RigidBodyComponent&>(component).SetBodyType(bodyType);
+                }
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "mass",
+            ReflectedPropertyType::Float32,
+            true,
+            true,
+            {},
+            [](const Component& component) { return static_cast<const RigidBodyComponent&>(component).GetMass(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_double())
+                {
+                    static_cast<RigidBodyComponent&>(component).SetMass(static_cast<Float32>(jsonValue.as_double()));
+                }
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "useGravity",
+            ReflectedPropertyType::Bool,
+            true,
+            true,
+            {},
+            [](const Component& component) { return static_cast<const RigidBodyComponent&>(component).UsesGravity(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_bool())
+                {
+                    static_cast<RigidBodyComponent&>(component).SetUseGravity(jsonValue.as_bool());
+                }
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "gravityScale",
+            ReflectedPropertyType::Float32,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return static_cast<const RigidBodyComponent&>(component).GetGravityScale(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_double())
+                {
+                    static_cast<RigidBodyComponent&>(component).SetGravityScale(
+                        static_cast<Float32>(jsonValue.as_double()));
+                }
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "linearVelocity",
+            ReflectedPropertyType::Vector3,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return ToJson(static_cast<const RigidBodyComponent&>(component).GetLinearVelocity()); },
+            [](Component& component, const value& jsonValue)
+            {
+                auto& rigidBodyComponent = static_cast<RigidBodyComponent&>(component);
+                rigidBodyComponent.SetLinearVelocity(ToVector3(jsonValue, rigidBodyComponent.GetLinearVelocity()));
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "angularVelocity",
+            ReflectedPropertyType::Vector3,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return ToJson(static_cast<const RigidBodyComponent&>(component).GetAngularVelocity()); },
+            [](Component& component, const value& jsonValue)
+            {
+                auto& rigidBodyComponent = static_cast<RigidBodyComponent&>(component);
+                rigidBodyComponent.SetAngularVelocity(ToVector3(jsonValue, rigidBodyComponent.GetAngularVelocity()));
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "linearDamping",
+            ReflectedPropertyType::Float32,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return static_cast<const RigidBodyComponent&>(component).GetLinearDamping(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_double())
+                {
+                    static_cast<RigidBodyComponent&>(component).SetLinearDamping(
+                        static_cast<Float32>(jsonValue.as_double()));
+                }
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "angularDamping",
+            ReflectedPropertyType::Float32,
+            true,
+            true,
+            {},
+            [](const Component& component)
+            { return static_cast<const RigidBodyComponent&>(component).GetAngularDamping(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_double())
+                {
+                    static_cast<RigidBodyComponent&>(component).SetAngularDamping(
+                        static_cast<Float32>(jsonValue.as_double()));
+                }
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "interpolationMode",
+            ReflectedPropertyType::Enum,
+            true,
+            true,
+            "PhysicsInterpolationMode",
+            [](const Component& component)
+            {
+                switch (static_cast<const RigidBodyComponent&>(component).GetInterpolationMode())
+                {
+                case PhysicsInterpolationMode::None:
+                    return value("None");
+                case PhysicsInterpolationMode::Extrapolate:
+                    return value("Extrapolate");
+                case PhysicsInterpolationMode::Interpolate:
+                default:
+                    return value("Interpolate");
+                }
+            },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_string())
+                {
+                    PhysicsInterpolationMode mode = PhysicsInterpolationMode::Interpolate;
+                    if (jsonValue.as_string() == "None")
+                    {
+                        mode = PhysicsInterpolationMode::None;
+                    }
+                    else if (jsonValue.as_string() == "Extrapolate")
+                    {
+                        mode = PhysicsInterpolationMode::Extrapolate;
+                    }
+                    static_cast<RigidBodyComponent&>(component).SetInterpolationMode(mode);
+                }
+            }});
+        rigidBody.properties.push_back(ReflectedPropertyInfo{
+            "isKinematic",
+            ReflectedPropertyType::Bool,
+            true,
+            true,
+            {},
+            [](const Component& component) { return static_cast<const RigidBodyComponent&>(component).IsKinematic(); },
+            [](Component& component, const value& jsonValue)
+            {
+                if (jsonValue.is_bool())
+                {
+                    static_cast<RigidBodyComponent&>(component).SetKinematic(jsonValue.as_bool());
+                }
+            }});
+        registry.RegisterType(std::move(rigidBody));
 
         RegisterScriptReflectionTypes(registry);
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/Core/Types.h"
 
 namespace ve
 {
@@ -36,6 +37,8 @@ namespace ve
 
         virtual void OnUpdate() {}
 
+        virtual void OnFixedUpdate(Float32) {}
+
         virtual void OnLateUpdate() {}
 
     private:
@@ -49,6 +52,7 @@ namespace ve
         void DispatchEnable();
         void DispatchDisable();
         void DispatchUpdate();
+        void DispatchFixedUpdate(Float32 fixedDeltaSeconds);
         void DispatchLateUpdate();
 
         GameObject* owner_ = nullptr;

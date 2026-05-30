@@ -2,7 +2,9 @@
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Physics/ColliderComponent.h"
 #include "Engine/Runtime/Physics/PhysicsGeometry.h"
+#include "Engine/Runtime/Physics/PhysicsSystem.h"
 #include "Engine/Runtime/Physics/PhysicsWorld.h"
+#include "Engine/Runtime/Physics/RigidBodyComponent.h"
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/Scene.h"
@@ -743,6 +745,246 @@ namespace
                          "OverlapSphere should filter non-matching 64-bit mask");
         return passed;
     }
+
+    bool TestRigidBodyDefaultsSettersAndDuplicateRule()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("RigidBody");
+        ve::RigidBodyComponent& rigidBody = object.AddComponent<ve::RigidBodyComponent>();
+
+        bool passed = true;
+        passed &= Expect(rigidBody.GetBodyType() == ve::RigidBodyType::Dynamic,
+                         "RigidBody should default to dynamic");
+        passed &= Expect(ve::NearlyEqual(rigidBody.GetMass(), 1.0f), "RigidBody mass should default to 1");
+        passed &= Expect(rigidBody.UsesGravity(), "RigidBody should use gravity by default");
+        passed &= Expect(rigidBody.GetInterpolationMode() == ve::PhysicsInterpolationMode::Interpolate,
+                         "RigidBody should default to interpolation");
+
+        rigidBody.SetBodyType(ve::RigidBodyType::Kinematic);
+        rigidBody.SetMass(3.0f);
+        rigidBody.SetUseGravity(false);
+        rigidBody.SetGravityScale(0.25f);
+        rigidBody.SetLinearVelocity(ve::Vector3(1.0f, 2.0f, 3.0f));
+        rigidBody.SetAngularVelocity(ve::Vector3(4.0f, 5.0f, 6.0f));
+        rigidBody.SetLinearDamping(0.5f);
+        rigidBody.SetAngularDamping(0.75f);
+        rigidBody.SetInterpolationMode(ve::PhysicsInterpolationMode::Extrapolate);
+        rigidBody.AddForce(ve::Vector3(7.0f, 8.0f, 9.0f));
+        rigidBody.AddTorque(ve::Vector3(10.0f, 11.0f, 12.0f));
+
+        passed &= Expect(rigidBody.GetBodyType() == ve::RigidBodyType::Kinematic,
+                         "RigidBody body type setter should persist");
+        passed &= Expect(ve::NearlyEqual(rigidBody.GetMass(), 3.0f), "RigidBody mass setter should persist");
+        passed &= Expect(!rigidBody.UsesGravity(), "RigidBody gravity toggle should persist");
+        passed &= Expect(ve::NearlyEqual(rigidBody.GetGravityScale(), 0.25f),
+                         "RigidBody gravity scale should persist");
+        passed &= ExpectVectorNearlyEqual(rigidBody.GetLinearVelocity(), ve::Vector3(1.0f, 2.0f, 3.0f),
+                                          "RigidBody linear velocity should persist");
+        passed &= ExpectVectorNearlyEqual(rigidBody.GetAngularVelocity(), ve::Vector3(4.0f, 5.0f, 6.0f),
+                                          "RigidBody angular velocity should persist");
+        passed &= Expect(ve::NearlyEqual(rigidBody.GetLinearDamping(), 0.5f),
+                         "RigidBody linear damping should persist");
+        passed &= Expect(ve::NearlyEqual(rigidBody.GetAngularDamping(), 0.75f),
+                         "RigidBody angular damping should persist");
+        passed &= Expect(rigidBody.GetInterpolationMode() == ve::PhysicsInterpolationMode::Extrapolate,
+                         "RigidBody interpolation mode should persist");
+        passed &= ExpectVectorNearlyEqual(rigidBody.GetAccumulatedForce(), ve::Vector3(7.0f, 8.0f, 9.0f),
+                                          "RigidBody accumulated force should persist until a step clears it");
+        passed &= ExpectVectorNearlyEqual(rigidBody.GetAccumulatedTorque(), ve::Vector3(10.0f, 11.0f, 12.0f),
+                                          "RigidBody accumulated torque should persist until a step clears it");
+
+        ve::RigidBodyComponent& duplicate = object.AddComponent<ve::RigidBodyComponent>();
+        passed &= Expect(&duplicate == &rigidBody, "Adding a second rigid body should return the existing component");
+        passed &= Expect(object.GetComponents().size() == 1, "Object should still own one rigid body component");
+        return passed;
+    }
+
+    bool TestRigidBodySerializationRoundTripAndDuplicateSkip()
+    {
+        ve::ReflectionRegistry registry;
+        ve::RegisterSceneReflectionTypes(registry);
+
+        ve::Scene source;
+        ve::GameObject& object = source.CreateGameObject("SerializedRigidBody");
+        object.AddComponent<ve::TransformComponent>();
+        ve::RigidBodyComponent& rigidBody = object.AddComponent<ve::RigidBodyComponent>();
+        rigidBody.SetBodyType(ve::RigidBodyType::Kinematic);
+        rigidBody.SetMass(4.0f);
+        rigidBody.SetUseGravity(false);
+        rigidBody.SetGravityScale(2.0f);
+        rigidBody.SetLinearVelocity(ve::Vector3(1.0f, 2.0f, 3.0f));
+        rigidBody.SetAngularVelocity(ve::Vector3(4.0f, 5.0f, 6.0f));
+        rigidBody.SetLinearDamping(0.25f);
+        rigidBody.SetAngularDamping(0.5f);
+        rigidBody.SetInterpolationMode(ve::PhysicsInterpolationMode::None);
+
+        const std::string json = ve::SerializeSceneToJson(source, registry);
+        ve::Scene loaded;
+        bool passed = true;
+        passed &= Expect(ve::DeserializeSceneFromJson(loaded, registry, json) == ve::ErrorCode::None,
+                         "RigidBody scene should deserialize");
+        ve::GameObject* loadedObject = loaded.FindGameObject(object.GetId());
+        const ve::RigidBodyComponent* loadedRigidBody =
+            loadedObject != nullptr ? loadedObject->GetComponent<ve::RigidBodyComponent>() : nullptr;
+        passed &= Expect(loadedRigidBody != nullptr, "Loaded object should have a rigid body");
+        if (loadedRigidBody != nullptr)
+        {
+            passed &= Expect(loadedRigidBody->GetBodyType() == ve::RigidBodyType::Kinematic,
+                             "RigidBody body type should round-trip");
+            passed &= Expect(ve::NearlyEqual(loadedRigidBody->GetMass(), 4.0f),
+                             "RigidBody mass should round-trip");
+            passed &= Expect(!loadedRigidBody->UsesGravity(), "RigidBody gravity toggle should round-trip");
+            passed &= Expect(ve::NearlyEqual(loadedRigidBody->GetGravityScale(), 2.0f),
+                             "RigidBody gravity scale should round-trip");
+            passed &= ExpectVectorNearlyEqual(loadedRigidBody->GetLinearVelocity(), ve::Vector3(1.0f, 2.0f, 3.0f),
+                                              "RigidBody linear velocity should round-trip");
+            passed &= ExpectVectorNearlyEqual(loadedRigidBody->GetAngularVelocity(), ve::Vector3(4.0f, 5.0f, 6.0f),
+                                              "RigidBody angular velocity should round-trip");
+            passed &= Expect(ve::NearlyEqual(loadedRigidBody->GetLinearDamping(), 0.25f),
+                             "RigidBody linear damping should round-trip");
+            passed &= Expect(ve::NearlyEqual(loadedRigidBody->GetAngularDamping(), 0.5f),
+                             "RigidBody angular damping should round-trip");
+            passed &= Expect(loadedRigidBody->GetInterpolationMode() == ve::PhysicsInterpolationMode::None,
+                             "RigidBody interpolation mode should round-trip");
+        }
+
+        const std::string duplicateJson = R"({
+            "version": 1,
+            "scene": {"name": "Scene"},
+            "gameObjects": [
+                {
+                    "id": 200,
+                    "name": "DuplicateRigidBody",
+                    "active": true,
+                    "parent": 0,
+                    "components": [
+                        {"type": "RigidBodyComponent", "properties": {"bodyType": "Static", "mass": 8.0}},
+                        {"type": "RigidBodyComponent", "properties": {"bodyType": "Dynamic", "mass": 1.0}}
+                    ]
+                }
+            ]
+        })";
+        ve::Scene duplicateScene;
+        passed &= Expect(ve::DeserializeSceneFromJson(duplicateScene, registry, duplicateJson) == ve::ErrorCode::None,
+                         "Duplicate rigid body scene should still deserialize");
+        ve::GameObject* duplicateObject = duplicateScene.FindGameObject(200);
+        const ve::RigidBodyComponent* duplicateRigidBody =
+            duplicateObject != nullptr ? duplicateObject->GetComponent<ve::RigidBodyComponent>() : nullptr;
+        passed &= Expect(duplicateObject != nullptr && duplicateObject->GetComponents().size() == 1,
+                         "Duplicate rigid body should be skipped");
+        passed &= Expect(duplicateRigidBody != nullptr &&
+                             duplicateRigidBody->GetBodyType() == ve::RigidBodyType::Static,
+                         "First rigid body should be preserved when duplicate is skipped");
+        return passed;
+    }
+
+    bool TestPhysicsSystemIntegratesGravityForceAndTorque()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("DynamicSphere");
+        ve::TransformComponent& transform = object.AddComponent<ve::TransformComponent>();
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        collider.SetShape(ve::ColliderShape::Sphere);
+        ve::RigidBodyComponent& rigidBody = object.AddComponent<ve::RigidBodyComponent>();
+        rigidBody.SetMass(2.0f);
+        rigidBody.SetUseGravity(true);
+        rigidBody.AddForce(ve::Vector3(4.0f, 0.0f, 0.0f));
+        rigidBody.AddTorque(ve::Vector3(0.0f, 0.0f, 2.0f));
+
+        scene.UpdateTransforms();
+        ve::PhysicsSystem physics;
+        physics.SyncFromScene(scene);
+        const ve::PhysicsStepStats stats = physics.Step(0.5f);
+        physics.WriteBackTransforms();
+        scene.UpdateTransforms();
+
+        bool passed = true;
+        passed &= Expect(stats.dynamicBodyCount == 1, "Physics step should count one dynamic body");
+        passed &= Expect(rigidBody.GetLinearVelocity().GetX() > 0.9f,
+                         "Force should accelerate dynamic body by inverse mass");
+        passed &= Expect(rigidBody.GetLinearVelocity().GetY() < -4.8f,
+                         "Gravity should accelerate dynamic body downward");
+        passed &= Expect(transform.GetLocalPosition().GetX() > 0.45f,
+                         "Integrated linear velocity should move Transform on X");
+        passed &= Expect(transform.GetLocalPosition().GetY() < -2.4f,
+                         "Integrated gravity velocity should move Transform downward");
+        passed &= Expect(rigidBody.GetAngularVelocity().GetZ() > 0.0f,
+                         "Torque should produce angular velocity");
+        passed &= ExpectVectorNearlyEqual(rigidBody.GetAccumulatedForce(), ve::Vector3::Zero(),
+                                          "Physics step should clear accumulated force");
+        passed &= ExpectVectorNearlyEqual(rigidBody.GetAccumulatedTorque(), ve::Vector3::Zero(),
+                                          "Physics step should clear accumulated torque");
+        passed &= Expect(physics.GetPoseHistoryCount() == 1, "Physics should retain pose history for the body");
+        return passed;
+    }
+
+    bool TestPhysicsSystemResolvesDynamicAgainstStaticGround()
+    {
+        ve::Scene scene;
+        ve::GameObject& ground = scene.CreateGameObject("Ground");
+        ground.AddComponent<ve::TransformComponent>().SetLocalPosition(ve::Vector3(0.0f, -0.5f, 0.0f));
+        ve::ColliderComponent& groundCollider = ground.AddComponent<ve::ColliderComponent>();
+        groundCollider.SetBoxSize(ve::Vector3(8.0f, 1.0f, 8.0f));
+
+        ve::GameObject& sphere = scene.CreateGameObject("Sphere");
+        ve::TransformComponent& sphereTransform = sphere.AddComponent<ve::TransformComponent>();
+        sphereTransform.SetLocalPosition(ve::Vector3(0.0f, 0.4f, 0.0f));
+        ve::ColliderComponent& sphereCollider = sphere.AddComponent<ve::ColliderComponent>();
+        sphereCollider.SetShape(ve::ColliderShape::Sphere);
+        sphereCollider.SetSphereRadius(0.5f);
+        ve::RigidBodyComponent& rigidBody = sphere.AddComponent<ve::RigidBodyComponent>();
+        rigidBody.SetLinearVelocity(ve::Vector3(0.0f, -1.0f, 0.0f));
+        rigidBody.SetUseGravity(false);
+
+        scene.UpdateTransforms();
+        ve::PhysicsSystem physics;
+        physics.SyncFromScene(scene);
+        const ve::PhysicsStepStats stats = physics.Step(0.1f);
+        physics.WriteBackTransforms();
+        scene.UpdateTransforms();
+
+        bool passed = true;
+        passed &= Expect(stats.contactCount >= 1, "Physics step should report a non-trigger contact");
+        passed &= Expect(sphereTransform.GetLocalPosition().GetY() >= 0.45f,
+                         "Collision response should move sphere out of static ground");
+        passed &= Expect(rigidBody.GetLinearVelocity().GetY() >= -0.1f,
+                         "Collision impulse should reduce downward velocity");
+        return passed;
+    }
+
+    bool TestPhysicsPresentationPoseDoesNotMutateTransform()
+    {
+        ve::Scene scene;
+        ve::GameObject& object = scene.CreateGameObject("Interpolated");
+        ve::TransformComponent& transform = object.AddComponent<ve::TransformComponent>();
+        transform.SetLocalPosition(ve::Vector3(10.0f, 0.0f, 0.0f));
+        ve::ColliderComponent& collider = object.AddComponent<ve::ColliderComponent>();
+        collider.SetShape(ve::ColliderShape::Sphere);
+        ve::RigidBodyComponent& rigidBody = object.AddComponent<ve::RigidBodyComponent>();
+        rigidBody.SetUseGravity(false);
+        rigidBody.SetLinearVelocity(ve::Vector3(2.0f, 0.0f, 0.0f));
+        rigidBody.SetInterpolationMode(ve::PhysicsInterpolationMode::Interpolate);
+
+        scene.UpdateTransforms();
+        ve::PhysicsSystem physics;
+        physics.SyncFromScene(scene);
+        physics.Step(1.0f);
+        physics.WriteBackTransforms();
+        scene.UpdateTransforms();
+
+        const auto pose = physics.GetPresentationPose(object.GetId(), 0.5f);
+
+        bool passed = true;
+        passed &= Expect(pose.has_value(), "Presentation pose should be available for simulated body");
+        if (pose)
+        {
+            passed &= ExpectVectorNearlyEqual(pose->position, ve::Vector3(11.0f, 0.0f, 0.0f),
+                                              "Interpolated presentation pose should sit between fixed poses");
+        }
+        passed &= ExpectVectorNearlyEqual(transform.GetLocalPosition(), ve::Vector3(12.0f, 0.0f, 0.0f),
+                                          "Presentation pose query should not mutate TransformComponent");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -777,5 +1019,10 @@ int main()
     passed &= TestPhysicsWorldRaycastFilteringAndSyncBoundary();
     passed &= TestPhysicsWorldOverlapSphereAndBox();
     passed &= TestPhysicsWorldOverlapFiltering();
+    passed &= TestRigidBodyDefaultsSettersAndDuplicateRule();
+    passed &= TestRigidBodySerializationRoundTripAndDuplicateSkip();
+    passed &= TestPhysicsSystemIntegratesGravityForceAndTorque();
+    passed &= TestPhysicsSystemResolvesDynamicAgainstStaticGround();
+    passed &= TestPhysicsPresentationPoseDoesNotMutateTransform();
     return passed ? 0 : 1;
 }

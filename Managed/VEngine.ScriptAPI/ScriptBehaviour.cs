@@ -31,6 +31,11 @@ public abstract class ScriptBehaviour : Component
         OnUpdate(deltaTime);
     }
 
+    internal void InvokeOnFixedUpdate(float fixedDeltaTime)
+    {
+        OnFixedUpdate(fixedDeltaTime);
+    }
+
     protected virtual void OnCreate()
     {
     }
@@ -48,6 +53,10 @@ public abstract class ScriptBehaviour : Component
     }
 
     protected virtual void OnUpdate(float deltaTime)
+    {
+    }
+
+    protected virtual void OnFixedUpdate(float fixedDeltaTime)
     {
     }
 }

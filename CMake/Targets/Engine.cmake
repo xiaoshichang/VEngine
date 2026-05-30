@@ -28,7 +28,9 @@ function(ve_add_engine)
             Engine/Runtime/Platform/Window.cpp
             Engine/Runtime/Physics/ColliderComponent.cpp
             Engine/Runtime/Physics/PhysicsGeometry.cpp
+            Engine/Runtime/Physics/PhysicsSystem.cpp
             Engine/Runtime/Physics/PhysicsWorld.cpp
+            Engine/Runtime/Physics/RigidBodyComponent.cpp
             Engine/Runtime/Reflection/ReflectionRegistry.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderSystem.cpp
@@ -87,7 +89,9 @@ function(ve_add_engine)
             Engine/Runtime/Platform/Window.h
             Engine/Runtime/Physics/ColliderComponent.h
             Engine/Runtime/Physics/PhysicsGeometry.h
+            Engine/Runtime/Physics/PhysicsSystem.h
             Engine/Runtime/Physics/PhysicsWorld.h
+            Engine/Runtime/Physics/RigidBodyComponent.h
             Engine/Runtime/Reflection/ReflectionRegistry.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/EditorUiFrame.h

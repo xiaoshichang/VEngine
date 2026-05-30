@@ -138,6 +138,9 @@ public static unsafe class ScriptApiBootstrap
             case ScriptLifecycleKind.OnUpdate:
                 state.Behaviour.InvokeOnUpdate(deltaSeconds);
                 break;
+            case ScriptLifecycleKind.OnFixedUpdate:
+                state.Behaviour.InvokeOnFixedUpdate(deltaSeconds);
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(lifecycle), lifecycle, "Unknown script lifecycle method.");
             }
@@ -322,4 +325,5 @@ internal enum ScriptLifecycleKind
     OnEnable = 2,
     OnDisable = 3,
     OnUpdate = 4,
+    OnFixedUpdate = 5,
 }

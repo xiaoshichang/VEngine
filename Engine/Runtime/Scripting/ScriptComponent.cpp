@@ -148,6 +148,19 @@ namespace ve
         }
     }
 
+    void ScriptComponent::OnFixedUpdate(Float32 fixedDeltaSeconds)
+    {
+        if (scriptTypeName_.empty())
+        {
+            return;
+        }
+
+        if (EnsureManagedInstance(true) && scriptValid_)
+        {
+            (void)InvokeManagedLifecycle(ScriptLifecycleMethod::OnFixedUpdate, fixedDeltaSeconds);
+        }
+    }
+
     ScriptContext* ScriptComponent::GetActiveScriptContext() noexcept
     {
         return GetScene().GetScriptContext();

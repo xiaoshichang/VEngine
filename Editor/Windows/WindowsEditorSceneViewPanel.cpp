@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector4.h"
+#include "Engine/Runtime/Physics/PhysicsWorld.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/RenderComponents.h"
 #include "Engine/Runtime/Scene/Scene.h"
@@ -145,6 +146,50 @@ namespace ve
         {
             const Quaternion rotation = BuildSceneViewCameraRotation(pitchRadians, yawRadians);
             return rotation.Conjugated().ToMatrix44() * Matrix44::Translation(-position);
+        }
+
+        [[nodiscard]] Ray BuildSceneViewRay(const ImVec2& mousePosition,
+                                            const ImVec2& imageMin,
+                                            const ImVec2& imageMax,
+                                            const Vector3& cameraPosition,
+                                            Float32 cameraPitchRadians,
+                                            Float32 cameraYawRadians) noexcept
+        {
+            const Float32 width = std::max(imageMax.x - imageMin.x, 1.0f);
+            const Float32 height = std::max(imageMax.y - imageMin.y, 1.0f);
+            const Float32 normalizedX = ((mousePosition.x - imageMin.x) / width) * 2.0f - 1.0f;
+            const Float32 normalizedY = 1.0f - ((mousePosition.y - imageMin.y) / height) * 2.0f;
+            const Float32 aspectRatio = width / height;
+            const Float32 tanHalfFov = std::tan(ToRadians(60.0f) * 0.5f);
+
+            const Vector3 viewDirection(normalizedX * aspectRatio * tanHalfFov,
+                                        normalizedY * tanHalfFov,
+                                        1.0f);
+            const Quaternion rotation = BuildSceneViewCameraRotation(cameraPitchRadians, cameraYawRadians);
+            return Ray(cameraPosition, rotation.RotateVector(viewDirection).Normalized());
+        }
+
+        [[nodiscard]] SceneObjectId PickSceneCollider(Scene& scene,
+                                                      const ImVec2& mousePosition,
+                                                      const ImVec2& imageMin,
+                                                      const ImVec2& imageMax,
+                                                      const Vector3& cameraPosition,
+                                                      Float32 cameraPitchRadians,
+                                                      Float32 cameraYawRadians)
+        {
+            scene.UpdateTransforms();
+            PhysicsWorld physicsWorld;
+            physicsWorld.SyncFromScene(scene);
+            const std::optional<RaycastHit> hit =
+                physicsWorld.RaycastClosest(BuildSceneViewRay(mousePosition,
+                                                              imageMin,
+                                                              imageMax,
+                                                              cameraPosition,
+                                                              cameraPitchRadians,
+                                                              cameraYawRadians),
+                                            ~0ull,
+                                            true);
+            return hit ? hit->gameObjectId : InvalidSceneObjectId;
         }
 
         [[nodiscard]] ImVec2 ProjectWorldDirectionToSceneView(const Matrix44& viewMatrix,
@@ -684,6 +729,22 @@ namespace ve
         if (clickedObjectId != InvalidSceneObjectId)
         {
             SelectGameObject(clickedObjectId);
+        }
+        else if (!sceneViewLookActive_ && imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+                 !ImGui::IsAnyItemHovered())
+        {
+            const SceneObjectId pickedObjectId =
+                PickSceneCollider(projectService.GetActiveScene(),
+                                  ImGui::GetMousePos(),
+                                  imageMin,
+                                  imageMax,
+                                  sceneViewCamera_.position,
+                                  sceneViewCamera_.pitchRadians,
+                                  sceneViewCamera_.yawRadians);
+            if (pickedObjectId != InvalidSceneObjectId)
+            {
+                SelectGameObject(pickedObjectId);
+            }
         }
 
         DrawSceneViewAxisGizmo(imageMin, imageMax, cameraRotation);

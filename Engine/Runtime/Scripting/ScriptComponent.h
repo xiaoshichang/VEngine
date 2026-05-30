@@ -32,6 +32,7 @@ namespace ve
         void OnEnable() override;
         void OnDisable() override;
         void OnUpdate() override;
+        void OnFixedUpdate(Float32 fixedDeltaSeconds) override;
 
     private:
         [[nodiscard]] ScriptContext* GetActiveScriptContext() noexcept;
