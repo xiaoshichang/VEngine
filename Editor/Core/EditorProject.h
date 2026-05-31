@@ -8,9 +8,10 @@
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scripting/ScriptProject.h"
 
+#include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
-#include <memory>
 #include <vector>
 
 namespace ve
@@ -69,6 +70,118 @@ namespace ve
         }
     };
 
+    struct EditorMeshRendererAssetReferences
+    {
+        SceneObjectId gameObjectId = InvalidSceneObjectId;
+        SizeT componentIndex = 0;
+        EditorAuthoredAssetReference mesh;
+        EditorAuthoredAssetReference material;
+    };
+
+    using EditorProjectDiagnosticSink = std::function<void(EditorProjectDiagnosticSeverity, std::string)>;
+
+    class EditorProjectAssetService
+    {
+    public:
+        void Clear() noexcept;
+        [[nodiscard]] ErrorCode Open(const Path& projectRoot, const EditorProjectDiagnosticSink& diagnostics);
+        [[nodiscard]] ErrorCode Refresh(const EditorProjectDiagnosticSink& diagnostics);
+        [[nodiscard]] ErrorCode Validate(const EditorProjectDiagnosticSink& diagnostics) const;
+
+        [[nodiscard]] AssetDatabase& GetDatabase() noexcept;
+        [[nodiscard]] const AssetDatabase& GetDatabase() const noexcept;
+
+    private:
+        AssetDatabase assetDatabase_;
+    };
+
+    class EditorProjectSceneService
+    {
+    public:
+        void Clear() noexcept;
+        void OpenEmptyEditScene() noexcept;
+        [[nodiscard]] ErrorCode OpenScene(const Path& projectRelativeScenePath,
+                                          AssetDatabase& assetDatabase,
+                                          ResourceManager& resourceManager,
+                                          const EditorProjectDiagnosticSink& diagnostics);
+        [[nodiscard]] ErrorCode OpenSceneFromRecord(const AssetRecord& record,
+                                                    AssetDatabase& assetDatabase,
+                                                    ResourceManager& resourceManager,
+                                                    const EditorProjectDiagnosticSink& diagnostics);
+        [[nodiscard]] ErrorCode SaveCurrentScene(AssetDatabase& assetDatabase,
+                                                 const EditorProjectDiagnosticSink& diagnostics);
+
+        [[nodiscard]] Scene& GetCurrentEditScene() noexcept;
+        [[nodiscard]] const Scene& GetCurrentEditScene() const noexcept;
+        [[nodiscard]] bool HasCurrentScene() const noexcept;
+        [[nodiscard]] const Path& GetCurrentScenePath() const noexcept;
+        [[nodiscard]] const AssetGuid& GetCurrentSceneGuid() const noexcept;
+        [[nodiscard]] bool IsDirty() const noexcept;
+        void MarkDirty() noexcept;
+        void MarkActiveSceneEdited(bool isPlaying) noexcept;
+        void ClearDirty() noexcept;
+
+        [[nodiscard]] const EditorAuthoredAssetReference*
+        FindMeshRendererAssetReference(SceneObjectId gameObjectId,
+                                       SizeT componentIndex,
+                                       EditorMeshRendererAssetSlot slot) const noexcept;
+
+    private:
+        Scene currentEditScene_;
+        Path currentScenePath_;
+        AssetGuid currentSceneGuid_;
+        std::vector<EditorMeshRendererAssetReferences> meshRendererAssetReferences_;
+        bool dirty_ = false;
+    };
+
+    class EditorProjectScriptService
+    {
+    public:
+        void Clear() noexcept;
+        [[nodiscard]] ErrorCode GenerateWorkspace(const Path& projectRoot,
+                                                  const EditorProjectDiagnosticSink& diagnostics);
+        [[nodiscard]] ErrorCode BuildScripts(const Path& projectRoot,
+                                             const EditorProjectDescriptor& descriptor,
+                                             ScriptBuildConfiguration configuration,
+                                             const EditorProjectDiagnosticSink& diagnostics);
+        [[nodiscard]] ErrorCode PreparePlayModeScripts(const Path& projectRoot,
+                                                       const EditorProjectDescriptor& descriptor,
+                                                       ScriptBuildConfiguration configuration,
+                                                       InputSystem* inputSystem,
+                                                       Scene& playScene,
+                                                       const EditorProjectDiagnosticSink& diagnostics);
+
+    private:
+        std::unique_ptr<ScriptHost> scriptHost_;
+        std::unique_ptr<ScriptContext> scriptContext_;
+    };
+
+    class EditorProjectPlayModeService
+    {
+    public:
+        void Clear(EditorProjectScriptService& scriptService) noexcept;
+        [[nodiscard]] ErrorCode Start(const Path& projectRoot,
+                                      const EditorProjectDescriptor& descriptor,
+                                      Scene& editScene,
+                                      GameThreadSystem& gameThreadSystem,
+                                      ResourceManager& resourceManager,
+                                      EditorProjectScriptService& scriptService,
+                                      InputSystem* inputSystem,
+                                      const EditorProjectDiagnosticSink& diagnostics);
+        [[nodiscard]] ErrorCode Stop(GameThreadSystem& gameThreadSystem,
+                                     EditorProjectScriptService& scriptService,
+                                     const EditorProjectDiagnosticSink& diagnostics);
+        void Stop(EditorProjectScriptService& scriptService, const EditorProjectDiagnosticSink& diagnostics);
+
+        [[nodiscard]] Scene& GetActiveScene(Scene& editScene) noexcept;
+        [[nodiscard]] const Scene& GetActiveScene(const Scene& editScene) const noexcept;
+        [[nodiscard]] bool IsPlaying() const noexcept;
+
+    private:
+        Scene playScene_;
+        bool isPlaying_ = false;
+    };
+
     class EditorProjectService
     {
     public:
@@ -106,7 +219,6 @@ namespace ve
                                               InputSystem* inputSystem = nullptr);
         [[nodiscard]] ErrorCode StopPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager);
         void StopPlayMode();
-        void TickPlayMode();
         [[nodiscard]] bool IsDirty() const noexcept;
         void MarkDirty() noexcept;
         void MarkActiveSceneEdited() noexcept;
@@ -119,40 +231,21 @@ namespace ve
         FindMeshRendererAssetReference(SceneObjectId gameObjectId,
                                        SizeT componentIndex,
                                        EditorMeshRendererAssetSlot slot) const noexcept;
-
-        struct EditorMeshRendererAssetReferences
-        {
-            SceneObjectId gameObjectId = InvalidSceneObjectId;
-            SizeT componentIndex = 0;
-            EditorAuthoredAssetReference mesh;
-            EditorAuthoredAssetReference material;
-        };
-
     private:
         void ClearOpenedProject() noexcept;
         void AddDiagnostic(EditorProjectDiagnosticSeverity severity, std::string message);
         [[nodiscard]] ErrorCode ValidateDirectoryContract(const Path& projectRoot);
         [[nodiscard]] ErrorCode EnsureGeneratedDirectories(const Path& projectRoot);
         [[nodiscard]] ErrorCode OpenStartupScene(ResourceManager& resourceManager);
-        [[nodiscard]] ErrorCode LoadSceneFromRecord(const AssetRecord& record, ResourceManager& resourceManager);
-        void OpenEmptyEditScene();
-        [[nodiscard]] ErrorCode PreparePlayModeScripts(ScriptBuildConfiguration configuration,
-                                                       InputSystem* inputSystem);
-        void ClearPlayModeScripts() noexcept;
+        [[nodiscard]] EditorProjectDiagnosticSink MakeDiagnosticSink();
 
         Path projectRoot_;
         EditorProjectDescriptor descriptor_;
-        AssetDatabase assetDatabase_;
-        Scene currentEditScene_;
-        Scene playScene_;
-        std::unique_ptr<ScriptHost> scriptHost_;
-        std::unique_ptr<ScriptContext> scriptContext_;
-        Path currentScenePath_;
-        AssetGuid currentSceneGuid_;
-        std::vector<EditorMeshRendererAssetReferences> meshRendererAssetReferences_;
+        EditorProjectAssetService assetService_;
+        EditorProjectSceneService sceneService_;
+        EditorProjectScriptService scriptService_;
+        EditorProjectPlayModeService playModeService_;
         std::vector<EditorProjectDiagnostic> diagnostics_;
         bool hasOpenProject_ = false;
-        bool isPlaying_ = false;
-        bool dirty_ = false;
     };
 } // namespace ve

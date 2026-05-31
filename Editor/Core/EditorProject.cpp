@@ -656,10 +656,10 @@ namespace ve
             return value(std::move(referenceJson));
         }
 
-        [[nodiscard]] std::vector<EditorProjectService::EditorMeshRendererAssetReferences>
+        [[nodiscard]] std::vector<EditorMeshRendererAssetReferences>
         ExtractMeshRendererAssetReferences(const object& sceneAsset)
         {
-            std::vector<EditorProjectService::EditorMeshRendererAssetReferences> references;
+            std::vector<EditorMeshRendererAssetReferences> references;
             const array* gameObjects = FindSceneGameObjects(sceneAsset);
             if (gameObjects == nullptr)
             {
@@ -707,7 +707,7 @@ namespace ve
                     }
 
                     const object& properties = propertiesValue->as_object();
-                    EditorProjectService::EditorMeshRendererAssetReferences entry;
+                    EditorMeshRendererAssetReferences entry;
                     entry.gameObjectId = gameObjectId;
                     entry.componentIndex = componentIndex;
 
@@ -735,7 +735,7 @@ namespace ve
 
         void ApplyMeshRendererAssetReferences(
             object& sceneAsset,
-            const std::vector<EditorProjectService::EditorMeshRendererAssetReferences>& references)
+            const std::vector<EditorMeshRendererAssetReferences>& references)
         {
             array* gameObjects = FindSceneGameObjects(sceneAsset);
             if (gameObjects == nullptr)
@@ -743,7 +743,7 @@ namespace ve
                 return;
             }
 
-            for (const EditorProjectService::EditorMeshRendererAssetReferences& reference : references)
+            for (const EditorMeshRendererAssetReferences& reference : references)
             {
                 object* gameObject = FindGameObjectById(*gameObjects, reference.gameObjectId);
                 if (gameObject == nullptr)
@@ -935,6 +935,497 @@ namespace ve
     EditorProjectService::EditorProjectService() = default;
 
     EditorProjectService::~EditorProjectService() = default;
+
+    void EditorProjectAssetService::Clear() noexcept
+    {
+        assetDatabase_ = {};
+    }
+
+    ErrorCode EditorProjectAssetService::Open(const Path& projectRoot,
+                                              const EditorProjectDiagnosticSink& diagnostics)
+    {
+        const ErrorCode openResult = assetDatabase_.Open(projectRoot);
+        if (openResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        std::string("AssetDatabase open failed: ") + ToString(openResult));
+            Clear();
+            return openResult;
+        }
+
+        diagnostics(EditorProjectDiagnosticSeverity::Info,
+                    "AssetDatabase refreshed " + std::to_string(assetDatabase_.GetRecords().size()) + " asset(s).");
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectAssetService::Refresh(const EditorProjectDiagnosticSink& diagnostics)
+    {
+        const ErrorCode refreshResult = assetDatabase_.Refresh();
+        if (refreshResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        std::string("AssetDatabase refresh failed: ") + ToString(refreshResult));
+            return refreshResult;
+        }
+
+        diagnostics(EditorProjectDiagnosticSeverity::Info,
+                    "AssetDatabase refreshed " + std::to_string(assetDatabase_.GetRecords().size()) + " asset(s).");
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectAssetService::Validate(const EditorProjectDiagnosticSink& diagnostics) const
+    {
+        const ErrorCode validationResult = assetDatabase_.Validate();
+        if (validationResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Warning,
+                        "AssetDatabase validation reported missing generated artifacts or source files.");
+        }
+
+        return validationResult;
+    }
+
+    AssetDatabase& EditorProjectAssetService::GetDatabase() noexcept
+    {
+        return assetDatabase_;
+    }
+
+    const AssetDatabase& EditorProjectAssetService::GetDatabase() const noexcept
+    {
+        return assetDatabase_;
+    }
+
+    void EditorProjectSceneService::Clear() noexcept
+    {
+        currentEditScene_.Clear();
+        currentScenePath_ = {};
+        currentSceneGuid_ = {};
+        meshRendererAssetReferences_.clear();
+        dirty_ = false;
+    }
+
+    void EditorProjectSceneService::OpenEmptyEditScene() noexcept
+    {
+        currentEditScene_.Clear();
+        currentEditScene_.UpdateTransforms();
+        currentScenePath_ = {};
+        currentSceneGuid_ = {};
+        meshRendererAssetReferences_.clear();
+        dirty_ = false;
+    }
+
+    ErrorCode EditorProjectSceneService::OpenScene(const Path& projectRelativeScenePath,
+                                                   AssetDatabase& assetDatabase,
+                                                   ResourceManager& resourceManager,
+                                                   const EditorProjectDiagnosticSink& diagnostics)
+    {
+        if (projectRelativeScenePath.IsEmpty())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const AssetRecord* record = assetDatabase.FindAssetByPath(projectRelativeScenePath);
+        if (record == nullptr)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Scene asset was not found: " + projectRelativeScenePath.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        if (record->assetType != AssetType::Scene)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Asset is not a scene: " + projectRelativeScenePath.GetString());
+            return ErrorCode::InvalidArgument;
+        }
+
+        return OpenSceneFromRecord(*record, assetDatabase, resourceManager, diagnostics);
+    }
+
+    ErrorCode EditorProjectSceneService::OpenSceneFromRecord(const AssetRecord& record,
+                                                             AssetDatabase& assetDatabase,
+                                                             ResourceManager& resourceManager,
+                                                             const EditorProjectDiagnosticSink& diagnostics)
+    {
+        if (record.assetType != AssetType::Scene || !record.guid.IsValid() || record.path.IsEmpty())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        const Path scenePath = assetDatabase.ResolveProjectPath(record.path);
+        if (!FileSystem::IsFile(scenePath))
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error, "Scene file is missing: " + record.path.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        ReflectionRegistry reflectionRegistry;
+        RegisterSceneReflectionTypes(reflectionRegistry);
+
+        Result<object> authoredSceneAsset = ReadJsonObject(scenePath);
+        if (!authoredSceneAsset)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error, "Scene parse failed: " + record.path.GetString());
+            return authoredSceneAsset.GetError().GetCode();
+        }
+
+        const ErrorCode sceneResult =
+            LoadSceneAsset(currentEditScene_, reflectionRegistry, resourceManager, assetDatabase, scenePath);
+        if (sceneResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Scene load failed: " + record.path.GetString() + " (" + ToString(sceneResult) + ")");
+            return sceneResult;
+        }
+
+        currentScenePath_ = record.path;
+        currentSceneGuid_ = record.guid;
+        meshRendererAssetReferences_ = ExtractMeshRendererAssetReferences(authoredSceneAsset.GetValue());
+        dirty_ = false;
+        diagnostics(EditorProjectDiagnosticSeverity::Info, "Opened scene: " + currentScenePath_.GetString());
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectSceneService::SaveCurrentScene(AssetDatabase& assetDatabase,
+                                                          const EditorProjectDiagnosticSink& diagnostics)
+    {
+        if (currentScenePath_.IsEmpty() || !currentSceneGuid_.IsValid())
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Current edit scene has no authored .vescene asset to save.");
+            return ErrorCode::InvalidState;
+        }
+
+        ReflectionRegistry reflectionRegistry;
+        RegisterSceneReflectionTypes(reflectionRegistry);
+
+        Result<object> sceneAsset =
+            MakeSceneAssetJson(currentEditScene_, reflectionRegistry, currentSceneGuid_, currentScenePath_);
+        if (!sceneAsset)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error, sceneAsset.GetError().GetMessage());
+            return sceneAsset.GetError().GetCode();
+        }
+
+        const Path scenePath = assetDatabase.ResolveProjectPath(currentScenePath_);
+        if (Result<object> previousSceneAsset = ReadJsonObject(scenePath))
+        {
+            PreserveSceneAssetReferences(sceneAsset.GetValue(), previousSceneAsset.GetValue());
+        }
+
+        ApplyMeshRendererAssetReferences(sceneAsset.GetValue(), meshRendererAssetReferences_);
+
+        const ErrorCode writeResult =
+            FileSystem::WriteTextFile(scenePath, SerializePrettyJsonObject(sceneAsset.GetValue()));
+        if (writeResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error, "Failed to save scene: " + currentScenePath_.GetString());
+            return writeResult;
+        }
+
+        meshRendererAssetReferences_ = ExtractMeshRendererAssetReferences(sceneAsset.GetValue());
+        dirty_ = false;
+        const ErrorCode refreshResult = assetDatabase.Refresh();
+        if (refreshResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Warning,
+                        "Scene saved, but AssetDatabase refresh failed: " + std::string(ToString(refreshResult)));
+            return refreshResult;
+        }
+
+        diagnostics(EditorProjectDiagnosticSeverity::Info, "Saved scene: " + currentScenePath_.GetString());
+        return ErrorCode::None;
+    }
+
+    Scene& EditorProjectSceneService::GetCurrentEditScene() noexcept
+    {
+        return currentEditScene_;
+    }
+
+    const Scene& EditorProjectSceneService::GetCurrentEditScene() const noexcept
+    {
+        return currentEditScene_;
+    }
+
+    bool EditorProjectSceneService::HasCurrentScene() const noexcept
+    {
+        return !currentScenePath_.IsEmpty() && currentSceneGuid_.IsValid();
+    }
+
+    const Path& EditorProjectSceneService::GetCurrentScenePath() const noexcept
+    {
+        return currentScenePath_;
+    }
+
+    const AssetGuid& EditorProjectSceneService::GetCurrentSceneGuid() const noexcept
+    {
+        return currentSceneGuid_;
+    }
+
+    bool EditorProjectSceneService::IsDirty() const noexcept
+    {
+        return dirty_;
+    }
+
+    void EditorProjectSceneService::MarkDirty() noexcept
+    {
+        dirty_ = true;
+    }
+
+    void EditorProjectSceneService::MarkActiveSceneEdited(bool isPlaying) noexcept
+    {
+        if (!isPlaying)
+        {
+            MarkDirty();
+        }
+    }
+
+    void EditorProjectSceneService::ClearDirty() noexcept
+    {
+        dirty_ = false;
+    }
+
+    const EditorAuthoredAssetReference*
+    EditorProjectSceneService::FindMeshRendererAssetReference(SceneObjectId gameObjectId,
+                                                              SizeT componentIndex,
+                                                              EditorMeshRendererAssetSlot slot) const noexcept
+    {
+        const auto iter = std::find_if(meshRendererAssetReferences_.begin(),
+                                       meshRendererAssetReferences_.end(),
+                                       [gameObjectId, componentIndex](const auto& reference)
+                                       {
+                                           return reference.gameObjectId == gameObjectId &&
+                                                  reference.componentIndex == componentIndex;
+                                       });
+        if (iter == meshRendererAssetReferences_.end())
+        {
+            return nullptr;
+        }
+
+        const EditorAuthoredAssetReference& reference =
+            slot == EditorMeshRendererAssetSlot::Mesh ? iter->mesh : iter->material;
+        return reference.IsSet() ? &reference : nullptr;
+    }
+
+    void EditorProjectScriptService::Clear() noexcept
+    {
+        scriptContext_.reset();
+        scriptHost_.reset();
+    }
+
+    ErrorCode EditorProjectScriptService::GenerateWorkspace(const Path& projectRoot,
+                                                            const EditorProjectDiagnosticSink& diagnostics)
+    {
+        ErrorCode result = EnsureWindowsScriptWorkspace(projectRoot);
+        if (result != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Failed to generate C# workspace: " +
+                            GetWindowsScriptSolutionPath(projectRoot).GetString());
+            return result;
+        }
+
+        diagnostics(EditorProjectDiagnosticSeverity::Info,
+                    "Generated C# workspace: " + GetWindowsScriptSolutionPath(projectRoot).GetString());
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectScriptService::BuildScripts(const Path& projectRoot,
+                                                       const EditorProjectDescriptor& descriptor,
+                                                       ScriptBuildConfiguration configuration,
+                                                       const EditorProjectDiagnosticSink& diagnostics)
+    {
+        if (!descriptor.scripting.HasWindowsScripts())
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Info, "Project has no Windows scripting configuration.");
+            return ErrorCode::None;
+        }
+
+        const ErrorCode workspaceResult = GenerateWorkspace(projectRoot, diagnostics);
+        if (workspaceResult != ErrorCode::None)
+        {
+            return workspaceResult;
+        }
+
+        Result<WindowsScriptBuildArtifacts> buildResult =
+            BuildWindowsScriptProject(projectRoot, descriptor.scripting.windows, configuration);
+        if (!buildResult)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Script build failed: " + buildResult.GetError().GetMessage());
+            return buildResult.GetError().GetCode();
+        }
+
+        diagnostics(EditorProjectDiagnosticSeverity::Info,
+                    "Script build output: " + buildResult.GetValue().outputDirectory.GetString());
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectScriptService::PreparePlayModeScripts(const Path& projectRoot,
+                                                                 const EditorProjectDescriptor& descriptor,
+                                                                 ScriptBuildConfiguration configuration,
+                                                                 InputSystem* inputSystem,
+                                                                 Scene& playScene,
+                                                                 const EditorProjectDiagnosticSink& diagnostics)
+    {
+        if (!descriptor.scripting.HasWindowsScripts())
+        {
+            return ErrorCode::None;
+        }
+
+        WindowsScriptBuildArtifacts artifacts =
+            GetWindowsGeneratedScriptBuildArtifacts(projectRoot,
+                                                    configuration,
+                                                    descriptor.scripting.windows.assemblyName);
+        if (ValidateWindowsScriptBuildArtifacts(artifacts) != ErrorCode::None)
+        {
+            ErrorCode buildResult = BuildScripts(projectRoot, descriptor, configuration, diagnostics);
+            if (buildResult != ErrorCode::None)
+            {
+                return buildResult;
+            }
+
+            artifacts = GetWindowsGeneratedScriptBuildArtifacts(projectRoot,
+                                                                configuration,
+                                                                descriptor.scripting.windows.assemblyName);
+        }
+
+        const ErrorCode validateResult = ValidateWindowsScriptBuildArtifacts(artifacts);
+        if (validateResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error, "Script output is missing required runtime files.");
+            return validateResult;
+        }
+
+        scriptHost_ = std::make_unique<ScriptHost>();
+        Result<ScriptHostInfo> hostInfo =
+            scriptHost_->Initialize(ScriptHostDesc{artifacts.projectRuntimeConfigPath,
+                                                   artifacts.scriptApiAssemblyPath});
+        if (!hostInfo)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "ScriptHost initialization failed: " + hostInfo.GetError().GetMessage());
+            scriptHost_.reset();
+            return hostInfo.GetError().GetCode();
+        }
+
+        scriptContext_ = std::make_unique<ScriptContext>(*scriptHost_);
+        scriptContext_->SetRuntimeContext(inputSystem, &playScene);
+        Result<ScriptOperationResult> loadResult =
+            scriptContext_->LoadProjectAssembly(artifacts.projectAssemblyPath);
+        if (!loadResult)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Project script assembly load failed: " + loadResult.GetError().GetMessage());
+            Clear();
+            return loadResult.GetError().GetCode();
+        }
+
+        playScene.SetScriptContext(scriptContext_.get());
+        diagnostics(EditorProjectDiagnosticSeverity::Info,
+                    "Script context loaded: " + descriptor.scripting.windows.assemblyName);
+        return ErrorCode::None;
+    }
+
+    void EditorProjectPlayModeService::Clear(EditorProjectScriptService& scriptService) noexcept
+    {
+        playScene_.Clear();
+        playScene_.SetScriptContext(nullptr);
+        scriptService.Clear();
+        isPlaying_ = false;
+    }
+
+    ErrorCode EditorProjectPlayModeService::Start(const Path& projectRoot,
+                                                  const EditorProjectDescriptor& descriptor,
+                                                  Scene& editScene,
+                                                  GameThreadSystem& gameThreadSystem,
+                                                  ResourceManager& resourceManager,
+                                                  EditorProjectScriptService& scriptService,
+                                                  InputSystem* inputSystem,
+                                                  const EditorProjectDiagnosticSink& diagnostics)
+    {
+        if (isPlaying_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        gameThreadSystem.ClearActiveScene();
+
+        ReflectionRegistry reflectionRegistry;
+        RegisterSceneReflectionTypes(reflectionRegistry);
+
+        ErrorCode scriptResult = scriptService.PreparePlayModeScripts(projectRoot,
+                                                                      descriptor,
+                                                                      ScriptBuildConfiguration::Debug,
+                                                                      inputSystem,
+                                                                      playScene_,
+                                                                      diagnostics);
+        if (scriptResult != ErrorCode::None)
+        {
+            scriptService.Clear();
+            return scriptResult;
+        }
+
+        const std::string editSceneJson = SerializeSceneToJson(editScene, reflectionRegistry);
+        ErrorCode cloneResult = DeserializeSceneFromJson(playScene_, reflectionRegistry, editSceneJson);
+        if (cloneResult != ErrorCode::None)
+        {
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Failed to create play scene instance: " + std::string(ToString(cloneResult)));
+            Clear(scriptService);
+            return cloneResult;
+        }
+
+        playScene_.UpdateTransforms();
+        isPlaying_ = true;
+        const ErrorCode bindResult = gameThreadSystem.SetActiveScene(&playScene_, &resourceManager);
+        if (bindResult != ErrorCode::None)
+        {
+            Clear(scriptService);
+            diagnostics(EditorProjectDiagnosticSeverity::Error,
+                        "Failed to bind play scene to the Game Thread: " + std::string(ToString(bindResult)));
+            return bindResult;
+        }
+
+        diagnostics(EditorProjectDiagnosticSeverity::Info, "Play mode started.");
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectPlayModeService::Stop(GameThreadSystem& gameThreadSystem,
+                                                 EditorProjectScriptService& scriptService,
+                                                 const EditorProjectDiagnosticSink& diagnostics)
+    {
+        gameThreadSystem.ClearActiveScene();
+        Stop(scriptService, diagnostics);
+        return ErrorCode::None;
+    }
+
+    void EditorProjectPlayModeService::Stop(EditorProjectScriptService& scriptService,
+                                            const EditorProjectDiagnosticSink& diagnostics)
+    {
+        if (!isPlaying_)
+        {
+            return;
+        }
+
+        Clear(scriptService);
+        diagnostics(EditorProjectDiagnosticSeverity::Info, "Play mode stopped.");
+    }
+
+    Scene& EditorProjectPlayModeService::GetActiveScene(Scene& editScene) noexcept
+    {
+        return isPlaying_ ? playScene_ : editScene;
+    }
+
+    const Scene& EditorProjectPlayModeService::GetActiveScene(const Scene& editScene) const noexcept
+    {
+        return isPlaying_ ? playScene_ : editScene;
+    }
+
+    bool EditorProjectPlayModeService::IsPlaying() const noexcept
+    {
+        return isPlaying_;
+    }
 
     Result<EditorProjectDescriptor> EditorProjectService::LoadProjectDescriptor(const Path& projectRoot)
     {
@@ -1148,35 +1639,25 @@ namespace ve
         descriptor_ = descriptorResult.MoveValue();
         FileSystem::SetProjectRoot(projectRoot_);
 
-        ErrorCode assetDatabaseResult = assetDatabase_.Open(projectRoot_);
+        ErrorCode assetDatabaseResult = assetService_.Open(projectRoot_, MakeDiagnosticSink());
         if (assetDatabaseResult != ErrorCode::None)
         {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          std::string("AssetDatabase open failed: ") + ToString(assetDatabaseResult));
             ClearOpenedProject();
             return assetDatabaseResult;
         }
 
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
-                      "AssetDatabase refreshed " + std::to_string(assetDatabase_.GetRecords().size()) + " asset(s).");
-
-        ErrorCode validationResult = assetDatabase_.Validate();
-        if (validationResult != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
-                          "AssetDatabase validation reported missing generated artifacts or source files.");
-        }
+        (void)assetService_.Validate(MakeDiagnosticSink());
 
         ErrorCode sceneResult = OpenStartupScene(resourceManager);
         if (sceneResult != ErrorCode::None)
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
                           "Startup scene could not be opened. Falling back to an empty edit scene.");
-            OpenEmptyEditScene();
+            sceneService_.OpenEmptyEditScene();
         }
 
         hasOpenProject_ = true;
-        dirty_ = false;
+        sceneService_.ClearDirty();
         AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
                       "Editor layout root: " + GetEditorLayoutPath().GetString());
         AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Project open complete: " + descriptor_.displayName);
@@ -1211,17 +1692,7 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        const ErrorCode refreshResult = assetDatabase_.Refresh();
-        if (refreshResult != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          std::string("AssetDatabase refresh failed: ") + ToString(refreshResult));
-            return refreshResult;
-        }
-
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
-                      "AssetDatabase refreshed " + std::to_string(assetDatabase_.GetRecords().size()) + " asset(s).");
-        return ErrorCode::None;
+        return assetService_.Refresh(MakeDiagnosticSink());
     }
 
     ErrorCode EditorProjectService::GenerateScriptWorkspace()
@@ -1231,18 +1702,7 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        ErrorCode result = EnsureWindowsScriptWorkspace(projectRoot_);
-        if (result != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Failed to generate C# workspace: " +
-                              GetWindowsScriptSolutionPath(projectRoot_).GetString());
-            return result;
-        }
-
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
-                      "Generated C# workspace: " + GetWindowsScriptSolutionPath(projectRoot_).GetString());
-        return ErrorCode::None;
+        return scriptService_.GenerateWorkspace(projectRoot_, MakeDiagnosticSink());
     }
 
     ErrorCode EditorProjectService::OpenScene(const Path& projectRelativeScenePath, ResourceManager& resourceManager)
@@ -1252,22 +1712,10 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        const AssetRecord* record = assetDatabase_.FindAssetByPath(projectRelativeScenePath);
-        if (record == nullptr)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Scene asset was not found: " + projectRelativeScenePath.GetString());
-            return ErrorCode::NotFound;
-        }
-
-        if (record->assetType != AssetType::Scene)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Asset is not a scene: " + projectRelativeScenePath.GetString());
-            return ErrorCode::InvalidArgument;
-        }
-
-        return LoadSceneFromRecord(*record, resourceManager);
+        return sceneService_.OpenScene(projectRelativeScenePath,
+                                       assetService_.GetDatabase(),
+                                       resourceManager,
+                                       MakeDiagnosticSink());
     }
 
     ErrorCode EditorProjectService::SaveCurrentScene()
@@ -1277,53 +1725,7 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        if (currentScenePath_.IsEmpty() || !currentSceneGuid_.IsValid())
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Current edit scene has no authored .vescene asset to save.");
-            return ErrorCode::InvalidState;
-        }
-
-        ReflectionRegistry reflectionRegistry;
-        RegisterSceneReflectionTypes(reflectionRegistry);
-
-        Result<object> sceneAsset =
-            MakeSceneAssetJson(currentEditScene_, reflectionRegistry, currentSceneGuid_, currentScenePath_);
-        if (!sceneAsset)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error, sceneAsset.GetError().GetMessage());
-            return sceneAsset.GetError().GetCode();
-        }
-
-        const Path scenePath = assetDatabase_.ResolveProjectPath(currentScenePath_);
-        if (Result<object> previousSceneAsset = ReadJsonObject(scenePath))
-        {
-            PreserveSceneAssetReferences(sceneAsset.GetValue(), previousSceneAsset.GetValue());
-        }
-
-        ApplyMeshRendererAssetReferences(sceneAsset.GetValue(), meshRendererAssetReferences_);
-
-        const ErrorCode writeResult =
-            FileSystem::WriteTextFile(scenePath, SerializePrettyJsonObject(sceneAsset.GetValue()));
-        if (writeResult != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Failed to save scene: " + currentScenePath_.GetString());
-            return writeResult;
-        }
-
-        meshRendererAssetReferences_ = ExtractMeshRendererAssetReferences(sceneAsset.GetValue());
-        dirty_ = false;
-        const ErrorCode refreshResult = assetDatabase_.Refresh();
-        if (refreshResult != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
-                          "Scene saved, but AssetDatabase refresh failed: " + std::string(ToString(refreshResult)));
-            return refreshResult;
-        }
-
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Saved scene: " + currentScenePath_.GetString());
-        return ErrorCode::None;
+        return sceneService_.SaveCurrentScene(assetService_.GetDatabase(), MakeDiagnosticSink());
     }
 
     bool EditorProjectService::HasOpenProject() const noexcept
@@ -1343,52 +1745,52 @@ namespace ve
 
     AssetDatabase& EditorProjectService::GetAssetDatabase() noexcept
     {
-        return assetDatabase_;
+        return assetService_.GetDatabase();
     }
 
     const AssetDatabase& EditorProjectService::GetAssetDatabase() const noexcept
     {
-        return assetDatabase_;
+        return assetService_.GetDatabase();
     }
 
     Scene& EditorProjectService::GetCurrentEditScene() noexcept
     {
-        return currentEditScene_;
+        return sceneService_.GetCurrentEditScene();
     }
 
     const Scene& EditorProjectService::GetCurrentEditScene() const noexcept
     {
-        return currentEditScene_;
+        return sceneService_.GetCurrentEditScene();
     }
 
     Scene& EditorProjectService::GetActiveScene() noexcept
     {
-        return isPlaying_ ? playScene_ : currentEditScene_;
+        return playModeService_.GetActiveScene(sceneService_.GetCurrentEditScene());
     }
 
     const Scene& EditorProjectService::GetActiveScene() const noexcept
     {
-        return isPlaying_ ? playScene_ : currentEditScene_;
+        return playModeService_.GetActiveScene(sceneService_.GetCurrentEditScene());
     }
 
     bool EditorProjectService::HasCurrentScene() const noexcept
     {
-        return !currentScenePath_.IsEmpty() && currentSceneGuid_.IsValid();
+        return sceneService_.HasCurrentScene();
     }
 
     const Path& EditorProjectService::GetCurrentScenePath() const noexcept
     {
-        return currentScenePath_;
+        return sceneService_.GetCurrentScenePath();
     }
 
     const AssetGuid& EditorProjectService::GetCurrentSceneGuid() const noexcept
     {
-        return currentSceneGuid_;
+        return sceneService_.GetCurrentSceneGuid();
     }
 
     bool EditorProjectService::IsPlaying() const noexcept
     {
-        return isPlaying_;
+        return playModeService_.IsPlaying();
     }
 
     bool EditorProjectService::HasWindowsScripts() const noexcept
@@ -1403,37 +1805,14 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        if (isPlaying_)
+        if (playModeService_.IsPlaying())
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
                           "Scripts can be rebuilt only after Play mode is stopped.");
             return ErrorCode::InvalidState;
         }
 
-        if (!descriptor_.scripting.HasWindowsScripts())
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Project has no Windows scripting configuration.");
-            return ErrorCode::None;
-        }
-
-        const ErrorCode workspaceResult = GenerateScriptWorkspace();
-        if (workspaceResult != ErrorCode::None)
-        {
-            return workspaceResult;
-        }
-
-        Result<WindowsScriptBuildArtifacts> buildResult =
-            BuildWindowsScriptProject(projectRoot_, descriptor_.scripting.windows, configuration);
-        if (!buildResult)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Script build failed: " + buildResult.GetError().GetMessage());
-            return buildResult.GetError().GetCode();
-        }
-
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
-                      "Script build output: " + buildResult.GetValue().outputDirectory.GetString());
-        return ErrorCode::None;
+        return scriptService_.BuildScripts(projectRoot_, descriptor_, configuration, MakeDiagnosticSink());
     }
 
     ErrorCode
@@ -1441,51 +1820,19 @@ namespace ve
                                         ResourceManager& resourceManager,
                                         InputSystem* inputSystem)
     {
-        if (!hasOpenProject_ || isPlaying_)
+        if (!hasOpenProject_ || playModeService_.IsPlaying())
         {
             return ErrorCode::InvalidState;
         }
 
-        gameThreadSystem.ClearActiveScene();
-
-        ReflectionRegistry reflectionRegistry;
-        RegisterSceneReflectionTypes(reflectionRegistry);
-
-        ErrorCode scriptResult = PreparePlayModeScripts(ScriptBuildConfiguration::Debug, inputSystem);
-        if (scriptResult != ErrorCode::None)
-        {
-            ClearPlayModeScripts();
-            return scriptResult;
-        }
-
-        const std::string editSceneJson = SerializeSceneToJson(currentEditScene_, reflectionRegistry);
-        ErrorCode cloneResult = DeserializeSceneFromJson(playScene_, reflectionRegistry, editSceneJson);
-        if (cloneResult != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Failed to create play scene instance: " + std::string(ToString(cloneResult)));
-            playScene_.Clear();
-            playScene_.SetScriptContext(nullptr);
-            ClearPlayModeScripts();
-            return cloneResult;
-        }
-
-        playScene_.UpdateTransforms();
-        isPlaying_ = true;
-        const ErrorCode bindResult = BindActiveScene(gameThreadSystem, resourceManager);
-        if (bindResult != ErrorCode::None)
-        {
-            isPlaying_ = false;
-            playScene_.Clear();
-            playScene_.SetScriptContext(nullptr);
-            ClearPlayModeScripts();
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Failed to bind play scene to the Game Thread: " + std::string(ToString(bindResult)));
-            return bindResult;
-        }
-
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Play mode started.");
-        return ErrorCode::None;
+        return playModeService_.Start(projectRoot_,
+                                      descriptor_,
+                                      sceneService_.GetCurrentEditScene(),
+                                      gameThreadSystem,
+                                      resourceManager,
+                                      scriptService_,
+                                      inputSystem,
+                                      MakeDiagnosticSink());
     }
 
     ErrorCode
@@ -1493,56 +1840,39 @@ namespace ve
     {
         (void)resourceManager;
 
-        gameThreadSystem.ClearActiveScene();
-        StopPlayMode();
+        const ErrorCode stopResult =
+            playModeService_.Stop(gameThreadSystem, scriptService_, MakeDiagnosticSink());
         if (!hasOpenProject_)
         {
             return ErrorCode::InvalidState;
         }
 
-        return ErrorCode::None;
+        return stopResult;
     }
 
     void EditorProjectService::StopPlayMode()
     {
-        if (!isPlaying_)
-        {
-            return;
-        }
-
-        playScene_.Clear();
-        playScene_.SetScriptContext(nullptr);
-        ClearPlayModeScripts();
-        isPlaying_ = false;
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Play mode stopped.");
-    }
-
-    void EditorProjectService::TickPlayMode()
-    {
-        // Play mode is advanced by GameThreadSystem so fixed-step physics and normal runtime updates stay together.
+        playModeService_.Stop(scriptService_, MakeDiagnosticSink());
     }
 
     bool EditorProjectService::IsDirty() const noexcept
     {
-        return dirty_;
+        return sceneService_.IsDirty();
     }
 
     void EditorProjectService::MarkDirty() noexcept
     {
-        dirty_ = true;
+        sceneService_.MarkDirty();
     }
 
     void EditorProjectService::MarkActiveSceneEdited() noexcept
     {
-        if (!isPlaying_)
-        {
-            MarkDirty();
-        }
+        sceneService_.MarkActiveSceneEdited(playModeService_.IsPlaying());
     }
 
     void EditorProjectService::ClearDirty() noexcept
     {
-        dirty_ = false;
+        sceneService_.ClearDirty();
     }
 
     Path EditorProjectService::GetGeneratedRoot() const
@@ -1565,39 +1895,18 @@ namespace ve
                                                          SizeT componentIndex,
                                                          EditorMeshRendererAssetSlot slot) const noexcept
     {
-        const auto iter = std::find_if(meshRendererAssetReferences_.begin(),
-                                       meshRendererAssetReferences_.end(),
-                                       [gameObjectId, componentIndex](const auto& reference)
-                                       {
-                                           return reference.gameObjectId == gameObjectId &&
-                                                  reference.componentIndex == componentIndex;
-                                       });
-        if (iter == meshRendererAssetReferences_.end())
-        {
-            return nullptr;
-        }
-
-        const EditorAuthoredAssetReference& reference =
-            slot == EditorMeshRendererAssetSlot::Mesh ? iter->mesh : iter->material;
-        return reference.IsSet() ? &reference : nullptr;
+        return sceneService_.FindMeshRendererAssetReference(gameObjectId, componentIndex, slot);
     }
 
     void EditorProjectService::ClearOpenedProject() noexcept
     {
         projectRoot_ = {};
         descriptor_ = {};
-        assetDatabase_ = {};
-        playScene_.Clear();
-        playScene_.SetScriptContext(nullptr);
-        ClearPlayModeScripts();
-        currentEditScene_.Clear();
-        currentScenePath_ = {};
-        currentSceneGuid_ = {};
-        meshRendererAssetReferences_.clear();
+        assetService_.Clear();
+        playModeService_.Clear(scriptService_);
+        sceneService_.Clear();
         diagnostics_.clear();
         hasOpenProject_ = false;
-        isPlaying_ = false;
-        dirty_ = false;
     }
 
     void EditorProjectService::AddDiagnostic(EditorProjectDiagnosticSeverity severity, std::string message)
@@ -1607,6 +1916,14 @@ namespace ve
         diagnostic.message = std::move(message);
         LogDiagnostic(diagnostic);
         diagnostics_.push_back(std::move(diagnostic));
+    }
+
+    EditorProjectDiagnosticSink EditorProjectService::MakeDiagnosticSink()
+    {
+        return [this](EditorProjectDiagnosticSeverity severity, std::string message)
+        {
+            AddDiagnostic(severity, std::move(message));
+        };
     }
 
     ErrorCode EditorProjectService::ValidateDirectoryContract(const Path& projectRoot)
@@ -1658,7 +1975,8 @@ namespace ve
             return ErrorCode::NotFound;
         }
 
-        const Path startupScenePath = assetDatabase_.ResolveProjectPath(descriptor_.startupScene.path);
+        AssetDatabase& assetDatabase = assetService_.GetDatabase();
+        const Path startupScenePath = assetDatabase.ResolveProjectPath(descriptor_.startupScene.path);
         if (!FileSystem::IsFile(startupScenePath))
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
@@ -1666,7 +1984,7 @@ namespace ve
             return ErrorCode::NotFound;
         }
 
-        const AssetRecord* startupRecord = assetDatabase_.FindAssetByPath(descriptor_.startupScene.path);
+        const AssetRecord* startupRecord = assetDatabase.FindAssetByPath(descriptor_.startupScene.path);
         if (startupRecord == nullptr || startupRecord->assetType != AssetType::Scene)
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
@@ -1675,7 +1993,10 @@ namespace ve
             return ErrorCode::NotFound;
         }
 
-        ErrorCode sceneResult = LoadSceneFromRecord(*startupRecord, resourceManager);
+        ErrorCode sceneResult = sceneService_.OpenSceneFromRecord(*startupRecord,
+                                                                  assetDatabase,
+                                                                  resourceManager,
+                                                                  MakeDiagnosticSink());
         if (sceneResult != ErrorCode::None)
         {
             AddDiagnostic(EditorProjectDiagnosticSeverity::Warning,
@@ -1686,123 +2007,4 @@ namespace ve
         return ErrorCode::None;
     }
 
-    ErrorCode EditorProjectService::LoadSceneFromRecord(const AssetRecord& record, ResourceManager& resourceManager)
-    {
-        if (record.assetType != AssetType::Scene || !record.guid.IsValid() || record.path.IsEmpty())
-        {
-            return ErrorCode::InvalidArgument;
-        }
-
-        const Path scenePath = assetDatabase_.ResolveProjectPath(record.path);
-        if (!FileSystem::IsFile(scenePath))
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error, "Scene file is missing: " + record.path.GetString());
-            return ErrorCode::NotFound;
-        }
-
-        ReflectionRegistry reflectionRegistry;
-        RegisterSceneReflectionTypes(reflectionRegistry);
-
-        Result<object> authoredSceneAsset = ReadJsonObject(scenePath);
-        if (!authoredSceneAsset)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Scene parse failed: " + record.path.GetString());
-            return authoredSceneAsset.GetError().GetCode();
-        }
-
-        const ErrorCode sceneResult =
-            LoadSceneAsset(currentEditScene_, reflectionRegistry, resourceManager, assetDatabase_, scenePath);
-        if (sceneResult != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Scene load failed: " + record.path.GetString() + " (" + ToString(sceneResult) + ")");
-            return sceneResult;
-        }
-
-        currentScenePath_ = record.path;
-        currentSceneGuid_ = record.guid;
-        meshRendererAssetReferences_ = ExtractMeshRendererAssetReferences(authoredSceneAsset.GetValue());
-        dirty_ = false;
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info, "Opened scene: " + currentScenePath_.GetString());
-        return ErrorCode::None;
-    }
-
-    void EditorProjectService::OpenEmptyEditScene()
-    {
-        currentEditScene_.Clear();
-        currentEditScene_.UpdateTransforms();
-        currentScenePath_ = {};
-        currentSceneGuid_ = {};
-        meshRendererAssetReferences_.clear();
-    }
-
-    ErrorCode EditorProjectService::PreparePlayModeScripts(ScriptBuildConfiguration configuration,
-                                                           InputSystem* inputSystem)
-    {
-        if (!descriptor_.scripting.HasWindowsScripts())
-        {
-            return ErrorCode::None;
-        }
-
-        WindowsScriptBuildArtifacts artifacts =
-            GetWindowsGeneratedScriptBuildArtifacts(projectRoot_,
-                                                    configuration,
-                                                    descriptor_.scripting.windows.assemblyName);
-        if (ValidateWindowsScriptBuildArtifacts(artifacts) != ErrorCode::None)
-        {
-            ErrorCode buildResult = BuildScripts(configuration);
-            if (buildResult != ErrorCode::None)
-            {
-                return buildResult;
-            }
-
-            artifacts = GetWindowsGeneratedScriptBuildArtifacts(projectRoot_,
-                                                                configuration,
-                                                                descriptor_.scripting.windows.assemblyName);
-        }
-
-        const ErrorCode validateResult = ValidateWindowsScriptBuildArtifacts(artifacts);
-        if (validateResult != ErrorCode::None)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Script output is missing required runtime files.");
-            return validateResult;
-        }
-
-        scriptHost_ = std::make_unique<ScriptHost>();
-        Result<ScriptHostInfo> hostInfo =
-            scriptHost_->Initialize(ScriptHostDesc{artifacts.projectRuntimeConfigPath,
-                                                   artifacts.scriptApiAssemblyPath});
-        if (!hostInfo)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "ScriptHost initialization failed: " + hostInfo.GetError().GetMessage());
-            scriptHost_.reset();
-            return hostInfo.GetError().GetCode();
-        }
-
-        scriptContext_ = std::make_unique<ScriptContext>(*scriptHost_);
-        scriptContext_->SetRuntimeContext(inputSystem, &playScene_);
-        Result<ScriptOperationResult> loadResult =
-            scriptContext_->LoadProjectAssembly(artifacts.projectAssemblyPath);
-        if (!loadResult)
-        {
-            AddDiagnostic(EditorProjectDiagnosticSeverity::Error,
-                          "Project script assembly load failed: " + loadResult.GetError().GetMessage());
-            ClearPlayModeScripts();
-            return loadResult.GetError().GetCode();
-        }
-
-        playScene_.SetScriptContext(scriptContext_.get());
-        AddDiagnostic(EditorProjectDiagnosticSeverity::Info,
-                      "Script context loaded: " + descriptor_.scripting.windows.assemblyName);
-        return ErrorCode::None;
-    }
-
-    void EditorProjectService::ClearPlayModeScripts() noexcept
-    {
-        scriptContext_.reset();
-        scriptHost_.reset();
-    }
 } // namespace ve

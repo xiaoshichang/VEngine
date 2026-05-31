@@ -354,7 +354,6 @@ namespace
             ImGui_ImplWin32_NewFrame();
             ImGui::NewFrame();
 
-            projectService.TickPlayMode();
             editorPanels_.BeginFrame();
             DrawEditor(owner, window, projectService, runtime);
 
