@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Application/Application.h"
 #include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Input/InputSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 #include "Engine/Runtime/Platform/Windows/Win32Window.h"
@@ -672,7 +673,9 @@ namespace
             if (ImGui::Button("Play"))
             {
                 const ve::ErrorCode playResult =
-                    projectService.StartPlayMode(runtime.GetGameThreadSystem(), runtime.GetResourceManager());
+                    projectService.StartPlayMode(runtime.GetGameThreadSystem(),
+                                                 runtime.GetResourceManager(),
+                                                 &runtime.GetInputSystem());
                 if (playResult == ve::ErrorCode::None)
                 {
                     statusMessage_ = "Play mode started.";
@@ -1222,6 +1225,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
 
         if (projectService.HasOpenProject())
         {
+            runtime.GetInputSystem().BeginMainFrame();
+            runtime.GetInputSystem().SetFocused(false);
             launcherUi.RenderEditor(nativeWindow, window, projectService, runtime);
             return;
         }

@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/ScopeExit.h"
+#include "Engine/Runtime/Input/InputSystem.h"
 #include "Engine/Runtime/Physics/PhysicsSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
@@ -85,11 +86,20 @@ namespace ve
             PhysicsSystem physicsSystem;
         };
 
+        struct InputState
+        {
+            Mutex mutex;
+            InputSystem* inputSystem = nullptr;
+            InputSnapshot pendingSnapshot;
+            bool hasPendingSnapshot = false;
+        };
+
         ThreadState thread;
         FrameState frame;
         CommandState commandQueue;
         RenderBridgeState renderBridge;
         SceneState scene;
+        InputState input;
     };
 
     namespace
@@ -279,6 +289,15 @@ namespace ve
             (void)frameId;
 
             SetPhase(impl.frame.phase, GameThreadPhase::BeginFrame);
+            {
+                LockGuard<Mutex> lock(impl.input.mutex);
+                if (impl.input.inputSystem != nullptr && impl.input.hasPendingSnapshot)
+                {
+                    impl.input.inputSystem->ApplyGameSnapshot(impl.input.pendingSnapshot);
+                    impl.input.hasPendingSnapshot = false;
+                }
+            }
+
             Time::Tick();
             const Time::TimeSnapshot timeSnapshot = Time::GetSnapshot();
 
@@ -578,6 +597,24 @@ namespace ve
         return ErrorCode::None;
     }
 
+    ErrorCode GameThreadSystem::SetInputSystem(InputSystem* inputSystem) noexcept
+    {
+        if (inputSystem == nullptr)
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        if (!impl_->thread.initialized.load(std::memory_order_acquire))
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        LockGuard<Mutex> lock(impl_->input.mutex);
+        impl_->input.inputSystem = inputSystem;
+        impl_->input.hasPendingSnapshot = false;
+        return ErrorCode::None;
+    }
+
     void GameThreadSystem::ClearRenderSystem() noexcept
     {
         RenderSystem* renderSystem = DetachRenderSystemAndWait(*impl_);
@@ -611,6 +648,19 @@ namespace ve
     void GameThreadSystem::ClearActiveScene() noexcept
     {
         DetachActiveSceneAndWait(*impl_);
+    }
+
+    ErrorCode GameThreadSystem::SubmitInputSnapshot(const InputSnapshot& snapshot)
+    {
+        if (!impl_->thread.initialized.load(std::memory_order_acquire))
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        LockGuard<Mutex> lock(impl_->input.mutex);
+        impl_->input.pendingSnapshot = snapshot;
+        impl_->input.hasPendingSnapshot = true;
+        return ErrorCode::None;
     }
 
 } // namespace ve

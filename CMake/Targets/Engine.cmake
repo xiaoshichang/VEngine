@@ -22,6 +22,7 @@ function(ve_add_engine)
             Engine/Runtime/FileSystem/Path.cpp
             Engine/Runtime/GameThread/GameThreadSystem.cpp
             Engine/Runtime/IO/IOSystem.cpp
+            Engine/Runtime/Input/InputSystem.cpp
             Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
@@ -77,6 +78,7 @@ function(ve_add_engine)
             Engine/Runtime/FileSystem/Path.h
             Engine/Runtime/GameThread/GameThreadSystem.h
             Engine/Runtime/IO/IOSystem.h
+            Engine/Runtime/Input/InputSystem.h
             Engine/Runtime/Jobs/JobSystem.h
             Engine/Runtime/Logging/Log.h
             Engine/Runtime/Math/Math.h
@@ -185,11 +187,13 @@ function(ve_add_engine)
         target_sources(VEngine
             PRIVATE
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.cpp
+                Engine/Runtime/Platform/Windows/Win32Input.cpp
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.cpp
                 Engine/Runtime/Platform/Windows/Win32Window.cpp
                 Engine/Runtime/Scripting/DotNetHostWindows.cpp
             PUBLIC
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.h
+                Engine/Runtime/Platform/Windows/Win32Input.h
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.h
                 Engine/Runtime/Platform/Windows/Win32Window.h
                 Engine/Runtime/Scripting/DotNetHost.h

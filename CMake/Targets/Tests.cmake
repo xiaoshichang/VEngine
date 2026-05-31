@@ -186,6 +186,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineIOSystemTests>
     )
 
+    add_executable(VEngineInputTests
+        Tests/Unit/InputTests.cpp
+    )
+
+    target_link_libraries(VEngineInputTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineInputTests)
+
+    add_test(
+        NAME VEngineInputTests
+        COMMAND $<TARGET_FILE:VEngineInputTests>
+    )
+
     add_executable(VEngineGameThreadSystemTests
         Tests/Unit/GameThreadSystemTests.cpp
     )

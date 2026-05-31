@@ -55,9 +55,16 @@ namespace ve
             TerminateRuntimeInitialization("GameThreadSystem", gameThreadSystemResult);
         }
 
+        ErrorCode inputBindResult = gameThreadSystem_.SetInputSystem(&inputSystem_);
+        if (inputBindResult != ErrorCode::None)
+        {
+            TerminateRuntimeInitialization("InputSystem", inputBindResult);
+        }
+
         state_ = EngineRuntimeState::Initialized;
         VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
         VE_LOG_INFO("IOSystem initialized.");
+        VE_LOG_INFO("InputSystem initialized.");
         VE_LOG_INFO("ResourceManager initialized.");
         VE_LOG_INFO("RenderSystem initialized.");
         VE_LOG_INFO("GameThreadSystem initialized.");
@@ -110,6 +117,18 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetIOSystem requires an initialized runtime.");
         return ioSystem_;
+    }
+
+    InputSystem& EngineRuntime::GetInputSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetInputSystem requires an initialized runtime.");
+        return inputSystem_;
+    }
+
+    const InputSystem& EngineRuntime::GetInputSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetInputSystem requires an initialized runtime.");
+        return inputSystem_;
     }
 
     ResourceManager& EngineRuntime::GetResourceManager() noexcept

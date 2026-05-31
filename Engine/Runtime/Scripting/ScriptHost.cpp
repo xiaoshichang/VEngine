@@ -108,7 +108,8 @@ namespace ve
         unloadProjectAssembly_ = reinterpret_cast<UnloadProjectAssemblyFunction>(unloadProjectAssembly.GetValue());
         getLastError_ = reinterpret_cast<GetLastErrorFunction>(getLastError.GetValue());
 
-        bridgeApi_ = CreateScriptBridgeApi(bridgeRegistry_);
+        bridgeContext_.registry = &bridgeRegistry_;
+        bridgeApi_ = CreateScriptBridgeApi(bridgeContext_);
         const std::int32_t initializeResult =
             initializeHost_(&bridgeApi_, static_cast<std::int32_t>(sizeof(bridgeApi_)));
         if (initializeResult != 0)
@@ -135,6 +136,7 @@ namespace ve
         unloadProjectAssembly_ = nullptr;
         getLastError_ = nullptr;
         bridgeRegistry_.Clear();
+        bridgeContext_ = {};
         dotNetHost_.Shutdown();
         initialized_ = false;
     }
@@ -152,6 +154,13 @@ namespace ve
     const ScriptBridgeRegistry& ScriptHost::GetBridgeRegistry() const noexcept
     {
         return bridgeRegistry_;
+    }
+
+    void ScriptHost::SetBridgeRuntimeContext(InputSystem* inputSystem, Scene* scene) noexcept
+    {
+        bridgeContext_.registry = &bridgeRegistry_;
+        bridgeContext_.inputSystem = inputSystem;
+        bridgeContext_.scene = scene;
     }
 
     Result<ScriptOperationResult> ScriptHost::LoadProjectAssembly(const Path& assemblyPath)

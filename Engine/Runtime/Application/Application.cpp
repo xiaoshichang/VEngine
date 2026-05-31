@@ -12,6 +12,21 @@
 #include "Engine/Runtime/Scripting/ScriptHost.h"
 #include "Engine/Runtime/Scripting/ScriptProject.h"
 
+#if VE_PLATFORM_WINDOWS
+#include "Engine/Runtime/Platform/Windows/Win32Input.h"
+#include "Engine/Runtime/Platform/Windows/Win32Window.h"
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <Windows.h>
+#endif
+
 #include <boost/json.hpp>
 #include <boost/system/error_code.hpp>
 
@@ -106,6 +121,17 @@ namespace ve
             Result<ScriptBuildConfiguration> configuration = ParseScriptBuildConfiguration(VE_BUILD_CONFIGURATION);
             return configuration ? configuration.GetValue() : ScriptBuildConfiguration::Debug;
         }
+
+#if VE_PLATFORM_WINDOWS
+        void InstallWin32InputHandler(Win32Window& window, InputSystem& inputSystem)
+        {
+            window.SetNativeMessageHandler(
+                [&inputSystem](HWND nativeWindow, UINT message, WPARAM wParam, LPARAM lParam, LRESULT& result)
+                {
+                    return HandleWin32InputMessage(inputSystem, nativeWindow, message, wParam, lParam, result);
+                });
+        }
+#endif
     } // namespace
 
     Application::Application(std::string name)
@@ -301,6 +327,7 @@ namespace ve
                     }
 
                     scriptContext_ = std::make_unique<ScriptContext>(*scriptHost_);
+                    scriptContext_->SetRuntimeContext(&engineRuntime_.GetInputSystem(), sampleScene_.get());
                     Result<ScriptOperationResult> loadScripts =
                         scriptContext_->LoadProjectAssembly(artifacts.projectAssemblyPath);
                     if (!loadScripts)
@@ -397,9 +424,28 @@ namespace ve
     {
         int exitCode = 0;
 
+#if VE_PLATFORM_WINDOWS
+        Win32Window* win32Window = nullptr;
+        if (!desc_.windowConfigure)
+        {
+            win32Window = dynamic_cast<Win32Window*>(&mainWindow);
+            if (win32Window != nullptr)
+            {
+                InstallWin32InputHandler(*win32Window, engineRuntime_.GetInputSystem());
+            }
+        }
+#endif
+
         while (!mainWindow.ShouldClose())
         {
             mainWindow.PumpCommands();
+
+#if VE_PLATFORM_WINDOWS
+            if (win32Window != nullptr)
+            {
+                BeginWin32WindowInputFrame(mainWindow, engineRuntime_.GetInputSystem());
+            }
+#endif
 
             const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
             if (pumpStatus.result == WindowPumpResult::Quit)
@@ -412,6 +458,9 @@ namespace ve
             {
                 desc_.frameUpdate(mainWindow, engineRuntime_);
             }
+
+            (void)engineRuntime_.GetGameThreadSystem().SubmitInputSnapshot(
+                engineRuntime_.GetInputSystem().CreateGameSnapshot());
 
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }

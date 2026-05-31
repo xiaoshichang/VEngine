@@ -1437,7 +1437,9 @@ namespace ve
     }
 
     ErrorCode
-    EditorProjectService::StartPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager)
+    EditorProjectService::StartPlayMode(GameThreadSystem& gameThreadSystem,
+                                        ResourceManager& resourceManager,
+                                        InputSystem* inputSystem)
     {
         if (!hasOpenProject_ || isPlaying_)
         {
@@ -1449,7 +1451,7 @@ namespace ve
         ReflectionRegistry reflectionRegistry;
         RegisterSceneReflectionTypes(reflectionRegistry);
 
-        ErrorCode scriptResult = PreparePlayModeScripts(ScriptBuildConfiguration::Debug);
+        ErrorCode scriptResult = PreparePlayModeScripts(ScriptBuildConfiguration::Debug, inputSystem);
         if (scriptResult != ErrorCode::None)
         {
             ClearPlayModeScripts();
@@ -1735,7 +1737,8 @@ namespace ve
         meshRendererAssetReferences_.clear();
     }
 
-    ErrorCode EditorProjectService::PreparePlayModeScripts(ScriptBuildConfiguration configuration)
+    ErrorCode EditorProjectService::PreparePlayModeScripts(ScriptBuildConfiguration configuration,
+                                                           InputSystem* inputSystem)
     {
         if (!descriptor_.scripting.HasWindowsScripts())
         {
@@ -1780,6 +1783,7 @@ namespace ve
         }
 
         scriptContext_ = std::make_unique<ScriptContext>(*scriptHost_);
+        scriptContext_->SetRuntimeContext(inputSystem, &playScene_);
         Result<ScriptOperationResult> loadResult =
             scriptContext_->LoadProjectAssembly(artifacts.projectAssemblyPath);
         if (!loadResult)

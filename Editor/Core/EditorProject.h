@@ -16,6 +16,7 @@
 namespace ve
 {
     class GameThreadSystem;
+    class InputSystem;
     class ResourceManager;
     class ScriptContext;
     class ScriptHost;
@@ -100,7 +101,9 @@ namespace ve
         [[nodiscard]] bool IsPlaying() const noexcept;
         [[nodiscard]] bool HasWindowsScripts() const noexcept;
         [[nodiscard]] ErrorCode BuildScripts(ScriptBuildConfiguration configuration);
-        [[nodiscard]] ErrorCode StartPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager);
+        [[nodiscard]] ErrorCode StartPlayMode(GameThreadSystem& gameThreadSystem,
+                                              ResourceManager& resourceManager,
+                                              InputSystem* inputSystem = nullptr);
         [[nodiscard]] ErrorCode StopPlayMode(GameThreadSystem& gameThreadSystem, ResourceManager& resourceManager);
         void StopPlayMode();
         void TickPlayMode();
@@ -133,7 +136,8 @@ namespace ve
         [[nodiscard]] ErrorCode OpenStartupScene(ResourceManager& resourceManager);
         [[nodiscard]] ErrorCode LoadSceneFromRecord(const AssetRecord& record, ResourceManager& resourceManager);
         void OpenEmptyEditScene();
-        [[nodiscard]] ErrorCode PreparePlayModeScripts(ScriptBuildConfiguration configuration);
+        [[nodiscard]] ErrorCode PreparePlayModeScripts(ScriptBuildConfiguration configuration,
+                                                       InputSystem* inputSystem);
         void ClearPlayModeScripts() noexcept;
 
         Path projectRoot_;

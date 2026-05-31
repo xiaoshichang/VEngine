@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/GameThread/GameThreadSystem.h"
 #include "Engine/Runtime/IO/IOSystem.h"
+#include "Engine/Runtime/Input/InputSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/ResourceManager.h"
@@ -89,6 +90,12 @@ namespace ve
         /// The runtime must be initialized before callers use the returned service.
         [[nodiscard]] const IOSystem& GetIOSystem() const noexcept;
 
+        /// Returns the runtime-owned Input System.
+        [[nodiscard]] InputSystem& GetInputSystem() noexcept;
+
+        /// Returns the runtime-owned Input System.
+        [[nodiscard]] const InputSystem& GetInputSystem() const noexcept;
+
         /// Returns the runtime-owned Resource Manager.
         [[nodiscard]] ResourceManager& GetResourceManager() noexcept;
 
@@ -118,6 +125,7 @@ namespace ve
     private:
         JobSystem jobSystem_;
         IOSystem ioSystem_;
+        InputSystem inputSystem_;
         ResourceManager resourceManager_;
         RenderSystem renderSystem_;
         GameThreadSystem gameThreadSystem_;

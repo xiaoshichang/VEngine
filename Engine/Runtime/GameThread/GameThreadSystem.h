@@ -11,6 +11,8 @@
 namespace ve
 {
     struct GameThreadSystemImpl;
+    class InputSystem;
+    struct InputSnapshot;
     class ResourceManager;
     class RenderSystem;
     class Scene;
@@ -89,6 +91,9 @@ namespace ve
         /// Thread cannot run unbounded ahead of the Render Thread.
         [[nodiscard]] ErrorCode SetRenderSystem(RenderSystem* renderSystem) noexcept;
 
+        /// Connects the runtime-owned InputSystem updated at the Game Thread frame boundary.
+        [[nodiscard]] ErrorCode SetInputSystem(InputSystem* inputSystem) noexcept;
+
         /// Disconnects the RenderSystem frame boundary and waits until any in-progress render extraction has returned.
         void ClearRenderSystem() noexcept;
 
@@ -99,6 +104,9 @@ namespace ve
 
         /// Clears the active scene and waits until any in-progress scene frame has returned.
         void ClearActiveScene() noexcept;
+
+        /// Queues the latest Main Thread input snapshot for consumption at the next Game Thread frame boundary.
+        [[nodiscard]] ErrorCode SubmitInputSnapshot(const InputSnapshot& snapshot);
 
     private:
         std::unique_ptr<GameThreadSystemImpl> impl_;

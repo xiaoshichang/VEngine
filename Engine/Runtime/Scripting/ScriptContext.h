@@ -11,6 +11,8 @@
 
 namespace ve
 {
+    class InputSystem;
+    class Scene;
     class ScriptComponent;
 
     class ScriptContext : public NonMovable
@@ -22,6 +24,7 @@ namespace ve
         [[nodiscard]] Result<ScriptOperationResult> LoadProjectAssembly(const Path& assemblyPath);
         [[nodiscard]] bool IsProjectAssemblyLoaded() const noexcept;
         [[nodiscard]] const Path& GetProjectAssemblyPath() const noexcept;
+        void SetRuntimeContext(InputSystem* inputSystem, Scene* scene) noexcept;
 
         [[nodiscard]] ScriptObjectHandle RegisterScriptComponent(ScriptComponent& component);
         void UnregisterScriptComponent(ScriptObjectHandle handle, const ScriptComponent& component) noexcept;

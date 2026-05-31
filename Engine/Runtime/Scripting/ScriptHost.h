@@ -12,6 +12,9 @@
 
 namespace ve
 {
+    class InputSystem;
+    class Scene;
+
 #if defined(_WIN32)
 #define VE_SCRIPT_HOST_CALLTYPE __stdcall
 #else
@@ -59,6 +62,7 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] ScriptBridgeRegistry& GetBridgeRegistry() noexcept;
         [[nodiscard]] const ScriptBridgeRegistry& GetBridgeRegistry() const noexcept;
+        void SetBridgeRuntimeContext(InputSystem* inputSystem, Scene* scene) noexcept;
 
         [[nodiscard]] Result<ScriptOperationResult> LoadProjectAssembly(const Path& assemblyPath);
         [[nodiscard]] Result<ScriptOperationResult> UnloadProjectAssembly();
@@ -92,6 +96,7 @@ namespace ve
 
         DotNetHost dotNetHost_;
         ScriptBridgeRegistry bridgeRegistry_;
+        ScriptBridgeContext bridgeContext_;
         ScriptBridgeApi bridgeApi_;
         InitializeHostFunction initializeHost_ = nullptr;
         LoadProjectAssemblyFunction loadProjectAssembly_ = nullptr;

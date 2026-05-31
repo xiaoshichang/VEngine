@@ -24,6 +24,27 @@ internal enum NativeScriptBridgeStatus
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct NativeScriptVector2
+{
+    public float X;
+    public float Y;
+
+    public static NativeScriptVector2 FromVector2(Vector2 value)
+    {
+        return new NativeScriptVector2
+        {
+            X = value.X,
+            Y = value.Y,
+        };
+    }
+
+    public Vector2 ToVector2()
+    {
+        return new Vector2(X, Y);
+    }
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal struct NativeScriptVector3
 {
     public float X;
@@ -72,6 +93,45 @@ internal struct NativeScriptQuaternion
 }
 
 [StructLayout(LayoutKind.Sequential)]
+internal struct NativeScriptRay
+{
+    public NativeScriptVector3 Origin;
+    public NativeScriptVector3 Direction;
+
+    public static NativeScriptRay FromRay(Ray value)
+    {
+        return new NativeScriptRay
+        {
+            Origin = NativeScriptVector3.FromVector3(value.Origin),
+            Direction = NativeScriptVector3.FromVector3(value.Direction),
+        };
+    }
+
+    public Ray ToRay()
+    {
+        return new Ray(Origin.ToVector3(), Direction.ToVector3());
+    }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeScriptRaycastHit
+{
+    public ulong GameObjectHandle;
+    public float Distance;
+    public NativeScriptVector3 Position;
+    public NativeScriptVector3 Normal;
+
+    public RaycastHit ToRaycastHit()
+    {
+        return new RaycastHit(
+            new GameObject(GameObjectHandle),
+            Distance,
+            Position.ToVector3(),
+            Normal.ToVector3());
+    }
+}
+
+[StructLayout(LayoutKind.Sequential)]
 internal unsafe struct NativeScriptBridgeApi
 {
     public int Version;
@@ -92,11 +152,25 @@ internal unsafe struct NativeScriptBridgeApi
     public delegate* unmanaged[Stdcall]<IntPtr, ulong, NativeScriptQuaternion, int> SetLocalRotation;
     public delegate* unmanaged[Stdcall]<IntPtr, ulong, NativeScriptVector3*, int> GetLocalScale;
     public delegate* unmanaged[Stdcall]<IntPtr, ulong, NativeScriptVector3, int> SetLocalScale;
+
+    public delegate* unmanaged[Stdcall]<IntPtr, int, int> GetKey;
+    public delegate* unmanaged[Stdcall]<IntPtr, int, int> GetKeyDown;
+    public delegate* unmanaged[Stdcall]<IntPtr, int, int> GetKeyUp;
+    public delegate* unmanaged[Stdcall]<IntPtr, int, int> GetMouseButton;
+    public delegate* unmanaged[Stdcall]<IntPtr, int, int> GetMouseButtonDown;
+    public delegate* unmanaged[Stdcall]<IntPtr, int, int> GetMouseButtonUp;
+    public delegate* unmanaged[Stdcall]<IntPtr, NativeScriptVector2> GetMousePosition;
+    public delegate* unmanaged[Stdcall]<IntPtr, NativeScriptVector2> GetMouseDelta;
+    public delegate* unmanaged[Stdcall]<IntPtr, float> GetScrollDelta;
+
+    public delegate* unmanaged[Stdcall]<IntPtr, ulong*, int> GetMainCamera;
+    public delegate* unmanaged[Stdcall]<IntPtr, ulong, NativeScriptVector2, NativeScriptRay*, int> ScreenPointToRay;
+    public delegate* unmanaged[Stdcall]<IntPtr, NativeScriptRay, NativeScriptRaycastHit*, ulong, bool, int> Raycast;
 }
 
 internal static unsafe class ScriptBridge
 {
-    private const int ExpectedVersion = 1;
+    private const int ExpectedVersion = 2;
 
     private static NativeScriptBridgeApi _api;
     private static bool _initialized;
@@ -129,7 +203,19 @@ internal static unsafe class ScriptBridge
             api->GetLocalRotation == null ||
             api->SetLocalRotation == null ||
             api->GetLocalScale == null ||
-            api->SetLocalScale == null)
+            api->SetLocalScale == null ||
+            api->GetKey == null ||
+            api->GetKeyDown == null ||
+            api->GetKeyUp == null ||
+            api->GetMouseButton == null ||
+            api->GetMouseButtonDown == null ||
+            api->GetMouseButtonUp == null ||
+            api->GetMousePosition == null ||
+            api->GetMouseDelta == null ||
+            api->GetScrollDelta == null ||
+            api->GetMainCamera == null ||
+            api->ScreenPointToRay == null ||
+            api->Raycast == null)
         {
             return 4;
         }
@@ -247,6 +333,105 @@ internal static unsafe class ScriptBridge
         EnsureValidHandle(nativeHandle);
         EnsureInitialized();
         ThrowIfBridgeError(_api.SetLocalScale(_api.UserData, nativeHandle, NativeScriptVector3.FromVector3(value)));
+    }
+
+    public static bool GetKey(KeyCode keyCode)
+    {
+        EnsureInitialized();
+        return _api.GetKey(_api.UserData, (int)keyCode) != 0;
+    }
+
+    public static bool GetKeyDown(KeyCode keyCode)
+    {
+        EnsureInitialized();
+        return _api.GetKeyDown(_api.UserData, (int)keyCode) != 0;
+    }
+
+    public static bool GetKeyUp(KeyCode keyCode)
+    {
+        EnsureInitialized();
+        return _api.GetKeyUp(_api.UserData, (int)keyCode) != 0;
+    }
+
+    public static bool GetMouseButton(MouseButton mouseButton)
+    {
+        EnsureInitialized();
+        return _api.GetMouseButton(_api.UserData, (int)mouseButton) != 0;
+    }
+
+    public static bool GetMouseButtonDown(MouseButton mouseButton)
+    {
+        EnsureInitialized();
+        return _api.GetMouseButtonDown(_api.UserData, (int)mouseButton) != 0;
+    }
+
+    public static bool GetMouseButtonUp(MouseButton mouseButton)
+    {
+        EnsureInitialized();
+        return _api.GetMouseButtonUp(_api.UserData, (int)mouseButton) != 0;
+    }
+
+    public static Vector2 GetMousePosition()
+    {
+        EnsureInitialized();
+        return _api.GetMousePosition(_api.UserData).ToVector2();
+    }
+
+    public static Vector2 GetMouseDelta()
+    {
+        EnsureInitialized();
+        return _api.GetMouseDelta(_api.UserData).ToVector2();
+    }
+
+    public static float GetScrollDelta()
+    {
+        EnsureInitialized();
+        return _api.GetScrollDelta(_api.UserData);
+    }
+
+    public static Camera? GetMainCamera()
+    {
+        EnsureInitialized();
+
+        ulong handle;
+        int status = _api.GetMainCamera(_api.UserData, &handle);
+        if (status == (int)NativeScriptBridgeStatus.MissingComponent)
+        {
+            return null;
+        }
+
+        ThrowIfBridgeError(status);
+        return handle != 0 ? new Camera(handle) : null;
+    }
+
+    public static Ray ScreenPointToRay(ulong nativeHandle, Vector2 screenPoint)
+    {
+        EnsureValidHandle(nativeHandle);
+        EnsureInitialized();
+
+        NativeScriptRay ray;
+        ThrowIfBridgeError(_api.ScreenPointToRay(
+            _api.UserData,
+            nativeHandle,
+            NativeScriptVector2.FromVector2(screenPoint),
+            &ray));
+        return ray.ToRay();
+    }
+
+    public static bool Raycast(Ray ray, out RaycastHit hit, ulong queryMask, bool includeTriggers)
+    {
+        EnsureInitialized();
+
+        NativeScriptRaycastHit nativeHit;
+        int result = _api.Raycast(
+            _api.UserData,
+            NativeScriptRay.FromRay(ray),
+            &nativeHit,
+            queryMask,
+            includeTriggers);
+        ThrowIfBridgeError(result < 0 ? result : 0);
+        hit = result > 0 ? nativeHit.ToRaycastHit() : default;
+        return result > 0;
     }
 
     private static void EnsureInitialized()

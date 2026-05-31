@@ -1,12 +1,15 @@
 #pragma once
 
 #include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/Core/Types.h"
 
 #include <cstdint>
 #include <vector>
 
 namespace ve
 {
+    class InputSystem;
+    class Scene;
     class ScriptComponent;
 
 #if defined(_WIN32)
@@ -52,6 +55,33 @@ namespace ve
         float w = 1.0f;
     };
 
+    struct ScriptVector2
+    {
+        float x = 0.0f;
+        float y = 0.0f;
+    };
+
+    struct ScriptRay
+    {
+        ScriptVector3 origin;
+        ScriptVector3 direction;
+    };
+
+    struct ScriptRaycastHit
+    {
+        ScriptObjectHandle gameObjectHandle = InvalidScriptObjectHandle;
+        float distance = 0.0f;
+        ScriptVector3 position;
+        ScriptVector3 normal;
+    };
+
+    struct ScriptBridgeContext
+    {
+        class ScriptBridgeRegistry* registry = nullptr;
+        InputSystem* inputSystem = nullptr;
+        Scene* scene = nullptr;
+    };
+
     struct ScriptBridgeApi
     {
         std::int32_t version = 1;
@@ -81,6 +111,26 @@ namespace ve
             void* userData, ScriptObjectHandle handle, ScriptVector3* outValue) = nullptr;
         std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* setLocalScale)(
             void* userData, ScriptObjectHandle handle, ScriptVector3 value) = nullptr;
+
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* getKey)(void* userData, std::int32_t keyCode) = nullptr;
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* getKeyDown)(void* userData, std::int32_t keyCode) = nullptr;
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* getKeyUp)(void* userData, std::int32_t keyCode) = nullptr;
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* getMouseButton)(void* userData, std::int32_t mouseButton) = nullptr;
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* getMouseButtonDown)(
+            void* userData, std::int32_t mouseButton) = nullptr;
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* getMouseButtonUp)(
+            void* userData, std::int32_t mouseButton) = nullptr;
+        ScriptVector2(VE_SCRIPT_BRIDGE_CALLTYPE* getMousePosition)(void* userData) = nullptr;
+        ScriptVector2(VE_SCRIPT_BRIDGE_CALLTYPE* getMouseDelta)(void* userData) = nullptr;
+        float(VE_SCRIPT_BRIDGE_CALLTYPE* getScrollDelta)(void* userData) = nullptr;
+
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* getMainCamera)(void* userData, ScriptObjectHandle* outHandle) =
+            nullptr;
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* screenPointToRay)(
+            void* userData, ScriptObjectHandle handle, ScriptVector2 screenPoint, ScriptRay* outRay) = nullptr;
+        std::int32_t(VE_SCRIPT_BRIDGE_CALLTYPE* raycast)(
+            void* userData, ScriptRay ray, ScriptRaycastHit* outHit, std::uint64_t queryMask, bool includeTriggers) =
+            nullptr;
     };
 
     class ScriptBridgeRegistry : public NonMovable
@@ -112,7 +162,7 @@ namespace ve
         std::uint32_t freeListHead_ = UINT32_MAX;
     };
 
-    [[nodiscard]] ScriptBridgeApi CreateScriptBridgeApi(ScriptBridgeRegistry& registry) noexcept;
+    [[nodiscard]] ScriptBridgeApi CreateScriptBridgeApi(ScriptBridgeContext& context) noexcept;
 
 #undef VE_SCRIPT_BRIDGE_CALLTYPE
 } // namespace ve

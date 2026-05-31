@@ -1,15 +1,21 @@
 #include "Engine/Runtime/Scripting/ScriptBridge.h"
 
+#include "Engine/Runtime/Input/InputSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
+#include "Engine/Runtime/Physics/PhysicsWorld.h"
 #include "Engine/Runtime/Scene/GameObject.h"
+#include "Engine/Runtime/Scene/RenderComponents.h"
+#include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Scripting/ScriptComponent.h"
 #include "Engine/Runtime/Time/Time.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -81,7 +87,20 @@ namespace ve
 
         [[nodiscard]] ScriptBridgeRegistry* GetRegistry(void* userData) noexcept
         {
-            return static_cast<ScriptBridgeRegistry*>(userData);
+            ScriptBridgeContext* context = static_cast<ScriptBridgeContext*>(userData);
+            return context != nullptr ? context->registry : nullptr;
+        }
+
+        [[nodiscard]] InputSystem* GetInputSystem(void* userData) noexcept
+        {
+            ScriptBridgeContext* context = static_cast<ScriptBridgeContext*>(userData);
+            return context != nullptr ? context->inputSystem : nullptr;
+        }
+
+        [[nodiscard]] Scene* GetScene(void* userData) noexcept
+        {
+            ScriptBridgeContext* context = static_cast<ScriptBridgeContext*>(userData);
+            return context != nullptr ? context->scene : nullptr;
         }
 
         [[nodiscard]] ScriptComponent* ResolveComponent(void* userData, ScriptObjectHandle handle) noexcept
@@ -90,15 +109,136 @@ namespace ve
             return registry != nullptr ? registry->ResolveComponent(handle) : nullptr;
         }
 
+        [[nodiscard]] GameObject* ResolveGameObject(void* userData, ScriptObjectHandle handle) noexcept
+        {
+            if (ScriptComponent* component = ResolveComponent(userData, handle))
+            {
+                return &component->GetGameObject();
+            }
+
+            Scene* scene = GetScene(userData);
+            return scene != nullptr ? scene->FindGameObject(static_cast<SceneObjectId>(handle)) : nullptr;
+        }
+
         [[nodiscard]] TransformComponent* ResolveTransform(void* userData, ScriptObjectHandle handle) noexcept
         {
-            ScriptComponent* component = ResolveComponent(userData, handle);
-            if (component == nullptr)
+            GameObject* gameObject = ResolveGameObject(userData, handle);
+            if (gameObject == nullptr)
             {
                 return nullptr;
             }
 
-            return component->GetGameObject().GetComponent<TransformComponent>();
+            return gameObject->GetComponent<TransformComponent>();
+        }
+
+        [[nodiscard]] ScriptVector2 ToScriptVector2(const Vector2& value) noexcept
+        {
+            return ScriptVector2{value.GetX(), value.GetY()};
+        }
+
+        [[nodiscard]] ScriptVector3 ToScriptVector3(const Vector3& value) noexcept
+        {
+            return ScriptVector3{value.GetX(), value.GetY(), value.GetZ()};
+        }
+
+        [[nodiscard]] Vector3 ToVector3(const ScriptVector3& value) noexcept
+        {
+            return Vector3(value.x, value.y, value.z);
+        }
+
+        [[nodiscard]] Ray ToRay(const ScriptRay& ray) noexcept
+        {
+            return Ray(ToVector3(ray.origin), ToVector3(ray.direction));
+        }
+
+        [[nodiscard]] bool VisitActiveGameObject(GameObject& gameObject,
+                                                  const std::function<bool(GameObject&)>& visitor)
+        {
+            if (!gameObject.IsActiveInHierarchy())
+            {
+                return false;
+            }
+
+            if (visitor(gameObject))
+            {
+                return true;
+            }
+
+            for (GameObject* child : gameObject.GetChildren())
+            {
+                if (child != nullptr && VisitActiveGameObject(*child, visitor))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        [[nodiscard]] CameraComponent* FindMainCamera(Scene& scene, GameObject** outGameObject = nullptr)
+        {
+            CameraComponent* result = nullptr;
+            for (GameObject* root : scene.GetRootGameObjects())
+            {
+                if (root == nullptr)
+                {
+                    continue;
+                }
+
+                if (VisitActiveGameObject(
+                    *root,
+                    [&result, outGameObject](GameObject& gameObject)
+                    {
+                        if (CameraComponent* camera = gameObject.GetComponent<CameraComponent>())
+                        {
+                            result = camera;
+                            if (outGameObject != nullptr)
+                            {
+                                *outGameObject = &gameObject;
+                            }
+                            return true;
+                        }
+
+                        return false;
+                    }))
+                {
+                    return result;
+                }
+            }
+
+            return nullptr;
+        }
+
+        [[nodiscard]] Ray BuildCameraScreenRay(CameraComponent& camera,
+                                               const Vector2& screenPoint,
+                                               UInt32 viewportWidth,
+                                               UInt32 viewportHeight) noexcept
+        {
+            const TransformComponent* transform = camera.GetGameObject().GetComponent<TransformComponent>();
+            const Vector3 cameraPosition = transform != nullptr ? transform->GetWorldPosition() : Vector3::Zero();
+            const Quaternion cameraRotation = transform != nullptr ? transform->GetLocalRotation()
+                                                                   : Quaternion::Identity();
+            const Float32 width = std::max(static_cast<Float32>(viewportWidth), 1.0f);
+            const Float32 height = std::max(static_cast<Float32>(viewportHeight), 1.0f);
+            const Float32 normalizedX = (screenPoint.GetX() / width) * 2.0f - 1.0f;
+            const Float32 normalizedY = 1.0f - (screenPoint.GetY() / height) * 2.0f;
+            const Float32 aspectRatio = width / height;
+
+            if (camera.GetProjectionMode() == CameraProjectionMode::Orthographic)
+            {
+                const Float32 viewHeight = camera.GetOrthographicSize();
+                const Float32 viewWidth = viewHeight * aspectRatio;
+                const Vector3 right = cameraRotation.RotateVector(Vector3::UnitX()).Normalized();
+                const Vector3 up = cameraRotation.RotateVector(Vector3::UnitY()).Normalized();
+                const Vector3 forward = cameraRotation.RotateVector(Vector3::UnitZ()).Normalized();
+                const Vector3 origin = cameraPosition + (right * normalizedX * viewWidth * 0.5f) +
+                                       (up * normalizedY * viewHeight * 0.5f);
+                return Ray(origin, forward);
+            }
+
+            const Float32 tanHalfFov = std::tan(camera.GetFieldOfViewRadians() * 0.5f);
+            const Vector3 viewDirection(normalizedX * aspectRatio * tanHalfFov, normalizedY * tanHalfFov, 1.0f);
+            return Ray(cameraPosition, cameraRotation.RotateVector(viewDirection).Normalized());
         }
 
         std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeLog(
@@ -134,13 +274,13 @@ namespace ve
         std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetGameObjectName(
             void* userData, ScriptObjectHandle handle, char* buffer, std::int32_t bufferSizeInBytes)
         {
-            ScriptComponent* component = ResolveComponent(userData, handle);
-            if (component == nullptr)
+            GameObject* gameObject = ResolveGameObject(userData, handle);
+            if (gameObject == nullptr)
             {
                 return ToStatus(ScriptBridgeStatus::InvalidHandle);
             }
 
-            return CopyUtf8String(component->GetGameObject().GetName(), buffer, bufferSizeInBytes);
+            return CopyUtf8String(gameObject->GetName(), buffer, bufferSizeInBytes);
         }
 
         std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeSetGameObjectName(
@@ -151,13 +291,13 @@ namespace ve
                 return ToStatus(ScriptBridgeStatus::InvalidArgument);
             }
 
-            ScriptComponent* component = ResolveComponent(userData, handle);
-            if (component == nullptr)
+            GameObject* gameObject = ResolveGameObject(userData, handle);
+            if (gameObject == nullptr)
             {
                 return ToStatus(ScriptBridgeStatus::InvalidHandle);
             }
 
-            component->GetGameObject().SetName(ReadUtf8String(name, nameSizeInBytes));
+            gameObject->SetName(ReadUtf8String(name, nameSizeInBytes));
             return ToStatus(ScriptBridgeStatus::Success);
         }
 
@@ -270,6 +410,149 @@ namespace ve
             return ToStatus(ScriptBridgeStatus::Success);
         }
 
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetKey(void* userData, std::int32_t keyCode)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr && inputSystem->GetKey(static_cast<KeyCode>(keyCode)) ? 1 : 0;
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetKeyDown(void* userData, std::int32_t keyCode)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr && inputSystem->GetKeyDown(static_cast<KeyCode>(keyCode)) ? 1 : 0;
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetKeyUp(void* userData, std::int32_t keyCode)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr && inputSystem->GetKeyUp(static_cast<KeyCode>(keyCode)) ? 1 : 0;
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetMouseButton(void* userData, std::int32_t mouseButton)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr && inputSystem->GetMouseButton(static_cast<MouseButton>(mouseButton)) ? 1
+                                                                                                               : 0;
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetMouseButtonDown(void* userData, std::int32_t mouseButton)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr && inputSystem->GetMouseButtonDown(static_cast<MouseButton>(mouseButton))
+                       ? 1
+                       : 0;
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetMouseButtonUp(void* userData, std::int32_t mouseButton)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr && inputSystem->GetMouseButtonUp(static_cast<MouseButton>(mouseButton)) ? 1
+                                                                                                                  : 0;
+        }
+
+        ScriptVector2 VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetMousePosition(void* userData)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr ? ToScriptVector2(inputSystem->GetMousePosition()) : ScriptVector2{};
+        }
+
+        ScriptVector2 VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetMouseDelta(void* userData)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr ? ToScriptVector2(inputSystem->GetMouseDelta()) : ScriptVector2{};
+        }
+
+        float VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetScrollDelta(void* userData)
+        {
+            InputSystem* inputSystem = GetInputSystem(userData);
+            return inputSystem != nullptr ? inputSystem->GetScrollDelta() : 0.0f;
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeGetMainCamera(void* userData, ScriptObjectHandle* outHandle)
+        {
+            if (outHandle == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::InvalidArgument);
+            }
+
+            *outHandle = InvalidScriptObjectHandle;
+            Scene* scene = GetScene(userData);
+            if (scene == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::InvalidHandle);
+            }
+
+            GameObject* cameraObject = nullptr;
+            if (FindMainCamera(*scene, &cameraObject) == nullptr || cameraObject == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::MissingComponent);
+            }
+
+            *outHandle = cameraObject->GetId();
+            return ToStatus(ScriptBridgeStatus::Success);
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeScreenPointToRay(
+            void* userData, ScriptObjectHandle handle, ScriptVector2 screenPoint, ScriptRay* outRay)
+        {
+            if (outRay == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::InvalidArgument);
+            }
+
+            GameObject* gameObject = ResolveGameObject(userData, handle);
+            if (gameObject == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::InvalidHandle);
+            }
+
+            CameraComponent* camera = gameObject->GetComponent<CameraComponent>();
+            if (camera == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::MissingComponent);
+            }
+
+            InputSystem* inputSystem = GetInputSystem(userData);
+            const UInt32 viewportWidth = inputSystem != nullptr ? inputSystem->GetViewportWidth() : 1u;
+            const UInt32 viewportHeight = inputSystem != nullptr ? inputSystem->GetViewportHeight() : 1u;
+            const Ray ray =
+                BuildCameraScreenRay(*camera, Vector2(screenPoint.x, screenPoint.y), viewportWidth, viewportHeight);
+            outRay->origin = ToScriptVector3(ray.origin);
+            outRay->direction = ToScriptVector3(ray.GetNormalizedDirection());
+            return ToStatus(ScriptBridgeStatus::Success);
+        }
+
+        std::int32_t VE_SCRIPT_BRIDGE_IMPL_CALLTYPE BridgeRaycast(
+            void* userData, ScriptRay ray, ScriptRaycastHit* outHit, std::uint64_t queryMask, bool includeTriggers)
+        {
+            if (outHit == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::InvalidArgument);
+            }
+
+            *outHit = ScriptRaycastHit{};
+            Scene* scene = GetScene(userData);
+            if (scene == nullptr)
+            {
+                return ToStatus(ScriptBridgeStatus::InvalidHandle);
+            }
+
+            scene->UpdateTransforms();
+            PhysicsWorld world;
+            world.SyncFromScene(*scene);
+            const std::optional<RaycastHit> hit = world.RaycastClosest(ToRay(ray), queryMask, includeTriggers);
+            if (!hit)
+            {
+                return 0;
+            }
+
+            outHit->gameObjectHandle = hit->gameObjectId;
+            outHit->distance = hit->distance;
+            outHit->position = ToScriptVector3(hit->position);
+            outHit->normal = ToScriptVector3(hit->normal);
+            return 1;
+        }
+
 #undef VE_SCRIPT_BRIDGE_IMPL_CALLTYPE
     } // namespace
 
@@ -376,12 +659,12 @@ namespace ve
         return outGeneration != 0;
     }
 
-    ScriptBridgeApi CreateScriptBridgeApi(ScriptBridgeRegistry& registry) noexcept
+    ScriptBridgeApi CreateScriptBridgeApi(ScriptBridgeContext& context) noexcept
     {
         ScriptBridgeApi api;
-        api.version = 1;
+        api.version = 2;
         api.size = sizeof(ScriptBridgeApi);
-        api.userData = &registry;
+        api.userData = &context;
         api.log = &BridgeLog;
         api.getTotalSeconds = &BridgeGetTotalSeconds;
         api.getDeltaSeconds = &BridgeGetDeltaSeconds;
@@ -394,6 +677,18 @@ namespace ve
         api.setLocalRotation = &BridgeSetLocalRotation;
         api.getLocalScale = &BridgeGetLocalScale;
         api.setLocalScale = &BridgeSetLocalScale;
+        api.getKey = &BridgeGetKey;
+        api.getKeyDown = &BridgeGetKeyDown;
+        api.getKeyUp = &BridgeGetKeyUp;
+        api.getMouseButton = &BridgeGetMouseButton;
+        api.getMouseButtonDown = &BridgeGetMouseButtonDown;
+        api.getMouseButtonUp = &BridgeGetMouseButtonUp;
+        api.getMousePosition = &BridgeGetMousePosition;
+        api.getMouseDelta = &BridgeGetMouseDelta;
+        api.getScrollDelta = &BridgeGetScrollDelta;
+        api.getMainCamera = &BridgeGetMainCamera;
+        api.screenPointToRay = &BridgeScreenPointToRay;
+        api.raycast = &BridgeRaycast;
         return api;
     }
 } // namespace ve

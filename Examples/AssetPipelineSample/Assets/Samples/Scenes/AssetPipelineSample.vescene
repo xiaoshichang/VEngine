@@ -337,6 +337,29 @@
             }
           }
         ]
+      },
+      {
+        "id": 10,
+        "name": "ClickRaycastProbe",
+        "active": true,
+        "parent": 0,
+        "components": [
+          {
+            "type": "TransformComponent",
+            "properties": {
+              "localPosition": [0.0, 0.0, 0.0],
+              "localRotation": [0.0, 0.0, 0.0, 1.0],
+              "localScale": [1.0, 1.0, 1.0]
+            }
+          },
+          {
+            "type": "ScriptComponent",
+            "properties": {
+              "scriptTypeName": "VE.Scripting.ClickRaycastAndLog",
+              "assemblyName": "VE.Scripting"
+            }
+          }
+        ]
       }
     ]
   }

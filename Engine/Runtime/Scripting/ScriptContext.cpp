@@ -70,6 +70,11 @@ namespace ve
         return projectAssemblyPath_;
     }
 
+    void ScriptContext::SetRuntimeContext(InputSystem* inputSystem, Scene* scene) noexcept
+    {
+        host_->SetBridgeRuntimeContext(inputSystem, scene);
+    }
+
     ScriptObjectHandle ScriptContext::RegisterScriptComponent(ScriptComponent& component)
     {
         return host_->GetBridgeRegistry().RegisterComponent(component);
