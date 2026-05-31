@@ -195,7 +195,7 @@ function(ve_add_managed_scripting_targets)
     )
 
     add_custom_target(VEngineScriptAPI ALL
-        COMMAND "${VE_DOTNET_EXECUTABLE}"
+        COMMAND ${CMAKE_COMMAND} -E env "LIB=" "${VE_DOTNET_EXECUTABLE}"
             build "${scriptApiProject}"
             --configuration $<CONFIG>
             --framework "${VE_DOTNET_TARGET_FRAMEWORK}"

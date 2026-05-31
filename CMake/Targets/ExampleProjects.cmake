@@ -106,7 +106,7 @@ EndGlobal
         add_custom_target(VEngineExampleAssetPipelineSampleScripts ALL
             COMMAND ${CMAKE_COMMAND} -E make_directory
                 "${veAssetPipelineSampleScriptsOutput}"
-            COMMAND "${VE_DOTNET_EXECUTABLE}"
+            COMMAND ${CMAKE_COMMAND} -E env "LIB=" "${VE_DOTNET_EXECUTABLE}"
                 build "${veAssetPipelineSampleScriptsProject}"
                 --configuration $<CONFIG>
                 --framework "${VE_DOTNET_TARGET_FRAMEWORK}"
