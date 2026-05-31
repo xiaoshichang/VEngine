@@ -125,6 +125,18 @@ namespace ve::rhi
             }
         }
 
+        D3D11_FILL_MODE ToD3D11FillMode(RhiFillMode fillMode)
+        {
+            switch (fillMode)
+            {
+            case RhiFillMode::Wireframe:
+                return D3D11_FILL_WIREFRAME;
+            case RhiFillMode::Solid:
+            default:
+                return D3D11_FILL_SOLID;
+            }
+        }
+
         std::string MakeHResultError(const char* operation, HRESULT result)
         {
             char buffer[128] = {};
@@ -1048,7 +1060,7 @@ namespace ve::rhi
                 }
 
                 D3D11_RASTERIZER_DESC rasterizerDesc = {};
-                rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+                rasterizerDesc.FillMode = ToD3D11FillMode(desc.fillMode);
                 rasterizerDesc.CullMode = ToD3D11CullMode(desc.cullMode);
                 rasterizerDesc.FrontCounterClockwise = FALSE;
                 rasterizerDesc.DepthClipEnable = TRUE;

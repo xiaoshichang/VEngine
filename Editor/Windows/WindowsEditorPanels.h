@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Math/Vector3.h"
+#include "Engine/Runtime/Math/Vector4.h"
 #include "Engine/Runtime/Reflection/ReflectionRegistry.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Scene/SceneTypes.h"
@@ -56,6 +57,9 @@ namespace ve
             Float32 yawRadians = 0.0f;
             Float32 pitchRadians = 0.20943952f;
             Float32 moveSpeed = 4.0f;
+            Float32 nearPlane = 0.05f;
+            Float32 farPlane = 1000.0f;
+            Vector4 clearColor = Vector4(0.13f, 0.15f, 0.18f, 1.0f);
         };
 
         [[nodiscard]] EditorViewportRenderRequest MakeSceneViewRequest(EditorProjectService& projectService,
@@ -70,6 +74,7 @@ namespace ve
                                const ImVec2& imageSize,
                                const char* overlayText,
                                bool showOverlayText);
+        void DrawSceneViewToolbar();
         void HandleSceneViewCameraInput(const ImVec2& imageSize, bool imageHovered);
         void SubmitGameViewInput(EngineRuntime& runtime,
                                  const ImVec2& imageMin,
@@ -124,6 +129,7 @@ namespace ve
         ReflectionRegistry reflectionRegistry_;
         std::vector<EditorViewportRenderRequest> viewportRequests_;
         SceneViewCameraState sceneViewCamera_;
+        EditorViewportShaderMode sceneViewShaderMode_ = EditorViewportShaderMode::Shaded;
         SelectionKind selectionKind_ = SelectionKind::None;
         SceneObjectId selectedGameObjectId_ = InvalidSceneObjectId;
         Path selectedAssetPath_;

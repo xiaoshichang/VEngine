@@ -355,7 +355,8 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             {
                 std::unique_ptr<rhi::RhiShaderModule> vertexShader;
                 std::unique_ptr<rhi::RhiShaderModule> fragmentShader;
-                std::unique_ptr<rhi::RhiPipelineState> pipelineState;
+                std::unique_ptr<rhi::RhiPipelineState> shadedPipelineState;
+                std::unique_ptr<rhi::RhiPipelineState> wireframePipelineState;
             };
 
             struct EditorUiPipelineResources
@@ -704,7 +705,8 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                 frameContext.lastError = ErrorCode::None;
             }
 
-            impl.rhi.scenePipeline.pipelineState.reset();
+            impl.rhi.scenePipeline.wireframePipelineState.reset();
+            impl.rhi.scenePipeline.shadedPipelineState.reset();
             impl.rhi.scenePipeline.fragmentShader.reset();
             impl.rhi.scenePipeline.vertexShader.reset();
             impl.rhi.sceneMaterials.clear();
@@ -907,12 +909,26 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
             pipelineDesc.colorFormat = impl.rhi.mainSwapchain->GetColorFormat();
             pipelineDesc.depthStencilFormat = rhi::RhiFormat::Depth32Float;
+            pipelineDesc.cullMode = rhi::RhiCullMode::Back;
+            pipelineDesc.fillMode = rhi::RhiFillMode::Solid;
             pipelineDesc.enableDepthTest = true;
             pipelineDesc.enableDepthWrite = true;
             pipelineDesc.debugName = "RenderSystemScenePipeline";
 
-            impl.rhi.scenePipeline.pipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
-            if (impl.rhi.scenePipeline.pipelineState == nullptr)
+            impl.rhi.scenePipeline.shadedPipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
+            if (impl.rhi.scenePipeline.shadedPipelineState == nullptr)
+            {
+                DestroyScenePipelineResources(impl);
+                return ErrorCode::PlatformError;
+            }
+
+            pipelineDesc.cullMode = rhi::RhiCullMode::None;
+            pipelineDesc.fillMode = rhi::RhiFillMode::Wireframe;
+            pipelineDesc.enableDepthWrite = false;
+            pipelineDesc.debugName = "RenderSystemSceneWireframePipeline";
+
+            impl.rhi.scenePipeline.wireframePipelineState = impl.rhi.device->CreateGraphicsPipeline(pipelineDesc);
+            if (impl.rhi.scenePipeline.wireframePipelineState == nullptr)
             {
                 DestroyScenePipelineResources(impl);
                 return ErrorCode::PlatformError;
@@ -1140,6 +1156,39 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             return drawCommands;
         }
 
+        void DrawSceneCommands(rhi::RhiCommandList& commandList,
+                               const rhi::RhiPipelineState& pipelineState,
+                               const std::vector<SceneDrawCommand>& drawCommands,
+                               const std::vector<ReusableRenderBuffer>& drawUniformBuffers)
+        {
+            commandList.SetPipeline(pipelineState);
+            for (SizeT index = 0; index < drawCommands.size(); ++index)
+            {
+                const SceneDrawCommand& drawCommand = drawCommands[index];
+                commandList.SetVertexBuffer(0, *drawCommand.mesh->vertexBuffer, sizeof(RenderVertex), 0);
+                commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex,
+                                             0,
+                                             *drawUniformBuffers[index].buffer,
+                                             0,
+                                             sizeof(DrawUniformData));
+                commandList.Draw(drawCommand.mesh->vertexCount, 0);
+            }
+        }
+
+        [[nodiscard]] const rhi::RhiPipelineState& GetEditorViewportScenePipeline(
+            const RenderSystemImpl& impl,
+            EditorViewportShaderMode shaderMode) noexcept
+        {
+            switch (shaderMode)
+            {
+            case EditorViewportShaderMode::Wireframe:
+                return *impl.rhi.scenePipeline.wireframePipelineState;
+            case EditorViewportShaderMode::Shaded:
+            default:
+                return *impl.rhi.scenePipeline.shadedPipelineState;
+            }
+        }
+
         void RenderClearFrame(RenderSystemImpl& impl, RenderFrameContext& frameContext)
         {
             if (impl.rhi.device == nullptr || impl.rhi.mainSwapchain == nullptr)
@@ -1185,7 +1234,7 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                 TerminateRenderSystem("frame execution failed in RenderSceneFrame", ErrorCode::InvalidState);
             }
 
-            if (impl.rhi.scenePipeline.pipelineState == nullptr || frameContext.commandList == nullptr)
+            if (impl.rhi.scenePipeline.shadedPipelineState == nullptr || frameContext.commandList == nullptr)
             {
                 TerminateRenderSystem("frame execution failed in RenderSceneFrame", ErrorCode::InvalidState);
             }
@@ -1239,19 +1288,8 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
             commandList.SetViewport(rhi::RhiViewport{
                 0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
             commandList.SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
-            commandList.SetPipeline(*impl.rhi.scenePipeline.pipelineState);
-            for (SizeT index = 0; index < drawCommands.size(); ++index)
-            {
-                const SceneDrawCommand& drawCommand = drawCommands[index];
-                commandList.SetVertexBuffer(0, *drawCommand.mesh->vertexBuffer, sizeof(RenderVertex), 0);
-                commandList.SetUniformBuffer(
-                    rhi::RhiShaderStage::Vertex,
-                    0,
-                    *frameContext.drawUniformBuffers[index].buffer,
-                    0,
-                    sizeof(DrawUniformData));
-                commandList.Draw(drawCommand.mesh->vertexCount, 0);
-            }
+            DrawSceneCommands(
+                commandList, *impl.rhi.scenePipeline.shadedPipelineState, drawCommands, frameContext.drawUniformBuffers);
             commandList.EndRenderPass();
 
             if (!commandList.End() || !impl.rhi.device->Submit(commandList) || !impl.rhi.mainSwapchain->Present())
@@ -1389,7 +1427,8 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                 TerminateRenderSystem("viewport execution failed in RenderSceneViewport", ErrorCode::InvalidState);
             }
 
-            if (impl.rhi.scenePipeline.pipelineState == nullptr)
+            if (impl.rhi.scenePipeline.shadedPipelineState == nullptr ||
+                impl.rhi.scenePipeline.wireframePipelineState == nullptr)
             {
                 TerminateRenderSystem("viewport execution failed in RenderSceneViewport", ErrorCode::InvalidState);
             }
@@ -1452,18 +1491,10 @@ fragment float4 PSMain(VSOutput input [[stage_in]], texture2d<float> fontTexture
                                                      0.0f,
                                                      1.0f});
             commandList.SetScissor(rhi::RhiScissorRect{0, 0, request.width, request.height});
-            commandList.SetPipeline(*impl.rhi.scenePipeline.pipelineState);
-            for (SizeT index = 0; index < drawCommands.size(); ++index)
-            {
-                const SceneDrawCommand& drawCommand = drawCommands[index];
-                commandList.SetVertexBuffer(0, *drawCommand.mesh->vertexBuffer, sizeof(RenderVertex), 0);
-                commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex,
-                                             0,
-                                             *viewportTexture.drawUniformBuffers[index].buffer,
-                                             0,
-                                             sizeof(DrawUniformData));
-                commandList.Draw(drawCommand.mesh->vertexCount, 0);
-            }
+            DrawSceneCommands(commandList,
+                              GetEditorViewportScenePipeline(impl, request.shaderMode),
+                              drawCommands,
+                              viewportTexture.drawUniformBuffers);
             commandList.EndRenderPass();
 
             if (!commandList.End() || !impl.rhi.device->Submit(commandList))

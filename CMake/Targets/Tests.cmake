@@ -170,6 +170,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineRuntimeTests>
     )
 
+    add_executable(VEngineRenderSystemTests
+        Tests/Unit/RenderSystemTests.cpp
+    )
+
+    target_link_libraries(VEngineRenderSystemTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineRenderSystemTests)
+
+    add_test(
+        NAME VEngineRenderSystemTests
+        COMMAND $<TARGET_FILE:VEngineRenderSystemTests>
+    )
+
     add_executable(VEngineIOSystemTests
         Tests/Unit/IOSystemTests.cpp
     )

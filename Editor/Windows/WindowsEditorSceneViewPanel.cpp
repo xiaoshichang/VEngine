@@ -31,6 +31,10 @@ namespace ve
         constexpr UInt64 SceneViewTextureId = 2;
         constexpr Float32 SceneViewOverlayMargin = 12.0f;
         constexpr Float32 SceneViewGizmoReservedSize = 112.0f;
+        constexpr Float32 SceneViewCameraMinNearPlane = 0.001f;
+        constexpr Float32 SceneViewCameraMinFarPlane = 0.01f;
+        constexpr Float32 SceneViewCameraMinMoveSpeed = 0.1f;
+        constexpr Float32 SceneViewCameraMaxMoveSpeed = 80.0f;
         constexpr Float32 AxisGizmoPositiveLength = 34.0f;
         constexpr Float32 AxisGizmoNegativeLength = 17.0f;
         constexpr Float32 AxisGizmoMinimumProjectedScale = 0.24f;
@@ -81,6 +85,28 @@ namespace ve
             imageSize.x = std::max(imageSize.x, 1.0f);
             imageSize.y = std::max(imageSize.y, 1.0f);
             return imageSize;
+        }
+
+        [[nodiscard]] const char* GetSceneViewShaderModeName(EditorViewportShaderMode shaderMode) noexcept
+        {
+            switch (shaderMode)
+            {
+            case EditorViewportShaderMode::Wireframe:
+                return "Wireframe";
+            case EditorViewportShaderMode::Shaded:
+            default:
+                return "Shaded";
+            }
+        }
+
+        [[nodiscard]] ImVec4 ToImVec4(const Vector4& color) noexcept
+        {
+            return ImVec4(color.GetX(), color.GetY(), color.GetZ(), color.GetW());
+        }
+
+        [[nodiscard]] Vector4 ToVector4(const ImVec4& color) noexcept
+        {
+            return Vector4(color.x, color.y, color.z, color.w);
         }
 
         [[nodiscard]] UInt32 ToTextureExtent(Float32 logicalSize, Float32 framebufferScale) noexcept
@@ -598,6 +624,78 @@ namespace ve
         }
     }
 
+    void WindowsEditorPanels::DrawSceneViewToolbar()
+    {
+        ImGui::SetNextItemWidth(156.0f);
+        if (ImGui::BeginCombo("Shader Mode", GetSceneViewShaderModeName(sceneViewShaderMode_)))
+        {
+            constexpr EditorViewportShaderMode ShaderModes[] = {
+                EditorViewportShaderMode::Shaded,
+                EditorViewportShaderMode::Wireframe,
+            };
+
+            for (EditorViewportShaderMode shaderMode : ShaderModes)
+            {
+                const bool selected = sceneViewShaderMode_ == shaderMode;
+                if (ImGui::Selectable(GetSceneViewShaderModeName(shaderMode), selected))
+                {
+                    sceneViewShaderMode_ = shaderMode;
+                }
+
+                if (selected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Scene Camera"))
+        {
+            ImGui::OpenPopup("SceneCameraSettings");
+        }
+
+        if (ImGui::BeginPopup("SceneCameraSettings"))
+        {
+            ImVec4 clearColor = ToImVec4(sceneViewCamera_.clearColor);
+            if (ImGui::ColorEdit4("Clear Color",
+                                  &clearColor.x,
+                                  ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar))
+            {
+                sceneViewCamera_.clearColor = ToVector4(clearColor);
+            }
+
+            if (ImGui::InputFloat("Near", &sceneViewCamera_.nearPlane, 0.01f, 0.1f, "%.3f"))
+            {
+                sceneViewCamera_.nearPlane =
+                    std::max(sceneViewCamera_.nearPlane, SceneViewCameraMinNearPlane);
+                sceneViewCamera_.farPlane =
+                    std::max(sceneViewCamera_.farPlane, sceneViewCamera_.nearPlane + SceneViewCameraMinFarPlane);
+            }
+
+            if (ImGui::InputFloat("Far", &sceneViewCamera_.farPlane, 1.0f, 10.0f, "%.1f"))
+            {
+                sceneViewCamera_.farPlane =
+                    std::max(sceneViewCamera_.farPlane, sceneViewCamera_.nearPlane + SceneViewCameraMinFarPlane);
+            }
+
+            if (ImGui::SliderFloat("Move Speed",
+                                   &sceneViewCamera_.moveSpeed,
+                                   SceneViewCameraMinMoveSpeed,
+                                   SceneViewCameraMaxMoveSpeed,
+                                   "%.2f"))
+            {
+                sceneViewCamera_.moveSpeed = std::clamp(sceneViewCamera_.moveSpeed,
+                                                        SceneViewCameraMinMoveSpeed,
+                                                        SceneViewCameraMaxMoveSpeed);
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+
     void WindowsEditorPanels::HandleSceneViewCameraInput(const ImVec2& imageSize, bool imageHovered)
     {
         (void)imageSize;
@@ -625,7 +723,9 @@ namespace ve
             if (sceneViewLookActive_)
             {
                 sceneViewCamera_.moveSpeed =
-                    std::clamp(sceneViewCamera_.moveSpeed * std::pow(1.15f, io.MouseWheel), 0.1f, 80.0f);
+                    std::clamp(sceneViewCamera_.moveSpeed * std::pow(1.15f, io.MouseWheel),
+                               SceneViewCameraMinMoveSpeed,
+                               SceneViewCameraMaxMoveSpeed);
             }
             else
             {
@@ -693,20 +793,23 @@ namespace ve
         snapshot.mainCamera.objectId = InvalidSceneObjectId;
         snapshot.mainCamera.viewMatrix = BuildSceneViewMatrix(
             sceneViewCamera_.position, sceneViewCamera_.pitchRadians, sceneViewCamera_.yawRadians);
-        snapshot.mainCamera.projectionMatrix = Perspective(ToRadians(60.0f), aspectRatio, 0.05f, 1000.0f);
+        snapshot.mainCamera.projectionMatrix =
+            Perspective(ToRadians(60.0f), aspectRatio, sceneViewCamera_.nearPlane, sceneViewCamera_.farPlane);
         snapshot.mainCamera.viewportRect = Vector4(0.0f, 0.0f, 1.0f, 1.0f);
-        snapshot.mainCamera.clearColor = Vector4(0.05f, 0.07f, 0.10f, 1.0f);
+        snapshot.mainCamera.clearColor = sceneViewCamera_.clearColor;
 
         EditorViewportRenderRequest request;
         request.textureId = SceneViewTextureId;
         request.width = width;
         request.height = height;
+        request.shaderMode = sceneViewShaderMode_;
         request.snapshot = std::move(snapshot);
         return request;
     }
 
     void WindowsEditorPanels::DrawSceneView(EditorProjectService& projectService, EngineRuntime& runtime)
     {
+        DrawSceneViewToolbar();
         const ImVec2 imageSize = GetViewportImageSize();
         DrawViewportImage(SceneViewTextureId, imageSize, nullptr, false);
         const bool imageHovered = ImGui::IsItemHovered();
@@ -717,7 +820,8 @@ namespace ve
         const Matrix44 viewMatrix =
             BuildSceneViewMatrix(sceneViewCamera_.position, sceneViewCamera_.pitchRadians, sceneViewCamera_.yawRadians);
         const Float32 aspectRatio = imageSize.y > 0.0f ? imageSize.x / imageSize.y : (16.0f / 9.0f);
-        const Matrix44 projectionMatrix = Perspective(ToRadians(60.0f), aspectRatio, 0.05f, 1000.0f);
+        const Matrix44 projectionMatrix =
+            Perspective(ToRadians(60.0f), aspectRatio, sceneViewCamera_.nearPlane, sceneViewCamera_.farPlane);
 
         const std::vector<SceneViewObjectIcon> objectIcons = BuildSceneViewObjectIcons(projectService.GetActiveScene(),
                                                                                        imageMin,

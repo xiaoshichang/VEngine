@@ -80,6 +80,13 @@ namespace ve::rhi
         Back,
     };
 
+    /// Describes triangle rasterization fill mode used by a graphics pipeline.
+    enum class RhiFillMode
+    {
+        Solid,
+        Wireframe,
+    };
+
     /// Describes intended usage for a texture.
     enum class RhiTextureUsage : uint32_t
     {
@@ -229,6 +236,7 @@ namespace ve::rhi
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
         RhiFormat depthStencilFormat = RhiFormat::Unknown;
         RhiCullMode cullMode = RhiCullMode::Back;
+        RhiFillMode fillMode = RhiFillMode::Solid;
         bool enableDepthTest = false;
         bool enableDepthWrite = false;
         bool enableAlphaBlending = false;

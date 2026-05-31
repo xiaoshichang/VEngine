@@ -105,6 +105,18 @@ namespace ve::rhi
             }
         }
 
+        MTLTriangleFillMode ToMetalTriangleFillMode(RhiFillMode fillMode)
+        {
+            switch (fillMode)
+            {
+            case RhiFillMode::Wireframe:
+                return MTLTriangleFillModeLines;
+            case RhiFillMode::Solid:
+            default:
+                return MTLTriangleFillModeFill;
+            }
+        }
+
         constexpr uint32_t MetalUniformBufferBaseSlot = 16;
 
         std::string ToString(NSError* error)
@@ -247,11 +259,13 @@ namespace ve::rhi
             MetalPipelineState(RhiPrimitiveTopology topology,
                                id<MTLRenderPipelineState> pipelineState,
                                id<MTLDepthStencilState> depthStencilState,
-                               RhiCullMode cullMode)
+                               RhiCullMode cullMode,
+                               RhiFillMode fillMode)
                 : topology_(topology)
                 , pipelineState_(pipelineState)
                 , depthStencilState_(depthStencilState)
                 , cullMode_(cullMode)
+                , fillMode_(fillMode)
             {
             }
 
@@ -275,11 +289,17 @@ namespace ve::rhi
                 return cullMode_;
             }
 
+            [[nodiscard]] RhiFillMode GetFillMode() const noexcept
+            {
+                return fillMode_;
+            }
+
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
             id<MTLRenderPipelineState> pipelineState_ = nil;
             id<MTLDepthStencilState> depthStencilState_ = nil;
             RhiCullMode cullMode_ = RhiCullMode::Back;
+            RhiFillMode fillMode_ = RhiFillMode::Solid;
         };
 
         class MetalSwapchain final : public RhiSwapchain
@@ -419,6 +439,7 @@ namespace ve::rhi
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
                 [renderCommandEncoder_ setDepthStencilState:metalPipelineState.GetNativeDepthStencilState()];
                 [renderCommandEncoder_ setCullMode:ToMetalCullMode(metalPipelineState.GetCullMode())];
+                [renderCommandEncoder_ setTriangleFillMode:ToMetalTriangleFillMode(metalPipelineState.GetFillMode())];
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -817,7 +838,7 @@ namespace ve::rhi
                 }
 
                 return std::make_unique<MetalPipelineState>(
-                    desc.topology, pipelineState, depthStencilState, desc.cullMode);
+                    desc.topology, pipelineState, depthStencilState, desc.cullMode, desc.fillMode);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

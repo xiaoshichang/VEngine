@@ -92,6 +92,18 @@ namespace ve::rhi
             }
         }
 
+        D3D12_FILL_MODE ToD3D12FillMode(RhiFillMode fillMode)
+        {
+            switch (fillMode)
+            {
+            case RhiFillMode::Wireframe:
+                return D3D12_FILL_MODE_WIREFRAME;
+            case RhiFillMode::Solid:
+            default:
+                return D3D12_FILL_MODE_SOLID;
+            }
+        }
+
         D3D12_RESOURCE_FLAGS ToD3D12TextureFlags(RhiTextureUsage usage)
         {
             D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
@@ -1590,7 +1602,7 @@ namespace ve::rhi
                 }
 
                 D3D12_RASTERIZER_DESC rasterizerDesc = {};
-                rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
+                rasterizerDesc.FillMode = ToD3D12FillMode(desc.fillMode);
                 rasterizerDesc.CullMode = ToD3D12CullMode(desc.cullMode);
                 rasterizerDesc.FrontCounterClockwise = FALSE;
                 rasterizerDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;

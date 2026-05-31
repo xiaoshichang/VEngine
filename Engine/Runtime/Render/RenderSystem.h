@@ -77,6 +77,13 @@ namespace ve
         RenderDeviceDesc device;
     };
 
+    /// Selects how an editor scene viewport renders scene geometry.
+    enum class EditorViewportShaderMode
+    {
+        Shaded,
+        Wireframe,
+    };
+
     /// One editor viewport render target update. The texture id is the ImGui texture id that will sample the result in
     /// a later EditorUiFrameData submission.
     struct EditorViewportRenderRequest
@@ -84,6 +91,7 @@ namespace ve
         UInt64 textureId = 0;
         UInt32 width = 0;
         UInt32 height = 0;
+        EditorViewportShaderMode shaderMode = EditorViewportShaderMode::Shaded;
         SceneRenderSnapshot snapshot;
     };
 
