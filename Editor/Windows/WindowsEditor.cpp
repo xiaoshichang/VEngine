@@ -1225,8 +1225,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
 
         if (projectService.HasOpenProject())
         {
-            runtime.GetInputSystem().BeginMainFrame();
-            runtime.GetInputSystem().SetFocused(false);
             launcherUi.RenderEditor(nativeWindow, window, projectService, runtime);
             return;
         }

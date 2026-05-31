@@ -72,6 +72,101 @@ namespace
         passed &= Expect(!input.GetMouseButton(ve::MouseButton::Left), "Losing focus should clear held mouse buttons.");
         return passed;
     }
+
+    bool TestMergedSnapshotsPreserveClickUntilConsumed()
+    {
+        ve::InputSystem input;
+
+        input.BeginMainFrame();
+        input.SetFocused(true);
+        input.SubmitMouseButton(ve::MouseButton::Left, true);
+        ve::InputSnapshot pending = input.CreateGameSnapshot();
+
+        input.BeginMainFrame();
+        ve::InputSnapshot next = input.CreateGameSnapshot();
+        ve::InputSnapshot merged = ve::InputSystem::MergeSnapshots(pending, next);
+        input.ApplyGameSnapshot(merged);
+
+        bool passed = true;
+        passed &= Expect(input.GetMouseButton(ve::MouseButton::Left),
+                         "Merged snapshot should keep the latest held mouse state.");
+        passed &= Expect(input.GetMouseButtonDown(ve::MouseButton::Left),
+                         "Merged snapshot should preserve a click until the Game Thread consumes it.");
+        return passed;
+    }
+
+    bool TestHeldMouseButtonDoesNotRepeatDown()
+    {
+        ve::InputSystem input;
+
+        input.BeginMainFrame();
+        input.SetFocused(true);
+        input.SubmitMouseButton(ve::MouseButton::Left, true);
+        input.ApplyGameSnapshot(input.CreateGameSnapshot());
+
+        input.BeginMainFrame();
+        input.SetFocused(true);
+        input.SubmitMouseButton(ve::MouseButton::Left, true);
+        input.ApplyGameSnapshot(input.CreateGameSnapshot());
+
+        bool passed = true;
+        passed &= Expect(input.GetMouseButton(ve::MouseButton::Left),
+                         "Held mouse button should remain down on the next frame.");
+        passed &= Expect(!input.GetMouseButtonDown(ve::MouseButton::Left),
+                         "Held mouse button should not repeat button down on the next frame.");
+        return passed;
+    }
+
+    bool TestTransientGameInputClearsWithoutNewSnapshot()
+    {
+        ve::InputSystem input;
+
+        input.BeginMainFrame();
+        input.SetFocused(true);
+        input.SubmitMouseButton(ve::MouseButton::Left, true);
+        input.SubmitMouseWheel(1.0f);
+        input.ApplyGameSnapshot(input.CreateGameSnapshot());
+
+        bool passed = true;
+        passed &= Expect(input.GetMouseButtonDown(ve::MouseButton::Left),
+                         "Mouse button down should be visible on the consumed game frame.");
+        passed &= Expect(input.GetScrollDelta() == 1.0f, "Scroll delta should be visible on the consumed game frame.");
+
+        input.ClearGameTransientState();
+        passed &= Expect(input.GetMouseButton(ve::MouseButton::Left),
+                         "Clearing transient game input should preserve held mouse state.");
+        passed &= Expect(!input.GetMouseButtonDown(ve::MouseButton::Left),
+                         "Mouse button down should not repeat without a new input snapshot.");
+        passed &= Expect(input.GetScrollDelta() == 0.0f,
+                         "Scroll delta should not repeat without a new input snapshot.");
+        return passed;
+    }
+
+    bool TestExplicitMouseButtonEventsDoNotRepeatAfterFocusClear()
+    {
+        ve::InputSystem input;
+
+        input.BeginMainFrame();
+        input.SetFocused(true);
+        input.SubmitMouseButtonState(ve::MouseButton::Left, true, true, false);
+        input.ApplyGameSnapshot(input.CreateGameSnapshot());
+
+        bool passed = true;
+        passed &= Expect(input.GetMouseButtonDown(ve::MouseButton::Left),
+                         "Explicit mouse click should report button down.");
+
+        input.BeginMainFrame();
+        input.SetFocused(false);
+        input.SetFocused(true);
+        input.SubmitMouseButtonState(ve::MouseButton::Left, true, false, false);
+        input.ApplyGameSnapshot(input.CreateGameSnapshot());
+
+        passed &= Expect(input.GetMouseButton(ve::MouseButton::Left),
+                         "Explicit held state should restore held mouse state after a focus clear.");
+        passed &= Expect(!input.GetMouseButtonDown(ve::MouseButton::Left),
+                         "Explicit held state should not synthesize another button down after a focus clear.");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -79,5 +174,9 @@ int main()
     bool passed = true;
     passed &= TestKeyTransitions();
     passed &= TestMouseAndFocusState();
+    passed &= TestMergedSnapshotsPreserveClickUntilConsumed();
+    passed &= TestHeldMouseButtonDoesNotRepeatDown();
+    passed &= TestTransientGameInputClearsWithoutNewSnapshot();
+    passed &= TestExplicitMouseButtonEventsDoNotRepeatAfterFocusClear();
     return passed ? 0 : 1;
 }

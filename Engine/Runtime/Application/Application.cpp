@@ -459,8 +459,13 @@ namespace ve
                 desc_.frameUpdate(mainWindow, engineRuntime_);
             }
 
-            (void)engineRuntime_.GetGameThreadSystem().SubmitInputSnapshot(
-                engineRuntime_.GetInputSystem().CreateGameSnapshot());
+#if VE_PLATFORM_WINDOWS
+            if (win32Window != nullptr)
+            {
+                (void)engineRuntime_.GetGameThreadSystem().SubmitInputSnapshot(
+                    engineRuntime_.GetInputSystem().CreateGameSnapshot());
+            }
+#endif
 
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }

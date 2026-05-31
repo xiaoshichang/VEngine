@@ -291,10 +291,17 @@ namespace ve
             SetPhase(impl.frame.phase, GameThreadPhase::BeginFrame);
             {
                 LockGuard<Mutex> lock(impl.input.mutex);
-                if (impl.input.inputSystem != nullptr && impl.input.hasPendingSnapshot)
+                if (impl.input.inputSystem != nullptr)
                 {
-                    impl.input.inputSystem->ApplyGameSnapshot(impl.input.pendingSnapshot);
-                    impl.input.hasPendingSnapshot = false;
+                    if (impl.input.hasPendingSnapshot)
+                    {
+                        impl.input.inputSystem->ApplyGameSnapshot(impl.input.pendingSnapshot);
+                        impl.input.hasPendingSnapshot = false;
+                    }
+                    else
+                    {
+                        impl.input.inputSystem->ClearGameTransientState();
+                    }
                 }
             }
 
@@ -658,7 +665,9 @@ namespace ve
         }
 
         LockGuard<Mutex> lock(impl_->input.mutex);
-        impl_->input.pendingSnapshot = snapshot;
+        impl_->input.pendingSnapshot = impl_->input.hasPendingSnapshot
+                                           ? InputSystem::MergeSnapshots(impl_->input.pendingSnapshot, snapshot)
+                                           : snapshot;
         impl_->input.hasPendingSnapshot = true;
         return ErrorCode::None;
     }

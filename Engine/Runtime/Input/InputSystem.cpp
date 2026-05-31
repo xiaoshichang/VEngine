@@ -14,6 +14,33 @@ namespace ve
         }
     } // namespace
 
+    InputSnapshot InputSystem::MergeSnapshots(const InputSnapshot& pending, const InputSnapshot& next) noexcept
+    {
+        if (!next.hasFocus)
+        {
+            return next;
+        }
+
+        InputSnapshot merged = next;
+        for (SizeT index = 0; index < merged.keysPressed.size(); ++index)
+        {
+            merged.keysPressed[index] = pending.keysPressed[index] || next.keysPressed[index];
+            merged.keysReleased[index] = pending.keysReleased[index] || next.keysReleased[index];
+        }
+
+        for (SizeT index = 0; index < merged.mouseButtonsPressed.size(); ++index)
+        {
+            merged.mouseButtonsPressed[index] =
+                pending.mouseButtonsPressed[index] || next.mouseButtonsPressed[index];
+            merged.mouseButtonsReleased[index] =
+                pending.mouseButtonsReleased[index] || next.mouseButtonsReleased[index];
+        }
+
+        merged.mouseDelta = pending.mouseDelta + next.mouseDelta;
+        merged.scrollDelta = pending.scrollDelta + next.scrollDelta;
+        return merged;
+    }
+
     void InputSystem::BeginMainFrame() noexcept
     {
         previousMainState_.keysDown = mainState_.keysDown;
@@ -71,6 +98,22 @@ namespace ve
         mainState_.mouseButtonsReleased[index] = mainState_.mouseButtonsReleased[index] || (!pressed && wasDown);
     }
 
+    void InputSystem::SubmitMouseButtonState(MouseButton button,
+                                             bool pressed,
+                                             bool pressedThisFrame,
+                                             bool releasedThisFrame) noexcept
+    {
+        const SizeT index = ToMouseButtonIndex(button);
+        if (index >= mainState_.mouseButtonsDown.size())
+        {
+            return;
+        }
+
+        mainState_.mouseButtonsDown[index] = pressed;
+        mainState_.mouseButtonsPressed[index] = mainState_.mouseButtonsPressed[index] || pressedThisFrame;
+        mainState_.mouseButtonsReleased[index] = mainState_.mouseButtonsReleased[index] || releasedThisFrame;
+    }
+
     void InputSystem::SubmitMousePosition(Float32 x, Float32 y) noexcept
     {
         const Vector2 nextPosition(x, y);
@@ -110,6 +153,16 @@ namespace ve
     void InputSystem::ApplyGameSnapshot(const InputSnapshot& snapshot) noexcept
     {
         gameState_ = snapshot;
+    }
+
+    void InputSystem::ClearGameTransientState() noexcept
+    {
+        gameState_.keysPressed.fill(false);
+        gameState_.keysReleased.fill(false);
+        gameState_.mouseButtonsPressed.fill(false);
+        gameState_.mouseButtonsReleased.fill(false);
+        gameState_.mouseDelta = Vector2::Zero();
+        gameState_.scrollDelta = 0.0f;
     }
 
     bool InputSystem::GetKey(KeyCode key) const noexcept

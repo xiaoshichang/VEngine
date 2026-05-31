@@ -94,17 +94,23 @@ namespace ve
     class InputSystem : public NonMovable
     {
     public:
+        [[nodiscard]] static InputSnapshot MergeSnapshots(const InputSnapshot& pending,
+                                                          const InputSnapshot& next) noexcept;
+
         void BeginMainFrame() noexcept;
         void SetFocused(bool focused) noexcept;
         void SetViewportSize(UInt32 width, UInt32 height) noexcept;
         void SubmitKey(KeyCode key, bool pressed) noexcept;
         void SubmitMouseButton(MouseButton button, bool pressed) noexcept;
+        void SubmitMouseButtonState(MouseButton button, bool pressed, bool pressedThisFrame, bool releasedThisFrame)
+            noexcept;
         void SubmitMousePosition(Float32 x, Float32 y) noexcept;
         void SubmitMouseWheel(Float32 delta) noexcept;
         void ClearMainState() noexcept;
 
         [[nodiscard]] InputSnapshot CreateGameSnapshot() const noexcept;
         void ApplyGameSnapshot(const InputSnapshot& snapshot) noexcept;
+        void ClearGameTransientState() noexcept;
 
         [[nodiscard]] bool GetKey(KeyCode key) const noexcept;
         [[nodiscard]] bool GetKeyDown(KeyCode key) const noexcept;

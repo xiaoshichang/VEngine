@@ -114,9 +114,18 @@ namespace ve
         if (imageHovered)
         {
             inputSystem.SubmitMouseWheel(io.MouseWheel);
-            inputSystem.SubmitMouseButton(MouseButton::Left, ImGui::IsMouseDown(ImGuiMouseButton_Left));
-            inputSystem.SubmitMouseButton(MouseButton::Right, ImGui::IsMouseDown(ImGuiMouseButton_Right));
-            inputSystem.SubmitMouseButton(MouseButton::Middle, ImGui::IsMouseDown(ImGuiMouseButton_Middle));
+            inputSystem.SubmitMouseButtonState(MouseButton::Left,
+                                               ImGui::IsMouseDown(ImGuiMouseButton_Left),
+                                               ImGui::IsMouseClicked(ImGuiMouseButton_Left),
+                                               ImGui::IsMouseReleased(ImGuiMouseButton_Left));
+            inputSystem.SubmitMouseButtonState(MouseButton::Right,
+                                               ImGui::IsMouseDown(ImGuiMouseButton_Right),
+                                               ImGui::IsMouseClicked(ImGuiMouseButton_Right),
+                                               ImGui::IsMouseReleased(ImGuiMouseButton_Right));
+            inputSystem.SubmitMouseButtonState(MouseButton::Middle,
+                                               ImGui::IsMouseDown(ImGuiMouseButton_Middle),
+                                               ImGui::IsMouseClicked(ImGuiMouseButton_Middle),
+                                               ImGui::IsMouseReleased(ImGuiMouseButton_Middle));
 
             SubmitKey(inputSystem, ImGuiKey_A, KeyCode::A);
             SubmitKey(inputSystem, ImGuiKey_B, KeyCode::B);
