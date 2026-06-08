@@ -31,6 +31,7 @@ Rules:
 - Do not use tabs.
 - Use a 120-column limit.
 - Use Allman braces.
+- Indent declarations and definitions inside namespaces.
 - Use `.h` and `.cpp` for C++.
 - Use `.mm` for Objective-C++.
 - Use `.metal` for Metal shader files.
@@ -59,6 +60,11 @@ Use `ve` as the root namespace.
 namespace ve
 {
     class Application;
+
+    struct Example
+    {
+        int value = 0;
+    };
 }
 ```
 

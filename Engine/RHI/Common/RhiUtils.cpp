@@ -2,8 +2,8 @@
 
 namespace ve::rhi
 {
-bool IsKnownFormat(RhiFormat format) noexcept
-{
-    return format != RhiFormat::Unknown;
-}
-}
+    bool IsKnownFormat(RhiFormat format) noexcept
+    {
+        return format != RhiFormat::Unknown;
+    }
+} // namespace ve::rhi

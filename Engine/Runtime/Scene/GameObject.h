@@ -15,116 +15,117 @@
 
 namespace ve
 {
-/// Node in a Scene-owned hierarchy.
-///
-/// GameObject owns its children and Components. A GameObject may be reparented in future milestones, but this first
-/// Scene skeleton keeps ownership explicit through unique pointers.
-class GameObject final : public NonMovable
-{
-public:
-    GameObject();
-    explicit GameObject(std::string name);
-    ~GameObject();
-
-    [[nodiscard]] const std::string& GetName() const noexcept;
-    void SetName(std::string name);
-
-    [[nodiscard]] bool IsActive() const noexcept;
-    void SetActive(bool active) noexcept;
-
-    [[nodiscard]] GameObject* GetParent() noexcept;
-    [[nodiscard]] const GameObject* GetParent() const noexcept;
-
-    [[nodiscard]] SizeT GetChildCount() const noexcept;
-    [[nodiscard]] GameObject* GetChild(SizeT index) noexcept;
-    [[nodiscard]] const GameObject* GetChild(SizeT index) const noexcept;
-
-    [[nodiscard]] Result<GameObject*> CreateChild(std::string name = {});
-    [[nodiscard]] bool DestroyChild(GameObject& child) noexcept;
-    void ClearChildren() noexcept;
-
-    [[nodiscard]] SizeT GetComponentCount() const noexcept;
-    [[nodiscard]] Component* GetComponent(SizeT index) noexcept;
-    [[nodiscard]] const Component* GetComponent(SizeT index) const noexcept;
-
-    template <typename TComponent, typename... TArgs>
-    [[nodiscard]] Result<TComponent*> AddComponent(TArgs&&... args)
+    /// Node in a Scene-owned hierarchy.
+    ///
+    /// GameObject owns its children and Components. A GameObject may be reparented in future milestones, but this first
+    /// Scene skeleton keeps ownership explicit through unique pointers.
+    class GameObject final : public NonMovable
     {
-        static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+    public:
+        GameObject();
+        explicit GameObject(std::string name);
+        ~GameObject();
 
-        try
-        {
-            std::unique_ptr<TComponent> component = std::make_unique<TComponent>(std::forward<TArgs>(args)...);
-            TComponent* componentPointer = component.get();
-            componentPointer->SetOwner(this);
-            components_.push_back(std::move(component));
-            return Result<TComponent*>::Success(componentPointer);
-        }
-        catch (const std::bad_alloc&)
-        {
-            return Result<TComponent*>::Failure(Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
-        }
-    }
+        [[nodiscard]] const std::string& GetName() const noexcept;
+        void SetName(std::string name);
 
-    template <typename TComponent>
-    [[nodiscard]] TComponent* GetComponent() noexcept
-    {
-        static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+        [[nodiscard]] bool IsActive() const noexcept;
+        void SetActive(bool active) noexcept;
 
-        for (const std::unique_ptr<Component>& component : components_)
+        [[nodiscard]] GameObject* GetParent() noexcept;
+        [[nodiscard]] const GameObject* GetParent() const noexcept;
+
+        [[nodiscard]] SizeT GetChildCount() const noexcept;
+        [[nodiscard]] GameObject* GetChild(SizeT index) noexcept;
+        [[nodiscard]] const GameObject* GetChild(SizeT index) const noexcept;
+
+        [[nodiscard]] Result<GameObject*> CreateChild(std::string name = {});
+        [[nodiscard]] bool DestroyChild(GameObject& child) noexcept;
+        void ClearChildren() noexcept;
+
+        [[nodiscard]] SizeT GetComponentCount() const noexcept;
+        [[nodiscard]] Component* GetComponent(SizeT index) noexcept;
+        [[nodiscard]] const Component* GetComponent(SizeT index) const noexcept;
+
+        template<typename TComponent, typename... TArgs>
+        [[nodiscard]] Result<TComponent*> AddComponent(TArgs&&... args)
         {
-            if (TComponent* typedComponent = dynamic_cast<TComponent*>(component.get()))
+            static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+
+            try
             {
-                return typedComponent;
+                std::unique_ptr<TComponent> component = std::make_unique<TComponent>(std::forward<TArgs>(args)...);
+                TComponent* componentPointer = component.get();
+                componentPointer->SetOwner(this);
+                components_.push_back(std::move(component));
+                return Result<TComponent*>::Success(componentPointer);
+            }
+            catch (const std::bad_alloc&)
+            {
+                return Result<TComponent*>::Failure(
+                    Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
             }
         }
 
-        return nullptr;
-    }
-
-    template <typename TComponent>
-    [[nodiscard]] const TComponent* GetComponent() const noexcept
-    {
-        static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
-
-        for (const std::unique_ptr<Component>& component : components_)
+        template<typename TComponent>
+        [[nodiscard]] TComponent* GetComponent() noexcept
         {
-            if (const TComponent* typedComponent = dynamic_cast<const TComponent*>(component.get()))
+            static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+
+            for (const std::unique_ptr<Component>& component : components_)
             {
-                return typedComponent;
+                if (TComponent* typedComponent = dynamic_cast<TComponent*>(component.get()))
+                {
+                    return typedComponent;
+                }
             }
+
+            return nullptr;
         }
 
-        return nullptr;
-    }
-
-    template <typename TComponent>
-    [[nodiscard]] bool RemoveComponent() noexcept
-    {
-        static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
-
-        for (auto it = components_.begin(); it != components_.end(); ++it)
+        template<typename TComponent>
+        [[nodiscard]] const TComponent* GetComponent() const noexcept
         {
-            if (dynamic_cast<TComponent*>(it->get()) != nullptr)
+            static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+
+            for (const std::unique_ptr<Component>& component : components_)
             {
-                (*it)->SetOwner(nullptr);
-                components_.erase(it);
-                return true;
+                if (const TComponent* typedComponent = dynamic_cast<const TComponent*>(component.get()))
+                {
+                    return typedComponent;
+                }
             }
+
+            return nullptr;
         }
 
-        return false;
-    }
+        template<typename TComponent>
+        [[nodiscard]] bool RemoveComponent() noexcept
+        {
+            static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
 
-    void Update(Float32 deltaSeconds);
+            for (auto it = components_.begin(); it != components_.end(); ++it)
+            {
+                if (dynamic_cast<TComponent*>(it->get()) != nullptr)
+                {
+                    (*it)->SetOwner(nullptr);
+                    components_.erase(it);
+                    return true;
+                }
+            }
 
-private:
-    void SetParent(GameObject* parent) noexcept;
+            return false;
+        }
 
-    std::string name_;
-    GameObject* parent_ = nullptr;
-    std::vector<std::unique_ptr<GameObject>> children_;
-    std::vector<std::unique_ptr<Component>> components_;
-    bool active_ = true;
-};
-}
+        void Update(Float32 deltaSeconds);
+
+    private:
+        void SetParent(GameObject* parent) noexcept;
+
+        std::string name_;
+        GameObject* parent_ = nullptr;
+        std::vector<std::unique_ptr<GameObject>> children_;
+        std::vector<std::unique_ptr<Component>> components_;
+        bool active_ = true;
+    };
+} // namespace ve

@@ -14,148 +14,149 @@
 
 namespace ve
 {
-struct RenderSystemImpl;
+    struct RenderSystemImpl;
 
-/// Selects the graphics backend owned by RenderSystem.
-enum class RenderBackend
-{
-    D3D11,
-    D3D12,
-    Metal,
-};
+    /// Selects the graphics backend owned by RenderSystem.
+    enum class RenderBackend
+    {
+        D3D11,
+        D3D12,
+        Metal,
+    };
 
-/// Describes RHI device creation owned by RenderSystem.
-struct RenderDeviceDesc
-{
-    /// Backend used for the RHI device.
-    RenderBackend backend = RenderBackend::D3D12;
+    /// Describes RHI device creation owned by RenderSystem.
+    struct RenderDeviceDesc
+    {
+        /// Backend used for the RHI device.
+        RenderBackend backend = RenderBackend::D3D12;
 
-    /// Enables backend debug validation where supported.
-    bool enableDebugDevice = false;
-};
+        /// Enables backend debug validation where supported.
+        bool enableDebugDevice = false;
+    };
 
-/// Describes the main presentation surface used by Player or first-stage tests.
-struct RenderSurfaceDesc
-{
-    /// Native platform window, such as HWND on Windows.
-    void* nativeWindow = nullptr;
+    /// Describes the main presentation surface used by Player or first-stage tests.
+    struct RenderSurfaceDesc
+    {
+        /// Native platform window, such as HWND on Windows.
+        void* nativeWindow = nullptr;
 
-    /// Native presentation layer, such as CAMetalLayer on Apple platforms.
-    void* nativeLayer = nullptr;
+        /// Native presentation layer, such as CAMetalLayer on Apple platforms.
+        void* nativeLayer = nullptr;
 
-    /// Surface width in pixels.
-    UInt32 width = 0;
+        /// Surface width in pixels.
+        UInt32 width = 0;
 
-    /// Surface height in pixels.
-    UInt32 height = 0;
+        /// Surface height in pixels.
+        UInt32 height = 0;
 
-    /// Preferred color format for the main swapchain.
-    rhi::RhiFormat colorFormat = rhi::RhiFormat::Bgra8Unorm;
+        /// Preferred color format for the main swapchain.
+        rhi::RhiFormat colorFormat = rhi::RhiFormat::Bgra8Unorm;
 
-    /// Preferred back-buffer count.
-    UInt32 bufferCount = 2;
-};
+        /// Preferred back-buffer count.
+        UInt32 bufferCount = 2;
+    };
 
-/// Describes the Render Thread created by RenderSystem::Initialize().
-struct RenderSystemInitParam
-{
-    /// Diagnostic name copied into the owned Render Thread.
-    std::string threadName = "VEngineRenderThread";
+    /// Describes the Render Thread created by RenderSystem::Initialize().
+    struct RenderSystemInitParam
+    {
+        /// Diagnostic name copied into the owned Render Thread.
+        std::string threadName = "VEngineRenderThread";
 
-    /// RHI device creation options used by Application after the Render Thread starts.
-    RenderDeviceDesc device;
-};
+        /// RHI device creation options used by Application after the Render Thread starts.
+        RenderDeviceDesc device;
+    };
 
-/// Callable payload executed on the Render Thread.
-using RenderCommandFunction = std::function<void()>;
+    /// Callable payload executed on the Render Thread.
+    using RenderCommandFunction = std::function<void()>;
 
-/// Callable payload used by RenderSystem for synchronous lifecycle operations on the Render Thread.
-using RenderSynchronousFunction = std::function<ErrorCode()>;
+    /// Callable payload used by RenderSystem for synchronous lifecycle operations on the Render Thread.
+    using RenderSynchronousFunction = std::function<ErrorCode()>;
 
-/// One command submitted to the Render Thread.
-///
-/// debugName is diagnostic and may be empty. function must be callable as `void()`. Captured references must remain
-/// valid until the command executes; future render-resource handles should be preferred over raw pointers when crossing
-/// from Game Thread or ResourceSystem code to Render Thread code.
-struct RenderCommand
-{
-    std::string debugName;
-    RenderCommandFunction function;
-};
-
-/// Owns the Render Thread and lock-free render command queue.
-///
-/// RenderSystem is a runtime service managed by EngineRuntime. It owns the long-lived Render Thread, the command
-/// execution boundary, and first-stage RHI device/swapchain lifecycle for Player and Editor entry points.
-class RenderSystem : public NonMovable
-{
-public:
-    RenderSystem();
-    ~RenderSystem();
-
-    /// Starts the Render Thread and begins accepting render commands.
+    /// One command submitted to the Render Thread.
     ///
-    /// Returns InvalidState when called while already initialized. A standalone RenderSystem object may be initialized
-    /// again after Shutdown() completes.
-    [[nodiscard]] ErrorCode Initialize(const RenderSystemInitParam& initParam);
+    /// debugName is diagnostic and may be empty. function must be callable as `void()`. Captured references must remain
+    /// valid until the command executes; future render-resource handles should be preferred over raw pointers when
+    /// crossing from Game Thread or ResourceSystem code to Render Thread code.
+    struct RenderCommand
+    {
+        std::string debugName;
+        RenderCommandFunction function;
+    };
 
-    /// Stops accepting commands, drains accepted work, wakes the Render Thread, and joins it.
+    /// Owns the Render Thread and lock-free render command queue.
     ///
-    /// Shutdown is a no-op when the system is not initialized. Accepted commands are executed before the Render Thread
-    /// exits. Commands submitted after shutdown starts are rejected by Submit().
-    void Shutdown() noexcept;
+    /// RenderSystem is a runtime service managed by EngineRuntime. It owns the long-lived Render Thread, the command
+    /// execution boundary, and first-stage RHI device/swapchain lifecycle for Player and Editor entry points.
+    class RenderSystem : public NonMovable
+    {
+    public:
+        RenderSystem();
+        ~RenderSystem();
 
-    /// Returns true after Initialize() succeeds and before Shutdown() completes.
-    [[nodiscard]] bool IsInitialized() const noexcept;
+        /// Starts the Render Thread and begins accepting render commands.
+        ///
+        /// Returns InvalidState when called while already initialized. A standalone RenderSystem object may be
+        /// initialized again after Shutdown() completes.
+        [[nodiscard]] ErrorCode Initialize(const RenderSystemInitParam& initParam);
 
-    /// Returns the last known id of the owned Render Thread.
-    [[nodiscard]] ThreadId GetRenderThreadId() const noexcept;
+        /// Stops accepting commands, drains accepted work, wakes the Render Thread, and joins it.
+        ///
+        /// Shutdown is a no-op when the system is not initialized. Accepted commands are executed before the Render
+        /// Thread exits. Commands submitted after shutdown starts are rejected by Submit().
+        void Shutdown() noexcept;
 
-    /// Creates the RHI device on the Render Thread.
-    ///
-    /// This is an explicit lifecycle API. It internally schedules synchronous render-thread work rather than requiring
-    /// callers to submit ad hoc render commands that mutate RHI lifetime.
-    [[nodiscard]] ErrorCode InitializeDevice(const RenderDeviceDesc& desc);
+        /// Returns true after Initialize() succeeds and before Shutdown() completes.
+        [[nodiscard]] bool IsInitialized() const noexcept;
 
-    /// Destroys the RHI device and any main swapchain owned by this RenderSystem on the Render Thread.
-    void ShutdownDevice() noexcept;
+        /// Returns the last known id of the owned Render Thread.
+        [[nodiscard]] ThreadId GetRenderThreadId() const noexcept;
 
-    /// Returns the backend of the initialized RHI device.
-    ///
-    /// Calling this before InitializeDevice() succeeds is API misuse.
-    [[nodiscard]] RenderBackend GetDeviceBackend() const noexcept;
+        /// Creates the RHI device on the Render Thread.
+        ///
+        /// This is an explicit lifecycle API. It internally schedules synchronous render-thread work rather than
+        /// requiring callers to submit ad hoc render commands that mutate RHI lifetime.
+        [[nodiscard]] ErrorCode InitializeDevice(const RenderDeviceDesc& desc);
 
-    /// Creates the main swapchain on the Render Thread.
-    ///
-    /// The RHI device must already be initialized. The surface descriptor must carry the native handle required by the
-    /// selected backend. The first implementation also creates the minimal triangle resources used by RenderFrame().
-    [[nodiscard]] ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
+        /// Destroys the RHI device and any main swapchain owned by this RenderSystem on the Render Thread.
+        void ShutdownDevice() noexcept;
 
-    /// Destroys the main swapchain on the Render Thread if one exists.
-    void DestroyMainSwapchain() noexcept;
+        /// Returns the backend of the initialized RHI device.
+        ///
+        /// Calling this before InitializeDevice() succeeds is API misuse.
+        [[nodiscard]] RenderBackend GetDeviceBackend() const noexcept;
 
-    /// Renders one first-stage frame to the main swapchain.
-    ///
-    /// The current implementation clears the back buffer, draws a simple triangle, submits the command list, and
-    /// presents. This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
-    [[nodiscard]] ErrorCode RenderFrame();
+        /// Creates the main swapchain on the Render Thread.
+        ///
+        /// The RHI device must already be initialized. The surface descriptor must carry the native handle required by
+        /// the selected backend. The first implementation also creates the minimal triangle resources used by
+        /// RenderFrame().
+        [[nodiscard]] ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
 
-    /// Submits a command to execute on the Render Thread.
-    ///
-    /// Returns InvalidState before initialization, during shutdown, or after shutdown. Returns InvalidArgument when the
-    /// command has no callable function. A successful return means the command was accepted and will run before a later
-    /// successful Flush() completes or before Shutdown() returns.
-    [[nodiscard]] ErrorCode Submit(RenderCommand command);
+        /// Destroys the main swapchain on the Render Thread if one exists.
+        void DestroyMainSwapchain() noexcept;
 
-    /// Blocks until every command accepted before this call has executed on the Render Thread.
-    ///
-    /// Flush() is a CPU render command queue fence. It does not wait for GPU idle or future RHI queue completion.
-    [[nodiscard]] ErrorCode Flush();
+        /// Renders one first-stage frame to the main swapchain.
+        ///
+        /// The current implementation clears the back buffer, draws a simple triangle, submits the command list, and
+        /// presents. This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
+        [[nodiscard]] ErrorCode RenderFrame();
 
-private:
-    [[nodiscard]] ErrorCode ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);
-    [[nodiscard]] ErrorCode SubmitFunction(std::string debugName, RenderCommandFunction function);
+        /// Submits a command to execute on the Render Thread.
+        ///
+        /// Returns InvalidState before initialization, during shutdown, or after shutdown. Returns InvalidArgument when
+        /// the command has no callable function. A successful return means the command was accepted and will run before
+        /// a later successful Flush() completes or before Shutdown() returns.
+        [[nodiscard]] ErrorCode Submit(RenderCommand command);
 
-    std::unique_ptr<RenderSystemImpl> impl_;
-};
-}
+        /// Blocks until every command accepted before this call has executed on the Render Thread.
+        ///
+        /// Flush() is a CPU render command queue fence. It does not wait for GPU idle or future RHI queue completion.
+        [[nodiscard]] ErrorCode Flush();
+
+    private:
+        [[nodiscard]] ErrorCode ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);
+        [[nodiscard]] ErrorCode SubmitFunction(std::string debugName, RenderCommandFunction function);
+
+        std::unique_ptr<RenderSystemImpl> impl_;
+    };
+} // namespace ve

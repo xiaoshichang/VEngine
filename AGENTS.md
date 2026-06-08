@@ -40,6 +40,7 @@ Key defaults:
 - C++20.
 - 4 spaces, no tabs, 120-column limit.
 - Allman braces.
+- Indent declarations and definitions inside namespaces.
 - `PascalCase` types, functions, constants, files, and CMake targets.
 - `lowerCamelCase` locals and parameters.
 - Trailing underscore for member fields.

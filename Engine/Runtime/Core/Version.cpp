@@ -6,22 +6,22 @@
 
 namespace ve
 {
-BuildInfo GetBuildInfo() noexcept
-{
-    const char* platform = "Unknown";
+    BuildInfo GetBuildInfo() noexcept
+    {
+        const char* platform = "Unknown";
 
 #if defined(VE_PLATFORM_WINDOWS) && VE_PLATFORM_WINDOWS
-    platform = "Windows";
+        platform = "Windows";
 #elif defined(VE_PLATFORM_IOS) && VE_PLATFORM_IOS
-    platform = "iOS";
+        platform = "iOS";
 #elif defined(VE_PLATFORM_APPLE) && VE_PLATFORM_APPLE
-    platform = "Apple";
+        platform = "Apple";
 #endif
 
-    BuildInfo buildInfo;
-    buildInfo.projectName = "VEngine";
-    buildInfo.version = VE_VERSION_STRING;
-    buildInfo.platform = platform;
-    return buildInfo;
-}
-}
+        BuildInfo buildInfo;
+        buildInfo.projectName = "VEngine";
+        buildInfo.version = VE_VERSION_STRING;
+        buildInfo.platform = platform;
+        return buildInfo;
+    }
+} // namespace ve

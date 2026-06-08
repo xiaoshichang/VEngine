@@ -2,23 +2,23 @@
 
 namespace ve
 {
-ErrorCode RenderCommandQueue::Push(RenderCommand command)
-{
-    return queue_.Push(std::move(command));
-}
+    ErrorCode RenderCommandQueue::Push(RenderCommand command)
+    {
+        return queue_.Push(std::move(command));
+    }
 
-std::optional<RenderCommand> RenderCommandQueue::TryPop()
-{
-    return queue_.TryPop();
-}
+    std::optional<RenderCommand> RenderCommandQueue::TryPop()
+    {
+        return queue_.TryPop();
+    }
 
-bool RenderCommandQueue::IsEmptyForConsumer() const noexcept
-{
-    return queue_.IsEmptyForConsumer();
-}
+    bool RenderCommandQueue::IsEmptyForConsumer() const noexcept
+    {
+        return queue_.IsEmptyForConsumer();
+    }
 
-void RenderCommandQueue::ClearForConsumer()
-{
-    queue_.ClearForConsumer();
-}
-}
+    void RenderCommandQueue::ClearForConsumer()
+    {
+        queue_.ClearForConsumer();
+    }
+} // namespace ve
