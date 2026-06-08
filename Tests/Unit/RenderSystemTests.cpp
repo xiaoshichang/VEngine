@@ -112,7 +112,7 @@ bool TestSubmitBeforeInitializeAndAfterShutdownFails()
     ve::RenderSystem renderSystem;
     ve::RenderCommand command;
     command.debugName = "ShouldNotRun";
-    command.function = [](ve::RenderThreadContext&)
+    command.function = []()
     {
     };
 
@@ -127,7 +127,7 @@ bool TestSubmitBeforeInitializeAndAfterShutdownFails()
 
     ve::RenderCommand afterShutdownCommand;
     afterShutdownCommand.debugName = "ShouldNotRunAfterShutdown";
-    afterShutdownCommand.function = [](ve::RenderThreadContext&)
+    afterShutdownCommand.function = []()
     {
     };
 
@@ -165,15 +165,13 @@ bool TestCommandExecutesOnRenderThread()
 
     const ve::ThreadId submitterThreadId = ve::GetCurrentThreadId();
     ve::ThreadId executedThreadId;
-    ve::ThreadId contextThreadId;
     ve::AtomicInt32 executed{0};
 
     ve::RenderCommand command;
     command.debugName = "RecordThreadIds";
-    command.function = [&](ve::RenderThreadContext& context)
+    command.function = [&]()
     {
         executedThreadId = ve::GetCurrentThreadId();
-        contextThreadId = context.GetRenderThreadId();
         executed.store(1, std::memory_order_release);
     };
 
@@ -182,8 +180,9 @@ bool TestCommandExecutesOnRenderThread()
 
     passed &= Expect(executed.load(std::memory_order_acquire) == 1, "Render command should execute");
     passed &= Expect(executedThreadId.IsValid(), "Executed thread id should be valid");
-    passed &= Expect(contextThreadId.IsValid(), "Context thread id should be valid");
-    passed &= Expect(executedThreadId == contextThreadId, "Context should identify the executing Render Thread");
+    passed &= Expect(
+        executedThreadId == renderSystem.GetRenderThreadId(),
+        "RenderSystem should identify the executing Render Thread");
     passed &= Expect(executedThreadId != submitterThreadId, "Render command should execute away from submitter thread");
 
     renderSystem.Shutdown();
@@ -196,14 +195,12 @@ bool TestDeviceLifecycle()
 
     ve::RenderSystem renderSystem;
     passed &= ExpectOk(renderSystem.Initialize(MakeRenderSystemDesc()), "RenderSystem should initialize for device test");
-    passed &= Expect(!renderSystem.HasDevice(), "RenderSystem should start without an RHI device");
 
     ve::RenderDeviceDesc deviceDesc;
     deviceDesc.backend = ve::RenderBackend::D3D11;
     deviceDesc.enableDebugDevice = false;
 
     passed &= ExpectOk(renderSystem.InitializeDevice(deviceDesc), "RenderSystem should create a D3D11 device");
-    passed &= Expect(renderSystem.HasDevice(), "RenderSystem should report an initialized RHI device");
     passed &= Expect(
         renderSystem.GetDeviceBackend() == ve::RenderBackend::D3D11,
         "RenderSystem should report the initialized backend");
@@ -215,8 +212,6 @@ bool TestDeviceLifecycle()
         "Repeated RHI device initialization should report InvalidState");
 
     renderSystem.ShutdownDevice();
-    passed &= Expect(!renderSystem.HasDevice(), "RenderSystem should report no RHI device after ShutdownDevice");
-    passed &= Expect(!renderSystem.HasMainSwapchain(), "ShutdownDevice should also clear the main swapchain state");
 
     renderSystem.Shutdown();
     return passed;
@@ -234,12 +229,9 @@ bool TestShutdownDestroysDevice()
     deviceDesc.enableDebugDevice = false;
 
     passed &= ExpectOk(renderSystem.InitializeDevice(deviceDesc), "RenderSystem should create a device before shutdown");
-    passed &= Expect(renderSystem.HasDevice(), "RenderSystem should report device before shutdown");
 
     renderSystem.Shutdown();
     passed &= Expect(!renderSystem.IsInitialized(), "RenderSystem should shut down");
-    passed &= Expect(!renderSystem.HasDevice(), "RenderSystem shutdown should destroy the RHI device");
-    passed &= Expect(!renderSystem.HasMainSwapchain(), "RenderSystem shutdown should destroy the main swapchain");
 
     return passed;
 }
@@ -342,7 +334,7 @@ bool TestFlushWaitsForAcceptedCommands()
     {
         ve::RenderCommand command;
         command.debugName = "IncrementCounter";
-        command.function = [&](ve::RenderThreadContext&)
+        command.function = [&]()
         {
             counter.fetch_add(1, std::memory_order_acq_rel);
         };
@@ -371,7 +363,7 @@ bool TestShutdownDrainsAcceptedCommands()
 
     ve::RenderCommand blockingCommand;
     blockingCommand.debugName = "BlockingCommand";
-    blockingCommand.function = [&](ve::RenderThreadContext&)
+    blockingCommand.function = [&]()
     {
         releaseCommand.Wait();
         counter.fetch_add(1, std::memory_order_acq_rel);
@@ -384,7 +376,7 @@ bool TestShutdownDrainsAcceptedCommands()
     {
         ve::RenderCommand command;
         command.debugName = "TrailingCommand";
-        command.function = [&](ve::RenderThreadContext&)
+        command.function = [&]()
         {
             counter.fetch_add(1, std::memory_order_acq_rel);
         };
@@ -435,7 +427,7 @@ bool TestMultipleProducerThreadsSubmitCommands()
                 {
                     ve::RenderCommand command;
                     command.debugName = "MpscIncrement";
-                    command.function = [&](ve::RenderThreadContext&)
+                    command.function = [&]()
                     {
                         counter.fetch_add(1, std::memory_order_acq_rel);
                     };

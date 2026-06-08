@@ -72,8 +72,6 @@ struct RenderSystemImpl
     AtomicBool stopRequested{false};
     AtomicBool initialized{false};
     AtomicSize activeSubmitCount{0};
-    AtomicBool hasDevice{false};
-    AtomicBool hasMainSwapchain{false};
     Atomic<int> backendValue{-1};
     std::unique_ptr<rhi::RhiDevice> device;
     std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
@@ -288,11 +286,11 @@ void DestroyTriangleResources(RenderSystemImpl& impl)
     return ErrorCode::None;
 }
 
-void ExecuteCommand(RenderThreadContext& context, RenderCommand& command) noexcept
+void ExecuteCommand(RenderCommand& command) noexcept
 {
     try
     {
-        command.function(context);
+        command.function();
     }
     catch (...)
     {
@@ -304,13 +302,12 @@ void RenderThreadLoop(RenderSystemImpl& impl)
 {
     const ThreadId renderThreadId = GetCurrentThreadId();
     impl.renderThreadIdValue.store(renderThreadId.value, std::memory_order_release);
-    RenderThreadContext context(renderThreadId);
 
     for (;;)
     {
         while (std::optional<RenderCommand> command = impl.commandQueue.TryPop())
         {
-            ExecuteCommand(context, *command);
+            ExecuteCommand(*command);
         }
 
         if (impl.stopRequested.load(std::memory_order_acquire))
@@ -328,7 +325,7 @@ void RenderThreadLoop(RenderSystemImpl& impl)
 
     while (std::optional<RenderCommand> command = impl.commandQueue.TryPop())
     {
-        ExecuteCommand(context, *command);
+        ExecuteCommand(*command);
     }
 }
 
@@ -339,13 +336,11 @@ void DestroyRhiStateOnRenderThread(RenderSystemImpl& impl)
         impl.device->WaitIdle();
     }
 
-    impl.hasMainSwapchain.store(false, std::memory_order_release);
     DestroyTriangleResources(impl);
     impl.mainSwapchain.reset();
 
     if (impl.device != nullptr)
     {
-        impl.hasDevice.store(false, std::memory_order_release);
         impl.device.reset();
     }
 
@@ -373,7 +368,7 @@ void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
         impl,
         RenderCommand{
             "RenderSystemDestroyRhiState",
-            [&impl, rhiDestroyed](RenderThreadContext&)
+            [&impl, rhiDestroyed]()
             {
                 DestroyRhiStateOnRenderThread(impl);
                 rhiDestroyed->Set();
@@ -394,16 +389,6 @@ void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
     impl.stopRequested.store(false, std::memory_order_release);
     impl.initialized.store(false, std::memory_order_release);
 }
-}
-
-RenderThreadContext::RenderThreadContext(ThreadId renderThreadId) noexcept
-    : renderThreadId_(renderThreadId)
-{
-}
-
-ThreadId RenderThreadContext::GetRenderThreadId() const noexcept
-{
-    return renderThreadId_;
 }
 
 RenderSystem::RenderSystem()
@@ -469,7 +454,7 @@ ErrorCode RenderSystem::InitializeDevice(const RenderDeviceDesc& desc)
 {
     return ExecuteSynchronous(
         "RenderSystemInitializeDevice",
-        [this, desc](RenderThreadContext&)
+        [this, desc]()
         {
             if (impl_->device != nullptr)
             {
@@ -484,7 +469,6 @@ ErrorCode RenderSystem::InitializeDevice(const RenderDeviceDesc& desc)
 
             impl_->device = std::move(device);
             impl_->backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
-            impl_->hasDevice.store(true, std::memory_order_release);
             VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
             return ErrorCode::None;
         });
@@ -499,18 +483,13 @@ void RenderSystem::ShutdownDevice() noexcept
 
     ErrorCode result = ExecuteSynchronous(
         "RenderSystemShutdownDevice",
-        [this](RenderThreadContext&)
+        [this]()
         {
             DestroyRhiStateOnRenderThread(*impl_);
             return ErrorCode::None;
         });
 
     VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to shut down its RHI device.");
-}
-
-bool RenderSystem::HasDevice() const noexcept
-{
-    return impl_->hasDevice.load(std::memory_order_acquire);
 }
 
 RenderBackend RenderSystem::GetDeviceBackend() const noexcept
@@ -530,7 +509,7 @@ ErrorCode RenderSystem::CreateMainSwapchain(const RenderSurfaceDesc& desc)
 
     return ExecuteSynchronous(
         "RenderSystemCreateMainSwapchain",
-        [this, desc](RenderThreadContext&)
+        [this, desc]()
         {
             if (impl_->device == nullptr)
             {
@@ -556,7 +535,6 @@ ErrorCode RenderSystem::CreateMainSwapchain(const RenderSurfaceDesc& desc)
                 return triangleResult;
             }
 
-            impl_->hasMainSwapchain.store(true, std::memory_order_release);
             return ErrorCode::None;
         });
 }
@@ -570,14 +548,13 @@ void RenderSystem::DestroyMainSwapchain() noexcept
 
     ErrorCode result = ExecuteSynchronous(
         "RenderSystemDestroyMainSwapchain",
-        [this](RenderThreadContext&)
+        [this]()
         {
             if (impl_->device != nullptr)
             {
                 impl_->device->WaitIdle();
             }
 
-            impl_->hasMainSwapchain.store(false, std::memory_order_release);
             DestroyTriangleResources(*impl_);
             impl_->mainSwapchain.reset();
             return ErrorCode::None;
@@ -586,16 +563,11 @@ void RenderSystem::DestroyMainSwapchain() noexcept
     VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to destroy its main swapchain.");
 }
 
-bool RenderSystem::HasMainSwapchain() const noexcept
-{
-    return impl_->hasMainSwapchain.load(std::memory_order_acquire);
-}
-
 ErrorCode RenderSystem::RenderFrame()
 {
     return ExecuteSynchronous(
         "RenderSystemRenderFrame",
-        [this](RenderThreadContext&)
+        [this]()
         {
             return RenderTriangleFrame(*impl_);
         });
@@ -616,7 +588,7 @@ ErrorCode RenderSystem::Flush()
     auto completed = std::make_shared<ManualResetEvent>(false);
     ErrorCode submitResult = SubmitFunction(
         "RenderSystemFlush",
-        [completed](RenderThreadContext&)
+        [completed]()
         {
             completed->Set();
         });
@@ -647,9 +619,9 @@ ErrorCode RenderSystem::ExecuteSynchronous(std::string debugName, RenderSynchron
 
     ErrorCode submitResult = SubmitFunction(
         std::move(debugName),
-        [completed, operationResult, function = std::move(function)](RenderThreadContext& context)
+        [completed, operationResult, function = std::move(function)]()
         {
-            *operationResult = function(context);
+            *operationResult = function();
             completed->Set();
         });
 

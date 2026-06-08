@@ -212,9 +212,9 @@ bool TestCanSubmitThroughRuntimeRenderSystem()
 
     ve::RenderCommand command;
     command.debugName = "RuntimeRenderCommand";
-    command.function = [&](ve::RenderThreadContext& context)
+    command.function = [&]()
     {
-        executedThreadId = context.GetRenderThreadId();
+        executedThreadId = ve::GetCurrentThreadId();
         value.store(29, std::memory_order_release);
     };
 

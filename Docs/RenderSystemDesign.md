@@ -77,7 +77,6 @@ The first version includes:
 
 - `RenderSystemDesc`.
 - `RenderSystem`.
-- `RenderThreadContext`.
 - `RenderCommand`.
 - One Render Thread owned by `RenderSystem`.
 - A lock-free multi-producer, single-consumer render command queue.
@@ -131,21 +130,22 @@ struct RenderCommand
 };
 ```
 
-`debugName` is diagnostic and may be empty. `function` must be callable as `void(RenderThreadContext&)`.
+`debugName` is diagnostic and may be empty. `function` must be callable as `void()`.
 
 Captured data must remain valid until the command runs. Future render-resource handles should replace raw captured
 engine pointers where possible.
 
-## 6. Render Thread Context
+## 6. Render Command Execution
 
-`RenderThreadContext` is passed to every command. The first version exposes only render-thread identity:
+Render commands execute on the Render Thread without a per-command context object:
 
 ```cpp
-ThreadId GetRenderThreadId() const noexcept;
+using RenderCommandFunction = std::function<void()>;
 ```
 
-Future versions may expose RHI device access, frame index, upload helpers, or render-resource registries through this
-context. Game Thread systems should not infer RHI access before those APIs exist.
+`RenderSystem` exposes the last known Render Thread id through `GetRenderThreadId()` for diagnostics and tests. RHI
+device access, frame state, upload helpers, and render-resource registries should be exposed through explicit
+RenderSystem or renderer-owned APIs rather than a generic command context.
 
 ## 7. Flush And Shutdown Semantics
 
@@ -244,9 +244,7 @@ ErrorCode InitializeDevice(const RenderDeviceDesc& desc);
 ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
 void DestroyMainSwapchain() noexcept;
 void ShutdownDevice() noexcept;
-bool HasDevice() const noexcept;
 RenderBackend GetDeviceBackend() const noexcept;
-bool HasMainSwapchain() const noexcept;
 ErrorCode RenderFrame();
 ```
 

@@ -66,34 +66,17 @@ struct RenderSystemInitParam
     RenderDeviceDesc device;
 };
 
-/// Context passed to commands executing on the Render Thread.
-///
-/// The first version exposes only Render Thread identity. Future RHI integration may add device, frame, upload, or
-/// render-resource access here without changing the command submission shape.
-class RenderThreadContext
-{
-public:
-    /// Creates a context for the currently running Render Thread.
-    explicit RenderThreadContext(ThreadId renderThreadId) noexcept;
-
-    /// Returns the VEngine thread id of the Render Thread executing the current command.
-    [[nodiscard]] ThreadId GetRenderThreadId() const noexcept;
-
-private:
-    ThreadId renderThreadId_;
-};
-
 /// Callable payload executed on the Render Thread.
-using RenderCommandFunction = std::function<void(RenderThreadContext&)>;
+using RenderCommandFunction = std::function<void()>;
 
 /// Callable payload used by RenderSystem for synchronous lifecycle operations on the Render Thread.
-using RenderSynchronousFunction = std::function<ErrorCode(RenderThreadContext&)>;
+using RenderSynchronousFunction = std::function<ErrorCode()>;
 
 /// One command submitted to the Render Thread.
 ///
-/// debugName is diagnostic and may be empty. function must be callable as `void(RenderThreadContext&)`. Captured
-/// references must remain valid until the command executes; future render-resource handles should be preferred over raw
-/// pointers when crossing from Game Thread or ResourceSystem code to Render Thread code.
+/// debugName is diagnostic and may be empty. function must be callable as `void()`. Captured references must remain
+/// valid until the command executes; future render-resource handles should be preferred over raw pointers when crossing
+/// from Game Thread or ResourceSystem code to Render Thread code.
 struct RenderCommand
 {
     std::string debugName;
@@ -137,12 +120,9 @@ public:
     /// Destroys the RHI device and any main swapchain owned by this RenderSystem on the Render Thread.
     void ShutdownDevice() noexcept;
 
-    /// Returns true when an RHI device has been created and has not been shut down.
-    [[nodiscard]] bool HasDevice() const noexcept;
-
     /// Returns the backend of the initialized RHI device.
     ///
-    /// Calling this before HasDevice() is true is API misuse.
+    /// Calling this before InitializeDevice() succeeds is API misuse.
     [[nodiscard]] RenderBackend GetDeviceBackend() const noexcept;
 
     /// Creates the main swapchain on the Render Thread.
@@ -153,9 +133,6 @@ public:
 
     /// Destroys the main swapchain on the Render Thread if one exists.
     void DestroyMainSwapchain() noexcept;
-
-    /// Returns true when the main swapchain exists.
-    [[nodiscard]] bool HasMainSwapchain() const noexcept;
 
     /// Renders one first-stage frame to the main swapchain.
     ///
