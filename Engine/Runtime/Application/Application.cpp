@@ -1,7 +1,6 @@
 #include "Engine/Runtime/Application/Application.h"
 
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Time/Time.h"
 
 #include <chrono>
 #include <cstdio>
@@ -116,7 +115,6 @@ namespace ve
     int Application::RunMainLoop(Window& mainWindow)
     {
         RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
-        Time::Reset();
         int exitCode = 0;
 
         while (!mainWindow.ShouldClose())
@@ -129,8 +127,6 @@ namespace ve
                 exitCode = pumpStatus.exitCode;
                 break;
             }
-
-            Time::Tick();
 
             ErrorCode renderResult = renderSystem.RenderFrame();
             if (renderResult != ErrorCode::None)

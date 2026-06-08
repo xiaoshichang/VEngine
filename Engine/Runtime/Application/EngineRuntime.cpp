@@ -40,29 +40,38 @@ namespace ve
         {
             TerminateRuntimeInitialization("JobSystem", jobSystemResult);
         }
+        VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
 
         ErrorCode ioSystemResult = ioSystem_.Initialize(desc.ioSystem);
         if (ioSystemResult != ErrorCode::None)
         {
             TerminateRuntimeInitialization("IOSystem", ioSystemResult);
         }
-
-        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem);
-        if (sceneSystemResult != ErrorCode::None)
-        {
-            TerminateRuntimeInitialization("SceneSystem", sceneSystemResult);
-        }
+        VE_LOG_INFO("IOSystem initialized.");
 
         ErrorCode renderSystemResult = renderSystem_.Initialize(desc.renderSystem);
         if (renderSystemResult != ErrorCode::None)
         {
             TerminateRuntimeInitialization("RenderSystem", renderSystemResult);
         }
+        VE_LOG_INFO("RenderSystem initialized.");
+
+        ErrorCode timeSystemResult = timeSystem_.Initialize(desc.timeSystem);
+        if (timeSystemResult != ErrorCode::None)
+        {
+            TerminateRuntimeInitialization("TimeSystem", timeSystemResult);
+        }
+        VE_LOG_INFO("TimeSystem initialized.");
+
+        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem, timeSystem_);
+        if (sceneSystemResult != ErrorCode::None)
+        {
+            TerminateRuntimeInitialization("SceneSystem", sceneSystemResult);
+        }
+        VE_LOG_INFO("SceneSystem initialized.");
 
         state_ = EngineRuntimeState::Initialized;
-        VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
-        VE_LOG_INFO("IOSystem initialized.");
-        VE_LOG_INFO("Runtime services initialized.");
+        VE_LOG_INFO("all systems initialized.");
         return ErrorCode::None;
     }
 
@@ -73,8 +82,9 @@ namespace ve
             return;
         }
 
-        renderSystem_.Shutdown();
         sceneSystem_.Shutdown();
+        timeSystem_.Shutdown();
+        renderSystem_.Shutdown();
         ioSystem_.Shutdown();
         jobSystem_.Shutdown();
         state_ = EngineRuntimeState::Shutdown;
@@ -112,6 +122,18 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetIOSystem requires an initialized runtime.");
         return ioSystem_;
+    }
+
+    TimeSystem& EngineRuntime::GetTimeSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetTimeSystem requires an initialized runtime.");
+        return timeSystem_;
+    }
+
+    const TimeSystem& EngineRuntime::GetTimeSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetTimeSystem requires an initialized runtime.");
+        return timeSystem_;
     }
 
     RenderSystem& EngineRuntime::GetRenderSystem() noexcept

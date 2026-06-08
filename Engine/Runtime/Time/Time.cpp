@@ -1,30 +1,19 @@
 #include "Engine/Runtime/Time/Time.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <limits>
 
-namespace ve::Time
+namespace ve
 {
     namespace
     {
-        using Clock = std::chrono::steady_clock;
-
-        struct TimeState
-        {
-            Clock::time_point lastTickTime = Clock::now();
-            TimeSnapshot snapshot;
-        };
-
-        TimeState gTimeState;
-
-        [[nodiscard]] bool IsPositiveFinite(float value) noexcept
+        [[nodiscard]] bool IsPositiveFinite(Float32 value) noexcept
         {
             return std::isfinite(value) && value > 0.0f;
         }
 
-        [[nodiscard]] float ClampRawDelta(float rawDeltaSeconds) noexcept
+        [[nodiscard]] Float32 ClampRawDelta(Float32 rawDeltaSeconds) noexcept
         {
             if (!std::isfinite(rawDeltaSeconds) || rawDeltaSeconds < 0.0f)
             {
@@ -34,130 +23,173 @@ namespace ve::Time
             return rawDeltaSeconds;
         }
 
-        [[nodiscard]] uint32_t CalculateFixedStepCount(double accumulatorSeconds, float fixedDeltaSeconds) noexcept
+        [[nodiscard]] UInt32 CalculateFixedStepCount(Float64 accumulatorSeconds, Float32 fixedDeltaSeconds) noexcept
         {
             if (fixedDeltaSeconds <= 0.0f)
             {
                 return 0;
             }
 
-            const double pendingSteps = accumulatorSeconds / static_cast<double>(fixedDeltaSeconds);
-
+            const Float64 pendingSteps = accumulatorSeconds / static_cast<Float64>(fixedDeltaSeconds);
             if (pendingSteps <= 0.0)
             {
                 return 0;
             }
 
-            constexpr double MaxCount = static_cast<double>(std::numeric_limits<uint32_t>::max());
-            return static_cast<uint32_t>(std::min(std::floor(pendingSteps), MaxCount));
+            constexpr Float64 MaxCount = static_cast<Float64>(std::numeric_limits<UInt32>::max());
+            return static_cast<UInt32>(std::min(std::floor(pendingSteps), MaxCount));
         }
     } // namespace
 
-    void Reset() noexcept
+    TimeSystem::TimeSystem() = default;
+
+    TimeSystem::~TimeSystem()
     {
-        gTimeState = TimeState{};
-        gTimeState.lastTickTime = Clock::now();
-        gTimeState.snapshot.maxDeltaSeconds = DefaultMaxDeltaSeconds;
-        gTimeState.snapshot.fixedDeltaSeconds = DefaultFixedDeltaSeconds;
+        Shutdown();
     }
 
-    void Tick() noexcept
+    ErrorCode TimeSystem::Initialize(const TimeSystemInitParam& initParam)
+    {
+        if (initialized_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (!IsPositiveFinite(initParam.maxDeltaSeconds) || !IsPositiveFinite(initParam.fixedDeltaSeconds))
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        snapshot_ = TimeSnapshot{};
+        snapshot_.maxDeltaSeconds = initParam.maxDeltaSeconds;
+        snapshot_.fixedDeltaSeconds = initParam.fixedDeltaSeconds;
+        lastTickTime_ = Clock::now();
+        initialized_ = true;
+        return ErrorCode::None;
+    }
+
+    void TimeSystem::Shutdown() noexcept
+    {
+        initialized_ = false;
+    }
+
+    bool TimeSystem::IsInitialized() const noexcept
+    {
+        return initialized_;
+    }
+
+    void TimeSystem::Reset() noexcept
+    {
+        const Float32 maxDeltaSeconds = snapshot_.maxDeltaSeconds;
+        const Float32 fixedDeltaSeconds = snapshot_.fixedDeltaSeconds;
+        snapshot_ = TimeSnapshot{};
+        snapshot_.maxDeltaSeconds = maxDeltaSeconds;
+        snapshot_.fixedDeltaSeconds = fixedDeltaSeconds;
+        lastTickTime_ = Clock::now();
+    }
+
+    void TimeSystem::Tick() noexcept
     {
         const Clock::time_point now = Clock::now();
-        const std::chrono::duration<float> delta = now - gTimeState.lastTickTime;
-        gTimeState.lastTickTime = now;
-        Advance(delta.count());
+        const std::chrono::duration<Float32> delta = now - lastTickTime_;
+        lastTickTime_ = now;
+        AdvanceUnlocked(delta.count());
     }
 
-    void Advance(float rawDeltaSeconds) noexcept
+    void TimeSystem::Advance(Float32 rawDeltaSeconds) noexcept
     {
-        TimeSnapshot& snapshot = gTimeState.snapshot;
-        const float rawDelta = ClampRawDelta(rawDeltaSeconds);
-        const float delta = std::min(rawDelta, snapshot.maxDeltaSeconds);
+        AdvanceUnlocked(rawDeltaSeconds);
+    }
+
+    void TimeSystem::AdvanceUnlocked(Float32 rawDeltaSeconds) noexcept
+    {
+        TimeSnapshot& snapshot = snapshot_;
+        const Float32 rawDelta = ClampRawDelta(rawDeltaSeconds);
+        const Float32 delta = std::min(rawDelta, snapshot.maxDeltaSeconds);
 
         snapshot.rawDeltaSeconds = rawDelta;
         snapshot.deltaSeconds = delta;
-        snapshot.totalSeconds += static_cast<double>(delta);
-        snapshot.fixedAccumulatorSeconds += static_cast<double>(delta);
+        snapshot.totalSeconds += static_cast<Float64>(delta);
+        snapshot.fixedAccumulatorSeconds += static_cast<Float64>(delta);
         ++snapshot.frameIndex;
 
         snapshot.fixedStepCount = CalculateFixedStepCount(snapshot.fixedAccumulatorSeconds, snapshot.fixedDeltaSeconds);
         snapshot.fixedAccumulatorSeconds =
             std::max(0.0,
-                     snapshot.fixedAccumulatorSeconds - static_cast<double>(snapshot.fixedStepCount) *
-                                                            static_cast<double>(snapshot.fixedDeltaSeconds));
+                     snapshot.fixedAccumulatorSeconds - static_cast<Float64>(snapshot.fixedStepCount) *
+                                                            static_cast<Float64>(snapshot.fixedDeltaSeconds));
     }
 
-    TimeSnapshot GetSnapshot() noexcept
+    TimeSnapshot TimeSystem::GetSnapshot() const noexcept
     {
-        return gTimeState.snapshot;
+        return snapshot_;
     }
 
-    uint64_t GetFrameIndex() noexcept
+    UInt64 TimeSystem::GetFrameIndex() const noexcept
     {
-        return gTimeState.snapshot.frameIndex;
+        return snapshot_.frameIndex;
     }
 
-    double GetTotalSeconds() noexcept
+    Float64 TimeSystem::GetTotalSeconds() const noexcept
     {
-        return gTimeState.snapshot.totalSeconds;
+        return snapshot_.totalSeconds;
     }
 
-    double GetFixedAccumulatorSeconds() noexcept
+    Float64 TimeSystem::GetFixedAccumulatorSeconds() const noexcept
     {
-        return gTimeState.snapshot.fixedAccumulatorSeconds;
+        return snapshot_.fixedAccumulatorSeconds;
     }
 
-    float GetRawDeltaSeconds() noexcept
+    Float32 TimeSystem::GetRawDeltaSeconds() const noexcept
     {
-        return gTimeState.snapshot.rawDeltaSeconds;
+        return snapshot_.rawDeltaSeconds;
     }
 
-    float GetDeltaSeconds() noexcept
+    Float32 TimeSystem::GetDeltaSeconds() const noexcept
     {
-        return gTimeState.snapshot.deltaSeconds;
+        return snapshot_.deltaSeconds;
     }
 
-    float GetMaxDeltaSeconds() noexcept
+    Float32 TimeSystem::GetMaxDeltaSeconds() const noexcept
     {
-        return gTimeState.snapshot.maxDeltaSeconds;
+        return snapshot_.maxDeltaSeconds;
     }
 
-    float GetFixedDeltaSeconds() noexcept
+    Float32 TimeSystem::GetFixedDeltaSeconds() const noexcept
     {
-        return gTimeState.snapshot.fixedDeltaSeconds;
+        return snapshot_.fixedDeltaSeconds;
     }
 
-    uint32_t GetFixedStepCount() noexcept
+    UInt32 TimeSystem::GetFixedStepCount() const noexcept
     {
-        return gTimeState.snapshot.fixedStepCount;
+        return snapshot_.fixedStepCount;
     }
 
-    bool SetMaxDeltaSeconds(float maxDeltaSeconds) noexcept
+    bool TimeSystem::SetMaxDeltaSeconds(Float32 maxDeltaSeconds) noexcept
     {
         if (!IsPositiveFinite(maxDeltaSeconds))
         {
             return false;
         }
 
-        gTimeState.snapshot.maxDeltaSeconds = maxDeltaSeconds;
+        snapshot_.maxDeltaSeconds = maxDeltaSeconds;
         return true;
     }
 
-    bool SetFixedDeltaSeconds(float fixedDeltaSeconds) noexcept
+    bool TimeSystem::SetFixedDeltaSeconds(Float32 fixedDeltaSeconds) noexcept
     {
         if (!IsPositiveFinite(fixedDeltaSeconds))
         {
             return false;
         }
 
-        gTimeState.snapshot.fixedDeltaSeconds = fixedDeltaSeconds;
-        gTimeState.snapshot.fixedStepCount = 0;
+        snapshot_.fixedDeltaSeconds = fixedDeltaSeconds;
+        snapshot_.fixedStepCount = 0;
         return true;
     }
 
-    bool HasFixedStep() noexcept
+    bool TimeSystem::HasFixedStep() const noexcept
     {
-        return GetFixedStepCount() > 0;
+        return snapshot_.fixedStepCount > 0;
     }
-} // namespace ve::Time
+} // namespace ve

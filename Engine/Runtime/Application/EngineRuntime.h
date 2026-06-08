@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
+#include "Engine/Runtime/Time/Time.h"
 
 namespace ve
 {
@@ -28,6 +29,9 @@ namespace ve
         /// Configuration for the dedicated file IO system service.
         IOSystemInitParam ioSystem;
 
+        /// Configuration for the runtime Time System.
+        TimeSystemInitParam timeSystem;
+
         /// Configuration for the Scene Thread and active Scene service.
         SceneSystemInitParam sceneSystem;
 
@@ -39,8 +43,8 @@ namespace ve
     ///
     /// EngineRuntime sits below Application's platform loop and above individual runtime modules. It initializes and
     /// shuts down long-lived services in a deterministic order, and exposes references to those services without using
-    /// a global singleton. The first version owns JobSystem, IOSystem, SceneSystem, and RenderSystem; Resource, Input,
-    /// Script, UI, and Physics can connect through this layer as those modules land.
+    /// a global singleton. The first version owns JobSystem, IOSystem, TimeSystem, SceneSystem, and RenderSystem;
+    /// Resource, Input, Script, UI, and Physics can connect through this layer as those modules land.
     class EngineRuntime : public NonMovable
     {
     public:
@@ -88,6 +92,16 @@ namespace ve
         /// The runtime must be initialized before callers use the returned service.
         [[nodiscard]] const IOSystem& GetIOSystem() const noexcept;
 
+        /// Returns the runtime-owned Time System.
+        ///
+        /// EngineRuntime initializes this service; SceneSystem's Scene Thread advances it.
+        [[nodiscard]] TimeSystem& GetTimeSystem() noexcept;
+
+        /// Returns the runtime-owned Time System.
+        ///
+        /// EngineRuntime initializes this service; SceneSystem's Scene Thread advances it.
+        [[nodiscard]] const TimeSystem& GetTimeSystem() const noexcept;
+
         /// Returns the runtime-owned Render System.
         ///
         /// The runtime must be initialized before callers use the returned service.
@@ -111,6 +125,7 @@ namespace ve
     private:
         JobSystem jobSystem_;
         IOSystem ioSystem_;
+        TimeSystem timeSystem_;
         SceneSystem sceneSystem_;
         RenderSystem renderSystem_;
         EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;

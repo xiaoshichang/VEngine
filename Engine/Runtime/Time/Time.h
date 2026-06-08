@@ -1,61 +1,109 @@
 #pragma once
 
-#include <cstdint>
+#include "Engine/Runtime/Core/Error.h"
+#include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/Core/Types.h"
 
-namespace ve::Time
+#include <chrono>
+
+namespace ve
 {
-    constexpr float DefaultMaxDeltaSeconds = 0.25f;
-    constexpr float DefaultFixedDeltaSeconds = 1.0f / 60.0f;
+    constexpr Float32 DefaultMaxDeltaSeconds = 0.25f;
+    constexpr Float32 DefaultFixedDeltaSeconds = 1.0f / 60.0f;
 
-    struct TimeSnapshot
+    /// Describes initial TimeSystem configuration.
+    struct TimeSystemInitParam
     {
-        /// Monotonically increasing engine frame index. Starts at 0 after Reset() and increments once per Tick() or
-        /// Advance().
-        uint64_t frameIndex = 0;
-
-        /// Total clamped engine time in seconds since the last Reset(). This accumulates deltaSeconds, not
-        /// rawDeltaSeconds.
-        double totalSeconds = 0.0;
-
-        /// Fractional fixed-step time carried into the next frame after fixedStepCount has been budgeted for this
-        /// frame.
-        double fixedAccumulatorSeconds = 0.0;
-
-        /// Unclamped measured frame delta in seconds. This is useful for diagnostics and may be larger than
-        /// deltaSeconds.
-        float rawDeltaSeconds = 0.0f;
-
-        /// Runtime frame delta in seconds after maxDeltaSeconds clamping. General update code should usually consume
-        /// this.
-        float deltaSeconds = 0.0f;
-
         /// Maximum allowed deltaSeconds value. Large raw deltas from stalls or breakpoints are clamped to this value.
-        float maxDeltaSeconds = DefaultMaxDeltaSeconds;
+        Float32 maxDeltaSeconds = DefaultMaxDeltaSeconds;
 
         /// Target fixed-step duration in seconds. fixedStepCount is calculated from this value and the fixed
         /// accumulator.
-        float fixedDeltaSeconds = DefaultFixedDeltaSeconds;
-
-        /// Number of fixed steps budgeted for the current frame. Time does not execute these steps; a scheduler should
-        /// consume it.
-        uint32_t fixedStepCount = 0;
+        Float32 fixedDeltaSeconds = DefaultFixedDeltaSeconds;
     };
 
-    void Reset() noexcept;
-    void Tick() noexcept;
-    void Advance(float rawDeltaSeconds) noexcept;
+    struct TimeSnapshot
+    {
+        /// Monotonically increasing engine frame index. Starts at 0 after Initialize() and increments once per Tick()
+        /// or Advance().
+        UInt64 frameIndex = 0;
 
-    [[nodiscard]] TimeSnapshot GetSnapshot() noexcept;
-    [[nodiscard]] uint64_t GetFrameIndex() noexcept;
-    [[nodiscard]] double GetTotalSeconds() noexcept;
-    [[nodiscard]] double GetFixedAccumulatorSeconds() noexcept;
-    [[nodiscard]] float GetRawDeltaSeconds() noexcept;
-    [[nodiscard]] float GetDeltaSeconds() noexcept;
-    [[nodiscard]] float GetMaxDeltaSeconds() noexcept;
-    [[nodiscard]] float GetFixedDeltaSeconds() noexcept;
-    [[nodiscard]] uint32_t GetFixedStepCount() noexcept;
+        /// Total clamped engine time in seconds since the last Initialize(). This accumulates deltaSeconds, not
+        /// rawDeltaSeconds.
+        Float64 totalSeconds = 0.0;
 
-    [[nodiscard]] bool SetMaxDeltaSeconds(float maxDeltaSeconds) noexcept;
-    [[nodiscard]] bool SetFixedDeltaSeconds(float fixedDeltaSeconds) noexcept;
-    [[nodiscard]] bool HasFixedStep() noexcept;
-} // namespace ve::Time
+        /// Fractional fixed-step time carried into the next frame after fixedStepCount has been budgeted for this
+        /// frame.
+        Float64 fixedAccumulatorSeconds = 0.0;
+
+        /// Unclamped measured frame delta in seconds. This is useful for diagnostics and may be larger than
+        /// deltaSeconds.
+        Float32 rawDeltaSeconds = 0.0f;
+
+        /// Runtime frame delta in seconds after maxDeltaSeconds clamping. General update code should usually consume
+        /// this.
+        Float32 deltaSeconds = 0.0f;
+
+        /// Maximum allowed deltaSeconds value. Large raw deltas from stalls or breakpoints are clamped to this value.
+        Float32 maxDeltaSeconds = DefaultMaxDeltaSeconds;
+
+        /// Target fixed-step duration in seconds. fixedStepCount is calculated from this value and the fixed
+        /// accumulator.
+        Float32 fixedDeltaSeconds = DefaultFixedDeltaSeconds;
+
+        /// Number of fixed steps budgeted for the current frame. TimeSystem does not execute these steps; a scheduler
+        /// should consume it.
+        UInt32 fixedStepCount = 0;
+    };
+
+    /// Owns engine frame time state.
+    ///
+    /// EngineRuntime owns and initializes TimeSystem, while SceneSystem's Scene Thread advances it so Scene update and
+    /// component update consume a SceneThread-driven clock.
+    class TimeSystem : public NonMovable
+    {
+    public:
+        TimeSystem();
+        ~TimeSystem();
+
+        /// Initializes time state and captures the monotonic clock baseline.
+        [[nodiscard]] ErrorCode Initialize(const TimeSystemInitParam& initParam);
+
+        /// Clears initialized state. Shutdown is a no-op when the system is not initialized.
+        void Shutdown() noexcept;
+
+        [[nodiscard]] bool IsInitialized() const noexcept;
+
+        /// Resets accumulated time while preserving the current delta configuration.
+        void Reset() noexcept;
+
+        /// Advances time using the monotonic clock delta since the previous Tick() or Initialize().
+        void Tick() noexcept;
+
+        /// Advances time by an explicit raw delta for deterministic tests and controlled simulation paths.
+        void Advance(Float32 rawDeltaSeconds) noexcept;
+
+        [[nodiscard]] TimeSnapshot GetSnapshot() const noexcept;
+        [[nodiscard]] UInt64 GetFrameIndex() const noexcept;
+        [[nodiscard]] Float64 GetTotalSeconds() const noexcept;
+        [[nodiscard]] Float64 GetFixedAccumulatorSeconds() const noexcept;
+        [[nodiscard]] Float32 GetRawDeltaSeconds() const noexcept;
+        [[nodiscard]] Float32 GetDeltaSeconds() const noexcept;
+        [[nodiscard]] Float32 GetMaxDeltaSeconds() const noexcept;
+        [[nodiscard]] Float32 GetFixedDeltaSeconds() const noexcept;
+        [[nodiscard]] UInt32 GetFixedStepCount() const noexcept;
+
+        [[nodiscard]] bool SetMaxDeltaSeconds(Float32 maxDeltaSeconds) noexcept;
+        [[nodiscard]] bool SetFixedDeltaSeconds(Float32 fixedDeltaSeconds) noexcept;
+        [[nodiscard]] bool HasFixedStep() const noexcept;
+
+    private:
+        using Clock = std::chrono::steady_clock;
+
+        void AdvanceUnlocked(Float32 rawDeltaSeconds) noexcept;
+
+        Clock::time_point lastTickTime_ = Clock::now();
+        TimeSnapshot snapshot_;
+        bool initialized_ = false;
+    };
+} // namespace ve

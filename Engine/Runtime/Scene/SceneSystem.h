@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Threading/Thread.h"
+#include "Engine/Runtime/Time/Time.h"
 
 #include <memory>
 #include <string>
@@ -32,7 +33,9 @@ namespace ve
         ~SceneSystem();
 
         /// Creates an empty active Scene and starts the Scene Thread.
-        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam);
+        ///
+        /// timeSystem must already be initialized by EngineRuntime before SceneSystem starts.
+        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem);
 
         /// Stops Scene updates and joins the Scene Thread.
         ///

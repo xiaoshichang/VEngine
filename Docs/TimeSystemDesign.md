@@ -1,26 +1,28 @@
-# VEngine Time System Design
+#VEngine Time System Design
 
 ## 1. Purpose
 
 This document records the current first-stage design for VEngine's basic time system.
 
-The goal is to provide a small global engine time module that can be consumed by early runtime systems, tests, and future
-scene/script/update code. It is intentionally closer to an application clock than to a complete gameplay world time model.
+The goal is to provide a small runtime-owned engine time service that can be consumed by early runtime systems, tests,
+and future scene/script/update code. It is intentionally closer to an application clock than to a complete gameplay
+world time model.
 
-The current design is not a full Unreal-style tick framework. It borrows the useful early idea of a globally accessible
-engine/app time source, while leaving world time, pause, time scale, tick groups, and fixed-step execution ownership for
-later systems.
+The current design is not a full Unreal-style tick framework. It borrows the useful early idea of a central engine/app
+time source, while leaving world time, pause, time scale, tick groups, and fixed-step execution ownership for later
+systems.
 
 ## 2. Current Scope
 
-The Time module lives under:
+The TimeSystem module lives under:
 
 ```text
 Engine/Runtime/Time/Time.h
 Engine/Runtime/Time/Time.cpp
 ```
 
-It exposes global functions under `ve::Time`.
+It exposes the `ve::TimeSystem` service class. `EngineRuntime` owns, initializes, and shuts down the instance, while
+`SceneSystem` starts the Scene Thread that advances it.
 
 Current responsibilities:
 
@@ -47,26 +49,37 @@ Current non-responsibilities:
 The primary API is:
 
 ```cpp
-namespace ve::Time
+namespace ve
 {
-    void Reset() noexcept;
-    void Tick() noexcept;
-    void Advance(float rawDeltaSeconds) noexcept;
+    struct TimeSystemInitParam;
+    struct TimeSnapshot;
 
-    TimeSnapshot GetSnapshot() noexcept;
-    uint64_t GetFrameIndex() noexcept;
-    double GetTotalSeconds() noexcept;
-    double GetFixedAccumulatorSeconds() noexcept;
-    float GetRawDeltaSeconds() noexcept;
-    float GetDeltaSeconds() noexcept;
-    float GetMaxDeltaSeconds() noexcept;
-    float GetFixedDeltaSeconds() noexcept;
-    uint32_t GetFixedStepCount() noexcept;
+    class TimeSystem
+    {
+    public:
+        ErrorCode Initialize(const TimeSystemInitParam& initParam);
+        void Shutdown() noexcept;
+        bool IsInitialized() const noexcept;
 
-    bool SetMaxDeltaSeconds(float maxDeltaSeconds) noexcept;
-    bool SetFixedDeltaSeconds(float fixedDeltaSeconds) noexcept;
-    bool HasFixedStep() noexcept;
-}
+        void Reset() noexcept;
+        void Tick() noexcept;
+        void Advance(float rawDeltaSeconds) noexcept;
+
+        TimeSnapshot GetSnapshot() const noexcept;
+        uint64_t GetFrameIndex() const noexcept;
+        double GetTotalSeconds() const noexcept;
+        double GetFixedAccumulatorSeconds() const noexcept;
+        float GetRawDeltaSeconds() const noexcept;
+        float GetDeltaSeconds() const noexcept;
+        float GetMaxDeltaSeconds() const noexcept;
+        float GetFixedDeltaSeconds() const noexcept;
+        uint32_t GetFixedStepCount() const noexcept;
+
+        bool SetMaxDeltaSeconds(float maxDeltaSeconds) noexcept;
+        bool SetFixedDeltaSeconds(float fixedDeltaSeconds) noexcept;
+        bool HasFixedStep() const noexcept;
+    };
+} // namespace ve
 ```
 
 `Tick()` uses `std::chrono::steady_clock`, which is a cross-platform monotonic clock suitable for Windows and iOS.
@@ -123,7 +136,7 @@ Invalid raw deltas such as negative, infinity, or NaN are treated as zero.
 
 ## 6. Fixed Step Budget
 
-The Time module currently provides a fixed-step budget, not fixed-step execution.
+TimeSystem currently provides a fixed-step budget, not fixed-step execution.
 
 The default fixed delta is:
 
@@ -143,29 +156,34 @@ This means:
 
 - `fixedStepCount` is the number of fixed steps that a future scheduler may run for this frame.
 - `fixedAccumulatorSeconds` stores only the fractional remainder after budgeting steps.
-- The Time module does not expose `ConsumeFixedStep()` and does not own fixed-step execution state.
+- TimeSystem does not expose `ConsumeFixedStep()` and does not own fixed-step execution state.
 
 This is intentionally a small design adjustment: fixed-step execution should belong to a future Tick Scheduler,
 Physics Scheduler, or Engine Loop stage. Time only provides the per-frame budget.
 
-## 7. Application Loop Integration
+## 7. EngineRuntime And SceneThread Integration
 
-The Windows `Application` currently calls:
+`EngineRuntime` owns `TimeSystem` as a long-lived runtime service. `EngineRuntime::Initialize()` initializes it before
+starting `SceneSystem`, then passes the initialized service to `SceneSystem`.
+
+`SceneSystem` starts the Scene Thread. The Scene Thread is responsible for advancing time and updating the active scene:
 
 ```text
-Create main window
-Time::Reset()
+EngineRuntime.Initialize()
+    TimeSystem.Initialize()
+    SceneSystem.Initialize(TimeSystem)
 
-while running:
-    Pump debug console commands
-    Pump platform messages
-    Time::Tick()
-    Sleep briefly
+while SceneSystem is running:
+    TimeSystem.Tick()
+    Scene.Update(TimeSystem.GetDeltaSeconds())
+
+EngineRuntime.Shutdown()
+    SceneSystem.Shutdown()
+    TimeSystem.Shutdown()
 ```
 
-The key ordering decision is that platform messages are pumped before `Time::Tick()`. This keeps OS lifecycle and quit
-events ahead of engine frame time advancement. Future engine-loop work can then consume the stable Time snapshot for the
-frame after platform state is current.
+This keeps Scene update and component update on a SceneThread-driven clock. The Windows `Application` no longer directly
+calls `TimeSystem::Tick()` from the main loop.
 
 This is only a first-stage loop. Later milestones should introduce a clearer Engine Loop with named phases.
 
@@ -175,7 +193,7 @@ The current module is only loosely inspired by Unreal's broad shape.
 
 Similarities:
 
-- A global engine/app-level time source exists.
+- A central engine/app-level time source exists.
 - Frame delta is updated once per engine frame.
 - Runtime systems can consume a stable delta for update work.
 
@@ -185,13 +203,13 @@ Differences:
 - VEngine does not yet have pause, time dilation, or per-world time scale.
 - VEngine does not yet have tick groups or prerequisites.
 - VEngine does not yet have a custom timestep policy object.
-- VEngine Time does not execute fixed updates.
+- VEngine TimeSystem does not execute fixed updates.
 
 Recommended future layering:
 
 ```text
-ve::Time
-  Global engine/app monotonic time and frame delta.
+TimeSystem
+  EngineRuntime-owned monotonic time and frame delta, driven by Scene Thread.
 
 EngineLoop / FrameClock
   Owns frame phases, custom timestep policy, and per-frame scheduling decisions.
@@ -205,26 +223,15 @@ TickScheduler / PhysicsScheduler
 
 ## 9. Testing
 
-The current tests live in:
+TimeSystem does not currently keep a dedicated unit test source file. The expected coverage areas remain:
 
-```text
-Tests/Unit/TimeTests.cpp
-```
-
-The CMake target is:
-
-```text
-VEngineTimeTests
-```
-
-Covered behavior:
-
-- Reset default state.
+- Initialization and shutdown.
 - Manual `Advance()` frame progression.
 - Delta clamp.
 - Invalid delta configuration rejection.
 - Fixed-step budget and accumulator remainder.
 - `Tick()` monotonic clock smoke test.
+- EngineRuntime ownership and SceneThread-driven updates.
 
 ## 10. Future Iteration Notes
 
@@ -233,6 +240,6 @@ Likely future changes:
 - Add a named Engine Loop phase around time update.
 - Add World or Scene time separate from global engine time.
 - Add pause and time scale at the World/Scene layer.
-- Move custom timestep policy out of the Time module if needed.
+- Move custom timestep policy out of TimeSystem if needed.
 - Have TickScheduler or PhysicsScheduler consume `fixedStepCount`.
 - Add platform timer facade only if `std::chrono::steady_clock` proves insufficient.

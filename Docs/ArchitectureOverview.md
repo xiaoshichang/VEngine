@@ -324,8 +324,8 @@ this application-level flow instead of duplicating service initialization in eac
 
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
 explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem,
-SceneSystem, and RenderSystem; Resource, Input, Script, UI, and Physics should connect through this layer as their
-modules land.
+TimeSystem, SceneSystem, and RenderSystem; Resource, Input, Script, UI, and Physics should connect through this layer as
+their modules land.
 
 ### 7.4 FileSystem
 

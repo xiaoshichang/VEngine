@@ -3,9 +3,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Threading/Atomic.h"
-#include "Engine/Runtime/Threading/Synchronization.h"
 
-#include <chrono>
 #include <exception>
 #include <new>
 
@@ -14,8 +12,8 @@ namespace ve
     struct SceneSystemImpl
     {
         Thread thread;
-        RecursiveMutex sceneMutex;
         std::unique_ptr<Scene> scene;
+        TimeSystem* timeSystem = nullptr;
         Atomic<UInt64> sceneThreadIdValue{0};
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
@@ -23,11 +21,8 @@ namespace ve
 
     namespace
     {
-        constexpr std::chrono::milliseconds SceneThreadIdleSleep(1);
-
         void UpdateScene(SceneSystemImpl& impl, Float32 deltaSeconds)
         {
-            LockGuard<RecursiveMutex> lock(impl.sceneMutex);
             if (impl.scene != nullptr)
             {
                 impl.scene->Update(deltaSeconds);
@@ -36,29 +31,23 @@ namespace ve
 
         void SceneThreadLoop(SceneSystemImpl& impl)
         {
-            using Clock = std::chrono::steady_clock;
-
             impl.sceneThreadIdValue.store(GetCurrentThreadId().value, std::memory_order_release);
 
-            Clock::time_point lastUpdateTime = Clock::now();
+            VE_ASSERT_MESSAGE(impl.timeSystem != nullptr, "impl.timeSystem should not be nullptr");
+            VE_ASSERT_MESSAGE(impl.timeSystem->IsInitialized(), "impl.timeSystem should be initialized.");
+
             while (!impl.stopRequested.load(std::memory_order_acquire))
             {
-                const Clock::time_point now = Clock::now();
-                const std::chrono::duration<Float32> rawDelta = now - lastUpdateTime;
-                lastUpdateTime = now;
+                impl.timeSystem->Tick();
+                const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
 
                 try
                 {
-                    UpdateScene(impl, rawDelta.count());
+                    UpdateScene(impl, timeSnapshot.deltaSeconds);
                 }
                 catch (...)
                 {
                     VE_ASSERT_ALWAYS_MESSAGE(false, "Unhandled exception escaped SceneSystem update.");
-                }
-
-                if (!impl.stopRequested.load(std::memory_order_acquire))
-                {
-                    SleepFor(SceneThreadIdleSleep);
                 }
             }
 
@@ -77,6 +66,7 @@ namespace ve
 
             impl.initialized.store(false, std::memory_order_release);
             impl.stopRequested.store(false, std::memory_order_release);
+            impl.timeSystem = nullptr;
         }
     } // namespace
 
@@ -90,42 +80,28 @@ namespace ve
         Shutdown();
     }
 
-    ErrorCode SceneSystem::Initialize(const SceneSystemInitParam& initParam)
+    ErrorCode SceneSystem::Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem)
     {
         if (impl_->initialized.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
 
+        if (!timeSystem.IsInitialized())
         {
-            LockGuard<RecursiveMutex> lock(impl_->sceneMutex);
-            if (impl_->scene == nullptr)
-            {
-                try
-                {
-                    impl_->scene = std::make_unique<Scene>();
-                }
-                catch (const std::bad_alloc&)
-                {
-                    return ErrorCode::OutOfMemory;
-                }
-            }
+            return ErrorCode::InvalidState;
         }
 
+        impl_->timeSystem = &timeSystem;
         impl_->stopRequested.store(false, std::memory_order_release);
 
-        ErrorCode startResult = impl_->thread.Start(initParam.threadName.empty() ? ThreadDesc{"VEngineSceneThread"}
-                                                                                 : ThreadDesc{initParam.threadName},
-                                                    [this]() { SceneThreadLoop(*impl_); });
-
+        ErrorCode startResult = impl_->thread.Start(ThreadDesc{initParam.threadName}, [this]() { SceneThreadLoop(*impl_); });
         if (startResult != ErrorCode::None)
         {
-            impl_->stopRequested.store(false, std::memory_order_release);
-            return startResult;
+            throw;
         }
 
         impl_->initialized.store(true, std::memory_order_release);
-        VE_LOG_INFO("SceneSystem initialized.");
         return ErrorCode::None;
     }
 
@@ -151,19 +127,16 @@ namespace ve
 
     Scene* SceneSystem::GetScene() noexcept
     {
-        LockGuard<RecursiveMutex> lock(impl_->sceneMutex);
         return impl_->scene.get();
     }
 
     const Scene* SceneSystem::GetScene() const noexcept
     {
-        LockGuard<RecursiveMutex> lock(impl_->sceneMutex);
         return impl_->scene.get();
     }
 
     void SceneSystem::ReplaceScene(std::unique_ptr<Scene> scene)
     {
-        LockGuard<RecursiveMutex> lock(impl_->sceneMutex);
         impl_->scene = scene != nullptr ? std::move(scene) : std::make_unique<Scene>();
     }
 
