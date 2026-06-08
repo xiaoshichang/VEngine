@@ -10,18 +10,18 @@
 
 namespace ve
 {
-struct ApplicationDesc
+struct ApplicationInitParam
 {
     std::string name = "VEngine";
     WindowDesc mainWindow;
-    EngineRuntimeDesc runtime;
+    EngineRuntimeInitParam runtime;
 };
 
 class Application
 {
 public:
     explicit Application(std::string name);
-    explicit Application(ApplicationDesc desc);
+    explicit Application(ApplicationInitParam desc);
     ~Application();
 
     [[nodiscard]] int Run();
@@ -39,7 +39,7 @@ private:
     [[nodiscard]] int RunMainLoop(Window& mainWindow);
     [[nodiscard]] int RunApplication();
 
-    ApplicationDesc desc_;
+    ApplicationInitParam initParam_;
     EngineRuntime engineRuntime_;
     int exitCode_ = 0;
 };

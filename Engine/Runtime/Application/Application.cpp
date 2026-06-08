@@ -19,29 +19,29 @@ void ShutdownEngineRuntime(EngineRuntime& runtime)
 }
 
 Application::Application(std::string name)
-    : desc_()
+    : initParam_()
 {
-    desc_.name = std::move(name);
+    initParam_.name = std::move(name);
 
-    if (desc_.name.empty())
+    if (initParam_.name.empty())
     {
-        desc_.name = "VEngine";
+        initParam_.name = "VEngine";
     }
 
-    desc_.mainWindow.title = desc_.name;
+    initParam_.mainWindow.title = initParam_.name;
 }
 
-Application::Application(ApplicationDesc desc)
-    : desc_(std::move(desc))
+Application::Application(ApplicationInitParam desc)
+    : initParam_(std::move(desc))
 {
-    if (desc_.name.empty())
+    if (initParam_.name.empty())
     {
-        desc_.name = "VEngine";
+        initParam_.name = "VEngine";
     }
 
-    if (desc_.mainWindow.title.empty())
+    if (initParam_.mainWindow.title.empty())
     {
-        desc_.mainWindow.title = desc_.name;
+        initParam_.mainWindow.title = initParam_.name;
     }
 }
 
@@ -55,7 +55,7 @@ int Application::Run()
 
 ErrorCode Application::InitializeEngineRuntime()
 {
-    ErrorCode runtimeResult = engineRuntime_.Initialize(desc_.runtime);
+    ErrorCode runtimeResult = engineRuntime_.Initialize(initParam_.runtime);
 
     if (runtimeResult != ErrorCode::None)
     {
@@ -67,7 +67,7 @@ ErrorCode Application::InitializeEngineRuntime()
 
 Result<std::unique_ptr<Window>> Application::CreateMainWindow()
 {
-    Result<std::unique_ptr<Window>> windowResult = Window::Create(desc_.mainWindow);
+    Result<std::unique_ptr<Window>> windowResult = Window::Create(initParam_.mainWindow);
 
     if (!windowResult)
     {
@@ -81,7 +81,7 @@ ErrorCode Application::InitializeRendering(Window& mainWindow)
 {
     RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
 
-    ErrorCode deviceResult = renderSystem.InitializeDevice(desc_.runtime.renderSystem.device);
+    ErrorCode deviceResult = renderSystem.InitializeDevice(initParam_.runtime.renderSystem.device);
     if (deviceResult != ErrorCode::None)
     {
         VE_LOG_ERROR("Failed to initialize render device: {}", ToString(deviceResult));
@@ -138,8 +138,6 @@ int Application::RunMainLoop(Window& mainWindow)
             VE_LOG_ERROR("RenderFrame failed: {}", ToString(renderResult));
             return 1;
         }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     return exitCode;
@@ -147,34 +145,17 @@ int Application::RunMainLoop(Window& mainWindow)
 
 int Application::RunApplication()
 {
-    VE_LOG_INFO("{} starting", desc_.name);
-
-    auto cleanup = [this](std::unique_ptr<Window>& window)
-    {
-        if (window != nullptr)
-        {
-            window->PumpCommands();
-            window->SetCommandHandler({});
-        }
-
-        window.reset();
-        ShutdownEngineRuntime(engineRuntime_);
-    };
-
+    VE_LOG_INFO("{} starting", initParam_.name);
     ErrorCode runtimeResult = InitializeEngineRuntime();
     if (runtimeResult != ErrorCode::None)
     {
-        std::unique_ptr<Window> emptyWindow;
-        cleanup(emptyWindow);
-        return 1;
+        throw;
     }
 
     Result<std::unique_ptr<Window>> windowResult = CreateMainWindow();
     if (!windowResult)
     {
-        std::unique_ptr<Window> emptyWindow;
-        cleanup(emptyWindow);
-        return 1;
+        throw;
     }
 
     std::unique_ptr<Window> mainWindow = windowResult.MoveValue();
@@ -186,21 +167,24 @@ int Application::RunApplication()
     ErrorCode renderResult = InitializeRendering(*mainWindow);
     if (renderResult != ErrorCode::None)
     {
-        cleanup(mainWindow);
-        return 1;
+        throw;
     }
 
     const int result = RunMainLoop(*mainWindow);
     ShutdownRendering();
-    cleanup(mainWindow);
 
-    VE_LOG_INFO("{} stopped with exit code {}", desc_.name, result);
+    mainWindow->PumpCommands();
+    mainWindow->SetCommandHandler({});
+    mainWindow.reset();
+    ShutdownEngineRuntime(engineRuntime_);
+
+    VE_LOG_INFO("{} stopped with exit code {}", initParam_.name, result);
     return result;
 }
 
 const std::string& Application::GetName() const noexcept
 {
-    return desc_.name;
+    return initParam_.name;
 }
 
 int Application::GetExitCode() const noexcept

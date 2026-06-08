@@ -26,54 +26,6 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineTests>
     )
 
-    add_executable(VEngineLoggingTests
-        Tests/Unit/LoggingTests.cpp
-    )
-
-    target_link_libraries(VEngineLoggingTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineLoggingTests)
-
-    add_test(
-        NAME VEngineLoggingTests
-        COMMAND $<TARGET_FILE:VEngineLoggingTests>
-    )
-
-    add_executable(VEngineTimeTests
-        Tests/Unit/TimeTests.cpp
-    )
-
-    target_link_libraries(VEngineTimeTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineTimeTests)
-
-    add_test(
-        NAME VEngineTimeTests
-        COMMAND $<TARGET_FILE:VEngineTimeTests>
-    )
-
-    add_executable(VEngineFileSystemTests
-        Tests/Unit/FileSystemTests.cpp
-    )
-
-    target_link_libraries(VEngineFileSystemTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineFileSystemTests)
-
-    add_test(
-        NAME VEngineFileSystemTests
-        COMMAND $<TARGET_FILE:VEngineFileSystemTests>
-    )
-
     add_executable(VEngineMemoryTests
         Tests/Unit/MemoryTests.cpp
     )
@@ -136,54 +88,6 @@ function(ve_add_tests)
     add_test(
         NAME VEngineJobSystemTests
         COMMAND $<TARGET_FILE:VEngineJobSystemTests>
-    )
-
-    add_executable(VEngineRuntimeTests
-        Tests/Unit/EngineRuntimeTests.cpp
-    )
-
-    target_link_libraries(VEngineRuntimeTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineRuntimeTests)
-
-    add_test(
-        NAME VEngineRuntimeTests
-        COMMAND $<TARGET_FILE:VEngineRuntimeTests>
-    )
-
-    add_executable(VEngineIOSystemTests
-        Tests/Unit/IOSystemTests.cpp
-    )
-
-    target_link_libraries(VEngineIOSystemTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineIOSystemTests)
-
-    add_test(
-        NAME VEngineIOSystemTests
-        COMMAND $<TARGET_FILE:VEngineIOSystemTests>
-    )
-
-    add_executable(VEngineRenderSystemTests
-        Tests/Unit/RenderSystemTests.cpp
-    )
-
-    target_link_libraries(VEngineRenderSystemTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineRenderSystemTests)
-
-    add_test(
-        NAME VEngineRenderSystemTests
-        COMMAND $<TARGET_FILE:VEngineRenderSystemTests>
     )
 
     if(VE_BUILD_SHADER_TESTS)

@@ -75,9 +75,9 @@ void RemoveTestRoot()
     std::filesystem::remove_all(std::filesystem::path("Generated") / "EngineRuntimeTests", error);
 }
 
-ve::EngineRuntimeDesc MakeRuntimeDesc()
+ve::EngineRuntimeInitParam MakeRuntimeDesc()
 {
-    ve::EngineRuntimeDesc desc;
+    ve::EngineRuntimeInitParam desc;
     desc.jobSystem.workerThreadCount = 1;
     desc.jobSystem.workerThreadNamePrefix = "EngineRuntimeTestJobWorker";
     desc.ioSystem.threadName = "EngineRuntimeTestIOThread";

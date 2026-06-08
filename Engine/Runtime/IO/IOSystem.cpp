@@ -221,7 +221,7 @@ IOSystem::~IOSystem()
     Shutdown();
 }
 
-ErrorCode IOSystem::Initialize(const IOSystemDesc& desc)
+ErrorCode IOSystem::Initialize(const IOSystemInitParam& desc)
 {
     {
         std::lock_guard<std::mutex> lock(impl_->mutex);

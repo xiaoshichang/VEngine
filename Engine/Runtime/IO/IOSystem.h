@@ -28,7 +28,7 @@ enum class IORequestPriority
 };
 
 /// Describes the dedicated thread created by IOSystem::Initialize().
-struct IOSystemDesc
+struct IOSystemInitParam
 {
     /// Diagnostic name copied into the owned IO Thread.
     std::string threadName = "VEngineIOThread";
@@ -104,7 +104,7 @@ public:
     ///
     /// Returns InvalidState when called while already initialized. A standalone IOSystem object may be initialized
     /// again after Shutdown() completes.
-    [[nodiscard]] ErrorCode Initialize(const IOSystemDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const IOSystemInitParam& desc);
 
     /// Stops accepting requests, drains queued/running reads, wakes the IO Thread, and joins it.
     ///

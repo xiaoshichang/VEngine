@@ -29,7 +29,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         return 1;
     }
 
-    ve::ApplicationDesc desc;
+    ve::ApplicationInitParam desc;
     desc.name = "VEnginePlayer";
     desc.mainWindow.title = "VEngine Player";
     desc.mainWindow.width = 1280;

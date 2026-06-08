@@ -416,7 +416,7 @@ RenderSystem::~RenderSystem()
     Shutdown();
 }
 
-ErrorCode RenderSystem::Initialize(const RenderSystemDesc& desc)
+ErrorCode RenderSystem::Initialize(const RenderSystemInitParam& desc)
 {
     if (impl_->initialized.load(std::memory_order_acquire))
     {

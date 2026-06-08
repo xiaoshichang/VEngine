@@ -57,7 +57,7 @@ struct RenderSurfaceDesc
 };
 
 /// Describes the Render Thread created by RenderSystem::Initialize().
-struct RenderSystemDesc
+struct RenderSystemInitParam
 {
     /// Diagnostic name copied into the owned Render Thread.
     std::string threadName = "VEngineRenderThread";
@@ -114,7 +114,7 @@ public:
     ///
     /// Returns InvalidState when called while already initialized. A standalone RenderSystem object may be initialized
     /// again after Shutdown() completes.
-    [[nodiscard]] ErrorCode Initialize(const RenderSystemDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const RenderSystemInitParam& desc);
 
     /// Stops accepting commands, drains accepted work, wakes the Render Thread, and joins it.
     ///

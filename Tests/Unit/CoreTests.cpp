@@ -78,7 +78,7 @@ bool TestApplicationAndVersion()
 {
     bool passed = true;
 
-    ve::ApplicationDesc desc;
+    ve::ApplicationInitParam desc;
     desc.name = "VEngineTests";
     desc.mainWindow.title = "VEngine Tests";
     desc.mainWindow.width = 640;

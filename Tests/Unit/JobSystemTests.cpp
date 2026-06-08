@@ -52,9 +52,9 @@ bool ExpectJobHandleResult(const ve::Result<ve::JobHandle>& result, const char* 
     return false;
 }
 
-ve::JobSystemDesc OneWorkerDesc()
+ve::JobSystemInitParam OneWorkerDesc()
 {
-    ve::JobSystemDesc desc;
+    ve::JobSystemInitParam desc;
     desc.workerThreadCount = 1;
     desc.workerThreadNamePrefix = "JobSystemTestWorker";
     return desc;
@@ -124,7 +124,7 @@ bool TestMultipleJobsExecute()
     bool passed = true;
 
     ve::JobSystem jobs;
-    ve::JobSystemDesc desc = OneWorkerDesc();
+    ve::JobSystemInitParam desc = OneWorkerDesc();
     desc.workerThreadCount = 2;
     passed &= ExpectOk(jobs.Initialize(desc), "JobSystem should initialize for multiple jobs test");
 
@@ -204,7 +204,7 @@ bool TestMultipleDependenciesOrder()
     bool passed = true;
 
     ve::JobSystem jobs;
-    ve::JobSystemDesc desc = OneWorkerDesc();
+    ve::JobSystemInitParam desc = OneWorkerDesc();
     desc.workerThreadCount = 2;
     passed &= ExpectOk(jobs.Initialize(desc), "JobSystem should initialize for multi-dependency test");
 
@@ -348,7 +348,7 @@ bool TestParallelForCoversEachItemOnce()
     bool passed = true;
 
     ve::JobSystem jobs;
-    ve::JobSystemDesc desc = OneWorkerDesc();
+    ve::JobSystemInitParam desc = OneWorkerDesc();
     desc.workerThreadCount = 3;
     passed &= ExpectOk(jobs.Initialize(desc), "JobSystem should initialize for ParallelFor test");
 

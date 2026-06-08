@@ -30,9 +30,9 @@ bool ExpectOk(ve::ErrorCode result, const char* message)
     return false;
 }
 
-ve::RenderSystemDesc MakeRenderSystemDesc()
+ve::RenderSystemInitParam MakeRenderSystemDesc()
 {
-    ve::RenderSystemDesc desc;
+    ve::RenderSystemInitParam desc;
     desc.threadName = "RenderSystemTestThread";
     return desc;
 }

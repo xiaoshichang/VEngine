@@ -23,7 +23,7 @@ EngineRuntime::~EngineRuntime()
     Shutdown();
 }
 
-ErrorCode EngineRuntime::Initialize(const EngineRuntimeDesc& desc)
+ErrorCode EngineRuntime::Initialize(const EngineRuntimeInitParam& desc)
 {
     if (state_ == EngineRuntimeState::Initialized)
     {

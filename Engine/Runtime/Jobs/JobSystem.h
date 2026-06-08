@@ -37,7 +37,7 @@ struct JobDesc
 };
 
 /// Describes the worker pool created by JobSystem::Initialize().
-struct JobSystemDesc
+struct JobSystemInitParam
 {
     /// Number of worker threads to create. A value of zero means max(1, hardware_concurrency - 1).
     SizeT workerThreadCount = 0;
@@ -85,7 +85,7 @@ public:
     /// Returns InvalidState when called while already initialized. If workerThreadCount is zero, the implementation
     /// creates max(1, hardware_concurrency - 1) workers. Partial initialization failures stop and join workers that were
     /// already created.
-    [[nodiscard]] ErrorCode Initialize(const JobSystemDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const JobSystemInitParam& desc);
 
     /// Stops accepting jobs, waits for submitted jobs to complete, wakes workers, and joins them.
     ///

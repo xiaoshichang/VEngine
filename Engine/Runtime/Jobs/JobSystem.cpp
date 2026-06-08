@@ -247,7 +247,7 @@ JobSystem::~JobSystem()
     Shutdown();
 }
 
-ErrorCode JobSystem::Initialize(const JobSystemDesc& desc)
+ErrorCode JobSystem::Initialize(const JobSystemInitParam& desc)
 {
     const SizeT workerThreadCount = ResolveWorkerThreadCount(desc.workerThreadCount);
 

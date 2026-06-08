@@ -19,16 +19,16 @@ enum class EngineRuntimeState
 ///
 /// Player, Editor, tools, and future platform backends pass this descriptor into EngineRuntime so service configuration
 /// stays explicit instead of relying on globals or per-entry-point initialization code.
-struct EngineRuntimeDesc
+struct EngineRuntimeInitParam
 {
     /// Configuration for the worker-thread Job System service.
-    JobSystemDesc jobSystem;
+    JobSystemInitParam jobSystem;
 
     /// Configuration for the dedicated file IO system service.
-    IOSystemDesc ioSystem;
+    IOSystemInitParam ioSystem;
 
     /// Configuration for the Render Thread and render command queue service.
-    RenderSystemDesc renderSystem;
+    RenderSystemInitParam renderSystem;
 };
 
 /// Owns the shared runtime service lifecycle for Player, Editor, and tools.
@@ -49,7 +49,7 @@ public:
     /// lifecycle. A single EngineRuntime object is intentionally one-shot so Player and Editor startup/shutdown order
     /// stays simple and visible. Service initialization failures are treated as unrecoverable startup failures: they are
     /// logged as fatal errors and terminate the process rather than returning partial runtime state to the caller.
-    [[nodiscard]] ErrorCode Initialize(const EngineRuntimeDesc& desc);
+    [[nodiscard]] ErrorCode Initialize(const EngineRuntimeInitParam& desc);
 
     /// Shuts down initialized services in reverse ownership order.
     ///

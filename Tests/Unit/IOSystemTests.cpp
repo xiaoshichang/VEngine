@@ -63,9 +63,9 @@ void RemoveTestRoot()
     std::filesystem::remove_all(std::filesystem::path("Generated") / "IOSystemTests", error);
 }
 
-ve::IOSystemDesc MakeIOSystemDesc()
+ve::IOSystemInitParam MakeIOSystemDesc()
 {
-    ve::IOSystemDesc desc;
+    ve::IOSystemInitParam desc;
     desc.threadName = "IOSystemTestThread";
     return desc;
 }
