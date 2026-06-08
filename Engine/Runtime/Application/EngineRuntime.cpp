@@ -47,6 +47,12 @@ ErrorCode EngineRuntime::Initialize(const EngineRuntimeInitParam& desc)
         TerminateRuntimeInitialization("IOSystem", ioSystemResult);
     }
 
+    ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem);
+    if (sceneSystemResult != ErrorCode::None)
+    {
+        TerminateRuntimeInitialization("SceneSystem", sceneSystemResult);
+    }
+
     ErrorCode renderSystemResult = renderSystem_.Initialize(desc.renderSystem);
     if (renderSystemResult != ErrorCode::None)
     {
@@ -56,7 +62,7 @@ ErrorCode EngineRuntime::Initialize(const EngineRuntimeInitParam& desc)
     state_ = EngineRuntimeState::Initialized;
     VE_LOG_INFO("JobSystem initialized with {} worker thread(s).", jobSystem_.GetWorkerThreadCount());
     VE_LOG_INFO("IOSystem initialized.");
-    VE_LOG_INFO("RenderSystem initialized.");
+    VE_LOG_INFO("Runtime services initialized.");
     return ErrorCode::None;
 }
 
@@ -68,6 +74,7 @@ void EngineRuntime::Shutdown() noexcept
     }
 
     renderSystem_.Shutdown();
+    sceneSystem_.Shutdown();
     ioSystem_.Shutdown();
     jobSystem_.Shutdown();
     state_ = EngineRuntimeState::Shutdown;
@@ -117,5 +124,17 @@ const RenderSystem& EngineRuntime::GetRenderSystem() const noexcept
 {
     VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetRenderSystem requires an initialized runtime.");
     return renderSystem_;
+}
+
+SceneSystem& EngineRuntime::GetSceneSystem() noexcept
+{
+    VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetSceneSystem requires an initialized runtime.");
+    return sceneSystem_;
+}
+
+const SceneSystem& EngineRuntime::GetSceneSystem() const noexcept
+{
+    VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetSceneSystem requires an initialized runtime.");
+    return sceneSystem_;
 }
 }

@@ -157,8 +157,9 @@ VE_LOG_INFO
 - Implement GameObject and Component base model.
 - Implement TransformComponent.
 - Implement CameraComponent.
-- Implement MeshRendererComponent.
+- Implement MeshRenderComponent.
 - Implement LightComponent.
+- Implement SceneSystem with active Scene ownership and Scene Thread update.
 - Implement basic reflection registration.
 - Implement Scene serialization.
 - Implement simple ResourceManager.
@@ -258,11 +259,11 @@ Initial services:
 
 - Job System.
 - IOSystem.
+- SceneSystem.
 - RenderSystem.
 
 Later services should connect through this layer as their modules land:
 
-- Scene runtime state.
 - ResourceManager and asset loading.
 - Input, scripting, runtime UI, and lightweight physics.
 

@@ -97,7 +97,7 @@ public:
     ///
     /// Returns InvalidState when called while already initialized. A standalone RenderSystem object may be initialized
     /// again after Shutdown() completes.
-    [[nodiscard]] ErrorCode Initialize(const RenderSystemInitParam& desc);
+    [[nodiscard]] ErrorCode Initialize(const RenderSystemInitParam& initParam);
 
     /// Stops accepting commands, drains accepted work, wakes the Render Thread, and joins it.
     ///

@@ -401,7 +401,7 @@ RenderSystem::~RenderSystem()
     Shutdown();
 }
 
-ErrorCode RenderSystem::Initialize(const RenderSystemInitParam& desc)
+ErrorCode RenderSystem::Initialize(const RenderSystemInitParam& initParam)
 {
     if (impl_->initialized.load(std::memory_order_acquire))
     {
@@ -411,8 +411,8 @@ ErrorCode RenderSystem::Initialize(const RenderSystemInitParam& desc)
     impl_->stopRequested.store(false, std::memory_order_release);
     impl_->acceptingCommands.store(true, std::memory_order_release);
 
-    ErrorCode startResult = impl_->thread.Start(desc.threadName.empty() ? ThreadDesc{"VEngineRenderThread"}
-                                                                           : ThreadDesc{desc.threadName},
+    ErrorCode startResult = impl_->thread.Start(initParam.threadName.empty() ? ThreadDesc{"VEngineRenderThread"}
+                                                                           : ThreadDesc{initParam.threadName},
         [this]()
         {
             RenderThreadLoop(*impl_);

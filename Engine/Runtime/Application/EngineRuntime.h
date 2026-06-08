@@ -5,6 +5,7 @@
 #include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
+#include "Engine/Runtime/Scene/SceneSystem.h"
 
 namespace ve
 {
@@ -27,6 +28,9 @@ struct EngineRuntimeInitParam
     /// Configuration for the dedicated file IO system service.
     IOSystemInitParam ioSystem;
 
+    /// Configuration for the Scene Thread and active Scene service.
+    SceneSystemInitParam sceneSystem;
+
     /// Configuration for the Render Thread and render command queue service.
     RenderSystemInitParam renderSystem;
 };
@@ -35,8 +39,8 @@ struct EngineRuntimeInitParam
 ///
 /// EngineRuntime sits below Application's platform loop and above individual runtime modules. It initializes and shuts
 /// down long-lived services in a deterministic order, and exposes references to those services without using a global
-/// singleton. The first version owns JobSystem, IOSystem, and RenderSystem; Scene, Resource, Input, Script, UI, and
-/// Physics can connect through this layer as those modules land.
+/// singleton. The first version owns JobSystem, IOSystem, SceneSystem, and RenderSystem; Resource, Input, Script, UI,
+/// and Physics can connect through this layer as those modules land.
 class EngineRuntime : public NonMovable
 {
 public:
@@ -93,9 +97,20 @@ public:
     /// The runtime must be initialized before callers use the returned service.
     [[nodiscard]] const RenderSystem& GetRenderSystem() const noexcept;
 
+    /// Returns the runtime-owned Scene System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] SceneSystem& GetSceneSystem() noexcept;
+
+    /// Returns the runtime-owned Scene System.
+    ///
+    /// The runtime must be initialized before callers use the returned service.
+    [[nodiscard]] const SceneSystem& GetSceneSystem() const noexcept;
+
 private:
     JobSystem jobSystem_;
     IOSystem ioSystem_;
+    SceneSystem sceneSystem_;
     RenderSystem renderSystem_;
     EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;
 };

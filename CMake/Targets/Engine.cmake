@@ -23,6 +23,10 @@ function(ve_add_engine)
             Engine/Runtime/Platform/Window.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderSystem.cpp
+            Engine/Runtime/Scene/Component.cpp
+            Engine/Runtime/Scene/GameObject.cpp
+            Engine/Runtime/Scene/Scene.cpp
+            Engine/Runtime/Scene/SceneSystem.cpp
             Engine/Runtime/Threading/Synchronization.cpp
             Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
@@ -58,6 +62,10 @@ function(ve_add_engine)
             Engine/Runtime/Platform/Window.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderSystem.h
+            Engine/Runtime/Scene/Component.h
+            Engine/Runtime/Scene/GameObject.h
+            Engine/Runtime/Scene/Scene.h
+            Engine/Runtime/Scene/SceneSystem.h
             Engine/Runtime/Threading/Atomic.h
             Engine/Runtime/Threading/LockFreeMpscQueue.h
             Engine/Runtime/Threading/LockFreeSpscQueue.h

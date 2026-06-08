@@ -323,8 +323,9 @@ The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar frame
 this application-level flow instead of duplicating service initialization in each executable entry point.
 
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
-explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem, and
-RenderSystem; Scene, Resource, Input, Script, UI, and Physics should connect through this layer as their modules land.
+explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem,
+SceneSystem, and RenderSystem; Resource, Input, Script, UI, and Physics should connect through this layer as their
+modules land.
 
 ### 7.4 FileSystem
 
@@ -462,6 +463,13 @@ Core concepts:
 - `GameObject`.
 - `Component`.
 - `TransformComponent`.
+- `MeshRenderComponent`.
+- `CameraComponent`.
+- `LightComponent`.
+
+`SceneSystem` owns the active `Scene` and starts the Scene Thread that updates the scene hierarchy. Main Thread and Game
+Thread remain conceptually distinct; this first implementation gives scene update a dedicated runtime service boundary
+without making Render Thread code read live `GameObject` state.
 
 Component lifecycle:
 
@@ -849,7 +857,7 @@ Recommended built-in first-stage components:
 
 - `TransformComponent`.
 - `CameraComponent`.
-- `MeshRendererComponent`.
+- `MeshRenderComponent`.
 - `LightComponent`.
 - `ScriptComponent`.
 - `CanvasComponent`.
