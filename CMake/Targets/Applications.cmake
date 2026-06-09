@@ -36,6 +36,8 @@ function(ve_add_windows_editor)
                 VEngine
         )
 
+        ve_setup_imgui(VEngineEditor)
+
         ve_configure_target(VEngineEditor)
     else()
         message(STATUS "VEngineEditor is only built on Windows.")
