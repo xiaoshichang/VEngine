@@ -39,7 +39,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     desc.runtime.renderSystem.threadName = "VEngineEditorRenderThread";
 
     ve::Application application(std::move(desc));
-    const int exitCode = application.Run();
+    int exitCode = application.Init();
+    if (exitCode == 0)
+    {
+        application.Run();
+        exitCode = application.GetExitCode();
+    }
+    application.UnInit();
     ve::ShutdownLogging();
     return exitCode;
 }

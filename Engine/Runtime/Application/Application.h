@@ -24,7 +24,9 @@ namespace ve
         explicit Application(ApplicationInitParam desc);
         ~Application();
 
-        [[nodiscard]] int Run();
+        [[nodiscard]] int Init();
+        void Run();
+        void UnInit();
 
         [[nodiscard]] const std::string& GetName() const noexcept;
         [[nodiscard]] int GetExitCode() const noexcept;
@@ -36,10 +38,11 @@ namespace ve
         [[nodiscard]] Result<std::unique_ptr<Window>> CreateMainWindow();
         [[nodiscard]] ErrorCode InitializeRendering(Window& mainWindow);
         [[nodiscard]] int RunMainLoop(Window& mainWindow);
-        [[nodiscard]] int RunApplication();
 
         ApplicationInitParam initParam_;
         EngineRuntime engineRuntime_;
+        std::unique_ptr<Window> mainWindow_;
+        bool initialized_ = false;
         int exitCode_ = 0;
     };
 } // namespace ve

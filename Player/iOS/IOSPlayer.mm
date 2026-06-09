@@ -17,7 +17,12 @@
     (void)launchOptions;
 
     ve::Application engineApplication("VEngineIOSPlayer");
-    engineApplication.RunOnce();
+    int engineInitResult = engineApplication.Init();
+    if (engineInitResult == 0)
+    {
+        engineApplication.Run();
+    }
+    engineApplication.UnInit();
 
     const ve::BuildInfo buildInfo = ve::GetBuildInfo();
     (void)buildInfo;

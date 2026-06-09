@@ -111,12 +111,55 @@ namespace ve
         }
     }
 
-    Application::~Application() = default;
-
-    int Application::Run()
+    Application::~Application()
     {
-        exitCode_ = RunApplication();
+        UnInit();
+    }
+
+    int Application::Init()
+    {
+        if (initialized_)
+        {
+            return exitCode_;
+        }
+
+        VE_LOG_INFO("{} starting", initParam_.name);
+        ErrorCode runtimeResult = InitializeEngineRuntime();
+        VE_ASSERT_MESSAGE(runtimeResult == ErrorCode::None, "InitializeEngineRuntime fail.");
+                          
+        Result<std::unique_ptr<Window>> windowResult = CreateMainWindow();
+        VE_ASSERT_MESSAGE(windowResult.IsOk(), "CreateMainWindow fail");
+
+        mainWindow_ = windowResult.MoveValue();
+        mainWindow_->SetCommandHandler([](std::string_view command)
+                                       { VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command); });
+
+        ErrorCode renderResult = InitializeRendering(*mainWindow_);
+        VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "InitializeRendering fail");
+
+        initialized_ = true;
+        exitCode_ = 0;
         return exitCode_;
+    }
+
+    void Application::Run()
+    {
+        exitCode_ = RunMainLoop(*mainWindow_);
+    }
+
+    void Application::UnInit()
+    {
+        const int finalExitCode = exitCode_;
+        if (mainWindow_ != nullptr)
+        {
+            mainWindow_->PumpCommands();
+            mainWindow_->SetCommandHandler({});
+            mainWindow_.reset();
+        }
+
+        ShutdownEngineRuntime(engineRuntime_);
+        initialized_ = false;
+        VE_LOG_INFO("{} stopped with exit code {}", initParam_.name, finalExitCode);
     }
 
     ErrorCode Application::InitializeEngineRuntime()
@@ -200,33 +243,6 @@ namespace ve
         }
 
         return exitCode;
-    }
-
-    int Application::RunApplication()
-    {
-        VE_LOG_INFO("{} starting", initParam_.name);
-        ErrorCode runtimeResult = InitializeEngineRuntime();
-        VE_ASSERT_MESSAGE(runtimeResult == ErrorCode::None, "InitializeEngineRuntime fail.");
-
-        Result<std::unique_ptr<Window>> windowResult = CreateMainWindow();
-        VE_ASSERT_MESSAGE(windowResult.IsOk(), "CreateMainWindow fail");
-
-        std::unique_ptr<Window> mainWindow = windowResult.MoveValue();
-        mainWindow->SetCommandHandler([](std::string_view command)
-                                      { VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command); });
-
-        ErrorCode renderResult = InitializeRendering(*mainWindow);
-        VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "InitializeRendering fail.");
-
-        const int result = RunMainLoop(*mainWindow);
-
-        mainWindow->PumpCommands();
-        mainWindow->SetCommandHandler({});
-        mainWindow.reset();
-        ShutdownEngineRuntime(engineRuntime_);
-
-        VE_LOG_INFO("{} stopped with exit code {}", initParam_.name, result);
-        return result;
     }
 
     const std::string& Application::GetName() const noexcept
