@@ -20,3 +20,6 @@ CTestTestfile.cmake
 
 *.log
 *.tmp
+
+cmake-build-debug
+cmake-build-release

@@ -11,14 +11,13 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace ve
 {
     /// Node in a Scene-owned hierarchy.
     ///
-    /// GameObject owns its children and Components. A GameObject may be reparented in future milestones, but this first
-    /// Scene skeleton keeps ownership explicit through unique pointers.
+    /// GameObject owns a fixed first-stage component set.
+    /// Parent-child hierarchy ownership lives on TransformComponent to match Unity-style transform trees.
     class GameObject final : public NonMovable
     {
     public:
@@ -29,20 +28,6 @@ namespace ve
         [[nodiscard]] const std::string& GetName() const noexcept;
         void SetName(std::string name);
 
-        [[nodiscard]] bool IsActive() const noexcept;
-        void SetActive(bool active) noexcept;
-
-        [[nodiscard]] GameObject* GetParent() noexcept;
-        [[nodiscard]] const GameObject* GetParent() const noexcept;
-
-        [[nodiscard]] SizeT GetChildCount() const noexcept;
-        [[nodiscard]] GameObject* GetChild(SizeT index) noexcept;
-        [[nodiscard]] const GameObject* GetChild(SizeT index) const noexcept;
-
-        [[nodiscard]] Result<GameObject*> CreateChild(std::string name = {});
-        [[nodiscard]] bool DestroyChild(GameObject& child) noexcept;
-        void ClearChildren() noexcept;
-
         [[nodiscard]] SizeT GetComponentCount() const noexcept;
         [[nodiscard]] Component* GetComponent(SizeT index) noexcept;
         [[nodiscard]] const Component* GetComponent(SizeT index) const noexcept;
@@ -51,13 +36,30 @@ namespace ve
         [[nodiscard]] Result<TComponent*> AddComponent(TArgs&&... args)
         {
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+            static_assert(IsSupportedComponentTypeV<TComponent>,
+                          "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
+                          "LightComponent.");
+
+            std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+            if (componentSlot == nullptr)
+            {
+                return Result<TComponent*>::Failure(
+                    Error(ErrorCode::InvalidArgument, "GameObject component slot lookup failed."));
+            }
+
+            if (*componentSlot != nullptr)
+            {
+                return Result<TComponent*>::Failure(
+                    Error(ErrorCode::InvalidState, "GameObject already owns this component type."));
+            }
 
             try
             {
                 std::unique_ptr<TComponent> component = std::make_unique<TComponent>(std::forward<TArgs>(args)...);
                 TComponent* componentPointer = component.get();
                 componentPointer->SetOwner(this);
-                components_.push_back(std::move(component));
+                *componentSlot = std::move(component);
                 return Result<TComponent*>::Success(componentPointer);
             }
             catch (const std::bad_alloc&)
@@ -71,61 +73,120 @@ namespace ve
         [[nodiscard]] TComponent* GetComponent() noexcept
         {
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+            static_assert(IsSupportedComponentTypeV<TComponent>,
+                          "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
+                          "LightComponent.");
 
-            for (const std::unique_ptr<Component>& component : components_)
-            {
-                if (TComponent* typedComponent = dynamic_cast<TComponent*>(component.get()))
-                {
-                    return typedComponent;
-                }
-            }
-
-            return nullptr;
+            std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+            return componentSlot != nullptr ? componentSlot->get() : nullptr;
         }
 
         template<typename TComponent>
         [[nodiscard]] const TComponent* GetComponent() const noexcept
         {
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+            static_assert(IsSupportedComponentTypeV<TComponent>,
+                          "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
+                          "LightComponent.");
 
-            for (const std::unique_ptr<Component>& component : components_)
-            {
-                if (const TComponent* typedComponent = dynamic_cast<const TComponent*>(component.get()))
-                {
-                    return typedComponent;
-                }
-            }
-
-            return nullptr;
+            const std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+            return componentSlot != nullptr ? componentSlot->get() : nullptr;
         }
 
         template<typename TComponent>
         [[nodiscard]] bool RemoveComponent() noexcept
         {
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
+            static_assert(IsSupportedComponentTypeV<TComponent>,
+                          "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
+                          "LightComponent.");
 
-            for (auto it = components_.begin(); it != components_.end(); ++it)
+            // Transform drives hierarchy and cannot be removed from a live GameObject.
+            if constexpr (std::is_same_v<TComponent, TransformComponent>)
             {
-                if (dynamic_cast<TComponent*>(it->get()) != nullptr)
-                {
-                    (*it)->SetOwner(nullptr);
-                    components_.erase(it);
-                    return true;
-                }
+                return false;
             }
 
-            return false;
+            std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+            if (componentSlot == nullptr || *componentSlot == nullptr)
+            {
+                return false;
+            }
+
+            (*componentSlot)->SetOwner(nullptr);
+            componentSlot->reset();
+            return true;
         }
 
         void Update(Float32 deltaSeconds);
 
     private:
-        void SetParent(GameObject* parent) noexcept;
+        template<typename TComponent>
+        static constexpr bool IsSupportedComponentTypeV =
+                std::is_same_v<TComponent, TransformComponent> ||
+                std::is_same_v<TComponent, MeshRenderComponent> ||
+                std::is_same_v<TComponent, CameraComponent> ||
+                std::is_same_v<TComponent, LightComponent>;
+
+        template<typename TComponent>
+        [[nodiscard]] std::unique_ptr<TComponent>* ResolveComponentSlot() noexcept
+        {
+            if constexpr (std::is_same_v<TComponent, TransformComponent>)
+            {
+                return &transformCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+            {
+                return &meshRenderCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, CameraComponent>)
+            {
+                return &cameraCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, LightComponent>)
+            {
+                return &lightCmpt_;
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+
+        template<typename TComponent>
+        [[nodiscard]] const std::unique_ptr<TComponent>* ResolveComponentSlot() const noexcept
+        {
+            if constexpr (std::is_same_v<TComponent, TransformComponent>)
+            {
+                return &transformCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+            {
+                return &meshRenderCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, CameraComponent>)
+            {
+                return &cameraCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, LightComponent>)
+            {
+                return &lightCmpt_;
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+
+        void InitializeRequiredComponents();
 
         std::string name_;
-        GameObject* parent_ = nullptr;
-        std::vector<std::unique_ptr<GameObject>> children_;
-        std::vector<std::unique_ptr<Component>> components_;
-        bool active_ = true;
+        std::unique_ptr<TransformComponent> transformCmpt_;
+        std::unique_ptr<MeshRenderComponent> meshRenderCmpt_;
+        std::unique_ptr<CameraComponent> cameraCmpt_;
+        std::unique_ptr<LightComponent> lightCmpt_;
     };
 } // namespace ve

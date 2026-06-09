@@ -482,7 +482,11 @@ OnUpdate
 OnLateUpdate
 ```
 
-`Scene` owns hierarchy, component storage, lifecycle dispatch, and serialization. Rendering, physics, UI, and script systems should observe or consume scene data through clear interfaces instead of freely coupling to scene internals.
+`Scene` owns root `GameObject` storage, lifecycle dispatch, and serialization. Parent-child tree ownership is maintained by
+`TransformComponent`, while `GameObject` keeps a fixed first-stage component slot layout (`Transform`, `MeshRender`,
+`Camera`, `Light`) rather than an open-ended component container. `GameObject` does not carry standalone parent, child, or
+active state. Rendering, physics, UI, and script systems should observe or consume scene data through clear interfaces
+instead of freely coupling to scene internals.
 
 ### 7.11 Resource
 
@@ -852,6 +856,9 @@ Scene
     TransformComponent
     Component...
 ```
+
+Hierarchy ownership lives on `TransformComponent` (parent/child links and child creation/destruction). `GameObject`
+exposes components only; hierarchy reads and writes go through `TransformComponent`.
 
 Recommended built-in first-stage components:
 

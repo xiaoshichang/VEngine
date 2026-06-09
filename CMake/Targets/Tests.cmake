@@ -26,6 +26,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineTests>
     )
 
+    add_executable(VEngineSceneTests
+        Tests/Unit/SceneTests.cpp
+    )
+
+    target_link_libraries(VEngineSceneTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineSceneTests)
+
+    add_test(
+        NAME VEngineSceneTests
+        COMMAND $<TARGET_FILE:VEngineSceneTests>
+    )
+
     add_executable(VEngineMemoryTests
         Tests/Unit/MemoryTests.cpp
     )
