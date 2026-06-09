@@ -21,6 +21,7 @@ namespace ve
         RenderSystem* renderSystem = nullptr;
 
         // frame sync between main thread and render thread.
+        ManualResetEvent startLoopEvent;
         MainThreadSceneThreadFrameEndSync* mainThreadSceneThreadFrameEndSync = nullptr;
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
 
@@ -68,6 +69,7 @@ namespace ve
             const ThreadId sceneThreadId = GetCurrentThreadId();
             impl.sceneThreadIdValue.store(sceneThreadId.value, std::memory_order_release);
             SetExpectedSceneThreadId(sceneThreadId);
+            impl.startLoopEvent.Wait();
 
             VE_ASSERT_MESSAGE(impl.timeSystem != nullptr, "impl.timeSystem should not be nullptr");
             VE_ASSERT_MESSAGE(impl.timeSystem->IsInitialized(), "impl.timeSystem should be initialized.");
@@ -83,7 +85,7 @@ namespace ve
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
 
                     ErrorCode renderResult = impl.renderSystem->RenderFrame();
-                    VE_ASSERT_MESSAGE(renderResult != ErrorCode::None, "RenderFrame with error.");
+                    VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
 
                     impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
                         impl.stopRequested,
@@ -238,6 +240,9 @@ namespace ve
                           "SetSceneThreadRenderThreadFrameEndSync requires SceneSystem to be stopped.");
         impl_->sceneThreadRenderThreadFrameEndSync = sync;
     }
-
+    void SceneSystem::StartLoop() noexcept
+    {
+        impl_->startLoopEvent.Set();
+    }
 
 } // namespace ve

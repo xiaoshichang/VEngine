@@ -35,7 +35,6 @@ namespace ve
         [[nodiscard]] ErrorCode InitializeEngineRuntime();
         [[nodiscard]] Result<std::unique_ptr<Window>> CreateMainWindow();
         [[nodiscard]] ErrorCode InitializeRendering(Window& mainWindow);
-        void ShutdownRendering() noexcept;
         [[nodiscard]] int RunMainLoop(Window& mainWindow);
         [[nodiscard]] int RunApplication();
 

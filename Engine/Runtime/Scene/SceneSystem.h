@@ -73,6 +73,9 @@ namespace ve
         /// Assigns the Scene-Render frame-end sync primitive used by this SceneSystem.
         void SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept;
 
+        /// notify scene thread to start main loop.
+        void StartLoop() noexcept;
+
 
     private:
         std::unique_ptr<SceneSystemImpl> impl_;

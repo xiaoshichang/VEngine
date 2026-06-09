@@ -172,20 +172,13 @@ namespace ve
         return ErrorCode::None;
     }
 
-    void Application::ShutdownRendering() noexcept
-    {
-        RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
-        renderSystem.DestroyMainSwapchain();
-        renderSystem.ShutdownDevice();
-    }
-
     int Application::RunMainLoop(Window& mainWindow)
     {
-        RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
-        SceneSystem& sceneSystem = engineRuntime_.GetSceneSystem();
         int exitCode = 0;
         WindowStateSnapshot previousState = CaptureWindowState(mainWindow);
 
+        SceneSystem& sceneSystem = engineRuntime_.GetSceneSystem();
+        sceneSystem.StartLoop();
         while (!mainWindow.ShouldClose())
         {
             mainWindow.PumpCommands();
@@ -213,29 +206,19 @@ namespace ve
     {
         VE_LOG_INFO("{} starting", initParam_.name);
         ErrorCode runtimeResult = InitializeEngineRuntime();
-        if (runtimeResult != ErrorCode::None)
-        {
-            throw;
-        }
+        VE_ASSERT_MESSAGE(runtimeResult == ErrorCode::None, "InitializeEngineRuntime fail.");
 
         Result<std::unique_ptr<Window>> windowResult = CreateMainWindow();
-        if (!windowResult)
-        {
-            throw;
-        }
+        VE_ASSERT_MESSAGE(windowResult.IsOk(), "CreateMainWindow fail");
 
         std::unique_ptr<Window> mainWindow = windowResult.MoveValue();
         mainWindow->SetCommandHandler([](std::string_view command)
                                       { VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command); });
 
         ErrorCode renderResult = InitializeRendering(*mainWindow);
-        if (renderResult != ErrorCode::None)
-        {
-            throw;
-        }
+        VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "InitializeRendering fail.");
 
         const int result = RunMainLoop(*mainWindow);
-        ShutdownRendering();
 
         mainWindow->PumpCommands();
         mainWindow->SetCommandHandler({});
