@@ -75,12 +75,12 @@ namespace ve
                           "This logic must run on the Render Thread.");                                               \
     } while (false)
 #else
-#define VE_ENSURE_SCENE_THREAD()                                                                                      \
+#define VE_ASSERT_SCENE_THREAD()                                                                                      \
     do                                                                                                                \
     {                                                                                                                 \
     } while (false)
 
-#define VE_ENSURE_RENDER_THREAD()                                                                                     \
+#define VE_ASSERT_RENDER_THREAD()                                                                                     \
     do                                                                                                                \
     {                                                                                                                 \
     } while (false)

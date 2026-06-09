@@ -67,6 +67,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
     {
         Thread thread;
         Atomic<UInt64> renderThreadIdValue{0};
+        // frame sync between scene thread
+        SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
+
         Semaphore commandSemaphore{0};
         RenderCommandQueue commandQueue;
         AtomicBool acceptingCommands{false};
@@ -422,6 +425,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         impl_->stopRequested.store(false, std::memory_order_release);
         impl_->acceptingCommands.store(true, std::memory_order_release);
+        if (impl_->sceneThreadRenderThreadFrameEndSync != nullptr)
+        {
+            impl_->sceneThreadRenderThreadFrameEndSync->Reset();
+        }
 
         ErrorCode startResult = impl_->thread.Start(initParam.threadName.empty() ? ThreadDesc{"VEngineRenderThread"}
                                                                                  : ThreadDesc{initParam.threadName},
@@ -457,6 +464,23 @@ float4 PSMain(VSOutput input) : SV_TARGET
     ThreadId RenderSystem::GetRenderThreadId() const noexcept
     {
         return ThreadId{impl_->renderThreadIdValue.load(std::memory_order_acquire)};
+    }
+
+    void RenderSystem::SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept
+    {
+        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire),
+                          "SetSceneThreadRenderThreadFrameEndSync requires RenderSystem to be stopped.");
+        impl_->sceneThreadRenderThreadFrameEndSync = sync;
+    }
+
+    ErrorCode RenderSystem::SubmitFrameEndFenceSignal(UInt32 fenceIndex)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        return SubmitFunction("RenderSystemFrameEndFenceSignal",
+                              [sync = impl_->sceneThreadRenderThreadFrameEndSync, fenceIndex]()
+                              {
+                                  sync->NotifyRenderThreadFrameEnd(fenceIndex);
+                              });
     }
 
     ErrorCode RenderSystem::InitializeDevice(const RenderDeviceDesc& desc)

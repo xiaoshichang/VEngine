@@ -3,16 +3,20 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Scene/OSEventQueue.h"
 #include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/Thread.h"
 #include "Engine/Runtime/Time/Time.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 
 namespace ve
 {
     struct SceneSystemImpl;
+    using RenderFrameFenceSignalSubmitter = std::function<ErrorCode(UInt32 fenceIndex)>;
 
     /// Describes the Scene Thread created by SceneSystem::Initialize().
     struct SceneSystemInitParam
@@ -56,13 +60,20 @@ namespace ve
         /// Returns the active Scene. The returned pointer remains owned by SceneSystem.
         [[nodiscard]] const Scene* GetScene() const noexcept;
 
-        /// Replaces the active Scene. Passing nullptr creates a new empty Scene.
-        void ReplaceScene(std::unique_ptr<Scene> scene);
+        /// Queues one OS event for Scene Thread processing.
+        [[nodiscard]] ErrorCode EnqueueOSEvent(const OSEvent& event);
 
-        /// Runs one update of the active Scene on the calling thread.
-        ///
-        /// This is useful for deterministic editor or smoke paths. It takes the same Scene lock as the Scene Thread.
-        void Update(Float32 deltaSeconds);
+        /// Marks one Main Thread frame end and blocks when Main Thread is ahead by more than one frame.
+        void NotifyMainThreadFrameEnd();
+
+        /// Assigns the Main-Scene frame-end sync primitive used by this SceneSystem.
+        void SetMainThreadSceneThreadFrameEndSync(MainThreadSceneThreadFrameEndSync* sync) noexcept;
+
+        /// Assigns the Scene-Render frame-end sync primitive used by this SceneSystem.
+        void SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept;
+
+        /// Assigns the callback used by Scene Thread to enqueue one render-thread fence signal command.
+        void SetRenderFrameFenceSignalSubmitter(RenderFrameFenceSignalSubmitter submitter) noexcept;
 
     private:
         std::unique_ptr<SceneSystemImpl> impl_;

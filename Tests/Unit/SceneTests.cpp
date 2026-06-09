@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Core/Error.h"
+#include "Engine/Runtime/Scene/OSEventQueue.h"
 #include "Engine/Runtime/Scene/Component.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 
@@ -131,6 +132,35 @@ namespace
 
         return passed;
     }
+
+    bool TestOSEventQueuePushAndPop()
+    {
+        bool passed = true;
+
+        ve::OSEventQueue osEventQueue;
+        passed &= Expect(osEventQueue.Push(ve::OSEvent{ve::OSEventType::WindowFocusGained}) == ve::ErrorCode::None,
+                         "OSEventQueue should push first event");
+        passed &= Expect(osEventQueue.Push(ve::OSEvent{ve::OSEventType::WindowResized, 1280, 720}) ==
+                             ve::ErrorCode::None,
+                         "OSEventQueue should push second event");
+
+        ve::OSEvent firstEvent;
+        passed &= Expect(osEventQueue.TryPop(firstEvent), "OSEventQueue should pop first event");
+        passed &= Expect(firstEvent.type == ve::OSEventType::WindowFocusGained,
+                         "OSEventQueue should preserve first event type");
+
+        ve::OSEvent secondEvent;
+        passed &= Expect(osEventQueue.TryPop(secondEvent), "OSEventQueue should pop second event");
+        passed &= Expect(secondEvent.type == ve::OSEventType::WindowResized,
+                         "OSEventQueue should preserve second event type");
+        passed &= Expect(secondEvent.width == 1280 && secondEvent.height == 720,
+                         "OSEventQueue should preserve resized event payload");
+
+        ve::OSEvent emptyEvent;
+        passed &= Expect(!osEventQueue.TryPop(emptyEvent), "OSEventQueue should report empty after pops");
+
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -140,6 +170,7 @@ int main()
     passed &= TestGameObjectStartsWithTransformComponent();
     passed &= TestComponentSlotsAreUniquePerType();
     passed &= TestTransformOwnsHierarchyRelationships();
+    passed &= TestOSEventQueuePushAndPop();
 
     if (passed)
     {

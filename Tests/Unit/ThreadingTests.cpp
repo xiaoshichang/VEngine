@@ -1,5 +1,6 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Threading/Atomic.h"
+#include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/LockFreeMpscQueue.h"
 #include "Engine/Runtime/Threading/LockFreeSpscQueue.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
@@ -89,6 +90,94 @@ namespace
         ve::SetExpectedSceneThreadId(ve::ThreadId{});
         ve::SetExpectedRenderThreadId(ve::ThreadId{});
         passed &= Expect(true, "Thread ensure macros should accept current thread id");
+
+        return passed;
+    }
+
+    bool TestMainThreadSceneThreadFrameEndSync()
+    {
+        bool passed = true;
+
+        ve::MainThreadSceneThreadFrameEndSync frameEndSync;
+        ve::AtomicUInt32 firstSignalFenceIndex{0};
+        ve::AtomicInt32 enqueueCount{0};
+
+        auto enqueueFenceSignal = [&](ve::UInt32 fenceIndex)
+        {
+            if (enqueueCount.fetch_add(1, std::memory_order_acq_rel) == 0)
+            {
+                firstSignalFenceIndex.store(fenceIndex, std::memory_order_release);
+            }
+
+            return ve::ErrorCode::None;
+        };
+
+        frameEndSync.NotifyMainThreadFrameEnd(enqueueFenceSignal);
+
+        ve::AtomicBool secondMainFrameFinished{false};
+        ve::Thread blockedMainThread;
+        passed &= ExpectOk(blockedMainThread.Start(ve::ThreadDesc{"MainSceneSyncBlockedMain"},
+                                                   [&]()
+                                                   {
+                                                       frameEndSync.NotifyMainThreadFrameEnd(enqueueFenceSignal);
+                                                       secondMainFrameFinished.store(true, std::memory_order_release);
+                                                   }),
+                           "MainScene sync blocked-main thread should start");
+
+        ve::SleepFor(std::chrono::milliseconds(20));
+        passed &= Expect(!secondMainFrameFinished.load(std::memory_order_acquire),
+                         "Second main-thread frame should block when scene lags more than one frame");
+
+        frameEndSync.NotifySceneThreadFrameEnd(firstSignalFenceIndex.load(std::memory_order_acquire));
+
+        passed &= Expect(blockedMainThread.Join(), "MainScene sync blocked-main thread should join");
+        passed &= Expect(secondMainFrameFinished.load(std::memory_order_acquire),
+                         "Second main-thread frame should resume after scene frame end");
+
+        return passed;
+    }
+
+    bool TestSceneThreadRenderThreadFrameEndSync()
+    {
+        bool passed = true;
+
+        ve::SceneThreadRenderThreadFrameEndSync frameEndSync;
+        ve::AtomicBool stopRequested{false};
+        ve::AtomicUInt32 firstSignalFenceIndex{0};
+        ve::AtomicInt32 enqueueCount{0};
+
+        auto enqueueFenceSignal = [&](ve::UInt32 fenceIndex)
+        {
+            if (enqueueCount.fetch_add(1, std::memory_order_acq_rel) == 0)
+            {
+                firstSignalFenceIndex.store(fenceIndex, std::memory_order_release);
+            }
+
+            return ve::ErrorCode::None;
+        };
+
+        frameEndSync.NotifySceneThreadFrameEndAndWait(stopRequested, enqueueFenceSignal);
+
+        ve::AtomicBool secondSceneFrameFinished{false};
+        ve::Thread blockedSceneThread;
+        passed &= ExpectOk(blockedSceneThread.Start(ve::ThreadDesc{"SceneRenderSyncBlockedScene"},
+                                                    [&]()
+                                                    {
+                                                        frameEndSync.NotifySceneThreadFrameEndAndWait(stopRequested,
+                                                                                                      enqueueFenceSignal);
+                                                        secondSceneFrameFinished.store(true, std::memory_order_release);
+                                                    }),
+                           "SceneRender sync blocked-scene thread should start");
+
+        ve::SleepFor(std::chrono::milliseconds(20));
+        passed &= Expect(!secondSceneFrameFinished.load(std::memory_order_acquire),
+                         "Second scene-thread frame should block when render lags more than one frame");
+
+        frameEndSync.NotifyRenderThreadFrameEnd(firstSignalFenceIndex.load(std::memory_order_acquire));
+
+        passed &= Expect(blockedSceneThread.Join(), "SceneRender sync blocked-scene thread should join");
+        passed &= Expect(secondSceneFrameFinished.load(std::memory_order_acquire),
+                         "Second scene-thread frame should resume after render frame end");
 
         return passed;
     }
@@ -495,6 +584,8 @@ int main()
 
     passed &= TestThreadStartJoinAndName();
     passed &= TestThreadEnsureMacros();
+    passed &= TestMainThreadSceneThreadFrameEndSync();
+    passed &= TestSceneThreadRenderThreadFrameEndSync();
     passed &= TestThreadRejectsRepeatedStart();
     passed &= TestMutexAndLockGuard();
     passed &= TestRecursiveMutex();

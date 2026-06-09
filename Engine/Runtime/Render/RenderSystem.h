@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/Thread.h"
 
 #include <functional>
@@ -110,6 +111,12 @@ namespace ve
 
         /// Returns the last known id of the owned Render Thread.
         [[nodiscard]] ThreadId GetRenderThreadId() const noexcept;
+
+        /// Assigns the Scene-Render frame-end sync primitive used by this RenderSystem.
+        void SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept;
+
+        /// Enqueues one render-thread frame-end fence signal through RenderCommandQueue.
+        [[nodiscard]] ErrorCode SubmitFrameEndFenceSignal(UInt32 fenceIndex);
 
         /// Creates the RHI device on the Render Thread.
         ///

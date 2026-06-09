@@ -654,6 +654,8 @@ Recommended frame flow:
 ```text
 Main Thread
   Pump platform messages
+  Handle main-thread-only OS events
+  Push remaining OS events to Scene Thread through OSEventQueue
   Tick application shell
 
 Game Thread
@@ -674,6 +676,11 @@ IO Thread + Worker Threads
   Decode/import resource data
   Prepare upload requests
 ```
+
+Frame pacing should keep adjacent thread stages within one frame:
+
+- `MainThreadSceneThreadFrameEndSync` limits Main Thread lead over Scene Thread to at most one frame.
+- `SceneThreadRenderThreadFrameEndSync` limits Scene Thread lead over Render Thread to at most one frame.
 
 ## 9. Job System
 

@@ -11,6 +11,73 @@ namespace ve
 {
     namespace
     {
+        struct WindowStateSnapshot
+        {
+            bool visible = false;
+            bool focused = false;
+            bool minimized = false;
+            WindowExtent extent = {};
+        };
+
+        [[nodiscard]] WindowStateSnapshot CaptureWindowState(const Window& window)
+        {
+            WindowStateSnapshot snapshot;
+            snapshot.visible = window.IsVisible();
+            snapshot.focused = window.IsFocused();
+            snapshot.minimized = window.IsMinimized();
+            snapshot.extent = window.GetClientExtent();
+            return snapshot;
+        }
+
+        void EnqueueOSEvent(SceneSystem& sceneSystem, OSEvent event)
+        {
+            ErrorCode queueResult = sceneSystem.EnqueueOSEvent(event);
+            if (queueResult != ErrorCode::None)
+            {
+                VE_LOG_WARN("Failed to enqueue OS event for Scene Thread: {}", ToString(queueResult));
+            }
+        }
+
+        void EnqueueWindowStateDeltaEvents(SceneSystem& sceneSystem,
+                                           const WindowStateSnapshot& previousState,
+                                           const WindowStateSnapshot& currentState)
+        {
+            if (previousState.focused != currentState.focused)
+            {
+                EnqueueOSEvent(sceneSystem,
+                               OSEvent{
+                                   currentState.focused ? OSEventType::WindowFocusGained : OSEventType::WindowFocusLost,
+                               });
+            }
+
+            if (previousState.minimized != currentState.minimized)
+            {
+                const OSEventType minimizedEventType =
+                    currentState.minimized ? OSEventType::WindowMinimized : OSEventType::WindowRestored;
+                EnqueueOSEvent(sceneSystem,
+                               OSEvent{
+                                   minimizedEventType,
+                               });
+            }
+
+            if (previousState.visible != currentState.visible)
+            {
+                EnqueueOSEvent(sceneSystem,
+                               OSEvent{currentState.visible ? OSEventType::WindowShown : OSEventType::WindowHidden});
+            }
+
+            if (previousState.extent.width != currentState.extent.width ||
+                previousState.extent.height != currentState.extent.height)
+            {
+                EnqueueOSEvent(sceneSystem,
+                               OSEvent{
+                                   OSEventType::WindowResized,
+                                   currentState.extent.width,
+                                   currentState.extent.height,
+                               });
+            }
+        }
+
         void ShutdownEngineRuntime(EngineRuntime& runtime)
         {
             runtime.Shutdown();
@@ -115,13 +182,21 @@ namespace ve
     int Application::RunMainLoop(Window& mainWindow)
     {
         RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
+        SceneSystem& sceneSystem = engineRuntime_.GetSceneSystem();
         int exitCode = 0;
+        WindowStateSnapshot previousState = CaptureWindowState(mainWindow);
 
         while (!mainWindow.ShouldClose())
         {
             mainWindow.PumpCommands();
 
+            // Main Thread handles loop control events (for example WM_QUIT) directly.
             const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
+            const WindowStateSnapshot currentState = CaptureWindowState(mainWindow);
+            EnqueueWindowStateDeltaEvents(sceneSystem, previousState, currentState);
+            previousState = currentState;
+
+            // Remaining window state changes are forwarded to Scene Thread through OSEventQueue.
             if (pumpStatus.result == WindowPumpResult::Quit)
             {
                 exitCode = pumpStatus.exitCode;
@@ -134,6 +209,8 @@ namespace ve
                 VE_LOG_ERROR("RenderFrame failed: {}", ToString(renderResult));
                 return 1;
             }
+
+            sceneSystem.NotifyMainThreadFrameEnd();
         }
 
         return exitCode;

@@ -2,29 +2,61 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Threading/ThreadEnsure.h"
 #include "Engine/Runtime/Threading/Atomic.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <exception>
 #include <new>
+#include <utility>
 
 namespace ve
 {
     struct SceneSystemImpl
     {
         Thread thread;
-        std::unique_ptr<Scene> scene;
-        TimeSystem* timeSystem = nullptr;
         Atomic<UInt64> sceneThreadIdValue{0};
+        std::unique_ptr<Scene> scene;
+        OSEventQueue osEventQueue;
+        TimeSystem* timeSystem = nullptr;
+
+        // frame sync between main thread and render thread.
+        MainThreadSceneThreadFrameEndSync* mainThreadSceneThreadFrameEndSync = nullptr;
+        SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
+        RenderFrameFenceSignalSubmitter renderFrameFenceSignalSubmitter;
+
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
     };
 
     namespace
     {
+        void ProcessOSEvents(SceneSystemImpl& impl)
+        {
+            OSEvent event;
+            while (impl.osEventQueue.TryPop(event))
+            {
+                switch (event.type)
+                {
+                case OSEventType::WindowFocusGained:
+                case OSEventType::WindowFocusLost:
+                case OSEventType::WindowMinimized:
+                case OSEventType::WindowRestored:
+                case OSEventType::WindowResized:
+                case OSEventType::WindowShown:
+                case OSEventType::WindowHidden:
+                    break;
+                case OSEventType::FrameEndFenceSignal:
+                    if (impl.mainThreadSceneThreadFrameEndSync != nullptr)
+                    {
+                        impl.mainThreadSceneThreadFrameEndSync->NotifySceneThreadFrameEnd(event.fenceIndex);
+                    }
+                    break;
+                }
+            }
+        }
+
         void UpdateScene(SceneSystemImpl& impl, Float32 deltaSeconds)
         {
-            VE_ASSERT_SCENE_THREAD();
             if (impl.scene != nullptr)
             {
                 impl.scene->Update(deltaSeconds);
@@ -42,12 +74,21 @@ namespace ve
 
             while (!impl.stopRequested.load(std::memory_order_acquire))
             {
-                impl.timeSystem->Tick();
-                const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
-
                 try
                 {
+                    VE_ASSERT_SCENE_THREAD();
+                    ProcessOSEvents(impl);
+                    impl.timeSystem->Tick();
+                    const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
+
+
+                    impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
+                        impl.stopRequested,
+                        [&impl](UInt32 fenceIndex)
+                        {
+                            return impl.renderFrameFenceSignalSubmitter(fenceIndex);
+                        });
                 }
                 catch (...)
                 {
@@ -62,6 +103,15 @@ namespace ve
         void StopAndJoinSceneThread(SceneSystemImpl& impl) noexcept
         {
             impl.stopRequested.store(true, std::memory_order_release);
+            if (impl.mainThreadSceneThreadFrameEndSync != nullptr)
+            {
+                impl.mainThreadSceneThreadFrameEndSync->UnblockAllWaiters();
+            }
+
+            if (impl.sceneThreadRenderThreadFrameEndSync != nullptr)
+            {
+                impl.sceneThreadRenderThreadFrameEndSync->UnblockAllWaiters();
+            }
 
             if (impl.thread.IsJoinable())
             {
@@ -72,6 +122,7 @@ namespace ve
             impl.initialized.store(false, std::memory_order_release);
             impl.stopRequested.store(false, std::memory_order_release);
             impl.timeSystem = nullptr;
+            impl.osEventQueue.ClearForConsumer();
         }
     } // namespace
 
@@ -99,6 +150,16 @@ namespace ve
 
         impl_->timeSystem = &timeSystem;
         impl_->stopRequested.store(false, std::memory_order_release);
+
+        if (impl_->mainThreadSceneThreadFrameEndSync != nullptr)
+        {
+            impl_->mainThreadSceneThreadFrameEndSync->Reset();
+        }
+
+        if (impl_->sceneThreadRenderThreadFrameEndSync != nullptr)
+        {
+            impl_->sceneThreadRenderThreadFrameEndSync->Reset();
+        }
 
         ErrorCode startResult = impl_->thread.Start(ThreadDesc{initParam.threadName},
                                                     [this]() { SceneThreadLoop(*impl_); });
@@ -141,13 +202,46 @@ namespace ve
         return impl_->scene.get();
     }
 
-    void SceneSystem::ReplaceScene(std::unique_ptr<Scene> scene)
+    ErrorCode SceneSystem::EnqueueOSEvent(const OSEvent& event)
     {
-        impl_->scene = scene != nullptr ? std::move(scene) : std::make_unique<Scene>();
+        return impl_->osEventQueue.Push(event);
     }
 
-    void SceneSystem::Update(Float32 deltaSeconds)
+    void SceneSystem::NotifyMainThreadFrameEnd()
     {
-        UpdateScene(*impl_, deltaSeconds);
+        impl_->mainThreadSceneThreadFrameEndSync->NotifyMainThreadFrameEnd(
+            [this](UInt32 fenceIndex)
+            {
+                return impl_->osEventQueue.Push(
+                    OSEvent{
+                        OSEventType::FrameEndFenceSignal,
+                        0,
+                        0,
+                        fenceIndex,
+                    });
+            });
     }
+
+    void SceneSystem::SetMainThreadSceneThreadFrameEndSync(MainThreadSceneThreadFrameEndSync* sync) noexcept
+    {
+        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire),
+                          "SetMainThreadSceneThreadFrameEndSync requires SceneSystem to be stopped.");
+        impl_->mainThreadSceneThreadFrameEndSync = sync;
+    }
+
+    void SceneSystem::SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept
+    {
+        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire),
+                          "SetSceneThreadRenderThreadFrameEndSync requires SceneSystem to be stopped.");
+        impl_->sceneThreadRenderThreadFrameEndSync = sync;
+    }
+
+    void SceneSystem::SetRenderFrameFenceSignalSubmitter(RenderFrameFenceSignalSubmitter submitter) noexcept
+    {
+        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire),
+                          "SetRenderFrameFenceSignalSubmitter requires SceneSystem to be stopped.");
+        impl_->renderFrameFenceSignalSubmitter = std::move(submitter);
+    }
+
+
 } // namespace ve

@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
+#include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Time/Time.h"
 
 namespace ve
@@ -128,6 +129,8 @@ namespace ve
         TimeSystem timeSystem_;
         SceneSystem sceneSystem_;
         RenderSystem renderSystem_;
+        MainThreadSceneThreadFrameEndSync mainThreadSceneThreadFrameEndSync_;
+        SceneThreadRenderThreadFrameEndSync sceneThreadRenderThreadFrameEndSync_;
         EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;
     };
 } // namespace ve

@@ -49,6 +49,17 @@ namespace ve
         }
         VE_LOG_INFO("IOSystem initialized.");
 
+        mainThreadSceneThreadFrameEndSync_.Reset();
+        sceneThreadRenderThreadFrameEndSync_.Reset();
+        renderSystem_.SetSceneThreadRenderThreadFrameEndSync(&sceneThreadRenderThreadFrameEndSync_);
+        sceneSystem_.SetMainThreadSceneThreadFrameEndSync(&mainThreadSceneThreadFrameEndSync_);
+        sceneSystem_.SetSceneThreadRenderThreadFrameEndSync(&sceneThreadRenderThreadFrameEndSync_);
+        sceneSystem_.SetRenderFrameFenceSignalSubmitter(
+            [this](UInt32 fenceIndex)
+            {
+                return renderSystem_.SubmitFrameEndFenceSignal(fenceIndex);
+            });
+
         ErrorCode renderSystemResult = renderSystem_.Initialize(desc.renderSystem);
         if (renderSystemResult != ErrorCode::None)
         {
