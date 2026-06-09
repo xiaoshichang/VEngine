@@ -54,11 +54,6 @@ namespace ve
         renderSystem_.SetSceneThreadRenderThreadFrameEndSync(&sceneThreadRenderThreadFrameEndSync_);
         sceneSystem_.SetMainThreadSceneThreadFrameEndSync(&mainThreadSceneThreadFrameEndSync_);
         sceneSystem_.SetSceneThreadRenderThreadFrameEndSync(&sceneThreadRenderThreadFrameEndSync_);
-        sceneSystem_.SetRenderFrameFenceSignalSubmitter(
-            [this](UInt32 fenceIndex)
-            {
-                return renderSystem_.SubmitFrameEndFenceSignal(fenceIndex);
-            });
 
         ErrorCode renderSystemResult = renderSystem_.Initialize(desc.renderSystem);
         if (renderSystemResult != ErrorCode::None)
@@ -74,7 +69,7 @@ namespace ve
         }
         VE_LOG_INFO("TimeSystem initialized.");
 
-        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem, timeSystem_);
+        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem, timeSystem_, renderSystem_);
         if (sceneSystemResult != ErrorCode::None)
         {
             TerminateRuntimeInitialization("SceneSystem", sceneSystemResult);

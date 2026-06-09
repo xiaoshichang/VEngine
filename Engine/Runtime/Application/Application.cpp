@@ -203,13 +203,6 @@ namespace ve
                 break;
             }
 
-            ErrorCode renderResult = renderSystem.RenderFrame();
-            if (renderResult != ErrorCode::None)
-            {
-                VE_LOG_ERROR("RenderFrame failed: {}", ToString(renderResult));
-                return 1;
-            }
-
             sceneSystem.NotifyMainThreadFrameEnd();
         }
 

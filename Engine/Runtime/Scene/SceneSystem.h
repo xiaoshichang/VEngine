@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/Thread.h"
 #include "Engine/Runtime/Time/Time.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 
 #include <functional>
 #include <memory>
@@ -39,7 +40,7 @@ namespace ve
         /// Creates an empty active Scene and starts the Scene Thread.
         ///
         /// timeSystem must already be initialized by EngineRuntime before SceneSystem starts.
-        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem);
+        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, RenderSystem& renderSystem);
 
         /// Stops Scene updates and joins the Scene Thread.
         ///
@@ -72,8 +73,6 @@ namespace ve
         /// Assigns the Scene-Render frame-end sync primitive used by this SceneSystem.
         void SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept;
 
-        /// Assigns the callback used by Scene Thread to enqueue one render-thread fence signal command.
-        void SetRenderFrameFenceSignalSubmitter(RenderFrameFenceSignalSubmitter submitter) noexcept;
 
     private:
         std::unique_ptr<SceneSystemImpl> impl_;
