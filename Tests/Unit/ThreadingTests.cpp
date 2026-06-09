@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Threading/LockFreeMpscQueue.h"
 #include "Engine/Runtime/Threading/LockFreeSpscQueue.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 #include "Engine/Runtime/Threading/Thread.h"
 
 #include <iostream>
@@ -72,6 +73,22 @@ namespace
             passed &= Expect(workerThreadId.IsValid(), "Worker should see a valid current thread id");
             passed &= Expect(sharedValue == 42, "Worker should update synchronized state");
         }
+
+        return passed;
+    }
+
+    bool TestThreadEnsureMacros()
+    {
+        bool passed = true;
+
+        const ve::ThreadId currentThreadId = ve::GetCurrentThreadId();
+        ve::SetExpectedSceneThreadId(currentThreadId);
+        ve::SetExpectedRenderThreadId(currentThreadId);
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_RENDER_THREAD();
+        ve::SetExpectedSceneThreadId(ve::ThreadId{});
+        ve::SetExpectedRenderThreadId(ve::ThreadId{});
+        passed &= Expect(true, "Thread ensure macros should accept current thread id");
 
         return passed;
     }
@@ -379,7 +396,8 @@ namespace
         passed &= Expect(consumer.Join(), "SPSC consumer should join");
 
         const int expectedSum = (ValueCount * (ValueCount + 1)) / 2;
-        passed &= Expect(consumedCount.load(std::memory_order_acquire) == ValueCount, "SPSC should consume all values");
+        passed &=
+            Expect(consumedCount.load(std::memory_order_acquire) == ValueCount, "SPSC should consume all values");
         passed &=
             Expect(consumedSum.load(std::memory_order_acquire) == expectedSum, "SPSC should preserve FIFO values");
 
@@ -476,6 +494,7 @@ int main()
     bool passed = true;
 
     passed &= TestThreadStartJoinAndName();
+    passed &= TestThreadEnsureMacros();
     passed &= TestThreadRejectsRepeatedStart();
     passed &= TestMutexAndLockGuard();
     passed &= TestRecursiveMutex();

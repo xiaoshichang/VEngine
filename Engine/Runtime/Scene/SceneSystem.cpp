@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 
 #include <exception>
@@ -23,6 +24,7 @@ namespace ve
     {
         void UpdateScene(SceneSystemImpl& impl, Float32 deltaSeconds)
         {
+            VE_ASSERT_SCENE_THREAD();
             if (impl.scene != nullptr)
             {
                 impl.scene->Update(deltaSeconds);
@@ -31,7 +33,9 @@ namespace ve
 
         void SceneThreadLoop(SceneSystemImpl& impl)
         {
-            impl.sceneThreadIdValue.store(GetCurrentThreadId().value, std::memory_order_release);
+            const ThreadId sceneThreadId = GetCurrentThreadId();
+            impl.sceneThreadIdValue.store(sceneThreadId.value, std::memory_order_release);
+            SetExpectedSceneThreadId(sceneThreadId);
 
             VE_ASSERT_MESSAGE(impl.timeSystem != nullptr, "impl.timeSystem should not be nullptr");
             VE_ASSERT_MESSAGE(impl.timeSystem->IsInitialized(), "impl.timeSystem should be initialized.");
@@ -52,6 +56,7 @@ namespace ve
             }
 
             impl.sceneThreadIdValue.store(0, std::memory_order_release);
+            SetExpectedSceneThreadId(ThreadId{});
         }
 
         void StopAndJoinSceneThread(SceneSystemImpl& impl) noexcept
@@ -95,7 +100,8 @@ namespace ve
         impl_->timeSystem = &timeSystem;
         impl_->stopRequested.store(false, std::memory_order_release);
 
-        ErrorCode startResult = impl_->thread.Start(ThreadDesc{initParam.threadName}, [this]() { SceneThreadLoop(*impl_); });
+        ErrorCode startResult = impl_->thread.Start(ThreadDesc{initParam.threadName},
+                                                    [this]() { SceneThreadLoop(*impl_); });
         if (startResult != ErrorCode::None)
         {
             throw;

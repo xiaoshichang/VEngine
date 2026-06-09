@@ -15,6 +15,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Threading/Atomic.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 
 #include <exception>
@@ -249,6 +250,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         [[nodiscard]] ErrorCode RenderTriangleFrame(RenderSystemImpl& impl)
         {
+            VE_ASSERT_RENDER_THREAD();
+
             if (impl.device == nullptr || impl.mainSwapchain == nullptr)
             {
                 return ErrorCode::InvalidState;
@@ -292,6 +295,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         void ExecuteCommand(RenderCommand& command) noexcept
         {
+            VE_ASSERT_RENDER_THREAD();
             try
             {
                 command.function();
@@ -306,6 +310,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         {
             const ThreadId renderThreadId = GetCurrentThreadId();
             impl.renderThreadIdValue.store(renderThreadId.value, std::memory_order_release);
+            SetExpectedRenderThreadId(renderThreadId);
 
             for (;;)
             {
@@ -331,10 +336,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
             {
                 ExecuteCommand(*command);
             }
+
+            SetExpectedRenderThreadId(ThreadId{});
         }
 
         void DestroyRhiStateOnRenderThread(RenderSystemImpl& impl)
         {
+            VE_ASSERT_RENDER_THREAD();
+
             if (impl.device != nullptr)
             {
                 impl.device->WaitIdle();
