@@ -22,6 +22,17 @@ namespace ve
         Float32 fixedDeltaSeconds = DefaultFixedDeltaSeconds;
     };
 
+    /// Stores frame rate statistics derived from clamped runtime deltaSeconds values.
+    struct FrameRateStats
+    {
+        /// FPS computed from the current frame's clamped deltaSeconds. Zero when the current delta sample is invalid
+        /// or non-positive.
+        Float32 currentFramesPerSecond = 0.0f;
+
+        /// Average FPS updated once per second from frames counted in the latest one-second interval.
+        Float32 averageFramesPerSecond = 0.0f;
+    };
+
     struct TimeSnapshot
     {
         /// Monotonically increasing engine frame index. Starts at 0 after Initialize() and increments once per Tick()
@@ -54,6 +65,9 @@ namespace ve
         /// Number of fixed steps budgeted for the current frame. TimeSystem does not execute these steps; a scheduler
         /// should consume it.
         UInt32 fixedStepCount = 0;
+
+        /// Frame rate statistics derived from clamped runtime deltas.
+        FrameRateStats frameRateStats;
     };
 
     /// Owns engine frame time state.
@@ -80,7 +94,8 @@ namespace ve
         /// Advances time using the monotonic clock delta since the previous Tick() or Initialize().
         void Tick() noexcept;
 
-        /// Advances time by an explicit raw delta for deterministic tests and controlled simulation paths.
+        /// Advances time using an explicit raw frame delta value. Useful for deterministic tests and controlled
+        /// simulation paths.
         void Advance(Float32 rawDeltaSeconds) noexcept;
 
         [[nodiscard]] TimeSnapshot GetSnapshot() const noexcept;
@@ -92,6 +107,9 @@ namespace ve
         [[nodiscard]] Float32 GetMaxDeltaSeconds() const noexcept;
         [[nodiscard]] Float32 GetFixedDeltaSeconds() const noexcept;
         [[nodiscard]] UInt32 GetFixedStepCount() const noexcept;
+        [[nodiscard]] FrameRateStats GetFrameRateStats() const noexcept;
+        [[nodiscard]] Float32 GetCurrentFrameRate() const noexcept;
+        [[nodiscard]] Float32 GetAverageFrameRate() const noexcept;
 
         [[nodiscard]] bool SetMaxDeltaSeconds(Float32 maxDeltaSeconds) noexcept;
         [[nodiscard]] bool SetFixedDeltaSeconds(Float32 fixedDeltaSeconds) noexcept;
@@ -103,6 +121,8 @@ namespace ve
         void AdvanceUnlocked(Float32 rawDeltaSeconds) noexcept;
 
         Clock::time_point lastTickTime_ = Clock::now();
+        Float64 frameRateIntervalElapsedSeconds_ = 0.0;
+        UInt32 frameRateIntervalFrameCount_ = 0;
         TimeSnapshot snapshot_;
         bool initialized_ = false;
     };

@@ -30,6 +30,7 @@ Current responsibilities:
 - Track total engine time in seconds.
 - Track raw frame delta from a monotonic clock.
 - Track clamped frame delta for runtime update use.
+- Track frame-rate statistics derived from clamped frame delta.
 - Provide configurable maximum delta clamp.
 - Provide fixed-step configuration and per-frame fixed-step budget.
 - Provide a snapshot API so consumers can copy stable frame time data.
@@ -52,6 +53,7 @@ The primary API is:
 namespace ve
 {
     struct TimeSystemInitParam;
+    struct FrameRateStats;
     struct TimeSnapshot;
 
     class TimeSystem
@@ -74,6 +76,9 @@ namespace ve
         float GetMaxDeltaSeconds() const noexcept;
         float GetFixedDeltaSeconds() const noexcept;
         uint32_t GetFixedStepCount() const noexcept;
+        FrameRateStats GetFrameRateStats() const noexcept;
+        float GetCurrentFrameRate() const noexcept;
+        float GetAverageFrameRate() const noexcept;
 
         bool SetMaxDeltaSeconds(float maxDeltaSeconds) noexcept;
         bool SetFixedDeltaSeconds(float fixedDeltaSeconds) noexcept;
@@ -102,6 +107,17 @@ struct TimeSnapshot
     float maxDeltaSeconds;
     float fixedDeltaSeconds;
     uint32_t fixedStepCount;
+    FrameRateStats frameRateStats;
+};
+```
+
+`FrameRateStats` currently stores:
+
+```cpp
+struct FrameRateStats
+{
+    float currentFramesPerSecond;
+    float averageFramesPerSecond;
 };
 ```
 
@@ -112,6 +128,7 @@ Type choices:
 - `deltaSeconds` uses `float` because most gameplay and rendering code consumes frame deltas as float values.
 - `rawDeltaSeconds` preserves the unclamped measured delta for diagnostics.
 - `deltaSeconds` is the clamped delta intended for first-stage runtime update use.
+- `frameRateStats` stores current FPS and a once-per-second refreshed average FPS.
 
 ## 5. Delta Clamp
 
@@ -133,6 +150,12 @@ The clamp prevents a breakpoint, window stall, or system hitch from producing a 
 frame. The raw value remains available for diagnostics.
 
 Invalid raw deltas such as negative, infinity, or NaN are treated as zero.
+
+Frame-rate behavior:
+
+- `currentFramesPerSecond` is derived from the frame's clamped `deltaSeconds`.
+- `averageFramesPerSecond` updates once per second using the frame count accumulated during the latest one-second
+  interval.
 
 ## 6. Fixed Step Budget
 
@@ -223,15 +246,18 @@ TickScheduler / PhysicsScheduler
 
 ## 9. Testing
 
-TimeSystem does not currently keep a dedicated unit test source file. The expected coverage areas remain:
+TimeSystem keeps dedicated unit coverage in:
 
-- Initialization and shutdown.
+```text
+Tests/Unit/TimeTests.cpp
+```
+
+Current coverage areas:
+
+- Frame-rate statistics and query APIs.
 - Manual `Advance()` frame progression.
-- Delta clamp.
-- Invalid delta configuration rejection.
-- Fixed-step budget and accumulator remainder.
-- `Tick()` monotonic clock smoke test.
-- EngineRuntime ownership and SceneThread-driven updates.
+- Delta clamp behavior for fixed-step and FPS stats.
+- Invalid/zero delta handling for FPS statistics.
 
 ## 10. Future Iteration Notes
 

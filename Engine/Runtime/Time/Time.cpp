@@ -1,5 +1,7 @@
 #include "Engine/Runtime/Time/Time.h"
 
+#include "Engine/Runtime/Logging/Log.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -39,6 +41,16 @@ namespace ve
             constexpr Float64 MaxCount = static_cast<Float64>(std::numeric_limits<UInt32>::max());
             return static_cast<UInt32>(std::min(std::floor(pendingSteps), MaxCount));
         }
+
+        [[nodiscard]] Float32 CalculateCurrentFrameRate(Float32 deltaSeconds) noexcept
+        {
+            if (!std::isfinite(deltaSeconds) || deltaSeconds <= 0.0f)
+            {
+                return 0.0f;
+            }
+
+            return 1.0f / deltaSeconds;
+        }
     } // namespace
 
     TimeSystem::TimeSystem() = default;
@@ -63,6 +75,8 @@ namespace ve
         snapshot_ = TimeSnapshot{};
         snapshot_.maxDeltaSeconds = initParam.maxDeltaSeconds;
         snapshot_.fixedDeltaSeconds = initParam.fixedDeltaSeconds;
+        frameRateIntervalElapsedSeconds_ = 0.0;
+        frameRateIntervalFrameCount_ = 0;
         lastTickTime_ = Clock::now();
         initialized_ = true;
         return ErrorCode::None;
@@ -70,6 +84,8 @@ namespace ve
 
     void TimeSystem::Shutdown() noexcept
     {
+        frameRateIntervalElapsedSeconds_ = 0.0;
+        frameRateIntervalFrameCount_ = 0;
         initialized_ = false;
     }
 
@@ -85,6 +101,8 @@ namespace ve
         snapshot_ = TimeSnapshot{};
         snapshot_.maxDeltaSeconds = maxDeltaSeconds;
         snapshot_.fixedDeltaSeconds = fixedDeltaSeconds;
+        frameRateIntervalElapsedSeconds_ = 0.0;
+        frameRateIntervalFrameCount_ = 0;
         lastTickTime_ = Clock::now();
     }
 
@@ -118,6 +136,29 @@ namespace ve
             std::max(0.0,
                      snapshot.fixedAccumulatorSeconds - static_cast<Float64>(snapshot.fixedStepCount) *
                                                             static_cast<Float64>(snapshot.fixedDeltaSeconds));
+
+        FrameRateStats& frameRateStats = snapshot.frameRateStats;
+        const Float32 currentFramesPerSecond = CalculateCurrentFrameRate(snapshot.deltaSeconds);
+        frameRateStats.currentFramesPerSecond = currentFramesPerSecond;
+
+        if (currentFramesPerSecond <= 0.0f)
+        {
+            return;
+        }
+
+        frameRateIntervalElapsedSeconds_ += static_cast<Float64>(snapshot.deltaSeconds);
+        ++frameRateIntervalFrameCount_;
+
+        if (frameRateIntervalElapsedSeconds_ >= 1.0)
+        {
+            frameRateStats.averageFramesPerSecond =
+                static_cast<Float32>(static_cast<Float64>(frameRateIntervalFrameCount_) /
+                                     frameRateIntervalElapsedSeconds_);
+            VE_LOG_DEBUG("frame rate: {}", frameRateStats.averageFramesPerSecond);
+
+            frameRateIntervalElapsedSeconds_ = 0.0;
+            frameRateIntervalFrameCount_ = 0;
+        }
     }
 
     TimeSnapshot TimeSystem::GetSnapshot() const noexcept
@@ -163,6 +204,21 @@ namespace ve
     UInt32 TimeSystem::GetFixedStepCount() const noexcept
     {
         return snapshot_.fixedStepCount;
+    }
+
+    FrameRateStats TimeSystem::GetFrameRateStats() const noexcept
+    {
+        return snapshot_.frameRateStats;
+    }
+
+    Float32 TimeSystem::GetCurrentFrameRate() const noexcept
+    {
+        return snapshot_.frameRateStats.currentFramesPerSecond;
+    }
+
+    Float32 TimeSystem::GetAverageFrameRate() const noexcept
+    {
+        return snapshot_.frameRateStats.averageFramesPerSecond;
     }
 
     bool TimeSystem::SetMaxDeltaSeconds(Float32 maxDeltaSeconds) noexcept

@@ -8,6 +8,7 @@
 #include <exception>
 #include <new>
 #include <utility>
+#include <format>
 
 namespace ve
 {
