@@ -28,17 +28,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         return 1;
     }
 
-    ve::ApplicationInitParam desc;
-    desc.name = "VEnginePlayer";
-    desc.mainWindow.title = "VEngine Player";
-    desc.mainWindow.width = 1280;
-    desc.mainWindow.height = 720;
-    desc.mainWindow.visible = true;
-    desc.runtime.jobSystem.workerThreadNamePrefix = "VEnginePlayerJobWorker";
-    desc.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
-    desc.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
+    ve::ApplicationInitParam initParam;
+    initParam.name = "VEnginePlayer";
+    initParam.mainWindow.title = "VEngine Player";
+    initParam.mainWindow.width = 1280;
+    initParam.mainWindow.height = 720;
+    initParam.mainWindow.visible = true;
+    initParam.runtime.jobSystem.workerThreadNamePrefix = "VEnginePlayerJobWorker";
+    initParam.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
+    initParam.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
 
-    ve::Application application(std::move(desc));
+    ve::Application application(std::move(initParam));
     int exitCode = application.Init();
     if (exitCode == 0)
     {

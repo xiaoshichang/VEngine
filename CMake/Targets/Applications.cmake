@@ -28,7 +28,9 @@ function(ve_add_windows_editor)
 
     if(WIN32)
         add_executable(VEngineEditor WIN32
-            Editor/Windows/WindowsEditor.cpp
+            "../../Editor/Windows/main.cpp"
+            "../../Editor/Windows/WindowsEditorApplication.cpp"
+            "../../Editor/Windows/WindowsEditorApplication.h"
         )
 
         target_link_libraries(VEngineEditor

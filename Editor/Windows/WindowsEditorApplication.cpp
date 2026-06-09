@@ -1,0 +1,35 @@
+#include "Editor/Windows/WindowsEditorApplication.h"
+
+#include "Engine/Runtime/Logging/Log.h"
+
+#include <utility>
+
+namespace ve::editor
+{
+    WindowsEditorApplication::WindowsEditorApplication(ve::ApplicationInitParam desc)
+        : ve::Application(std::move(desc))
+    {
+    }
+
+    WindowsEditorApplication::~WindowsEditorApplication()
+    {
+        UnInit();
+    }
+
+    int WindowsEditorApplication::Init()
+    {
+        VE_LOG_INFO("Initializing Windows editor application.");
+        const int result = ve::Application::Init();
+        return result;
+    }
+
+    void WindowsEditorApplication::Run()
+    {
+        ve::Application::Run();
+    }
+
+    void WindowsEditorApplication::UnInit()
+    {
+        ve::Application::UnInit();
+    }
+} // namespace ve::editor

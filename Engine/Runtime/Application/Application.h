@@ -22,11 +22,11 @@ namespace ve
     public:
         explicit Application(std::string name);
         explicit Application(ApplicationInitParam desc);
-        ~Application();
+        virtual ~Application();
 
-        [[nodiscard]] int Init();
-        void Run();
-        void UnInit();
+        [[nodiscard]] virtual int Init();
+        virtual void Run();
+        virtual void UnInit();
 
         [[nodiscard]] const std::string& GetName() const noexcept;
         [[nodiscard]] int GetExitCode() const noexcept;

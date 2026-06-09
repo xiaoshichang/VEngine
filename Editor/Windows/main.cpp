@@ -1,4 +1,4 @@
-#include "Engine/Runtime/Application/Application.h"
+#include "Editor/Windows/WindowsEditorApplication.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 
@@ -28,17 +28,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         return 1;
     }
 
-    ve::ApplicationInitParam desc;
-    desc.name = "VEngineEditor";
-    desc.mainWindow.title = "VEngine Editor";
-    desc.mainWindow.width = 1600;
-    desc.mainWindow.height = 900;
-    desc.mainWindow.visible = true;
-    desc.runtime.jobSystem.workerThreadNamePrefix = "VEngineEditorJobWorker";
-    desc.runtime.ioSystem.threadName = "VEngineEditorIOThread";
-    desc.runtime.renderSystem.threadName = "VEngineEditorRenderThread";
+    ve::ApplicationInitParam initParam;
+    initParam.name = "VEngineEditor";
+    initParam.mainWindow.title = "VEngine Editor";
+    initParam.mainWindow.width = 1600;
+    initParam.mainWindow.height = 900;
+    initParam.mainWindow.visible = true;
+    initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineEditorJobWorker";
+    initParam.runtime.ioSystem.threadName = "VEngineEditorIOThread";
+    initParam.runtime.renderSystem.threadName = "VEngineEditorRenderThread";
 
-    ve::Application application(std::move(desc));
+    ve::editor::WindowsEditorApplication application(std::move(initParam));
     int exitCode = application.Init();
     if (exitCode == 0)
     {
