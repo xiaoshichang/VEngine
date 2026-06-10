@@ -159,10 +159,21 @@ namespace ve
         /// Destroys the main swapchain on the Render Thread if one exists.
         void DestroyMainSwapchain() noexcept;
 
-        /// Renders one first-stage frame to the main swapchain.
+        /// Begins one main-swapchain render frame on the Render Thread.
         ///
-        /// The current implementation clears the back buffer, draws a simple triangle, submits the command list, and
-        /// presents. This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
+        /// This clears the current back buffer, begins the render pass, and sets the default viewport and scissor for
+        /// subsequent frame draw commands.
+        [[nodiscard]] ErrorCode BeginRenderFrame();
+
+        /// Ends the current main-swapchain render frame on the Render Thread.
+        ///
+        /// This ends the active render pass, submits the frame command list, and presents the main swapchain.
+        [[nodiscard]] ErrorCode EndRenderFrame();
+
+        /// Enqueues the first-stage triangle draw into the active render frame.
+        ///
+        /// SceneSystem wraps this with BeginRenderFrame() and EndRenderFrame() for Player. Editor uses the same frame
+        /// lifecycle and submits its UI draw commands instead.
         [[nodiscard]] ErrorCode RenderFrame();
 
         /// Submits a command to execute on the Render Thread.
@@ -179,7 +190,7 @@ namespace ve
 
     private:
         [[nodiscard]] ErrorCode ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);
-        [[nodiscard]] ErrorCode SubmitFunction(std::string debugName, RenderCommandFunction function);
+        [[nodiscard]] ErrorCode EnqueueCommand(std::string debugName, RenderCommandFunction function);
 
         std::unique_ptr<RenderSystemImpl> impl_;
     };

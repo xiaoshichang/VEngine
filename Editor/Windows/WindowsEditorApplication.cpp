@@ -42,7 +42,7 @@ namespace ve::editor
 
     void WindowsEditorApplication::UnInit()
     {
-        ve::Application::UnInit();
         editor_.UnInit();
+        ve::Application::UnInit();
     }
 } // namespace ve::editor

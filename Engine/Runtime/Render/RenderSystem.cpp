@@ -251,20 +251,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode RenderTriangleFrame(RenderSystemImpl& impl)
+        [[nodiscard]] ErrorCode BeginMainSwapchainFrame(RenderSystemImpl& impl)
         {
             VE_ASSERT_RENDER_THREAD();
-
-            if (impl.device == nullptr || impl.mainSwapchain == nullptr)
-            {
-                return ErrorCode::InvalidState;
-            }
-
-            if (impl.triangleVertexBuffer == nullptr || impl.trianglePipelineState == nullptr ||
-                impl.frameCommandList == nullptr)
-            {
-                return ErrorCode::InvalidState;
-            }
+            VE_ASSERT(impl.device != nullptr);
+            VE_ASSERT(impl.mainSwapchain != nullptr);
+            VE_ASSERT(impl.frameCommandList != nullptr);
 
             rhi::RhiRenderPassDesc renderPassDesc = {};
             renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
@@ -273,25 +265,49 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
             const rhi::RhiExtent2D extent = impl.mainSwapchain->GetExtent();
 
-            if (!impl.frameCommandList->Begin() ||
-                !impl.frameCommandList->BeginRenderPass(*impl.mainSwapchain, renderPassDesc))
-            {
-                return ErrorCode::PlatformError;
-            }
+            auto ok = impl.frameCommandList->Begin();
+            VE_ASSERT(ok);
+            ok = impl.frameCommandList->BeginRenderPass(*impl.mainSwapchain, renderPassDesc);
+            VE_ASSERT(ok);
 
             impl.frameCommandList->SetViewport(rhi::RhiViewport{
                 0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
             impl.frameCommandList->SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
+
+            return ErrorCode::None;
+        }
+
+        [[nodiscard]] ErrorCode DrawTriangleFrame(RenderSystemImpl& impl)
+        {
+            VE_ASSERT_RENDER_THREAD();
+            VE_ASSERT(impl.triangleVertexBuffer != nullptr);
+            VE_ASSERT(impl.trianglePipelineState != nullptr);
+            VE_ASSERT(impl.frameCommandList != nullptr);
+
             impl.frameCommandList->SetPipeline(*impl.trianglePipelineState);
             impl.frameCommandList->SetVertexBuffer(0, *impl.triangleVertexBuffer, sizeof(TriangleVertex), 0);
             impl.frameCommandList->Draw(3, 0);
+
+            return ErrorCode::None;
+        }
+
+        [[nodiscard]] ErrorCode EndMainSwapchainFrame(RenderSystemImpl& impl)
+        {
+            VE_ASSERT_RENDER_THREAD();
+            VE_ASSERT(impl.device != nullptr);
+            VE_ASSERT(impl.mainSwapchain != nullptr);
+            VE_ASSERT(impl.frameCommandList != nullptr);
+
             impl.frameCommandList->EndRenderPass();
 
-            if (!impl.frameCommandList->End() || !impl.device->Submit(*impl.frameCommandList) ||
-                !impl.mainSwapchain->Present())
-            {
-                return ErrorCode::PlatformError;
-            }
+            auto ok = impl.frameCommandList->End();
+            VE_ASSERT(ok);
+
+            ok = impl.device->Submit(*impl.frameCommandList);
+            VE_ASSERT(ok);
+
+            ok = impl.mainSwapchain->Present();
+            VE_ASSERT(ok);
 
             return ErrorCode::None;
         }
@@ -476,7 +492,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
     ErrorCode RenderSystem::SubmitFrameEndFenceSignal(UInt32 fenceIndex)
     {
         VE_ASSERT_SCENE_THREAD();
-        return SubmitFunction("RenderSystemFrameEndFenceSignal",
+        return EnqueueCommand("RenderSystemFrameEndFenceSignal",
                               [sync = impl_->sceneThreadRenderThreadFrameEndSync, fenceIndex]()
                               {
                                   sync->NotifyRenderThreadFrameEnd(fenceIndex);
@@ -614,17 +630,53 @@ float4 PSMain(VSOutput input) : SV_TARGET
         VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to destroy its main swapchain.");
     }
 
+    ErrorCode RenderSystem::BeginRenderFrame()
+    {
+        VE_ASSERT_SCENE_THREAD();
+
+        ErrorCode submitResult = EnqueueCommand("RenderSystemBeginRenderFrame",
+                                                [this]()
+                                                {
+                                                    const ErrorCode result = BeginMainSwapchainFrame(*impl_);
+                                                    VE_ASSERT_MESSAGE(result == ErrorCode::None,
+                                                                      "RenderSystem::BeginRenderFrame failed.");
+                                                });
+        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "RenderSystem::BeginRenderFrame enqueue failed.");
+        return submitResult;
+    }
+
+    ErrorCode RenderSystem::EndRenderFrame()
+    {
+        VE_ASSERT_SCENE_THREAD();
+
+        ErrorCode submitResult = EnqueueCommand("RenderSystemEndRenderFrame",
+                                                [this]()
+                                                {
+                                                    const ErrorCode result = EndMainSwapchainFrame(*impl_);
+                                                    VE_ASSERT_MESSAGE(result == ErrorCode::None,
+                                                                      "RenderSystem::EndRenderFrame failed.");
+                                                });
+        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "RenderSystem::EndRenderFrame enqueue failed.");
+        return submitResult;
+    }
+
     ErrorCode RenderSystem::RenderFrame()
     {
-        auto lambda = [this]() { return RenderTriangleFrame(*impl_); };
-        auto ret = EnqueueCommand(RenderCommand("RenderSystemRenderFrame", lambda));
-        VE_ASSERT(ret == ErrorCode::None);
-        return ret;
+        VE_ASSERT_SCENE_THREAD();
+        ErrorCode submitResult = EnqueueCommand("RenderSystemRenderTriangleFrame",
+                                                [this]()
+                                                {
+                                                    const ErrorCode result = DrawTriangleFrame(*impl_);
+                                                    VE_ASSERT_MESSAGE(result == ErrorCode::None,
+                                                                      "RenderSystem::RenderFrame failed.");
+                                                });
+        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "RenderSystem::RenderFrame enqueue failed.");
+        return submitResult;
     }
 
     ErrorCode RenderSystem::EnqueueCommand(RenderCommand command)
     {
-        return SubmitFunction(std::move(command.debugName), std::move(command.function));
+        return EnqueueCommand(std::move(command.debugName), std::move(command.function));
     }
 
     ErrorCode RenderSystem::Flush()
@@ -635,7 +687,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         }
 
         auto completed = std::make_shared<ManualResetEvent>(false);
-        ErrorCode submitResult = SubmitFunction("RenderSystemFlush", [completed]() { completed->Set(); });
+        ErrorCode submitResult = EnqueueCommand("RenderSystemFlush", [completed]() { completed->Set(); });
 
         if (submitResult != ErrorCode::None)
         {
@@ -661,7 +713,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         auto completed = std::make_shared<ManualResetEvent>(false);
         auto operationResult = std::make_shared<ErrorCode>(ErrorCode::None);
 
-        ErrorCode submitResult = SubmitFunction(std::move(debugName),
+        ErrorCode submitResult = EnqueueCommand(std::move(debugName),
                                                 [completed, operationResult, function = std::move(function)]()
                                                 {
                                                     *operationResult = function();
@@ -677,7 +729,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return *operationResult;
     }
 
-    ErrorCode RenderSystem::SubmitFunction(std::string debugName, RenderCommandFunction function)
+    ErrorCode RenderSystem::EnqueueCommand(std::string debugName, RenderCommandFunction function)
     {
         if (!function)
         {

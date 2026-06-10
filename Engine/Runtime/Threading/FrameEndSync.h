@@ -59,13 +59,7 @@ namespace ve
             mainThreadFenceIndex_ = (mainThreadFenceIndex_ + 1) & 1u;
 
             const ErrorCode enqueueResult = std::forward<EnqueueFenceSignalFunction>(enqueueFenceSignal)(signalFenceIndex);
-            if (enqueueResult != ErrorCode::None)
-            {
-                // Prevent deadlock when the fence signal command cannot be enqueued.
-                fence.Emit();
-                return;
-            }
-
+            VE_ASSERT(enqueueResult == ErrorCode::None);
             sceneThreadFrameEndFences_[mainThreadFenceIndex_].Wait();
         }
 
@@ -118,12 +112,7 @@ namespace ve
             sceneThreadFenceIndex_ = (sceneThreadFenceIndex_ + 1) & 1u;
 
             const ErrorCode enqueueResult = std::forward<EnqueueFenceSignalFunction>(enqueueFenceSignal)(signalFenceIndex);
-            if (enqueueResult != ErrorCode::None)
-            {
-                // Prevent deadlock when the fence signal command cannot be enqueued.
-                fence.Emit();
-                return;
-            }
+            VE_ASSERT(enqueueResult == ErrorCode::None);
 
             // Shutdown path should call UnblockAllWaiters() to release this wait.
             renderThreadFrameEndFences_[sceneThreadFenceIndex_].Wait();

@@ -94,15 +94,21 @@ namespace ve
                         impl.editorCallback.onStartFrame();
                     }
 
+                    ErrorCode beginRenderFrameResult = impl.renderSystem->BeginRenderFrame();
+                    VE_ASSERT_MESSAGE(beginRenderFrameResult == ErrorCode::None, "BeginRenderFrame with error.");
+
                     if (impl.editorCallback.onRender != nullptr)
                     {
                         impl.editorCallback.onRender();
                     }
                     else
                     {
+                        ErrorCode renderResult = impl.renderSystem->RenderFrame();
+                        VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
                     }
-                    ErrorCode renderResult = impl.renderSystem->RenderFrame();
-                    VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
+
+                    ErrorCode endRenderFrameResult = impl.renderSystem->EndRenderFrame();
+                    VE_ASSERT_MESSAGE(endRenderFrameResult == ErrorCode::None, "EndRenderFrame with error.");
 
                     impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
                         impl.stopRequested,
