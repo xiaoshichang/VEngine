@@ -1,6 +1,5 @@
 #include "Editor/Windows/WindowsEditorApplication.h"
 
-#include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 
 #include <utility>
@@ -26,8 +25,13 @@ namespace ve::editor
             return result;
         }
 
-        const ErrorCode editorResult = editor_.Init(GetRuntime());
-        VE_ASSERT_MESSAGE(editorResult == ErrorCode::None, "Editor::Init failed.");
+        const ErrorCode editorResult = editor_.Init(GetRuntime(), GetMainWindowNativeHandle());
+        if (editorResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR("Editor::Init failed: {}", ToString(editorResult));
+            return 1;
+        }
+
         return result;
     }
 

@@ -30,6 +30,8 @@ namespace ve
 
         [[nodiscard]] const std::string& GetName() const noexcept;
         [[nodiscard]] int GetExitCode() const noexcept;
+        [[nodiscard]] void* GetMainWindowNativeHandle() const noexcept;
+        [[nodiscard]] void* GetMainWindowNativeLayer() const noexcept;
         [[nodiscard]] EngineRuntime& GetRuntime() noexcept;
         [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
 

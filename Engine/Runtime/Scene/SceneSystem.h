@@ -17,11 +17,11 @@
 namespace ve
 {
     struct SceneSystemImpl;
-    using RenderFrameFenceSignalSubmitter = std::function<ErrorCode(UInt32 fenceIndex)>;
 
     /// SceneThread callbacks supplied by Editor for per-frame event and render hooks.
     struct SceneSystemEditorCallback
     {
+        std::function<void()> onStartFrame;
         std::function<void(const OSEvent& event)> onOSEvent;
         std::function<void()> onRender;
     };

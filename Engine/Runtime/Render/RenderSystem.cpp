@@ -507,6 +507,26 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                   });
     }
 
+    ErrorCode RenderSystem::QueryNativeHandles(RenderNativeHandles& outHandles)
+    {
+        return ExecuteSynchronous("RenderSystemQueryNativeHandles",
+                                  [this, &outHandles]()
+                                  {
+                                      if (impl_->device == nullptr)
+                                      {
+                                          return ErrorCode::InvalidState;
+                                      }
+
+                                      outHandles.backend = static_cast<RenderBackend>(
+                                          impl_->backendValue.load(std::memory_order_acquire));
+                                      outHandles.hasMainSwapchain = impl_->mainSwapchain != nullptr;
+                                      outHandles.device = impl_->device->GetNativeDeviceHandle();
+                                      outHandles.immediateContext = impl_->device->GetNativeImmediateContextHandle();
+                                      outHandles.graphicsQueue = impl_->device->GetNativeGraphicsQueueHandle();
+                                      return ErrorCode::None;
+                                  });
+    }
+
     void RenderSystem::ShutdownDevice() noexcept
     {
         if (!impl_->acceptingCommands.load(std::memory_order_acquire))

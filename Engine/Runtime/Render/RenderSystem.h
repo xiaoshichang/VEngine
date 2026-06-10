@@ -67,8 +67,19 @@ namespace ve
         RenderDeviceDesc device;
     };
 
+    /// Backend-native handles queried from RenderSystem after RHI initialization.
+    struct RenderNativeHandles
+    {
+        RenderBackend backend = RenderBackend::D3D12;
+        bool hasMainSwapchain = false;
+        void* device = nullptr;
+        void* immediateContext = nullptr;
+        void* graphicsQueue = nullptr;
+    };
+
     /// Callable payload executed on the Render Thread.
     using RenderCommandFunction = std::function<void()>;
+    using RenderFrameOverlayFunction = std::function<void()>;
 
     /// Callable payload used by RenderSystem for synchronous lifecycle operations on the Render Thread.
     using RenderSynchronousFunction = std::function<ErrorCode()>;
@@ -124,6 +135,12 @@ namespace ve
         /// requiring callers to submit ad hoc render commands that mutate RHI lifetime.
         [[nodiscard]] ErrorCode InitializeDevice(const RenderDeviceDesc& desc);
 
+        /// Queries backend and native handles used by platform integrations such as Editor UI backends.
+        ///
+        /// The RHI device must already be initialized. hasMainSwapchain indicates whether the main presentation
+        /// surface has been created.
+        [[nodiscard]] ErrorCode QueryNativeHandles(RenderNativeHandles& outHandles);
+
         /// Destroys the RHI device and any main swapchain owned by this RenderSystem on the Render Thread.
         void ShutdownDevice() noexcept;
 
@@ -145,7 +162,8 @@ namespace ve
         /// Renders one first-stage frame to the main swapchain.
         ///
         /// The current implementation clears the back buffer, draws a simple triangle, submits the command list, and
-        /// presents. This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
+        /// presents. frameOverlayFunction is optional and executes on the Render Thread before end-render-pass.
+        /// This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
         [[nodiscard]] ErrorCode RenderFrame();
 
         /// Submits a command to execute on the Render Thread.

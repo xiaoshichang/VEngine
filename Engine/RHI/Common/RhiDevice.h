@@ -160,5 +160,26 @@ namespace ve::rhi
 
         /// Blocks until all previously submitted work is complete.
         virtual void WaitIdle() = 0;
+
+        /// Returns the backend-native device handle when available.
+        /// For example: ID3D11Device* on D3D11, ID3D12Device* on D3D12.
+        [[nodiscard]] virtual void* GetNativeDeviceHandle() const noexcept
+        {
+            return nullptr;
+        }
+
+        /// Returns the backend-native immediate context handle when available.
+        /// For example: ID3D11DeviceContext* on D3D11.
+        [[nodiscard]] virtual void* GetNativeImmediateContextHandle() const noexcept
+        {
+            return nullptr;
+        }
+
+        /// Returns the backend-native graphics queue handle when available.
+        /// For example: ID3D12CommandQueue* on D3D12.
+        [[nodiscard]] virtual void* GetNativeGraphicsQueueHandle() const noexcept
+        {
+            return nullptr;
+        }
     };
 } // namespace ve::rhi

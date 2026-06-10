@@ -37,6 +37,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineEditorJobWorker";
     initParam.runtime.ioSystem.threadName = "VEngineEditorIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineEditorRenderThread";
+    initParam.runtime.renderSystem.device.backend = ve::RenderBackend::D3D11;
 
     ve::editor::WindowsEditorApplication application(std::move(initParam));
     int exitCode = application.Init();

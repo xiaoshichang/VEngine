@@ -255,6 +255,26 @@ namespace ve
         return exitCode_;
     }
 
+    void* Application::GetMainWindowNativeHandle() const noexcept
+    {
+        if (mainWindow_ == nullptr)
+        {
+            return nullptr;
+        }
+
+        return mainWindow_->GetNativeHandle();
+    }
+
+    void* Application::GetMainWindowNativeLayer() const noexcept
+    {
+        if (mainWindow_ == nullptr)
+        {
+            return nullptr;
+        }
+
+        return mainWindow_->GetNativeLayer();
+    }
+
     EngineRuntime& Application::GetRuntime() noexcept
     {
         return engineRuntime_;

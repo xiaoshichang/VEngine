@@ -604,6 +604,16 @@ namespace ve::rhi
                 return lastError_.c_str();
             }
 
+            [[nodiscard]] void* GetNativeDeviceHandle() const noexcept override
+            {
+                return device_.Get();
+            }
+
+            [[nodiscard]] void* GetNativeGraphicsQueueHandle() const noexcept override
+            {
+                return queue_.Get();
+            }
+
             [[nodiscard]] std::unique_ptr<RhiSwapchain> CreateSwapchain(const RhiSwapchainDesc& desc) override
             {
                 HWND window = static_cast<HWND>(desc.nativeWindow);

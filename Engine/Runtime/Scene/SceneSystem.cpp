@@ -98,6 +98,10 @@ namespace ve
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
 
+                    if (editorCallback.onStartFrame != nullptr)
+                    {
+                        editorCallback.onStartFrame();
+                    }
                     if (editorCallback.onRender != nullptr)
                     {
                         editorCallback.onRender();
