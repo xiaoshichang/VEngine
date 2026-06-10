@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/Core/Editor.h"
 #include "Engine/Runtime/Application/Application.h"
 
 namespace ve::editor
@@ -13,5 +14,8 @@ namespace ve::editor
         [[nodiscard]] int Init() override;
         void Run() override;
         void UnInit() override;
+
+    private:
+        Editor editor_;
     };
 } // namespace ve::editor

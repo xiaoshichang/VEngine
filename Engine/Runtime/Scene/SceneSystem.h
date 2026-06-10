@@ -19,6 +19,13 @@ namespace ve
     struct SceneSystemImpl;
     using RenderFrameFenceSignalSubmitter = std::function<ErrorCode(UInt32 fenceIndex)>;
 
+    /// SceneThread callbacks supplied by Editor for per-frame event and render hooks.
+    struct SceneSystemEditorCallback
+    {
+        std::function<void(const OSEvent& event)> onOSEvent;
+        std::function<void()> onRender;
+    };
+
     /// Describes the Scene Thread created by SceneSystem::Initialize().
     struct SceneSystemInitParam
     {
@@ -40,7 +47,8 @@ namespace ve
         /// Creates an empty active Scene and starts the Scene Thread.
         ///
         /// timeSystem must already be initialized by EngineRuntime before SceneSystem starts.
-        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, RenderSystem& renderSystem);
+        [[nodiscard]] ErrorCode
+        Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, RenderSystem& renderSystem);
 
         /// Stops Scene updates and joins the Scene Thread.
         ///
@@ -72,6 +80,9 @@ namespace ve
 
         /// Assigns the Scene-Render frame-end sync primitive used by this SceneSystem.
         void SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept;
+
+        /// Assigns callbacks executed on the Scene Thread for Editor integration.
+        void SetEditorCallback(SceneSystemEditorCallback callback) noexcept;
 
         /// notify scene thread to start main loop.
         void StartLoop() noexcept;

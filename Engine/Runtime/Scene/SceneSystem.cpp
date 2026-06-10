@@ -6,9 +6,9 @@
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <exception>
+#include <mutex>
 #include <new>
 #include <utility>
-#include <format>
 
 namespace ve
 {
@@ -25,6 +25,8 @@ namespace ve
         ManualResetEvent startLoopEvent;
         MainThreadSceneThreadFrameEndSync* mainThreadSceneThreadFrameEndSync = nullptr;
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
+        std::mutex editorCallbackMutex;
+        SceneSystemEditorCallback editorCallback;
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
@@ -32,7 +34,13 @@ namespace ve
 
     namespace
     {
-        void ProcessOSEvents(SceneSystemImpl& impl)
+        [[nodiscard]] SceneSystemEditorCallback CopyEditorCallback(SceneSystemImpl& impl)
+        {
+            std::lock_guard lock(impl.editorCallbackMutex);
+            return impl.editorCallback;
+        }
+
+        void ProcessOSEvents(SceneSystemImpl& impl, const SceneSystemEditorCallback& editorCallback)
         {
             OSEvent event;
             while (impl.osEventQueue.TryPop(event))
@@ -46,6 +54,10 @@ namespace ve
                 case OSEventType::WindowResized:
                 case OSEventType::WindowShown:
                 case OSEventType::WindowHidden:
+                    if (editorCallback.onOSEvent != nullptr)
+                    {
+                        editorCallback.onOSEvent(event);
+                    }
                     break;
                 case OSEventType::FrameEndFenceSignal:
                     if (impl.mainThreadSceneThreadFrameEndSync != nullptr)
@@ -80,10 +92,16 @@ namespace ve
                 try
                 {
                     VE_ASSERT_SCENE_THREAD();
-                    ProcessOSEvents(impl);
+                    const SceneSystemEditorCallback editorCallback = CopyEditorCallback(impl);
+                    ProcessOSEvents(impl, editorCallback);
                     impl.timeSystem->Tick();
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
+
+                    if (editorCallback.onRender != nullptr)
+                    {
+                        editorCallback.onRender();
+                    }
 
                     ErrorCode renderResult = impl.renderSystem->RenderFrame();
                     VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
@@ -141,7 +159,8 @@ namespace ve
         Shutdown();
     }
 
-    ErrorCode SceneSystem::Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, RenderSystem& renderSystem)
+    ErrorCode
+    SceneSystem::Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, RenderSystem& renderSystem)
     {
         if (impl_->initialized.load(std::memory_order_acquire))
         {
@@ -241,6 +260,13 @@ namespace ve
                           "SetSceneThreadRenderThreadFrameEndSync requires SceneSystem to be stopped.");
         impl_->sceneThreadRenderThreadFrameEndSync = sync;
     }
+
+    void SceneSystem::SetEditorCallback(SceneSystemEditorCallback callback) noexcept
+    {
+        std::lock_guard lock(impl_->editorCallbackMutex);
+        impl_->editorCallback = std::move(callback);
+    }
+
     void SceneSystem::StartLoop() noexcept
     {
         impl_->startLoopEvent.Set();
