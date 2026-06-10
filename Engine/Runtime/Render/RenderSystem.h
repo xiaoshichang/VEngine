@@ -162,8 +162,7 @@ namespace ve
         /// Renders one first-stage frame to the main swapchain.
         ///
         /// The current implementation clears the back buffer, draws a simple triangle, submits the command list, and
-        /// presents. frameOverlayFunction is optional and executes on the Render Thread before end-render-pass.
-        /// This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
+        /// presents. This is a smoke path used until RenderWorld, scene extraction, and real render passes land.
         [[nodiscard]] ErrorCode RenderFrame();
 
         /// Submits a command to execute on the Render Thread.
@@ -171,7 +170,7 @@ namespace ve
         /// Returns InvalidState before initialization, during shutdown, or after shutdown. Returns InvalidArgument when
         /// the command has no callable function. A successful return means the command was accepted and will run before
         /// a later successful Flush() completes or before Shutdown() returns.
-        [[nodiscard]] ErrorCode Submit(RenderCommand command);
+        [[nodiscard]] ErrorCode EnqueueCommand(RenderCommand command);
 
         /// Blocks until every command accepted before this call has executed on the Render Thread.
         ///

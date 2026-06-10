@@ -619,7 +619,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return ExecuteSynchronous("RenderSystemRenderFrame", [this]() { return RenderTriangleFrame(*impl_); });
     }
 
-    ErrorCode RenderSystem::Submit(RenderCommand command)
+    ErrorCode RenderSystem::EnqueueCommand(RenderCommand command)
     {
         return SubmitFunction(std::move(command.debugName), std::move(command.function));
     }

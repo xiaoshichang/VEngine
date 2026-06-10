@@ -20,6 +20,7 @@ namespace ve::editor
     struct EditorFrameDrawData
     {
         ImDrawData drawData;
+        ImVector<ImTextureData*> textureRefs;
         std::vector<std::unique_ptr<ImDrawList>> ownedCmdLists;
     };
 
@@ -41,6 +42,16 @@ namespace ve::editor
             frameDrawData->drawData.FramebufferScale = sourceDrawData->FramebufferScale;
             frameDrawData->drawData.OwnerViewport = sourceDrawData->OwnerViewport;
             frameDrawData->drawData.Textures = nullptr;
+
+            if (sourceDrawData->Textures != nullptr)
+            {
+                frameDrawData->textureRefs.reserve(sourceDrawData->Textures->Size);
+                for (int textureIndex = 0; textureIndex < sourceDrawData->Textures->Size; ++textureIndex)
+                {
+                    frameDrawData->textureRefs.push_back((*sourceDrawData->Textures)[textureIndex]);
+                }
+                frameDrawData->drawData.Textures = &frameDrawData->textureRefs;
+            }
 
             frameDrawData->ownedCmdLists.reserve(static_cast<size_t>(sourceDrawData->CmdListsCount));
             for (int drawListIndex = 0; drawListIndex < sourceDrawData->CmdListsCount; ++drawListIndex)
@@ -79,17 +90,9 @@ namespace ve::editor
         VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "ImGui::CreateContext failed.");
         ImGui::StyleColorsDark();
 
-#if VE_PLATFORM_WINDOWS
-        if (!ImGui_ImplWin32_Init(nativeWindowHandle))
-        {
-            ImGui::DestroyContext();
-            return ErrorCode::PlatformError;
-        }
-#else
-        (void)nativeWindowHandle;
-        ImGui::DestroyContext();
-        return ErrorCode::Unsupported;
-#endif
+        auto ok = ImGui_ImplWin32_Init(nativeWindowHandle);
+        VE_ASSERT(ok);
+
         renderSystem_ = &runtime.GetRenderSystem();
         const ErrorCode renderBackendResult = InitRenderBackend(*renderSystem_);
         VE_ASSERT(renderBackendResult == ErrorCode::None);
@@ -99,7 +102,7 @@ namespace ve::editor
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
             .onStartFrame = [this]() { StartFrame(); },
             .onOSEvent = [this](const OSEvent& event) { OnOSEvent(event); },
-            .onRender = [this]() { return Render(); },
+            .onRender = [this]() { Render(); },
         });
 
         VE_LOG_INFO_CATEGORY("Editor", "Editor initialized.");
@@ -147,11 +150,16 @@ namespace ve::editor
     void Editor::Render()
     {
         VE_ASSERT_SCENE_THREAD();
+        if (!initialized_.load(std::memory_order_acquire))
+        {
+            return;
+        }
+
         ImGui::ShowDemoWindow(&showDemoWindow_);
         ImGui::Render();
 
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
-        VE_ASSERT(frameDrawData != nullptr);
+        VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
 
         auto lambda = [this, frameDrawData = std::move(frameDrawData)]()
         {
@@ -173,8 +181,9 @@ namespace ve::editor
                 break;
             }
         };
-        auto error = renderSystem_->Submit(RenderCommand("RenderEditor", lambda));
-        VE_ASSERT(error == ErrorCode::None);
+
+        ErrorCode submitResult = renderSystem_->EnqueueCommand(RenderCommand{"RenderEditor", std::move(lambda)});
+        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "Editor::Render failed to submit render command.");
     }
 
     void Editor::UnInit() noexcept
@@ -192,6 +201,9 @@ namespace ve::editor
         }
 
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::UnInit requires renderSystem_ to be valid.");
+        ErrorCode flushResult = renderSystem_->Flush();
+        VE_ASSERT_MESSAGE(flushResult == ErrorCode::None || flushResult == ErrorCode::InvalidState,
+                          "Editor::UnInit flush render queue failed.");
         ShutdownRenderBackend();
 
 #if VE_PLATFORM_WINDOWS

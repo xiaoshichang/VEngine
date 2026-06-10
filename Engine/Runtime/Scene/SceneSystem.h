@@ -21,9 +21,9 @@ namespace ve
     /// SceneThread callbacks supplied by Editor for per-frame event and render hooks.
     struct SceneSystemEditorCallback
     {
-        std::function<void()> onStartFrame;
-        std::function<void(const OSEvent& event)> onOSEvent;
-        std::function<void()> onRender;
+        std::function<void()> onStartFrame = nullptr;
+        std::function<void(const OSEvent& event)> onOSEvent = nullptr;
+        std::function<void()> onRender = nullptr;
     };
 
     /// Describes the Scene Thread created by SceneSystem::Initialize().

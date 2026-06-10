@@ -6,7 +6,6 @@
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <exception>
-#include <mutex>
 #include <new>
 #include <utility>
 
@@ -25,7 +24,6 @@ namespace ve
         ManualResetEvent startLoopEvent;
         MainThreadSceneThreadFrameEndSync* mainThreadSceneThreadFrameEndSync = nullptr;
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
-        std::mutex editorCallbackMutex;
         SceneSystemEditorCallback editorCallback;
 
         AtomicBool initialized{false};
@@ -34,12 +32,6 @@ namespace ve
 
     namespace
     {
-        [[nodiscard]] SceneSystemEditorCallback CopyEditorCallback(SceneSystemImpl& impl)
-        {
-            std::lock_guard lock(impl.editorCallbackMutex);
-            return impl.editorCallback;
-        }
-
         void ProcessOSEvents(SceneSystemImpl& impl, const SceneSystemEditorCallback& editorCallback)
         {
             OSEvent event;
@@ -91,24 +83,26 @@ namespace ve
             {
                 try
                 {
-                    VE_ASSERT_SCENE_THREAD();
-                    const SceneSystemEditorCallback editorCallback = CopyEditorCallback(impl);
-                    ProcessOSEvents(impl, editorCallback);
+                    ProcessOSEvents(impl, impl.editorCallback);
+
                     impl.timeSystem->Tick();
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
 
-                    if (editorCallback.onStartFrame != nullptr)
+                    if (impl.editorCallback.onStartFrame != nullptr)
                     {
-                        editorCallback.onStartFrame();
-                    }
-                    if (editorCallback.onRender != nullptr)
-                    {
-                        editorCallback.onRender();
+                        impl.editorCallback.onStartFrame();
                     }
 
-                    ErrorCode renderResult = impl.renderSystem->RenderFrame();
-                    VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
+                    if (impl.editorCallback.onRender != nullptr)
+                    {
+                        impl.editorCallback.onRender();
+                    }
+                    else
+                    {
+                        ErrorCode renderResult = impl.renderSystem->RenderFrame();
+                        VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
+                    }
 
                     impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
                         impl.stopRequested,
@@ -267,7 +261,6 @@ namespace ve
 
     void SceneSystem::SetEditorCallback(SceneSystemEditorCallback callback) noexcept
     {
-        std::lock_guard lock(impl_->editorCallbackMutex);
         impl_->editorCallback = std::move(callback);
     }
 
