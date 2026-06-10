@@ -616,7 +616,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     ErrorCode RenderSystem::RenderFrame()
     {
-        return ExecuteSynchronous("RenderSystemRenderFrame", [this]() { return RenderTriangleFrame(*impl_); });
+        auto lambda = [this]() { return RenderTriangleFrame(*impl_); };
+        auto ret = EnqueueCommand(RenderCommand("RenderSystemRenderFrame", lambda));
+        VE_ASSERT(ret == ErrorCode::None);
+        return ret;
     }
 
     ErrorCode RenderSystem::EnqueueCommand(RenderCommand command)

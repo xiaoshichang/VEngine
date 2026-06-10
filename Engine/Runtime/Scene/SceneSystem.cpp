@@ -100,9 +100,9 @@ namespace ve
                     }
                     else
                     {
-                        ErrorCode renderResult = impl.renderSystem->RenderFrame();
-                        VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
                     }
+                    ErrorCode renderResult = impl.renderSystem->RenderFrame();
+                    VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
 
                     impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
                         impl.stopRequested,
