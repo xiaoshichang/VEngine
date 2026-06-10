@@ -32,9 +32,6 @@ namespace ve::editor
         RenderSystem* renderSystem_ = nullptr;
         RenderBackend renderBackend_ = RenderBackend::D3D12;
         std::atomic_bool initialized_{false};
-        bool imguiContextCreated_ = false;
-        bool imguiPlatformInitialized_ = false;
-        bool imguiRenderBackendInitialized_ = false;
         bool showDemoWindow_ = true;
     };
 } // namespace ve::editor

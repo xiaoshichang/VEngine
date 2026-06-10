@@ -76,45 +76,23 @@ namespace ve::editor
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        imguiContextCreated_ = true;
+        VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "ImGui::CreateContext failed.");
         ImGui::StyleColorsDark();
 
 #if VE_PLATFORM_WINDOWS
         if (!ImGui_ImplWin32_Init(nativeWindowHandle))
         {
             ImGui::DestroyContext();
-            imguiContextCreated_ = false;
             return ErrorCode::PlatformError;
         }
-        imguiPlatformInitialized_ = true;
 #else
         (void)nativeWindowHandle;
         ImGui::DestroyContext();
-        imguiContextCreated_ = false;
         return ErrorCode::Unsupported;
 #endif
-
         renderSystem_ = &runtime.GetRenderSystem();
         const ErrorCode renderBackendResult = InitRenderBackend(*renderSystem_);
-        if (renderBackendResult != ErrorCode::None)
-        {
-#if VE_PLATFORM_WINDOWS
-            if (imguiPlatformInitialized_)
-            {
-                ImGui_ImplWin32_Shutdown();
-                imguiPlatformInitialized_ = false;
-            }
-#endif
-
-            if (imguiContextCreated_)
-            {
-                ImGui::DestroyContext();
-                imguiContextCreated_ = false;
-            }
-
-            renderSystem_ = nullptr;
-            return renderBackendResult;
-        }
+        VE_ASSERT(renderBackendResult == ErrorCode::None);
 
         sceneSystem_ = &runtime.GetSceneSystem();
         initialized_.store(true, std::memory_order_release);
@@ -213,21 +191,15 @@ namespace ve::editor
             sceneSystem_ = nullptr;
         }
 
+        VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::UnInit requires renderSystem_ to be valid.");
         ShutdownRenderBackend();
 
 #if VE_PLATFORM_WINDOWS
-        if (imguiPlatformInitialized_)
-        {
-            ImGui_ImplWin32_Shutdown();
-            imguiPlatformInitialized_ = false;
-        }
+        ImGui_ImplWin32_Shutdown();
 #endif
 
-        if (imguiContextCreated_)
-        {
-            ImGui::DestroyContext();
-            imguiContextCreated_ = false;
-        }
+        VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::UnInit requires an active ImGui context.");
+        ImGui::DestroyContext();
 
         renderSystem_ = nullptr;
         VE_LOG_INFO_CATEGORY("Editor", "Editor uninitialized.");
@@ -270,7 +242,6 @@ namespace ve::editor
                 return ErrorCode::PlatformError;
             }
 
-            imguiRenderBackendInitialized_ = true;
             return ErrorCode::None;
 #else
             return ErrorCode::Unsupported;
@@ -289,23 +260,20 @@ namespace ve::editor
 
     void Editor::ShutdownRenderBackend() noexcept
     {
-        if (!imguiRenderBackendInitialized_)
-        {
-            return;
-        }
-
         switch (renderBackend_)
         {
         case RenderBackend::D3D11:
 #if VE_PLATFORM_WINDOWS
+            VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr,
+                              "Editor::ShutdownRenderBackend requires an active ImGui context.");
             ImGui_ImplDX11_Shutdown();
 #endif
             break;
         case RenderBackend::D3D12:
         case RenderBackend::Metal:
+            VE_ASSERT_ALWAYS_MESSAGE(false,
+                                     "Editor::ShutdownRenderBackend called for unsupported backend in current build.");
             break;
         }
-
-        imguiRenderBackendInitialized_ = false;
     }
 } // namespace ve::editor
