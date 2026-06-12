@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Input/InputSystem.h"
+#include "Engine/Runtime/Logging/Log.h"
 
 #include <array>
 #include <algorithm>
@@ -131,6 +132,7 @@ namespace ve
                 if (!impl_->keysDown[keyIndex])
                 {
                     impl_->keysPressed[keyIndex] = true;
+                    VE_LOG_INFO("Key pressed: {}", event.keyCode);
                 }
                 impl_->keysDown[keyIndex] = true;
             }

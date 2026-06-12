@@ -83,21 +83,21 @@ namespace ve
             {
                 try
                 {
+                    if (impl.editorCallback.onStartFrame != nullptr)
+                    {
+                        impl.editorCallback.onStartFrame();
+                    }
                     if (impl.inputSystem != nullptr)
                     {
                         impl.inputSystem->BeginFrame();
                     }
-
                     ProcessOSEvents(impl);
+
 
                     impl.timeSystem->Tick();
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
 
-                    if (impl.editorCallback.onStartFrame != nullptr)
-                    {
-                        impl.editorCallback.onStartFrame();
-                    }
 
                     ErrorCode beginRenderFrameResult = impl.renderSystem->BeginRenderFrame();
                     VE_ASSERT_MESSAGE(beginRenderFrameResult == ErrorCode::None, "BeginRenderFrame with error.");

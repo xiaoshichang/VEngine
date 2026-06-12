@@ -30,6 +30,8 @@ function(ve_add_windows_editor)
         add_executable(VEngineEditor WIN32
             Editor/Core/Editor.cpp
             Editor/Core/Editor.h
+            Editor/Core/EditorInput.cpp
+            Editor/Core/EditorInput.h
             Editor/Windows/main.cpp
             Editor/Windows/WindowsEditorApplication.cpp
             Editor/Windows/WindowsEditorApplication.h
