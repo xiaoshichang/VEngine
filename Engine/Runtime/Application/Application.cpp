@@ -78,6 +78,15 @@ namespace ve
             }
         }
 
+        void EnqueuePendingWindowOSEvents(SceneSystem& sceneSystem, Window& window)
+        {
+            OSEvent event;
+            while (window.TryPopOSEvent(event))
+            {
+                EnqueueOSEvent(sceneSystem, event);
+            }
+        }
+
         void ShutdownEngineRuntime(EngineRuntime& runtime)
         {
             runtime.Shutdown();
@@ -230,6 +239,7 @@ namespace ve
             const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
             const WindowStateSnapshot currentState = CaptureWindowState(mainWindow);
             EnqueueWindowStateDeltaEvents(sceneSystem, previousState, currentState);
+            EnqueuePendingWindowOSEvents(sceneSystem, mainWindow);
             previousState = currentState;
 
             // Remaining window state changes are forwarded to Scene Thread through OSEventQueue.

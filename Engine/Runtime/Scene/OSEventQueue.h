@@ -2,33 +2,13 @@
 
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Input/OSEvent.h"
 #include "Engine/Runtime/Threading/LockFreeSpscQueue.h"
 
 #include <utility>
 
 namespace ve
 {
-    enum class OSEventType
-    {
-        WindowFocusGained,
-        WindowFocusLost,
-        WindowMinimized,
-        WindowRestored,
-        WindowResized,
-        WindowShown,
-        WindowHidden,
-        FrameEndFenceSignal,
-    };
-
-    struct OSEvent
-    {
-        OSEventType type = OSEventType::WindowShown;
-        UInt32 width = 0;
-        UInt32 height = 0;
-        UInt32 fenceIndex = 0;
-    };
-
     /// Single-producer single-consumer OS event queue for main-thread to scene-thread dispatch.
     class OSEventQueue : public NonMovable
     {

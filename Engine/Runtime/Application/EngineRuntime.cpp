@@ -49,6 +49,13 @@ namespace ve
         }
         VE_LOG_INFO("IOSystem initialized.");
 
+        ErrorCode inputSystemResult = inputSystem_.Initialize(desc.inputSystem);
+        if (inputSystemResult != ErrorCode::None)
+        {
+            TerminateRuntimeInitialization("InputSystem", inputSystemResult);
+        }
+        VE_LOG_INFO("InputSystem initialized.");
+
         mainThreadSceneThreadFrameEndSync_.Reset();
         sceneThreadRenderThreadFrameEndSync_.Reset();
         renderSystem_.SetSceneThreadRenderThreadFrameEndSync(&sceneThreadRenderThreadFrameEndSync_);
@@ -69,7 +76,7 @@ namespace ve
         }
         VE_LOG_INFO("TimeSystem initialized.");
 
-        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem, timeSystem_, renderSystem_);
+        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem, timeSystem_, inputSystem_, renderSystem_);
         if (sceneSystemResult != ErrorCode::None)
         {
             TerminateRuntimeInitialization("SceneSystem", sceneSystemResult);
@@ -91,6 +98,7 @@ namespace ve
         sceneSystem_.Shutdown();
         timeSystem_.Shutdown();
         renderSystem_.Shutdown();
+        inputSystem_.Shutdown();
         ioSystem_.Shutdown();
         jobSystem_.Shutdown();
         state_ = EngineRuntimeState::Shutdown;
@@ -128,6 +136,18 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetIOSystem requires an initialized runtime.");
         return ioSystem_;
+    }
+
+    InputSystem& EngineRuntime::GetInputSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetInputSystem requires an initialized runtime.");
+        return inputSystem_;
+    }
+
+    const InputSystem& EngineRuntime::GetInputSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetInputSystem requires an initialized runtime.");
+        return inputSystem_;
     }
 
     TimeSystem& EngineRuntime::GetTimeSystem() noexcept

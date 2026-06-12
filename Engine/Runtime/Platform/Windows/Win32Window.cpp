@@ -10,6 +10,99 @@ namespace ve
     {
         constexpr wchar_t WindowClassName[] = L"VEngineWin32Window";
 
+        [[nodiscard]] Int32 GetSignedLowWord(LPARAM value) noexcept
+        {
+            return static_cast<Int16>(value & 0xffff);
+        }
+
+        [[nodiscard]] Int32 GetSignedHighWord(LPARAM value) noexcept
+        {
+            return static_cast<Int16>((value >> 16) & 0xffff);
+        }
+
+        [[nodiscard]] Int16 GetSignedHighWord(WPARAM value) noexcept
+        {
+            return static_cast<Int16>((value >> 16) & 0xffff);
+        }
+
+        [[nodiscard]] InputModifierFlags GetCurrentInputModifiers() noexcept
+        {
+            InputModifierFlags modifiers = InputModifierFlags::None;
+
+            if ((GetKeyState(VK_SHIFT) & 0x8000) != 0)
+            {
+                modifiers |= InputModifierFlags::Shift;
+            }
+
+            if ((GetKeyState(VK_CONTROL) & 0x8000) != 0)
+            {
+                modifiers |= InputModifierFlags::Control;
+            }
+
+            if ((GetKeyState(VK_MENU) & 0x8000) != 0)
+            {
+                modifiers |= InputModifierFlags::Alt;
+            }
+
+            if ((GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0)
+            {
+                modifiers |= InputModifierFlags::Super;
+            }
+
+            if ((GetKeyState(VK_CAPITAL) & 0x0001) != 0)
+            {
+                modifiers |= InputModifierFlags::CapsLock;
+            }
+
+            if ((GetKeyState(VK_NUMLOCK) & 0x0001) != 0)
+            {
+                modifiers |= InputModifierFlags::NumLock;
+            }
+
+            return modifiers;
+        }
+
+        [[nodiscard]] OSEvent MakeKeyboardEvent(OSEventType type, WPARAM wParam, LPARAM lParam)
+        {
+            OSEvent event;
+            event.type = type;
+            event.keyCode = static_cast<UInt32>(wParam);
+            event.scanCode = static_cast<UInt32>((lParam >> 16) & 0xff);
+            event.modifiers = GetCurrentInputModifiers();
+            event.isRepeat = (type == OSEventType::KeyboardKeyDown) && ((lParam & (1ll << 30)) != 0);
+            event.isExtended = (lParam & (1ll << 24)) != 0;
+
+            if (wParam == VK_SHIFT)
+            {
+                event.keyCode = MapVirtualKeyW(event.scanCode, MAPVK_VSC_TO_VK_EX);
+            }
+            else if (wParam == VK_CONTROL)
+            {
+                event.keyCode = event.isExtended ? VK_RCONTROL : VK_LCONTROL;
+            }
+            else if (wParam == VK_MENU)
+            {
+                event.keyCode = event.isExtended ? VK_RMENU : VK_LMENU;
+            }
+
+            return event;
+        }
+
+        [[nodiscard]] OSEvent MakeMousePositionEvent(OSEventType type, LPARAM lParam)
+        {
+            OSEvent event;
+            event.type = type;
+            event.mouseX = GetSignedLowWord(lParam);
+            event.mouseY = GetSignedHighWord(lParam);
+            event.modifiers = GetCurrentInputModifiers();
+            return event;
+        }
+
+        [[nodiscard]] bool HasPressedMouseButton(WPARAM wParam) noexcept
+        {
+            return (wParam & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON | MK_XBUTTON1 | MK_XBUTTON2)) != 0;
+        }
+
         std::wstring Utf8ToWide(std::string_view text)
         {
             if (text.empty())
@@ -129,6 +222,18 @@ namespace ve
         }
 
         return WindowPumpStatus{};
+    }
+
+    bool Win32Window::TryPopOSEvent(OSEvent& outEvent)
+    {
+        if (pendingOSEvents_.empty())
+        {
+            return false;
+        }
+
+        outEvent = pendingOSEvents_.front();
+        pendingOSEvents_.pop_front();
+        return true;
     }
 
     void Win32Window::SetCommandHandler(WindowCommandHandler handler)
@@ -300,6 +405,111 @@ namespace ve
         case WM_KILLFOCUS:
             focused_ = false;
             return 0;
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            QueueOSEvent(MakeKeyboardEvent(OSEventType::KeyboardKeyDown, wParam, lParam));
+            break;
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            QueueOSEvent(MakeKeyboardEvent(OSEventType::KeyboardKeyUp, wParam, lParam));
+            break;
+        case WM_CHAR:
+            QueueOSEvent(OSEvent{
+                .type = OSEventType::TextInput,
+                .modifiers = GetCurrentInputModifiers(),
+                .textCodepoint = static_cast<UInt32>(wParam),
+            });
+            break;
+        case WM_MOUSEMOVE:
+            QueueOSEvent(MakeMousePositionEvent(OSEventType::MouseMoved, lParam));
+            break;
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+        case WM_XBUTTONDOWN:
+        {
+            OSEvent event = MakeMousePositionEvent(OSEventType::MouseButtonDown, lParam);
+            if (message == WM_LBUTTONDOWN)
+            {
+                event.mouseButton = InputMouseButton::Left;
+            }
+            else if (message == WM_RBUTTONDOWN)
+            {
+                event.mouseButton = InputMouseButton::Right;
+            }
+            else if (message == WM_MBUTTONDOWN)
+            {
+                event.mouseButton = InputMouseButton::Middle;
+            }
+            else
+            {
+                event.mouseButton =
+                    GetSignedHighWord(wParam) == XBUTTON1 ? InputMouseButton::X1 : InputMouseButton::X2;
+            }
+
+            SetCapture(windowHandle);
+            QueueOSEvent(event);
+            return 0;
+        }
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+        case WM_XBUTTONUP:
+        {
+            OSEvent event = MakeMousePositionEvent(OSEventType::MouseButtonUp, lParam);
+            if (message == WM_LBUTTONUP)
+            {
+                event.mouseButton = InputMouseButton::Left;
+            }
+            else if (message == WM_RBUTTONUP)
+            {
+                event.mouseButton = InputMouseButton::Right;
+            }
+            else if (message == WM_MBUTTONUP)
+            {
+                event.mouseButton = InputMouseButton::Middle;
+            }
+            else
+            {
+                event.mouseButton =
+                    GetSignedHighWord(wParam) == XBUTTON1 ? InputMouseButton::X1 : InputMouseButton::X2;
+            }
+
+            QueueOSEvent(event);
+            if (!HasPressedMouseButton(wParam))
+            {
+                ReleaseCapture();
+            }
+            return 0;
+        }
+        case WM_MOUSEWHEEL:
+        {
+            POINT point{GetSignedLowWord(lParam), GetSignedHighWord(lParam)};
+            ScreenToClient(windowHandle, &point);
+
+            OSEvent event;
+            event.type = OSEventType::MouseWheel;
+            event.modifiers = GetCurrentInputModifiers();
+            event.mouseX = static_cast<Int32>(point.x);
+            event.mouseY = static_cast<Int32>(point.y);
+            event.mouseWheelY = static_cast<Float32>(GetSignedHighWord(wParam)) / static_cast<Float32>(WHEEL_DELTA);
+            QueueOSEvent(event);
+            return 0;
+        }
+        case WM_MOUSEHWHEEL:
+        {
+            POINT point{GetSignedLowWord(lParam), GetSignedHighWord(lParam)};
+            ScreenToClient(windowHandle, &point);
+
+            OSEvent event;
+            event.type = OSEventType::MouseWheel;
+            event.modifiers = GetCurrentInputModifiers();
+            event.mouseX = static_cast<Int32>(point.x);
+            event.mouseY = static_cast<Int32>(point.y);
+            event.mouseWheelX = static_cast<Float32>(GetSignedHighWord(wParam)) / static_cast<Float32>(WHEEL_DELTA);
+            QueueOSEvent(event);
+            return 0;
+        }
         default:
             break;
         }
@@ -324,5 +534,10 @@ namespace ve
 
         clientExtent_.width = static_cast<uint32_t>(std::max<LONG>(clientRect.right - clientRect.left, 0));
         clientExtent_.height = static_cast<uint32_t>(std::max<LONG>(clientRect.bottom - clientRect.top, 0));
+    }
+
+    void Win32Window::QueueOSEvent(OSEvent event)
+    {
+        pendingOSEvents_.push_back(event);
     }
 } // namespace ve

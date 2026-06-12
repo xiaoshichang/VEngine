@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/Input/InputSystem.h"
 #include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
@@ -29,6 +30,9 @@ namespace ve
 
         /// Configuration for the dedicated file IO system service.
         IOSystemInitParam ioSystem;
+
+        /// Configuration for the runtime Input System.
+        InputSystemInitParam inputSystem;
 
         /// Configuration for the runtime Time System.
         TimeSystemInitParam timeSystem;
@@ -93,6 +97,16 @@ namespace ve
         /// The runtime must be initialized before callers use the returned service.
         [[nodiscard]] const IOSystem& GetIOSystem() const noexcept;
 
+        /// Returns the runtime-owned Input System.
+        ///
+        /// The runtime must be initialized before callers use the returned service.
+        [[nodiscard]] InputSystem& GetInputSystem() noexcept;
+
+        /// Returns the runtime-owned Input System.
+        ///
+        /// The runtime must be initialized before callers use the returned service.
+        [[nodiscard]] const InputSystem& GetInputSystem() const noexcept;
+
         /// Returns the runtime-owned Time System.
         ///
         /// EngineRuntime initializes this service; SceneSystem's Scene Thread advances it.
@@ -126,6 +140,7 @@ namespace ve
     private:
         JobSystem jobSystem_;
         IOSystem ioSystem_;
+        InputSystem inputSystem_;
         TimeSystem timeSystem_;
         SceneSystem sceneSystem_;
         RenderSystem renderSystem_;

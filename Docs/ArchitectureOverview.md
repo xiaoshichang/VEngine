@@ -292,11 +292,11 @@ Current Windows first-stage implementation:
 - Win32 message loop.
 - Native window handle access for early RHI and demo integration.
 - Debug console integration for log output and GM command input.
+- Keyboard and mouse OS event collection.
 - Empty Player and Editor shell window creation.
 
 Future Windows responsibilities:
 
-- Keyboard and mouse input.
 - High precision timer.
 - Dynamic library loading.
 - File path conversion.
@@ -324,8 +324,8 @@ this application-level flow instead of duplicating service initialization in eac
 
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
 explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem,
-TimeSystem, SceneSystem, and RenderSystem; Resource, Input, Script, UI, and Physics should connect through this layer as
-their modules land.
+InputSystem, TimeSystem, SceneSystem, and RenderSystem; Resource, Script, UI, and Physics should connect through this
+layer as their modules land.
 
 ### 7.4 FileSystem
 
@@ -556,6 +556,10 @@ iOS first stage:
 - Touch.
 
 Input should be collected by the platform layer and consumed by the Game Thread through a stable input snapshot.
+The first implementation routes Win32 keyboard and mouse messages through `OSEventQueue`; `SceneSystem` consumes those
+events on the Scene Thread and updates `InputSystem` before scene/editor frame work runs.
+When an Editor callback is installed, Editor receives OS input events first and explicitly returns whether an event should
+continue into `InputSystem`. Without an Editor callback, input events flow directly to `InputSystem`.
 
 ### 7.15 Runtime UI
 
@@ -1008,7 +1012,7 @@ Windows platform layer:
 - Exposes native window handles.
 - Supports Player and Editor shells.
 - Owns debug console output and command input in debug builds.
-- Later produces input events.
+- Produces keyboard and mouse OS events for Input and Editor consumption.
 - Later supports dynamic library loading for scripting.
 - Later provides platform file path utilities.
 

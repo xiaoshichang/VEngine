@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Platform/Windows/Win32MessageLoop.h"
 
+#include <deque>
 #include <memory>
 #include <string>
 
@@ -35,6 +36,7 @@ namespace ve
         void Show() override;
         void Close() override;
         [[nodiscard]] WindowPumpStatus PumpEvents() override;
+        [[nodiscard]] bool TryPopOSEvent(OSEvent& outEvent) override;
         void SetCommandHandler(WindowCommandHandler handler) override;
         void PumpCommands() override;
 
@@ -57,12 +59,14 @@ namespace ve
         LRESULT HandleMessage(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam);
 
         void UpdateClientExtent() noexcept;
+        void QueueOSEvent(OSEvent event);
 
     private:
         HWND windowHandle_ = nullptr;
         std::string title_;
         WindowExtent clientExtent_ = {};
         Win32MessageLoop messageLoop_;
+        std::deque<OSEvent> pendingOSEvents_;
         bool visible_ = false;
         bool focused_ = false;
         bool minimized_ = false;

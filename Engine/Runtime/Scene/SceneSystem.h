@@ -3,12 +3,13 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Input/InputSystem.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Scene/OSEventQueue.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/Thread.h"
 #include "Engine/Runtime/Time/Time.h"
-#include "Engine/Runtime/Render/RenderSystem.h"
 
 #include <functional>
 #include <memory>
@@ -22,7 +23,11 @@ namespace ve
     struct SceneSystemEditorCallback
     {
         std::function<void()> onStartFrame = nullptr;
-        std::function<void(const OSEvent& event)> onOSEvent = nullptr;
+        /// Handles an OS event before runtime input processing.
+        ///
+        /// Return true when the event should continue to InputSystem. This lets Editor-owned views decide when
+        /// keyboard and mouse input belongs to game runtime input instead of editor UI.
+        std::function<bool(const OSEvent& event)> onOSEvent = nullptr;
         std::function<void()> onRender = nullptr;
     };
 
@@ -47,8 +52,10 @@ namespace ve
         /// Creates an empty active Scene and starts the Scene Thread.
         ///
         /// timeSystem must already be initialized by EngineRuntime before SceneSystem starts.
-        [[nodiscard]] ErrorCode
-        Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, RenderSystem& renderSystem);
+        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam,
+                                           TimeSystem& timeSystem,
+                                           InputSystem& inputSystem,
+                                           RenderSystem& renderSystem);
 
         /// Stops Scene updates and joins the Scene Thread.
         ///

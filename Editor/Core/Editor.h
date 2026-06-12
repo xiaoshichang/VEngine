@@ -19,7 +19,7 @@ namespace ve::editor
 
         [[nodiscard]] ErrorCode Init(EngineRuntime& runtime, void* nativeWindowHandle);
         void StartFrame();
-        void OnOSEvent(const OSEvent& event);
+        [[nodiscard]] bool OnOSEvent(const OSEvent& event);
         void Render();
         void UnInit() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;

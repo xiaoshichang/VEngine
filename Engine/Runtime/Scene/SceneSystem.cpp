@@ -18,6 +18,7 @@ namespace ve
         std::unique_ptr<Scene> scene;
         OSEventQueue osEventQueue;
         TimeSystem* timeSystem = nullptr;
+        InputSystem* inputSystem = nullptr;
         RenderSystem* renderSystem = nullptr;
 
         // frame sync between main thread and render thread.
@@ -32,31 +33,30 @@ namespace ve
 
     namespace
     {
-        void ProcessOSEvents(SceneSystemImpl& impl, const SceneSystemEditorCallback& editorCallback)
+        void ProcessOSEvents(SceneSystemImpl& impl)
         {
+            const auto editorOnOSEvent = impl.editorCallback.onOSEvent;
             OSEvent event;
             while (impl.osEventQueue.TryPop(event))
             {
-                switch (event.type)
+                if (event.type == OSEventType::FrameEndFenceSignal)
                 {
-                case OSEventType::WindowFocusGained:
-                case OSEventType::WindowFocusLost:
-                case OSEventType::WindowMinimized:
-                case OSEventType::WindowRestored:
-                case OSEventType::WindowResized:
-                case OSEventType::WindowShown:
-                case OSEventType::WindowHidden:
-                    if (editorCallback.onOSEvent != nullptr)
-                    {
-                        editorCallback.onOSEvent(event);
-                    }
-                    break;
-                case OSEventType::FrameEndFenceSignal:
                     if (impl.mainThreadSceneThreadFrameEndSync != nullptr)
                     {
                         impl.mainThreadSceneThreadFrameEndSync->NotifySceneThreadFrameEnd(event.fenceIndex);
                     }
-                    break;
+
+                    continue;
+                }
+
+                bool shouldDispatchToInput = true;
+                if (editorOnOSEvent != nullptr)
+                {
+                    shouldDispatchToInput = editorOnOSEvent(event);
+                }
+                if (shouldDispatchToInput)
+                {
+                    impl.inputSystem->ProcessOSEvent(event);
                 }
             }
         }
@@ -83,7 +83,12 @@ namespace ve
             {
                 try
                 {
-                    ProcessOSEvents(impl, impl.editorCallback);
+                    if (impl.inputSystem != nullptr)
+                    {
+                        impl.inputSystem->BeginFrame();
+                    }
+
+                    ProcessOSEvents(impl);
 
                     impl.timeSystem->Tick();
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
@@ -149,6 +154,8 @@ namespace ve
             impl.initialized.store(false, std::memory_order_release);
             impl.stopRequested.store(false, std::memory_order_release);
             impl.timeSystem = nullptr;
+            impl.inputSystem = nullptr;
+            impl.renderSystem = nullptr;
             impl.osEventQueue.ClearForConsumer();
         }
     } // namespace
@@ -163,8 +170,10 @@ namespace ve
         Shutdown();
     }
 
-    ErrorCode
-    SceneSystem::Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, RenderSystem& renderSystem)
+    ErrorCode SceneSystem::Initialize(const SceneSystemInitParam& initParam,
+                                      TimeSystem& timeSystem,
+                                      InputSystem& inputSystem,
+                                      RenderSystem& renderSystem)
     {
         if (impl_->initialized.load(std::memory_order_acquire))
         {
@@ -177,6 +186,7 @@ namespace ve
         }
 
         impl_->timeSystem = &timeSystem;
+        impl_->inputSystem = &inputSystem;
         impl_->renderSystem = &renderSystem;
         impl_->stopRequested.store(false, std::memory_order_release);
 

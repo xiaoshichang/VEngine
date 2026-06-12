@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/Input/OSEvent.h"
 
 #include <cstdint>
 #include <functional>
@@ -49,6 +50,7 @@ namespace ve
         virtual void Show() = 0;
         virtual void Close() = 0;
         [[nodiscard]] virtual WindowPumpStatus PumpEvents() = 0;
+        [[nodiscard]] virtual bool TryPopOSEvent(OSEvent& outEvent) = 0;
         virtual void SetCommandHandler(WindowCommandHandler handler) = 0;
         virtual void PumpCommands() = 0;
 
