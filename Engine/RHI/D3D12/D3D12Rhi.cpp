@@ -400,11 +400,12 @@ namespace ve::rhi
             {
                 auto* d3dSwapchain = dynamic_cast<D3D12Swapchain*>(&swapchain);
 
-                if (d3dSwapchain == nullptr)
+                if (d3dSwapchain == nullptr || desc.colorAttachmentCount == 0)
                 {
                     return false;
                 }
 
+                const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
                 activeSwapchain_ = d3dSwapchain;
 
                 D3D12_RESOURCE_BARRIER barrier = {};
@@ -419,10 +420,13 @@ namespace ve::rhi
                 D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = d3dSwapchain->GetCurrentRtv();
                 commandList_->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
-                if (desc.colorLoadAction == RhiLoadAction::Clear)
+                if (colorAttachment.loadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
-                        desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a};
+                        colorAttachment.clearColor.r,
+                        colorAttachment.clearColor.g,
+                        colorAttachment.clearColor.b,
+                        colorAttachment.clearColor.a};
                     commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
                 }
 

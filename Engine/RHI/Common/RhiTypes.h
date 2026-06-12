@@ -4,6 +4,10 @@
 
 namespace ve::rhi
 {
+    class RhiTexture;
+
+    inline constexpr uint32_t RhiMaxColorAttachments = 4;
+
     /// Identifies the native graphics backend used by an RHI device.
     enum class RhiBackend
     {
@@ -45,6 +49,7 @@ namespace ve::rhi
     {
         Load,
         Clear,
+        DontCare,
     };
 
     /// Describes how a render target should be stored at render-pass end.
@@ -103,6 +108,29 @@ namespace ve::rhi
         uint32_t height = 0;
     };
 
+    /// Describes an integer render area inside pass attachments.
+    struct RhiRenderArea
+    {
+        int32_t x = 0;
+        int32_t y = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+
+    /// Selects one texture subresource used by a render-pass attachment.
+    struct RhiTextureSubresource
+    {
+        uint32_t mipLevel = 0;
+        uint32_t arraySlice = 0;
+    };
+
+    /// Stores depth/stencil clear values in API-neutral form.
+    struct RhiDepthStencilClearValue
+    {
+        float depth = 1.0f;
+        uint32_t stencil = 0;
+    };
+
     /// Describes how a swapchain should be created for a native surface.
     struct RhiSwapchainDesc
     {
@@ -115,12 +143,42 @@ namespace ve::rhi
         const char* debugName = nullptr;
     };
 
-    /// Describes a render pass targeting the current swapchain image.
+    /// Describes one color attachment used by a render pass.
+    ///
+    /// texture may be null when CommandList::BeginRenderPass targets a swapchain and should use its current back
+    /// buffer for this attachment.
+    struct RhiRenderPassColorAttachmentDesc
+    {
+        RhiTexture* texture = nullptr;
+        RhiTextureSubresource subresource = {};
+        RhiLoadAction loadAction = RhiLoadAction::Clear;
+        RhiStoreAction storeAction = RhiStoreAction::Store;
+        RhiColor clearColor = {};
+    };
+
+    /// Describes the optional depth/stencil attachment used by a render pass.
+    struct RhiRenderPassDepthStencilAttachmentDesc
+    {
+        RhiTexture* texture = nullptr;
+        RhiTextureSubresource subresource = {};
+        RhiLoadAction depthLoadAction = RhiLoadAction::Clear;
+        RhiStoreAction depthStoreAction = RhiStoreAction::Store;
+        RhiLoadAction stencilLoadAction = RhiLoadAction::DontCare;
+        RhiStoreAction stencilStoreAction = RhiStoreAction::DontCare;
+        RhiDepthStencilClearValue clearValue = {};
+        bool depthReadOnly = false;
+        bool stencilReadOnly = false;
+    };
+
+    /// Describes a render pass attachment set and its load/store behavior.
     struct RhiRenderPassDesc
     {
-        RhiLoadAction colorLoadAction = RhiLoadAction::Clear;
-        RhiStoreAction colorStoreAction = RhiStoreAction::Store;
-        RhiColor clearColor = {};
+        const char* debugName = nullptr;
+        RhiRenderArea renderArea = {};
+        RhiRenderPassColorAttachmentDesc colorAttachments[RhiMaxColorAttachments] = {};
+        uint32_t colorAttachmentCount = 0;
+        RhiRenderPassDepthStencilAttachmentDesc depthStencilAttachment = {};
+        bool hasDepthStencilAttachment = false;
     };
 
     /// Describes initial data and usage for a GPU buffer.

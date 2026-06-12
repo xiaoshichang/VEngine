@@ -68,6 +68,32 @@ namespace ve::rhi
             }
         }
 
+        MTLLoadAction ToMetalLoadAction(RhiLoadAction loadAction)
+        {
+            switch (loadAction)
+            {
+            case RhiLoadAction::Load:
+                return MTLLoadActionLoad;
+            case RhiLoadAction::Clear:
+                return MTLLoadActionClear;
+            case RhiLoadAction::DontCare:
+            default:
+                return MTLLoadActionDontCare;
+            }
+        }
+
+        MTLStoreAction ToMetalStoreAction(RhiStoreAction storeAction)
+        {
+            switch (storeAction)
+            {
+            case RhiStoreAction::Store:
+                return MTLStoreActionStore;
+            case RhiStoreAction::DontCare:
+            default:
+                return MTLStoreActionDontCare;
+            }
+        }
+
         std::string ToString(NSError* error)
         {
             if (error == nil)
@@ -301,11 +327,12 @@ namespace ve::rhi
             {
                 auto* metalSwapchain = dynamic_cast<MetalSwapchain*>(&swapchain);
 
-                if (metalSwapchain == nullptr || commandBuffer_ == nil)
+                if (metalSwapchain == nullptr || commandBuffer_ == nil || desc.colorAttachmentCount == 0)
                 {
                     return false;
                 }
 
+                const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
                 drawable_ = [metalSwapchain->AcquireDrawable() retain];
 
                 if (drawable_ == nil)
@@ -315,12 +342,13 @@ namespace ve::rhi
 
                 MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
                 renderPassDescriptor.colorAttachments[0].texture = drawable_.texture;
-                renderPassDescriptor.colorAttachments[0].loadAction =
-                    desc.colorLoadAction == RhiLoadAction::Clear ? MTLLoadActionClear : MTLLoadActionLoad;
-                renderPassDescriptor.colorAttachments[0].storeAction =
-                    desc.colorStoreAction == RhiStoreAction::Store ? MTLStoreActionStore : MTLStoreActionDontCare;
+                renderPassDescriptor.colorAttachments[0].loadAction = ToMetalLoadAction(colorAttachment.loadAction);
+                renderPassDescriptor.colorAttachments[0].storeAction = ToMetalStoreAction(colorAttachment.storeAction);
                 renderPassDescriptor.colorAttachments[0].clearColor =
-                    MTLClearColorMake(desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a);
+                    MTLClearColorMake(colorAttachment.clearColor.r,
+                                      colorAttachment.clearColor.g,
+                                      colorAttachment.clearColor.b,
+                                      colorAttachment.clearColor.a);
 
                 renderCommandEncoder_ = [commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor];
                 return renderCommandEncoder_ != nil;

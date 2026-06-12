@@ -380,18 +380,22 @@ namespace ve::rhi
             {
                 auto* d3dSwapchain = dynamic_cast<D3D11Swapchain*>(&swapchain);
 
-                if (d3dSwapchain == nullptr)
+                if (d3dSwapchain == nullptr || desc.colorAttachmentCount == 0)
                 {
                     return false;
                 }
 
+                const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
                 ID3D11RenderTargetView* renderTargetView = d3dSwapchain->GetRenderTargetView();
                 context_->OMSetRenderTargets(1, &renderTargetView, nullptr);
 
-                if (desc.colorLoadAction == RhiLoadAction::Clear)
+                if (colorAttachment.loadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
-                        desc.clearColor.r, desc.clearColor.g, desc.clearColor.b, desc.clearColor.a};
+                        colorAttachment.clearColor.r,
+                        colorAttachment.clearColor.g,
+                        colorAttachment.clearColor.b,
+                        colorAttachment.clearColor.a};
                     context_->ClearRenderTargetView(renderTargetView, clearColor);
                 }
 

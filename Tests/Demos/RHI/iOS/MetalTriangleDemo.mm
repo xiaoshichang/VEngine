@@ -141,9 +141,11 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         }
 
         ve::rhi::RhiRenderPassDesc renderPassDesc = {};
-        renderPassDesc.colorLoadAction = ve::rhi::RhiLoadAction::Clear;
-        renderPassDesc.colorStoreAction = ve::rhi::RhiStoreAction::Store;
-        renderPassDesc.clearColor = {0.05f, 0.07f, 0.10f, 1.0f};
+        renderPassDesc.debugName = "MetalTriangleDemoPass";
+        renderPassDesc.colorAttachmentCount = 1;
+        renderPassDesc.colorAttachments[0].loadAction = ve::rhi::RhiLoadAction::Clear;
+        renderPassDesc.colorAttachments[0].storeAction = ve::rhi::RhiStoreAction::Store;
+        renderPassDesc.colorAttachments[0].clearColor = {0.05f, 0.07f, 0.10f, 1.0f};
 
         const ve::rhi::RhiExtent2D extent = swapchain->GetExtent();
 

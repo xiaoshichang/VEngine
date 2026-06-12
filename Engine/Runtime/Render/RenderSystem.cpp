@@ -13,6 +13,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/ScopeExit.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Render/FrameRenderer.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -84,10 +85,48 @@ float4 PSMain(VSOutput input) : SV_TARGET
         std::unique_ptr<rhi::RhiShaderModule> triangleFragmentShader;
         std::unique_ptr<rhi::RhiPipelineState> trianglePipelineState;
         std::unique_ptr<rhi::RhiCommandList> frameCommandList;
+        FrameRenderer frameRenderer;
     };
 
     namespace
     {
+        class TriangleRenderPass final : public RenderPass
+        {
+        public:
+            TriangleRenderPass(rhi::RhiBuffer& vertexBuffer, rhi::RhiPipelineState& pipelineState)
+                : vertexBuffer_(&vertexBuffer)
+                , pipelineState_(&pipelineState)
+            {
+            }
+
+            [[nodiscard]] const char* GetName() const noexcept override
+            {
+                return "TriangleForwardPass";
+            }
+
+            void Setup(RenderPassBuilder& builder) override
+            {
+                builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear,
+                                                    rhi::RhiStoreAction::Store,
+                                                    rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+            }
+
+            void Execute(RenderPassContext& context) override
+            {
+                VE_ASSERT(vertexBuffer_ != nullptr);
+                VE_ASSERT(pipelineState_ != nullptr);
+
+                rhi::RhiCommandList& commandList = context.GetCommandList();
+                commandList.SetPipeline(*pipelineState_);
+                commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(TriangleVertex), 0);
+                commandList.Draw(3, 0);
+            }
+
+        private:
+            rhi::RhiBuffer* vertexBuffer_ = nullptr;
+            rhi::RhiPipelineState* pipelineState_ = nullptr;
+        };
+
         [[nodiscard]] const char* ToString(RenderBackend backend) noexcept
         {
             switch (backend)
@@ -167,6 +206,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         void DestroyTriangleResources(RenderSystemImpl& impl)
         {
+            impl.frameRenderer.ClearPasses();
             impl.frameCommandList.reset();
             impl.trianglePipelineState.reset();
             impl.triangleFragmentShader.reset();
@@ -248,6 +288,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 return ErrorCode::PlatformError;
             }
 
+            impl.frameRenderer.ClearPasses();
+            impl.frameRenderer.AddPass(
+                std::make_unique<TriangleRenderPass>(*impl.triangleVertexBuffer, *impl.trianglePipelineState));
+
             return ErrorCode::None;
         }
 
@@ -258,23 +302,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             VE_ASSERT(impl.mainSwapchain != nullptr);
             VE_ASSERT(impl.frameCommandList != nullptr);
 
-            rhi::RhiRenderPassDesc renderPassDesc = {};
-            renderPassDesc.colorLoadAction = rhi::RhiLoadAction::Clear;
-            renderPassDesc.colorStoreAction = rhi::RhiStoreAction::Store;
-            renderPassDesc.clearColor = {0.05f, 0.07f, 0.10f, 1.0f};
-
-            const rhi::RhiExtent2D extent = impl.mainSwapchain->GetExtent();
-
-            auto ok = impl.frameCommandList->Begin();
-            VE_ASSERT(ok);
-            ok = impl.frameCommandList->BeginRenderPass(*impl.mainSwapchain, renderPassDesc);
-            VE_ASSERT(ok);
-
-            impl.frameCommandList->SetViewport(rhi::RhiViewport{
-                0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f});
-            impl.frameCommandList->SetScissor(rhi::RhiScissorRect{0, 0, extent.width, extent.height});
-
-            return ErrorCode::None;
+            return impl.frameRenderer.BeginFrame(*impl.frameCommandList, *impl.mainSwapchain);
         }
 
         [[nodiscard]] ErrorCode DrawTriangleFrame(RenderSystemImpl& impl)
@@ -284,11 +312,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             VE_ASSERT(impl.trianglePipelineState != nullptr);
             VE_ASSERT(impl.frameCommandList != nullptr);
 
-            impl.frameCommandList->SetPipeline(*impl.trianglePipelineState);
-            impl.frameCommandList->SetVertexBuffer(0, *impl.triangleVertexBuffer, sizeof(TriangleVertex), 0);
-            impl.frameCommandList->Draw(3, 0);
-
-            return ErrorCode::None;
+            return impl.frameRenderer.ExecutePassesInOrder();
         }
 
         [[nodiscard]] ErrorCode EndMainSwapchainFrame(RenderSystemImpl& impl)
@@ -298,12 +322,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
             VE_ASSERT(impl.mainSwapchain != nullptr);
             VE_ASSERT(impl.frameCommandList != nullptr);
 
-            impl.frameCommandList->EndRenderPass();
+            impl.frameRenderer.EndFrame();
 
-            auto ok = impl.frameCommandList->End();
-            VE_ASSERT(ok);
-
-            ok = impl.device->Submit(*impl.frameCommandList);
+            auto ok = impl.device->Submit(*impl.frameCommandList);
             VE_ASSERT(ok);
 
             ok = impl.mainSwapchain->Present();

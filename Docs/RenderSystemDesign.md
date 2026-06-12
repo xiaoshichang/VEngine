@@ -14,7 +14,8 @@ The first version intentionally keeps the renderer narrow while making the runti
 - Initialize and shut down the selected RHI device on the Render Thread.
 - Create and destroy the main swapchain from the platform window surface.
 - Render a minimal triangle frame as the first Player/Editor rendering smoke path.
-- Leave RenderWorld, render-resource registries, upload scheduling, frame graph/pass orchestration, and viewport
+- Provide a lightweight pass orchestration shape through `FrameRenderer` and `RenderPass`.
+- Leave RenderWorld, render-resource registries, upload scheduling, full frame graph dependency analysis, and viewport
   registration for later renderer work.
 
 ## 2. Relationship To RHI
@@ -85,7 +86,7 @@ The first version includes:
 - Integration into `EngineRuntime`.
 - RHI device lifecycle APIs.
 - Main swapchain lifecycle APIs.
-- A minimal `RenderFrame()` path that clears, draws one triangle, submits, and presents.
+- A minimal `FrameRenderer` and `RenderPass` path that clears, draws one triangle, submits, and presents.
 - Unit tests for lifecycle, command execution, flushing, shutdown draining, and runtime access.
 
 The first version does not create or own:
@@ -99,7 +100,61 @@ The first version does not create or own:
 - Frame graph.
 - Mesh, material, texture, or UI rendering.
 
-## 5. Command Queue Model
+## 5. Frame Renderer And Render Pass Model
+
+`FrameRenderer` is the first renderer-level frame orchestrator. It owns long-lived `RenderPass` objects, then builds
+per-frame pass data from the current main-swapchain frame context.
+
+First-stage frame flow:
+
+```text
+FrameRenderer
+  Build frame context
+  Update render world
+  Build visible draw lists
+  Execute passes in order
+```
+
+The current implementation keeps `UpdateRenderWorld()` and `BuildVisibleDrawLists()` as explicit no-op extension points
+until render proxies and mesh draw lists exist. This keeps the threading boundary visible without introducing a partial
+RenderWorld.
+
+Renderer-level passes use this interface:
+
+```cpp
+class RenderPass
+{
+public:
+    virtual const char* GetName() const noexcept = 0;
+    virtual void Setup(RenderPassBuilder& builder) = 0;
+    virtual void Execute(RenderPassContext& context) = 0;
+};
+```
+
+`Setup()` runs every frame and declares the pass attachment shape through `RenderPassBuilder`. `Execute()` records draw
+commands through `RenderPassContext` after the RHI render pass has begun. The pass object itself is long-lived; the pass
+descriptor, viewport, scissor, and frame context are rebuilt per frame.
+
+The first concrete pass is the triangle smoke pass. It replaces the earlier direct `RenderSystem::RenderFrame()` draw
+logic with this shape:
+
+```text
+TriangleForwardPass
+  Setup:
+    write swapchain color attachment
+    clear -> store
+
+  Execute:
+    bind triangle pipeline
+    bind triangle vertex buffer
+    draw 3 vertices
+```
+
+This is intentionally not a full render graph. There is no automatic pass culling, transient resource aliasing, resource
+state inference, or graph-level scheduling yet. The current goal is to make the frame/pass ownership boundary real while
+keeping the first rendering vertical slice small.
+
+## 6. Command Queue Model
 
 The command queue is a lock-free MPSC queue:
 
@@ -135,7 +190,7 @@ struct RenderCommand
 Captured data must remain valid until the command runs. Future render-resource handles should replace raw captured
 engine pointers where possible.
 
-## 6. Render Command Execution
+## 7. Render Command Execution
 
 Render commands execute on the Render Thread without a per-command context object:
 
@@ -147,7 +202,7 @@ using RenderCommandFunction = std::function<void()>;
 device access, frame state, upload helpers, and render-resource registries should be exposed through explicit
 RenderSystem or renderer-owned APIs rather than a generic command context.
 
-## 7. Flush And Shutdown Semantics
+## 8. Flush And Shutdown Semantics
 
 `Flush()` waits until all commands submitted before the flush call have completed on the Render Thread.
 
@@ -168,7 +223,7 @@ Shutdown behavior:
 
 Commands submitted after shutdown starts fail with `ErrorCode::InvalidState`.
 
-## 8. Lifecycle Rules
+## 9. Lifecycle Rules
 
 A standalone `RenderSystem` may be initialized again after `Shutdown()`. This matches `JobSystem` and `IOSystem` and
 keeps unit tests straightforward.
@@ -182,9 +237,9 @@ Repeated `RenderSystem::Initialize()` while running returns `ErrorCode::InvalidS
 
 Submitting an empty command function returns `ErrorCode::InvalidArgument`.
 
-## 9. RHI Device And Swapchain Lifecycle
+## 10. RHI Device And Swapchain Lifecycle
 
-### 9.1 Reference Direction
+### 10.1 Reference Direction
 
 Unreal and Unity both separate long-lived graphics lifecycle ownership from ordinary per-frame rendering commands.
 
@@ -203,7 +258,7 @@ VEngine should follow this split:
 - Ordinary external callers should not create or destroy RHI devices by submitting ad hoc `RenderCommand` lambdas.
 - `RenderSystem` may implement its own lifecycle APIs internally by enqueueing synchronous render-thread operations.
 
-### 9.2 Public Lifecycle API
+### 10.2 Public Lifecycle API
 
 RHI device and swapchain lifecycle should be explicit `RenderSystem` API, not an unstructured render command submitted
 by arbitrary callers.
@@ -255,10 +310,10 @@ surface to RHI swapchain. RHI backend headers stay responsible for backend-speci
 
 The first-stage startup path initializes `EngineRuntime`, creates the main `Window`, then calls
 `RenderSystem::InitializeDevice()` and `RenderSystem::CreateMainSwapchain()` before entering the main loop. Each loop
-iteration pumps the `Window`, calls `RenderSystem::RenderFrame()` to clear, draw the first-stage triangle, submit, and
-present. Shutdown destroys the main swapchain and RHI device before `EngineRuntime::Shutdown()`.
+iteration pumps the `Window`, begins the main render frame, executes renderer passes such as `TriangleForwardPass`,
+submits, and presents. Shutdown destroys the main swapchain and RHI device before `EngineRuntime::Shutdown()`.
 
-### 9.3 Threading Rule
+### 10.3 Threading Rule
 
 RHI lifecycle work should execute on the Render Thread.
 
@@ -275,7 +330,7 @@ This keeps startup code straightforward while preserving render-thread ownership
 Ordinary `Submit(RenderCommand)` remains available for render work, resource uploads, and future render-resource
 updates. It should not be the primary public API for device or swapchain lifecycle.
 
-### 9.4 State Ownership
+### 10.4 State Ownership
 
 `RenderSystem` should track render lifecycle state separately from `EngineRuntime` service state:
 
@@ -293,7 +348,7 @@ Main swapchain state:
 First RHI integration may support one main swapchain for Player. Editor viewport work should avoid assuming there will
 only ever be one surface; future Editor support may register additional viewport surfaces or render targets.
 
-### 9.5 Shutdown Order
+### 10.5 Shutdown Order
 
 When RHI ownership is added, `RenderSystem::Shutdown()` should drain normal commands and then perform render-side
 teardown in this order:
@@ -310,14 +365,14 @@ Join Render Thread
 GPU fences and frame latency should remain RHI concepts. `RenderSystem` coordinates when to call them during lifecycle
 transitions, but should not turn CPU command `Flush()` into a GPU-idle operation.
 
-## 10. Future Render Work
+## 11. Future Render Work
 
 After RHI device and main swapchain lifecycle are connected, later RenderSystem work should add render-resource
 registries, upload scheduling, frame begin/end commands, viewport registration, and RenderWorld/RenderScene ownership.
 Those features should build on the explicit lifecycle APIs above instead of bypassing them with ad hoc public render
 commands.
 
-## 11. Testing Plan
+## 12. Testing Plan
 
 Required tests:
 
