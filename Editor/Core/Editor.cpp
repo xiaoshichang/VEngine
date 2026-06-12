@@ -391,7 +391,10 @@ namespace ve::editor
             return;
         }
 
-        ImGui::ShowDemoWindow(&showDemoWindow_);
+        if (showDemoWindow_)
+        {
+            ImGui::ShowDemoWindow(&showDemoWindow_);
+        }
         ImGui::Render();
 
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
