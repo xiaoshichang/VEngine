@@ -228,6 +228,11 @@ namespace ve
         return ErrorCode::None;
     }
 
+    void Application::OnMainLoopIteration(Window& mainWindow)
+    {
+        (void)mainWindow;
+    }
+
     int Application::RunMainLoop(Window& mainWindow)
     {
         int exitCode = 0;
