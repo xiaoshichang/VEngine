@@ -4,7 +4,11 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Scene/CameraComponent.h"
 #include "Engine/Runtime/Scene/Component.h"
+#include "Engine/Runtime/Scene/LightComponent.h"
+#include "Engine/Runtime/Scene/MeshRenderComponent.h"
+#include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <memory>
 #include <new>
