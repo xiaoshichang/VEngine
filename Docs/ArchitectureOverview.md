@@ -517,7 +517,17 @@ Responsibilities:
 - Mesh render queues.
 - Material binding.
 - Viewport rendering.
+- ViewportClient ownership and viewport binding.
+- RenderTarget description for window and texture-backed outputs.
 - Editor viewport support.
+
+Viewport clients model one active binding at a time:
+
+- Window surface binding for Player or on-screen editor panes.
+- Off-screen render target binding for scene previews, thumbnails, and embedded game views.
+
+The viewport client keeps these modes mutually exclusive so camera data can stay separate and be merged later when scene
+render work is assembled for the Render Thread.
 
 The render layer should avoid directly depending on GameObject instances on the Render Thread. It should consume render proxies, snapshots, or render commands produced by the Game Thread.
 

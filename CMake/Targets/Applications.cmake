@@ -7,7 +7,9 @@ function(ve_add_windows_player)
 
     if(WIN32)
         add_executable(VEnginePlayer WIN32
+            Player/Windows/main.cpp
             Player/Windows/WindowsPlayer.cpp
+            Player/Windows/WindowsPlayer.h
         )
 
         target_link_libraries(VEnginePlayer

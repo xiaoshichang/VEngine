@@ -57,4 +57,20 @@ function(ve_add_tests)
         NAME VEngineRenderTests
         COMMAND $<TARGET_FILE:VEngineRenderTests>
     )
+
+    add_executable(VEngineViewportTests
+        Tests/Unit/ViewportTests.cpp
+    )
+
+    target_link_libraries(VEngineViewportTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineViewportTests)
+
+    add_test(
+        NAME VEngineViewportTests
+        COMMAND $<TARGET_FILE:VEngineViewportTests>
+    )
 endfunction()

@@ -37,11 +37,14 @@ namespace ve
         [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
         [[nodiscard]] ApplicationCommandQueue& GetMainThreadCommandQueue() noexcept;
 
+    protected:
+        [[nodiscard]] virtual ErrorCode InitializeRendering(Window& mainWindow);
+        virtual void OnMainLoopIteration(Window& mainWindow);
+        [[nodiscard]] virtual int RunMainLoop(Window& mainWindow);
+
     private:
         [[nodiscard]] ErrorCode InitializeEngineRuntime();
         [[nodiscard]] Result<std::unique_ptr<Window>> CreateMainWindow();
-        [[nodiscard]] ErrorCode InitializeRendering(Window& mainWindow);
-        [[nodiscard]] int RunMainLoop(Window& mainWindow);
 
         ApplicationInitParam initParam_;
         EngineRuntime engineRuntime_;

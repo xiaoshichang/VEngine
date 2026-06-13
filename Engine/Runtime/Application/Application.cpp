@@ -199,6 +199,8 @@ namespace ve
 
     ErrorCode Application::InitializeRendering(Window& mainWindow)
     {
+        (void)mainWindow;
+
         RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
 
         ErrorCode deviceResult = renderSystem.InitializeDevice(initParam_.runtime.renderSystem.device);
@@ -244,6 +246,7 @@ namespace ve
             EnqueuePendingWindowOSEvents(sceneSystem, mainWindow);
             previousState = currentState;
             mainThreadCommandQueue_.ExecutePending();
+            OnMainLoopIteration(mainWindow);
 
             // Remaining window state changes are forwarded to Scene Thread through OSEventQueue.
             if (pumpStatus.result == WindowPumpResult::Quit)

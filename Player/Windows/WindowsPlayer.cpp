@@ -1,51 +1,38 @@
-#include "Engine/Runtime/Application/Application.h"
-#include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
+#include "Player/Windows/WindowsPlayer.h"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-
-#include <Windows.h>
 #include <utility>
 
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR commandLine, int showCommand)
+namespace ve
 {
-    (void)instance;
-    (void)previousInstance;
-    (void)commandLine;
-    (void)showCommand;
-
-    ve::InitializeWin32DebugConsole();
-
-    ve::ErrorCode loggingResult = ve::InitializeLogging();
-    if (loggingResult != ve::ErrorCode::None)
+    WindowsPlayer::WindowsPlayer(ApplicationInitParam initParam)
+        : Application(std::move(initParam))
+        , viewportClient_("PlayerViewport")
     {
-        return 1;
     }
 
-    ve::ApplicationInitParam initParam;
-    initParam.name = "VEnginePlayer";
-    initParam.mainWindow.title = "VEngine Player";
-    initParam.mainWindow.width = 1280;
-    initParam.mainWindow.height = 720;
-    initParam.mainWindow.visible = true;
-    initParam.runtime.jobSystem.workerThreadNamePrefix = "VEnginePlayerJobWorker";
-    initParam.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
-    initParam.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
-
-    ve::Application application(std::move(initParam));
-    int exitCode = application.Init();
-    if (exitCode == 0)
+    WindowsPlayer::~WindowsPlayer()
     {
-        application.Run();
-        exitCode = application.GetExitCode();
+        UnInit();
     }
-    application.UnInit();
-    ve::ShutdownLogging();
-    return exitCode;
-}
+
+    const ViewportClient& WindowsPlayer::GetViewportClient() const noexcept
+    {
+        return viewportClient_;
+    }
+
+    ViewportClient& WindowsPlayer::GetViewportClient() noexcept
+    {
+        return viewportClient_;
+    }
+
+    ErrorCode WindowsPlayer::InitializeRendering(Window& mainWindow)
+    {
+        viewportClient_.SyncFromWindow(mainWindow);
+        return Application::InitializeRendering(mainWindow);
+    }
+
+    void WindowsPlayer::OnMainLoopIteration(Window& mainWindow)
+    {
+        viewportClient_.SyncFromWindow(mainWindow);
+    }
+} // namespace ve
