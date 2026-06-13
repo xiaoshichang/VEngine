@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Runtime/Application/ApplicationCommandQueue.h"
 #include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Result.h"
@@ -34,6 +35,7 @@ namespace ve
         [[nodiscard]] void* GetMainWindowNativeLayer() const noexcept;
         [[nodiscard]] EngineRuntime& GetRuntime() noexcept;
         [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
+        [[nodiscard]] ApplicationCommandQueue& GetMainThreadCommandQueue() noexcept;
 
     private:
         [[nodiscard]] ErrorCode InitializeEngineRuntime();
@@ -43,6 +45,7 @@ namespace ve
 
         ApplicationInitParam initParam_;
         EngineRuntime engineRuntime_;
+        ApplicationCommandQueue mainThreadCommandQueue_;
         std::unique_ptr<Window> mainWindow_;
         bool initialized_ = false;
         int exitCode_ = 0;

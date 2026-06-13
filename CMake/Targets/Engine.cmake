@@ -10,6 +10,7 @@ function(ve_add_engine)
     target_sources(VEngine
         PRIVATE
             Engine/Runtime/Application/Application.cpp
+            Engine/Runtime/Application/ApplicationCommandQueue.cpp
             Engine/Runtime/Application/EngineRuntime.cpp
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
@@ -37,6 +38,7 @@ function(ve_add_engine)
             Engine/RHI/Common/RhiUtils.cpp
         PUBLIC
             Engine/Runtime/Application/Application.h
+            Engine/Runtime/Application/ApplicationCommandQueue.h
             Engine/Runtime/Application/EngineRuntime.h
             Engine/Runtime/Core/Assert.h
             Engine/Runtime/Core/BuildConfig.h

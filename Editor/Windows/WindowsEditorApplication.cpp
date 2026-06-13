@@ -25,7 +25,8 @@ namespace ve::editor
             return result;
         }
 
-        const ErrorCode editorResult = editor_.Init(GetRuntime(), GetMainWindowNativeHandle());
+        const ErrorCode editorResult =
+            editor_.Init(GetRuntime(), GetMainThreadCommandQueue(), GetMainWindowNativeHandle());
         if (editorResult != ErrorCode::None)
         {
             VE_LOG_ERROR("Editor::Init failed: {}", ToString(editorResult));

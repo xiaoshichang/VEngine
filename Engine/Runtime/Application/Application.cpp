@@ -161,6 +161,8 @@ namespace ve
         const int finalExitCode = exitCode_;
         if (mainWindow_ != nullptr)
         {
+            mainThreadCommandQueue_.ExecutePending();
+            mainThreadCommandQueue_.Clear();
             mainWindow_->PumpCommands();
             mainWindow_->SetCommandHandler({});
             mainWindow_.reset();
@@ -241,6 +243,7 @@ namespace ve
             EnqueueWindowStateDeltaEvents(sceneSystem, previousState, currentState);
             EnqueuePendingWindowOSEvents(sceneSystem, mainWindow);
             previousState = currentState;
+            mainThreadCommandQueue_.ExecutePending();
 
             // Remaining window state changes are forwarded to Scene Thread through OSEventQueue.
             if (pumpStatus.result == WindowPumpResult::Quit)
@@ -293,5 +296,10 @@ namespace ve
     const EngineRuntime& Application::GetRuntime() const noexcept
     {
         return engineRuntime_;
+    }
+
+    ApplicationCommandQueue& Application::GetMainThreadCommandQueue() noexcept
+    {
+        return mainThreadCommandQueue_;
     }
 } // namespace ve

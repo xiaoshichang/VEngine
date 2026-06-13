@@ -32,6 +32,26 @@ function(ve_add_windows_editor)
             Editor/Core/Editor.h
             Editor/Core/EditorInput.cpp
             Editor/Core/EditorInput.h
+            Editor/Core/EditorProjectDirectoryDialog.cpp
+            Editor/Core/EditorProjectDirectoryDialog.h
+            Editor/Core/EditorProjectEditingView.cpp
+            Editor/Core/EditorProjectEditingView.h
+            Editor/Core/EditorProjectRegistry.cpp
+            Editor/Core/EditorProjectRegistry.h
+            Editor/Core/EditorProjectSelectionView.cpp
+            Editor/Core/EditorProjectSelectionView.h
+            Editor/Panels/AssetsPanel.cpp
+            Editor/Panels/AssetsPanel.h
+            Editor/Panels/BasePanel.cpp
+            Editor/Panels/BasePanel.h
+            Editor/Panels/GameViewPanel.cpp
+            Editor/Panels/GameViewPanel.h
+            Editor/Panels/HierarchyPanel.cpp
+            Editor/Panels/HierarchyPanel.h
+            Editor/Panels/InspectorPanel.cpp
+            Editor/Panels/InspectorPanel.h
+            Editor/Panels/SceneViewPanel.cpp
+            Editor/Panels/SceneViewPanel.h
             Editor/Windows/main.cpp
             Editor/Windows/WindowsEditorApplication.cpp
             Editor/Windows/WindowsEditorApplication.h

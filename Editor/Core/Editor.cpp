@@ -1,5 +1,7 @@
 #include "Editor/Core/Editor.h"
 
+#include "Editor/Core/EditorProjectEditingView.h"
+#include "Editor/Core/EditorProjectSelectionView.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -8,11 +10,19 @@
 
 #if VE_PLATFORM_WINDOWS
 #include <backends/imgui_impl_dx11.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
 #include <d3d11.h>
 #endif
 
+#include <algorithm>
 #include <memory>
-#include <vector>
+#include <utility>
 
 namespace ve::editor
 {
@@ -65,7 +75,6 @@ namespace ve::editor
             frameDrawData->drawData.CmdListsCount = frameDrawData->drawData.CmdLists.Size;
             return frameDrawData;
         }
-
     } // namespace
 
     Editor::~Editor()
@@ -73,7 +82,9 @@ namespace ve::editor
         UnInit();
     }
 
-    ErrorCode Editor::Init(EngineRuntime& runtime, void* nativeWindowHandle)
+    ErrorCode Editor::Init(EngineRuntime& runtime,
+                           ApplicationCommandQueue& mainThreadCommandQueue,
+                           void* nativeWindowHandle)
     {
         if (initialized_.load(std::memory_order_acquire))
         {
@@ -90,14 +101,21 @@ namespace ve::editor
         VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "ImGui::CreateContext failed.");
         ImGui::StyleColorsDark();
 
+        recentProjects_ = EditorProjectRegistry::LoadRecentProjects();
+
         const ErrorCode inputResult = input_.Init(nativeWindowHandle);
         VE_ASSERT(inputResult == ErrorCode::None);
 
         renderSystem_ = &runtime.GetRenderSystem();
+        mainThreadCommandQueue_ = &mainThreadCommandQueue;
         const ErrorCode renderBackendResult = InitRenderBackend(*renderSystem_);
         VE_ASSERT(renderBackendResult == ErrorCode::None);
 
+        projectSelectionView_ = new ProjectSelectionView();
+        projectEditingView_ = new ProjectEditingView();
+
         sceneSystem_ = &runtime.GetSceneSystem();
+        nativeWindowHandle_ = nativeWindowHandle;
         initialized_.store(true, std::memory_order_release);
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
             .onStartFrame = [this]() { StartFrame(); },
@@ -141,10 +159,16 @@ namespace ve::editor
             return;
         }
 
-        if (showDemoWindow_)
+        switch (mainView_)
         {
-            ImGui::ShowDemoWindow(&showDemoWindow_);
+        case MainView::ProjectSelection:
+            projectSelectionView_->Render(*this);
+            break;
+        case MainView::ProjectEditing:
+            projectEditingView_->Render(*this);
+            break;
         }
+
         ImGui::Render();
 
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
@@ -200,6 +224,12 @@ namespace ve::editor
         VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::UnInit requires an active ImGui context.");
         ImGui::DestroyContext();
 
+        delete projectSelectionView_;
+        delete projectEditingView_;
+        projectSelectionView_ = nullptr;
+        projectEditingView_ = nullptr;
+        mainThreadCommandQueue_ = nullptr;
+        nativeWindowHandle_ = nullptr;
         renderSystem_ = nullptr;
         VE_LOG_INFO_CATEGORY("Editor", "Editor uninitialized.");
     }
@@ -207,6 +237,145 @@ namespace ve::editor
     bool Editor::IsInitialized() const noexcept
     {
         return initialized_.load(std::memory_order_acquire);
+    }
+
+    void Editor::OpenProject(std::string projectPath)
+    {
+        if (projectPath.empty())
+        {
+            return;
+        }
+
+        SetCurrentProject(std::move(projectPath));
+        AddRecentProject(currentProjectPath_);
+        mainView_ = MainView::ProjectEditing;
+        EnqueueMainWindowTitleUpdate();
+        VE_LOG_INFO_CATEGORY("Editor", "Opened editor project: {}", currentProjectPath_);
+    }
+
+    void Editor::ShowProjectSelection() noexcept
+    {
+        mainView_ = MainView::ProjectSelection;
+    }
+
+    const std::string& Editor::GetCurrentProjectPath() const noexcept
+    {
+        return currentProjectPath_;
+    }
+
+    const std::string& Editor::GetCurrentProjectName() const noexcept
+    {
+        return currentProjectName_;
+    }
+
+    const std::vector<std::string>& Editor::GetRecentProjects() const noexcept
+    {
+        return recentProjects_;
+    }
+
+    std::string Editor::GetProjectDisplayName(const std::string& projectPath)
+    {
+        if (projectPath.empty())
+        {
+            return "Untitled Project";
+        }
+
+        const size_t lastSeparator = projectPath.find_last_of("/\\");
+        if (lastSeparator == std::string::npos || lastSeparator + 1 >= projectPath.size())
+        {
+            return projectPath;
+        }
+
+        return projectPath.substr(lastSeparator + 1);
+    }
+
+    void Editor::AddRecentProject(const std::string& projectPath)
+    {
+        recentProjects_.erase(std::remove(recentProjects_.begin(), recentProjects_.end(), projectPath),
+                              recentProjects_.end());
+        recentProjects_.insert(recentProjects_.begin(), projectPath);
+        if (recentProjects_.size() > EditorProjectRegistry::MaxRecentProjectCount)
+        {
+            recentProjects_.resize(EditorProjectRegistry::MaxRecentProjectCount);
+        }
+
+        EditorProjectRegistry::SaveRecentProjects(recentProjects_);
+    }
+
+    void Editor::SetCurrentProject(std::string projectPath)
+    {
+        currentProjectPath_ = std::move(projectPath);
+        currentProjectName_ = GetProjectDisplayName(currentProjectPath_);
+    }
+
+    void Editor::EnqueueMainWindowTitleUpdate()
+    {
+        if (mainThreadCommandQueue_ == nullptr)
+        {
+            return;
+        }
+
+        void* nativeWindowHandle = nativeWindowHandle_;
+        std::string title = BuildMainWindowTitle();
+        mainThreadCommandQueue_->Enqueue(
+            [nativeWindowHandle, title = std::move(title)]() { ApplyMainWindowTitle(nativeWindowHandle, title); });
+    }
+
+    void Editor::ApplyMainWindowTitle(void* nativeWindowHandle, const std::string& title)
+    {
+#if VE_PLATFORM_WINDOWS
+        if (nativeWindowHandle == nullptr)
+        {
+            return;
+        }
+
+        const int requiredLength =
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title.data(), static_cast<int>(title.size()), nullptr, 0);
+        if (requiredLength <= 0)
+        {
+            return;
+        }
+
+        std::wstring wideTitle(static_cast<size_t>(requiredLength), L'\0');
+        MultiByteToWideChar(CP_UTF8,
+                            MB_ERR_INVALID_CHARS,
+                            title.data(),
+                            static_cast<int>(title.size()),
+                            wideTitle.data(),
+                            requiredLength);
+        SetWindowTextW(static_cast<HWND>(nativeWindowHandle), wideTitle.c_str());
+#else
+        (void)nativeWindowHandle;
+        (void)title;
+#endif
+    }
+
+    std::string Editor::BuildMainWindowTitle() const
+    {
+        std::string title = "VEngine Editor - ";
+        title += GetRenderBackendName();
+        if (!currentProjectPath_.empty())
+        {
+            title += " - ";
+            title += currentProjectPath_;
+        }
+
+        return title;
+    }
+
+    const char* Editor::GetRenderBackendName() const noexcept
+    {
+        switch (renderBackend_)
+        {
+        case RenderBackend::D3D11:
+            return "D3D11";
+        case RenderBackend::D3D12:
+            return "D3D12";
+        case RenderBackend::Metal:
+            return "Metal";
+        }
+
+        return "Unknown";
     }
 
     ErrorCode Editor::InitRenderBackend(RenderSystem& renderSystem)
