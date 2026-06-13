@@ -69,6 +69,46 @@ namespace ve
             }
         }
 
+
+        void SceneThreadLoop_StartFrame(SceneSystemImpl& impl)
+        {
+            if (impl.editorCallback.onStartFrame != nullptr)
+            {
+                impl.editorCallback.onStartFrame();
+            }
+            if (impl.inputSystem != nullptr)
+            {
+                impl.inputSystem->BeginFrame();
+            }
+            ProcessOSEvents(impl);
+        }
+
+        void SceneThreadLoop_Render(SceneSystemImpl& impl)
+        {
+            ErrorCode beginRenderFrameResult = impl.renderSystem->BeginRenderFrame();
+            VE_ASSERT_MESSAGE(beginRenderFrameResult == ErrorCode::None, "BeginRenderFrame with error.");
+
+            if (impl.editorCallback.onRender != nullptr)
+            {
+                impl.editorCallback.onRender();
+            }
+            else
+            {
+                ErrorCode renderResult = impl.renderSystem->RenderFrame();
+                VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
+            }
+
+            ErrorCode endRenderFrameResult = impl.renderSystem->EndRenderFrame();
+            VE_ASSERT_MESSAGE(endRenderFrameResult == ErrorCode::None, "EndRenderFrame with error.");
+        }
+
+        void SceneThreadLoop_EndFrame(SceneSystemImpl& impl)
+        {
+            impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
+                impl.stopRequested,
+                [&impl](UInt32 fenceIndex) { return impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex); });
+        }
+
         void SceneThreadLoop(SceneSystemImpl& impl)
         {
             const ThreadId sceneThreadId = GetCurrentThreadId();
@@ -83,44 +123,15 @@ namespace ve
             {
                 try
                 {
-                    if (impl.editorCallback.onStartFrame != nullptr)
-                    {
-                        impl.editorCallback.onStartFrame();
-                    }
-                    if (impl.inputSystem != nullptr)
-                    {
-                        impl.inputSystem->BeginFrame();
-                    }
-                    ProcessOSEvents(impl);
-
+                    SceneThreadLoop_StartFrame(impl);
 
                     impl.timeSystem->Tick();
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
 
-
-                    ErrorCode beginRenderFrameResult = impl.renderSystem->BeginRenderFrame();
-                    VE_ASSERT_MESSAGE(beginRenderFrameResult == ErrorCode::None, "BeginRenderFrame with error.");
-
-                    if (impl.editorCallback.onRender != nullptr)
-                    {
-                        impl.editorCallback.onRender();
-                    }
-                    else
-                    {
-                        ErrorCode renderResult = impl.renderSystem->RenderFrame();
-                        VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
-                    }
-
-                    ErrorCode endRenderFrameResult = impl.renderSystem->EndRenderFrame();
-                    VE_ASSERT_MESSAGE(endRenderFrameResult == ErrorCode::None, "EndRenderFrame with error.");
-
-                    impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
-                        impl.stopRequested,
-                        [&impl](UInt32 fenceIndex)
-                        {
-                            return impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex);
-                        });
+                    SceneThreadLoop_Render(impl);
+                    SceneThreadLoop_EndFrame(impl);
+                    
                 }
                 catch (...)
                 {
