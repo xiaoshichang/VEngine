@@ -27,11 +27,25 @@ namespace ve
 
     ErrorCode WindowsPlayer::InitializeRendering(Window& mainWindow)
     {
-        viewportClient_.SyncFromWindow(mainWindow);
+        SyncViewportFromWindow(mainWindow);
         return Application::InitializeRendering(mainWindow);
     }
 
-    void WindowsPlayer::OnMainLoopIteration(Window& mainWindow)
+    void WindowsPlayer::OnMainWindowOSEventInMainThread(const OSEvent& event, Window& mainWindow)
+    {
+        switch (event.type)
+        {
+        case OSEventType::WindowResized:
+            /// The player viewport tracks the native window's client extent, so resize is the only shell event that
+            /// requires rebuilding the viewport binding.
+            SyncViewportFromWindow(mainWindow);
+            break;
+        default:
+            break;
+        }
+    }
+
+    void WindowsPlayer::SyncViewportFromWindow(Window& mainWindow)
     {
         viewportClient_.SyncFromWindow(mainWindow);
     }

@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <array>
 #include <thread>
 #include <utility>
 
@@ -11,6 +12,8 @@ namespace ve
 {
     namespace
     {
+        constexpr SizeT MaxWindowOSEventChangesPerFrame = 4;
+
         struct WindowStateSnapshot
         {
             bool visible = false;
@@ -29,7 +32,7 @@ namespace ve
             return snapshot;
         }
 
-        void EnqueueOSEvent(SceneSystem& sceneSystem, OSEvent event)
+        void EnqueueOSEventToSceneThread(SceneSystem& sceneSystem, OSEvent event)
         {
             ErrorCode queueResult = sceneSystem.EnqueueOSEvent(event);
             if (queueResult != ErrorCode::None)
@@ -38,52 +41,64 @@ namespace ve
             }
         }
 
-        void EnqueueWindowStateDeltaEvents(SceneSystem& sceneSystem,
-                                           const WindowStateSnapshot& previousState,
-                                           const WindowStateSnapshot& currentState)
+        [[nodiscard]] SizeT CollectWindowStateDeltaEvents(std::array<OSEvent, MaxWindowOSEventChangesPerFrame>& events,
+                                                          const WindowStateSnapshot& previousState,
+                                                          const WindowStateSnapshot& currentState)
         {
+            SizeT eventCount = 0;
+
             if (previousState.focused != currentState.focused)
             {
-                EnqueueOSEvent(sceneSystem,
-                               OSEvent{
-                                   currentState.focused ? OSEventType::WindowFocusGained : OSEventType::WindowFocusLost,
-                               });
+                events[eventCount++] = OSEvent{
+                    currentState.focused ? OSEventType::WindowFocusGained : OSEventType::WindowFocusLost,
+                };
             }
 
             if (previousState.minimized != currentState.minimized)
             {
                 const OSEventType minimizedEventType =
                     currentState.minimized ? OSEventType::WindowMinimized : OSEventType::WindowRestored;
-                EnqueueOSEvent(sceneSystem,
-                               OSEvent{
-                                   minimizedEventType,
-                               });
+                events[eventCount++] = OSEvent{
+                    minimizedEventType,
+                };
             }
 
             if (previousState.visible != currentState.visible)
             {
-                EnqueueOSEvent(sceneSystem,
-                               OSEvent{currentState.visible ? OSEventType::WindowShown : OSEventType::WindowHidden});
+                events[eventCount++] = OSEvent{currentState.visible ? OSEventType::WindowShown
+                                                                    : OSEventType::WindowHidden};
             }
 
             if (previousState.extent.width != currentState.extent.width ||
                 previousState.extent.height != currentState.extent.height)
             {
-                EnqueueOSEvent(sceneSystem,
-                               OSEvent{
-                                   OSEventType::WindowResized,
-                                   currentState.extent.width,
-                                   currentState.extent.height,
-                               });
+                events[eventCount++] = OSEvent{
+                    OSEventType::WindowResized,
+                    currentState.extent.width,
+                    currentState.extent.height,
+                };
+            }
+
+            VE_ASSERT_MESSAGE(eventCount <= events.size(), "CollectWindowStateDeltaEvents overflowed its buffer.");
+            return eventCount;
+        }
+
+        void EnqueueWindowStateDeltaEventsToSceneThread(SceneSystem& sceneSystem,
+                                           const std::array<OSEvent, MaxWindowOSEventChangesPerFrame>& events,
+                                           SizeT eventCount)
+        {
+            for (SizeT eventIndex = 0; eventIndex < eventCount; ++eventIndex)
+            {
+                EnqueueOSEventToSceneThread(sceneSystem, events[eventIndex]);
             }
         }
 
-        void EnqueuePendingWindowOSEvents(SceneSystem& sceneSystem, Window& window)
+        void EnqueuePendingWindowOSEventsToSceneThread(SceneSystem& sceneSystem, Window& window)
         {
             OSEvent event;
             while (window.TryPopOSEvent(event))
             {
-                EnqueueOSEvent(sceneSystem, event);
+                EnqueueOSEventToSceneThread(sceneSystem, event);
             }
         }
 
@@ -199,8 +214,6 @@ namespace ve
 
     ErrorCode Application::InitializeRendering(Window& mainWindow)
     {
-        (void)mainWindow;
-
         RenderSystem& renderSystem = engineRuntime_.GetRenderSystem();
 
         ErrorCode deviceResult = renderSystem.InitializeDevice(initParam_.runtime.renderSystem.device);
@@ -228,11 +241,6 @@ namespace ve
         return ErrorCode::None;
     }
 
-    void Application::OnMainLoopIteration(Window& mainWindow)
-    {
-        (void)mainWindow;
-    }
-
     int Application::RunMainLoop(Window& mainWindow)
     {
         int exitCode = 0;
@@ -244,22 +252,34 @@ namespace ve
         {
             mainWindow.PumpCommands();
 
-            // Main Thread handles loop control events (for example WM_QUIT) directly.
+            // Step 1: pump native window messages. The platform layer mutates the live window state here.
             const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
             const WindowStateSnapshot currentState = CaptureWindowState(mainWindow);
-            EnqueueWindowStateDeltaEvents(sceneSystem, previousState, currentState);
-            EnqueuePendingWindowOSEvents(sceneSystem, mainWindow);
+
+            // Step 2: detect the state changes that should be forwarded to the Scene Thread and application shell.
+            std::array<OSEvent, MaxWindowOSEventChangesPerFrame> windowStateDeltaEvents = {};
+            const SizeT windowStateDeltaEventCount =
+                CollectWindowStateDeltaEvents(windowStateDeltaEvents, previousState, currentState);
+
+            // Step 3: publish the window delta events to the Scene Thread queue first so the scene sees the change.
+            EnqueueWindowStateDeltaEventsToSceneThread(sceneSystem, windowStateDeltaEvents, windowStateDeltaEventCount);
+
+            // Step 4: let the application shell react to the same window events without hiding that work inside the
+            // delta-collection helper. Derived classes can react to a narrow subset of OS events here.
+            auto e = std::span<const OSEvent>(windowStateDeltaEvents.data(), windowStateDeltaEventCount);
+            ProcessMainWindowOSEventsOnMainThread(e, mainWindow);
+            EnqueuePendingWindowOSEventsToSceneThread(sceneSystem, mainWindow);
             previousState = currentState;
             mainThreadCommandQueue_.ExecutePending();
-            OnMainLoopIteration(mainWindow);
 
-            // Remaining window state changes are forwarded to Scene Thread through OSEventQueue.
+            // Step 5: honor WM_QUIT / platform exit requests after the current frame's shell work has completed.
             if (pumpStatus.result == WindowPumpResult::Quit)
             {
                 exitCode = pumpStatus.exitCode;
                 break;
             }
 
+            // Step 6: hand off the completed main-thread frame to the Scene Thread.
             sceneSystem.NotifyMainThreadFrameEnd();
         }
 
@@ -309,5 +329,19 @@ namespace ve
     ApplicationCommandQueue& Application::GetMainThreadCommandQueue() noexcept
     {
         return mainThreadCommandQueue_;
+    }
+
+    void Application::OnMainWindowOSEventInMainThread(const OSEvent& event, Window& mainWindow)
+    {
+        (void)event;
+        (void)mainWindow;
+    }
+
+    void Application::ProcessMainWindowOSEventsOnMainThread(std::span<const OSEvent> events, Window& mainWindow)
+    {
+        for (const OSEvent& event : events)
+        {
+            OnMainWindowOSEventInMainThread(event, mainWindow);
+        }
     }
 } // namespace ve
