@@ -41,7 +41,7 @@ namespace ve::editor
         const float centerHeight = (std::max)(240.0F, available.y - AssetsHeight - PanelGap);
         const float splitCenterWidth = (std::max)(160.0F, (centerWidth - PanelGap) * 0.5F);
 
-        hierarchyPanel_.Render(origin, ImVec2(HierarchyWidth, available.y));
+        hierarchyPanel_.Render(editor, origin, ImVec2(HierarchyWidth, available.y));
 
         const float centerX = origin.x + HierarchyWidth + PanelGap;
         sceneViewPanel_.Render(ImVec2(centerX, origin.y), ImVec2(splitCenterWidth, centerHeight));
@@ -51,7 +51,8 @@ namespace ve::editor
         assetsPanel_.Render(
             editor, ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
 
-        inspectorPanel_.Render(ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
+        inspectorPanel_.Render(
+            editor, ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
     }
 
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept

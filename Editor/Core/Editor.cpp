@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <imgui.h>
@@ -294,6 +295,18 @@ namespace ve::editor
         return initialized_.load(std::memory_order_acquire);
     }
 
+    SceneSystem& Editor::GetSceneSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(sceneSystem_ != nullptr, "Editor::GetSceneSystem requires an initialized editor.");
+        return *sceneSystem_;
+    }
+
+    const SceneSystem& Editor::GetSceneSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(sceneSystem_ != nullptr, "Editor::GetSceneSystem requires an initialized editor.");
+        return *sceneSystem_;
+    }
+
     RenderSystem& Editor::GetRenderSystem() noexcept
     {
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::GetRenderSystem requires an initialized editor.");
@@ -308,6 +321,47 @@ namespace ve::editor
     const EditorAssetDatabase& Editor::GetAssetDatabase() const noexcept
     {
         return assetDatabase_;
+    }
+
+    void Editor::SetSelectedGameObject(ve::GameObject* gameObject) noexcept
+    {
+        selectionType_ = gameObject != nullptr ? EditorSelectionType::GameObject : EditorSelectionType::None;
+        selectedGameObject_ = gameObject;
+        selectedAssetPath_ = Path();
+    }
+
+    void Editor::SetSelectedAsset(Path assetPath)
+    {
+        selectionType_ = assetPath.IsEmpty() ? EditorSelectionType::None : EditorSelectionType::Asset;
+        selectedGameObject_ = nullptr;
+        selectedAssetPath_ = std::move(assetPath);
+    }
+
+    void Editor::ClearSelection() noexcept
+    {
+        selectionType_ = EditorSelectionType::None;
+        selectedGameObject_ = nullptr;
+        selectedAssetPath_ = Path();
+    }
+
+    EditorSelectionType Editor::GetSelectionType() const noexcept
+    {
+        return selectionType_;
+    }
+
+    ve::GameObject* Editor::GetSelectedGameObject() noexcept
+    {
+        return selectionType_ == EditorSelectionType::GameObject ? selectedGameObject_ : nullptr;
+    }
+
+    const ve::GameObject* Editor::GetSelectedGameObject() const noexcept
+    {
+        return selectionType_ == EditorSelectionType::GameObject ? selectedGameObject_ : nullptr;
+    }
+
+    const Path& Editor::GetSelectedAssetPath() const noexcept
+    {
+        return selectedAssetPath_;
     }
 
     void Editor::KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture)
@@ -336,7 +390,8 @@ namespace ve::editor
         const ErrorCode layoutResult = EditorProject::EnsureLayout(projectRoot);
         if (layoutResult != ErrorCode::None)
         {
-            VE_LOG_ERROR_CATEGORY("Editor", "Failed to prepare project layout '{}': {}", projectPath, ToString(layoutResult));
+            VE_LOG_ERROR_CATEGORY(
+                "Editor", "Failed to prepare project layout '{}': {}", projectPath, ToString(layoutResult));
             return;
         }
 
@@ -352,7 +407,23 @@ namespace ve::editor
 
         FileSystem::SetProjectRoot(projectRoot);
         SetCurrentProject(std::move(projectPath));
-        currentProjectName_ = descriptorResult.GetValue().name.empty() ? currentProjectName_ : descriptorResult.GetValue().name;
+        ClearSelection();
+        currentProjectName_ =
+            descriptorResult.GetValue().name.empty() ? currentProjectName_ : descriptorResult.GetValue().name;
+        if (!descriptorResult.GetValue().startScene.empty() && sceneSystem_ != nullptr &&
+            sceneSystem_->GetScene() != nullptr)
+        {
+            const ErrorCode loadSceneResult = SceneSerialization::LoadFromFile(
+                *sceneSystem_->GetScene(), Path(descriptorResult.GetValue().startScene));
+            if (loadSceneResult != ErrorCode::None)
+            {
+                VE_LOG_WARN_CATEGORY("Editor",
+                                     "Failed to load project start scene '{}': {}",
+                                     descriptorResult.GetValue().startScene,
+                                     ToString(loadSceneResult));
+            }
+        }
+
         const ErrorCode assetDatabaseResult = assetDatabase_.Initialize(projectRoot);
         if (assetDatabaseResult != ErrorCode::None)
         {
@@ -371,6 +442,7 @@ namespace ve::editor
 
     void Editor::ShowProjectSelection() noexcept
     {
+        ClearSelection();
         mainView_ = MainView::ProjectSelection;
     }
 

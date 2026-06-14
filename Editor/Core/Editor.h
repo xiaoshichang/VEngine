@@ -14,10 +14,22 @@
 #include <string>
 #include <vector>
 
+namespace ve
+{
+    class GameObject;
+}
+
 namespace ve::editor
 {
     class ProjectEditingView;
     class ProjectSelectionView;
+
+    enum class EditorSelectionType
+    {
+        None,
+        GameObject,
+        Asset,
+    };
 
     /// Owns editor-level lifecycle and scene callbacks.
     class Editor : public NonMovable
@@ -33,9 +45,18 @@ namespace ve::editor
         [[nodiscard]] std::shared_ptr<FrameRenderer> Render();
         void UnInit() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
+        [[nodiscard]] SceneSystem& GetSceneSystem() noexcept;
+        [[nodiscard]] const SceneSystem& GetSceneSystem() const noexcept;
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
         [[nodiscard]] EditorAssetDatabase& GetAssetDatabase() noexcept;
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
+        void SetSelectedGameObject(ve::GameObject* gameObject) noexcept;
+        void SetSelectedAsset(Path assetPath);
+        void ClearSelection() noexcept;
+        [[nodiscard]] EditorSelectionType GetSelectionType() const noexcept;
+        [[nodiscard]] ve::GameObject* GetSelectedGameObject() noexcept;
+        [[nodiscard]] const ve::GameObject* GetSelectedGameObject() const noexcept;
+        [[nodiscard]] const Path& GetSelectedAssetPath() const noexcept;
         void KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture);
 
         void OpenProject(std::string projectPath);
@@ -70,6 +91,9 @@ namespace ve::editor
         ProjectEditingView* projectEditingView_ = nullptr;
         RenderBackend renderBackend_ = RenderBackend::D3D12;
         EditorAssetDatabase assetDatabase_;
+        EditorSelectionType selectionType_ = EditorSelectionType::None;
+        ve::GameObject* selectedGameObject_ = nullptr;
+        Path selectedAssetPath_;
         std::atomic_bool initialized_{false};
         MainView mainView_ = MainView::ProjectSelection;
 
