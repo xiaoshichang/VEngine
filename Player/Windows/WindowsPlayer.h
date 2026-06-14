@@ -16,10 +16,10 @@ namespace ve
 
     protected:
         [[nodiscard]] ErrorCode InitializeRendering(Window& mainWindow) override;
-        void OnMainWindowOSEventInMainThread(const OSEvent& event, Window& mainWindow) override;
 
     private:
-        void SyncViewportFromWindow(Window& mainWindow);
+        void RegisterSceneThreadViewportCallback();
+        void HandleSceneThreadOSEvent(const OSEvent& event);
 
         ViewportClient viewportClient_;
     };

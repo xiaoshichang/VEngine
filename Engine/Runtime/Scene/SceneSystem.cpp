@@ -26,6 +26,7 @@ namespace ve
         MainThreadSceneThreadFrameEndSync* mainThreadSceneThreadFrameEndSync = nullptr;
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
         SceneSystemEditorCallback editorCallback;
+        std::function<void(const OSEvent& event)> runtimeOSEventCallback;
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
@@ -35,6 +36,7 @@ namespace ve
     {
         void ProcessOSEvents(SceneSystemImpl& impl)
         {
+            const auto runtimeOnOSEvent = impl.runtimeOSEventCallback;
             const auto editorOnOSEvent = impl.editorCallback.onOSEvent;
             OSEvent event;
             while (impl.osEventQueue.TryPop(event))
@@ -47,6 +49,11 @@ namespace ve
                     }
 
                     continue;
+                }
+
+                if (runtimeOnOSEvent != nullptr)
+                {
+                    runtimeOnOSEvent(event);
                 }
 
                 bool shouldDispatchToInput = true;
@@ -167,6 +174,7 @@ namespace ve
             impl.timeSystem = nullptr;
             impl.inputSystem = nullptr;
             impl.renderSystem = nullptr;
+            impl.runtimeOSEventCallback = nullptr;
             impl.osEventQueue.ClearForConsumer();
         }
     } // namespace
@@ -289,6 +297,11 @@ namespace ve
     void SceneSystem::SetEditorCallback(SceneSystemEditorCallback callback) noexcept
     {
         impl_->editorCallback = std::move(callback);
+    }
+
+    void SceneSystem::SetRuntimeOSEventCallback(std::function<void(const OSEvent& event)> callback) noexcept
+    {
+        impl_->runtimeOSEventCallback = std::move(callback);
     }
 
     void SceneSystem::StartLoop() noexcept

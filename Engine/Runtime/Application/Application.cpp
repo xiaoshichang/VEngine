@@ -83,9 +83,10 @@ namespace ve
             return eventCount;
         }
 
-        void EnqueueWindowStateDeltaEventsToSceneThread(SceneSystem& sceneSystem,
-                                           const std::array<OSEvent, MaxWindowOSEventChangesPerFrame>& events,
-                                           SizeT eventCount)
+        void EnqueueWindowStateDeltaEventsToSceneThread(
+            SceneSystem& sceneSystem,
+            const std::array<OSEvent, MaxWindowOSEventChangesPerFrame>& events,
+            SizeT eventCount)
         {
             for (SizeT eventIndex = 0; eventIndex < eventCount; ++eventIndex)
             {
@@ -256,30 +257,26 @@ namespace ve
             const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
             const WindowStateSnapshot currentState = CaptureWindowState(mainWindow);
 
-            // Step 2: detect the state changes that should be forwarded to the Scene Thread and application shell.
+            // Step 2: detect the window state changes that should be forwarded to the Scene Thread.
             std::array<OSEvent, MaxWindowOSEventChangesPerFrame> windowStateDeltaEvents = {};
             const SizeT windowStateDeltaEventCount =
                 CollectWindowStateDeltaEvents(windowStateDeltaEvents, previousState, currentState);
 
-            // Step 3: publish the window delta events to the Scene Thread queue first so the scene sees the change.
+            // Step 3: publish window delta events to the Scene Thread. Viewport, input, and future render-facing
+            // state updates are handled there so rendering-related state is not mutated from the Main Thread.
             EnqueueWindowStateDeltaEventsToSceneThread(sceneSystem, windowStateDeltaEvents, windowStateDeltaEventCount);
-
-            // Step 4: let the application shell react to the same window events without hiding that work inside the
-            // delta-collection helper. Derived classes can react to a narrow subset of OS events here.
-            auto e = std::span<const OSEvent>(windowStateDeltaEvents.data(), windowStateDeltaEventCount);
-            ProcessMainWindowOSEventsOnMainThread(e, mainWindow);
             EnqueuePendingWindowOSEventsToSceneThread(sceneSystem, mainWindow);
             previousState = currentState;
             mainThreadCommandQueue_.ExecutePending();
 
-            // Step 5: honor WM_QUIT / platform exit requests after the current frame's shell work has completed.
+            // Step 4: honor WM_QUIT / platform exit requests after the current frame's Main Thread work completes.
             if (pumpStatus.result == WindowPumpResult::Quit)
             {
                 exitCode = pumpStatus.exitCode;
                 break;
             }
 
-            // Step 6: hand off the completed main-thread frame to the Scene Thread.
+            // Step 5: hand off the completed Main Thread frame to the Scene Thread.
             sceneSystem.NotifyMainThreadFrameEnd();
         }
 
@@ -331,17 +328,4 @@ namespace ve
         return mainThreadCommandQueue_;
     }
 
-    void Application::OnMainWindowOSEventInMainThread(const OSEvent& event, Window& mainWindow)
-    {
-        (void)event;
-        (void)mainWindow;
-    }
-
-    void Application::ProcessMainWindowOSEventsOnMainThread(std::span<const OSEvent> events, Window& mainWindow)
-    {
-        for (const OSEvent& event : events)
-        {
-            OnMainWindowOSEventInMainThread(event, mainWindow);
-        }
-    }
 } // namespace ve

@@ -109,4 +109,13 @@ namespace ve
     {
         BindWindowSurface(window.GetNativeHandle(), window.GetNativeLayer(), window.GetClientExtent());
     }
+
+    void ViewportClient::ResizeWindowSurface(WindowExtent extent)
+    {
+        VE_ASSERT_MESSAGE(bindingKind_ == ViewportBindingKind::WindowSurface,
+                          "ResizeWindowSurface requires a window-backed viewport.");
+        VE_ASSERT_MESSAGE(extent.width != 0 && extent.height != 0, "ResizeWindowSurface requires a valid extent.");
+
+        renderTarget_.SetExtent(extent);
+    }
 } // namespace ve

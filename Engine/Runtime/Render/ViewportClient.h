@@ -76,6 +76,13 @@ namespace ve
         /// This is a convenience wrapper around BindWindowSurface() for the common Player and editor window cases.
         void SyncFromWindow(const Window& window);
 
+        /// Updates the extent of an existing window-backed viewport.
+        ///
+        /// Main Thread owns platform window message pumping, but Scene Thread owns render-facing viewport state after
+        /// startup. Resize events should therefore carry the new extent to Scene Thread and use this method instead of
+        /// rebinding native window handles every frame.
+        void ResizeWindowSurface(WindowExtent extent);
+
     private:
         std::string name_;
         RenderTarget renderTarget_;

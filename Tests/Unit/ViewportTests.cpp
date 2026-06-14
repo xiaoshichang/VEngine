@@ -118,6 +118,16 @@ namespace
         passed &= Expect(viewportClient.GetBindingKind() == ve::ViewportBindingKind::WindowSurface,
                          "ViewportClient should report window-surface binding kind");
 
+        viewportClient.ResizeWindowSurface(ve::WindowExtent{1600, 900});
+        passed &= Expect(viewportClient.IsWindowSurfaceBound(), "Viewport resize should preserve window binding");
+        passed &= Expect(viewportClient.GetRenderTarget().GetExtent().width == 1600 &&
+                             viewportClient.GetRenderTarget().GetExtent().height == 900,
+                         "Viewport resize should update the window render target extent");
+        passed &= Expect(viewportClient.GetNativeWindow() == window.nativeWindow,
+                         "Viewport resize should preserve native window handle");
+        passed &= Expect(viewportClient.GetNativeLayer() == window.nativeLayer,
+                         "Viewport resize should preserve native layer handle");
+
         ve::RenderTarget offscreenTarget;
         offscreenTarget.SetName("SceneView");
         offscreenTarget.SetKind(ve::RenderTargetKind::Texture);

@@ -4,10 +4,7 @@
 #include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/Result.h"
-#include "Engine/Runtime/Input/OSEvent.h"
 #include "Engine/Runtime/Platform/Window.h"
-
-#include <span>
 
 #include <memory>
 #include <string>
@@ -47,12 +44,6 @@ namespace ve
     private:
         [[nodiscard]] ErrorCode InitializeEngineRuntime();
         [[nodiscard]] Result<std::unique_ptr<Window>> CreateMainWindow();
-        /// Receives main-window OS events that may need application-shell handling in a derived class.
-        ///
-        /// The base implementation is a no-op. Derived applications can react to a narrow set of window state
-        /// changes without polling every frame.
-        virtual void OnMainWindowOSEventInMainThread(const OSEvent& event, Window& mainWindow);
-        void ProcessMainWindowOSEventsOnMainThread(std::span<const OSEvent> events, Window& mainWindow);
 
         ApplicationInitParam initParam_;
         EngineRuntime engineRuntime_;
