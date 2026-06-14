@@ -7,7 +7,7 @@
 #include "Editor/Panels/InspectorPanel.h"
 #include "Editor/Panels/SceneViewPanel.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Render/RenderTarget.h"
+#include "Engine/Runtime/Render/RenderTexture.h"
 
 #include <memory>
 
@@ -20,8 +20,9 @@ namespace ve::editor
     public:
         ProjectEditingView() = default;
 
+        void Init(Editor& editor);
         void Render(Editor& editor);
-        [[nodiscard]] std::shared_ptr<RTRenderTarget> GetGameViewRenderTarget() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewTexture() const noexcept;
 
     private:
         void RenderMainMenu();
@@ -32,5 +33,6 @@ namespace ve::editor
         InspectorPanel inspectorPanel_;
         AssetsPanel assetsPanel_;
         ProjectDirectoryDialog projectDirectoryDialog_;
+        bool initialized_ = false;
     };
 } // namespace ve::editor

@@ -31,7 +31,6 @@ namespace ve::editor
         ImDrawData drawData;
         ImVector<ImTextureData*> textureRefs;
         std::vector<std::unique_ptr<ImDrawList>> ownedCmdLists;
-        std::vector<std::shared_ptr<RTRenderTarget>> retainedRenderTargets;
     };
 
     class EditorImGuiRenderPass final : public RenderPass
@@ -98,10 +97,10 @@ namespace ve::editor
             if (sourceDrawData == nullptr || !sourceDrawData->Valid)
             {
                 return nullptr;
-        }
+            }
 
-        auto frameDrawData = std::make_shared<EditorFrameDrawData>();
-        frameDrawData->drawData.Valid = sourceDrawData->Valid;
+            auto frameDrawData = std::make_shared<EditorFrameDrawData>();
+            frameDrawData->drawData.Valid = sourceDrawData->Valid;
             frameDrawData->drawData.TotalIdxCount = 0;
             frameDrawData->drawData.TotalVtxCount = 0;
             frameDrawData->drawData.DisplayPos = sourceDrawData->DisplayPos;
@@ -231,16 +230,14 @@ namespace ve::editor
 
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
         VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
-        frameDrawData->retainedRenderTargets = std::move(pendingImGuiTextureRenderTargets_);
-        pendingImGuiTextureRenderTargets_.clear();
 
         auto renderer = std::make_shared<FrameRenderer>();
 
         const bool hasGameViewScenePass = mainView_ == MainView::ProjectEditing;
         if (hasGameViewScenePass)
         {
-            std::shared_ptr<RTRenderTarget> gameViewRenderTarget = projectEditingView_->GetGameViewRenderTarget();
-            renderer->AddPass(renderSystem_->CreateTriangleForwardPass(std::move(gameViewRenderTarget)));
+            std::shared_ptr<RTRenderTexture> gameViewTexture = projectEditingView_->GetGameViewTexture();
+            renderer->AddPass(renderSystem_->CreateTriangleForwardPass(std::move(gameViewTexture)));
         }
 
         renderer->AddPass(std::make_unique<EditorImGuiRenderPass>(
@@ -266,6 +263,13 @@ namespace ve::editor
         ErrorCode flushResult = renderSystem_->Flush();
         VE_ASSERT_MESSAGE(flushResult == ErrorCode::None || flushResult == ErrorCode::InvalidState,
                           "Editor::UnInit flush render queue failed.");
+        retainedImGuiRenderTextures_.clear();
+
+        delete projectSelectionView_;
+        delete projectEditingView_;
+        projectSelectionView_ = nullptr;
+        projectEditingView_ = nullptr;
+
         ShutdownRenderBackend();
 
         input_.Shutdown();
@@ -273,10 +277,6 @@ namespace ve::editor
         VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::UnInit requires an active ImGui context.");
         ImGui::DestroyContext();
 
-        delete projectSelectionView_;
-        delete projectEditingView_;
-        projectSelectionView_ = nullptr;
-        projectEditingView_ = nullptr;
         mainThreadCommandQueue_ = nullptr;
         nativeWindowHandle_ = nullptr;
         renderSystem_ = nullptr;
@@ -294,12 +294,18 @@ namespace ve::editor
         return *renderSystem_;
     }
 
-    void Editor::KeepImGuiTextureAlive(std::shared_ptr<RTRenderTarget> renderTarget)
+    void Editor::KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture)
     {
         VE_ASSERT_SCENE_THREAD();
-        if (renderTarget != nullptr)
+        if (renderTexture != nullptr)
         {
-            pendingImGuiTextureRenderTargets_.push_back(std::move(renderTarget));
+            const auto existing = std::find(retainedImGuiRenderTextures_.begin(),
+                                            retainedImGuiRenderTextures_.end(),
+                                            renderTexture);
+            if (existing == retainedImGuiRenderTextures_.end())
+            {
+                retainedImGuiRenderTextures_.push_back(std::move(renderTexture));
+            }
         }
     }
 
@@ -312,6 +318,8 @@ namespace ve::editor
 
         SetCurrentProject(std::move(projectPath));
         AddRecentProject(currentProjectPath_);
+        VE_ASSERT_MESSAGE(projectEditingView_ != nullptr, "Editor::OpenProject requires a project editing view.");
+        projectEditingView_->Init(*this);
         mainView_ = MainView::ProjectEditing;
         EnqueueMainWindowTitleUpdate();
         VE_LOG_INFO_CATEGORY("Editor", "Opened editor project: {}", currentProjectPath_);

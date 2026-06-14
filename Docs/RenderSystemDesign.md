@@ -28,8 +28,9 @@ matching backend proxy objects.
 
 Recommended naming:
 
-- Scene Thread CPU object: `RenderTarget`
-- Render Thread proxy object: `RTRenderTarget`
+- Scene Thread CPU description: `RenderTarget`
+- Scene Thread texture-backed resource object: `RenderTexture`
+- Render Thread texture proxy object: `RTRenderTexture`
 - Any Render Thread proxy class should use an `RT` prefix to make the ownership boundary obvious in code review and
   debugging.
 
@@ -48,16 +49,16 @@ Suggested lifecycle:
 
 ```text
 Scene Thread
-  Construct RenderTarget
+  Construct RenderTexture
   Initialize CPU-side fields
   Call InitRenderResource(RenderSystem&)
   Update logical state through scene events
-  Release RenderTarget when scene data no longer needs it
+  Release RenderTexture when scene data no longer needs it
 
 Render Thread
-  Create RTRenderTarget
+  Create RTRenderTexture
   Build or refresh RHI resources
-  Consume render commands that captured shared_ptr<RTRenderTarget>
+  Consume render commands that captured shared_ptr<RTRenderTexture>
   Release RHI resources when the last RT reference goes away
 ```
 
@@ -253,16 +254,16 @@ When a Scene Thread object needs to touch RHI-backed state, it should expose a d
 that submits a render command and forwards the RT proxy:
 
 ```cpp
-void RenderTarget::InitRenderResource(RenderSystem& renderSystem)
+void RenderTexture::InitRenderResource(RenderSystem& renderSystem)
 {
     EnsureRenderThreadProxy();
-    RenderTargetDesc desc = BuildCurrentDesc();
-    renderSystem.InitRenderResource(rtRenderTarget_, std::move(desc));
+    RenderTextureDesc desc = BuildCurrentDesc();
+    renderSystem.InitRenderResource(rtRenderTexture_, std::move(desc));
 }
 ```
 
 `RenderSystem::InitRenderResource()` copies the CPU-side description when the command is submitted. The Render Thread
-then updates `RTRenderTarget` and creates or replaces the RHI texture from that snapshot. The exact public API can
+then updates `RTRenderTexture` and creates or replaces the RHI texture from that snapshot. The exact public API can
 change, but the rule should stay stable: RHI-facing work travels through render commands, not through direct Scene
 Thread calls or shared mutable CPU descriptions.
 

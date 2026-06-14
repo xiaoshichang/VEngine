@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Render/FrameRenderer.h"
 #include "Engine/Runtime/Render/RenderPass.h"
 #include "Engine/Runtime/Render/RenderTarget.h"
+#include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/Thread.h"
 
@@ -166,15 +167,13 @@ namespace ve
         /// The returned pass references RenderSystem-owned RHI resources, but pass ownership belongs to the caller's
         /// FrameRenderer. This keeps frame orchestration on the Scene Thread while RenderSystem keeps low-level RHI
         /// resource ownership on the Render Thread.
-        [[nodiscard]] std::unique_ptr<RenderPass> CreateTriangleForwardPass(
-            std::shared_ptr<RTRenderTarget> colorTarget = nullptr);
+        [[nodiscard]] std::unique_ptr<RenderPass> CreateTriangleForwardPass(std::shared_ptr<RTRenderTexture> colorTarget = nullptr);
 
         /// Initializes a Scene Thread-owned render resource proxy on the Render Thread.
         ///
         /// The description is copied at submission time. This avoids sharing mutable CPU-side RenderTarget state with
         /// the Render Thread while still keeping the RT proxy alive through the captured shared_ptr.
-        [[nodiscard]] ErrorCode InitRenderResource(std::shared_ptr<RTRenderTarget> renderTarget,
-                                                   RenderTargetDesc desc);
+        [[nodiscard]] ErrorCode InitRenderResource(std::shared_ptr<RTRenderTexture> renderTexture, RenderTextureDesc desc);
 
         /// Enqueues one complete main-swapchain frame on the Render Thread.
         ///

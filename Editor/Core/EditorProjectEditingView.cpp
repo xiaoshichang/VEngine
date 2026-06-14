@@ -16,6 +16,17 @@ namespace ve::editor
         constexpr float AssetsHeight = 230.0F;
     } // namespace
 
+    void ProjectEditingView::Init(Editor& editor)
+    {
+        if (initialized_)
+        {
+            return;
+        }
+
+        gameViewPanel_.Init(editor);
+        initialized_ = true;
+    }
+
     void ProjectEditingView::Render(Editor& editor)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -42,9 +53,9 @@ namespace ve::editor
         inspectorPanel_.Render(ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
     }
 
-    std::shared_ptr<RTRenderTarget> ProjectEditingView::GetGameViewRenderTarget() const noexcept
+    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept
     {
-        return gameViewPanel_.GetViewportClient().GetRenderTarget().GetRTRenderTarget();
+        return gameViewPanel_.GetGameViewTexture().GetRTRenderTexture();
     }
 
     void ProjectEditingView::RenderMainMenu()

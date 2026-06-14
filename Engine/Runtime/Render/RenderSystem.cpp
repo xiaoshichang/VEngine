@@ -169,9 +169,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
         class TriangleRenderPass final : public RenderPass
         {
         public:
-            TriangleRenderPass(RenderSystemImpl& impl, std::shared_ptr<RTRenderTarget> colorTarget)
+            TriangleRenderPass(RenderSystemImpl& impl, std::shared_ptr<RTRenderTexture> colorTexture)
                 : impl_(&impl)
-                , colorTarget_(std::move(colorTarget))
+                , colorTexture_(std::move(colorTexture))
             {
             }
 
@@ -182,9 +182,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
             void Setup(RenderPassBuilder& builder) override
             {
-                if (colorTarget_ != nullptr && colorTarget_->GetTexture() != nullptr)
+                if (colorTexture_ != nullptr && colorTexture_->GetTexture() != nullptr)
                 {
-                    builder.AddTextureColorAttachment(*colorTarget_->GetTexture(),
+                    builder.AddTextureColorAttachment(*colorTexture_->GetTexture(),
                                                       rhi::RhiLoadAction::Clear,
                                                       rhi::RhiStoreAction::Store,
                                                       rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
@@ -211,7 +211,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         private:
             RenderSystemImpl* impl_ = nullptr;
-            std::shared_ptr<RTRenderTarget> colorTarget_;
+            std::shared_ptr<RTRenderTexture> colorTexture_;
         };
 
         void DestroyTriangleResources(RenderSystemImpl& impl)
@@ -649,27 +649,28 @@ float4 PSMain(VSOutput input) : SV_TARGET
         VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to destroy its main swapchain.");
     }
 
-    std::unique_ptr<RenderPass> RenderSystem::CreateTriangleForwardPass(std::shared_ptr<RTRenderTarget> colorTarget)
+    std::unique_ptr<RenderPass> RenderSystem::CreateTriangleForwardPass(std::shared_ptr<RTRenderTexture> colorTexture)
     {
         VE_ASSERT_SCENE_THREAD();
-        return std::make_unique<TriangleRenderPass>(*impl_, std::move(colorTarget));
+        return std::make_unique<TriangleRenderPass>(*impl_, std::move(colorTexture));
     }
 
-    ErrorCode RenderSystem::InitRenderResource(std::shared_ptr<RTRenderTarget> renderTarget, RenderTargetDesc desc)
+    ErrorCode RenderSystem::InitRenderResource(std::shared_ptr<RTRenderTexture> renderTexture, RenderTextureDesc desc)
     {
         VE_ASSERT_SCENE_THREAD();
 
-        if (renderTarget == nullptr)
+        if (renderTexture == nullptr)
         {
             return ErrorCode::InvalidArgument;
         }
 
         ErrorCode submitResult =
             EnqueueCommand("RenderSystemInitRenderResource",
-                           [this, renderTarget = std::move(renderTarget), desc = std::move(desc)]() mutable
+                           [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
                            {
                                VE_ASSERT(impl_->device != nullptr);
-                               const ErrorCode result = renderTarget->InitRenderResource(*impl_->device, std::move(desc));
+                               const ErrorCode result =
+                                   renderTexture->InitRenderResource(*impl_->device, std::move(desc));
                                VE_ASSERT(result == ErrorCode::None);
                            });
         VE_ASSERT(submitResult == ErrorCode::None);

@@ -2,7 +2,9 @@
 
 #include "Editor/Panels/BasePanel.h"
 #include "Engine/Runtime/Platform/Window.h"
-#include "Engine/Runtime/Render/ViewportClient.h"
+#include "Engine/Runtime/Render/RenderTexture.h"
+
+#include <memory>
 
 struct ImVec2;
 
@@ -15,19 +17,20 @@ namespace ve::editor
     public:
         GameViewPanel();
 
+        void Init(Editor& editor);
         void Render(Editor& editor, const ImVec2& position, const ImVec2& size);
 
-        [[nodiscard]] const ViewportClient& GetViewportClient() const noexcept;
-        [[nodiscard]] ViewportClient& GetViewportClient() noexcept;
+        [[nodiscard]] const RenderTexture& GetGameViewTexture() const noexcept;
+        [[nodiscard]] RenderTexture& GetGameViewTexture() noexcept;
 
     private:
         [[nodiscard]] const char* GetName() const noexcept override;
         void RenderContent() override;
 
-        void RebuildViewportClient(Editor& editor, WindowExtent extent);
+        void RebuildGameViewTexture(Editor& editor, WindowExtent extent);
         [[nodiscard]] static WindowExtent ToRenderTargetExtent(const ImVec2& size) noexcept;
 
-        ViewportClient viewportClient_;
+        std::shared_ptr<RenderTexture> gameViewTexture_;
         WindowExtent renderTargetExtent_ = {};
         Editor* activeEditor_ = nullptr;
     };

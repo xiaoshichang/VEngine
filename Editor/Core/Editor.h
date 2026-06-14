@@ -33,7 +33,7 @@ namespace ve::editor
         void UnInit() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
-        void KeepImGuiTextureAlive(std::shared_ptr<RTRenderTarget> renderTarget);
+        void KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture);
 
         void OpenProject(std::string projectPath);
         void ShowProjectSelection() noexcept;
@@ -68,7 +68,10 @@ namespace ve::editor
         RenderBackend renderBackend_ = RenderBackend::D3D12;
         std::atomic_bool initialized_{false};
         MainView mainView_ = MainView::ProjectSelection;
-        std::vector<std::shared_ptr<RTRenderTarget>> pendingImGuiTextureRenderTargets_;
+
+        // ImGui consumes native texture handles as raw IDs. Keep the owning RenderTexture objects alive at editor
+        // scope, and let panels register those textures once when their editor-side view is initialized.
+        std::vector<std::shared_ptr<RenderTexture>> retainedImGuiRenderTextures_;
         std::vector<std::string> recentProjects_;
         std::string currentProjectPath_;
         std::string currentProjectName_;

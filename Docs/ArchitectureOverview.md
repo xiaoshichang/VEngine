@@ -531,9 +531,9 @@ render work is assembled for the Render Thread.
 
 Render-facing resource ownership follows an Unreal-style split between the Scene Thread and Render Thread:
 
-- Scene Thread owns CPU-side render objects such as `RenderTarget`, future mesh render data, material state, texture
-  resources, and viewport state.
-- Render Thread owns matching render proxies whose type names use an `RT` prefix, such as `RTRenderTarget`.
+- Scene Thread owns CPU-side render objects such as `RenderTarget`, `RenderTexture`, future mesh render data, material
+  state, texture resources, and viewport state.
+- Render Thread owns matching render proxies whose type names use an `RT` prefix, such as `RTRenderTexture`.
 - CPU-side render objects may keep a `std::shared_ptr` to their RT proxy so the Render Thread can finish already
   queued work after the Scene Thread object is destroyed.
 - Objects with RT proxies must not call RHI directly from the Scene Thread. They initialize or update render-side state
@@ -545,18 +545,21 @@ Example:
 ```text
 Scene Thread:
   RenderTarget
-    Describes kind, extent, format, and logical ownership.
-    Holds shared_ptr<RTRenderTarget>.
+    Describes kind, extent, format, and logical output ownership.
+
+  RenderTexture
+    Bundles a texture-backed RenderTarget description with render-resource-view access.
+    Holds shared_ptr<RTRenderTexture>.
     Calls InitRenderResource(RenderSystem&) when RHI-backed state is needed.
 
 Render Thread:
-  RTRenderTarget
-    Owns RHI texture / view / swapchain attachment references.
+  RTRenderTexture
+    Owns RHI texture, render target view, and sampled/resource view references.
     Receives initialization, resize, and release commands.
 ```
 
 This model lets Scene Thread code keep ordinary CPU descriptions while Render Thread code owns the backend-specific
-objects and timing-sensitive destruction. `RenderTarget` can be destroyed on the Scene Thread while `RTRenderTarget`
+objects and timing-sensitive destruction. `RenderTexture` can be destroyed on the Scene Thread while `RTRenderTexture`
 survives until the last render command that captured it has completed.
 
 The render layer should avoid directly depending on live `GameObject` instances on the Render Thread. It should consume
