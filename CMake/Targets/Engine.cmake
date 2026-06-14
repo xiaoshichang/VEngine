@@ -14,6 +14,7 @@ function(ve_add_engine)
             Engine/Runtime/Application/EngineRuntime.cpp
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
+            Engine/Runtime/Core/JsonUtils.cpp
             Engine/Runtime/Core/Version.cpp
             Engine/Runtime/FileSystem/FileSystem.cpp
             Engine/Runtime/FileSystem/Path.cpp
@@ -37,6 +38,7 @@ function(ve_add_engine)
             Engine/Runtime/Scene/LightComponent.cpp
             Engine/Runtime/Scene/MeshRenderComponent.cpp
             Engine/Runtime/Scene/Scene.cpp
+            Engine/Runtime/Scene/SceneSerialization.cpp
             Engine/Runtime/Scene/SceneSystem.cpp
             Engine/Runtime/Scene/TransformComponent.cpp
             Engine/Runtime/Threading/Synchronization.cpp
@@ -53,6 +55,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Compiler.h
             Engine/Runtime/Core/EnumFlags.h
             Engine/Runtime/Core/Error.h
+            Engine/Runtime/Core/JsonUtils.h
             Engine/Runtime/Core/NonCopyable.h
             Engine/Runtime/Core/Platform.h
             Engine/Runtime/Core/Result.h
@@ -89,6 +92,7 @@ function(ve_add_engine)
             Engine/Runtime/Scene/LightComponent.h
             Engine/Runtime/Scene/MeshRenderComponent.h
             Engine/Runtime/Scene/Scene.h
+            Engine/Runtime/Scene/SceneSerialization.h
             Engine/Runtime/Scene/SceneSystem.h
             Engine/Runtime/Scene/TransformComponent.h
             Engine/Runtime/Threading/Atomic.h

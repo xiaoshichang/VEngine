@@ -1,0 +1,131 @@
+{
+    "schemaVersion": 1,
+    "name": "Sample Scene",
+    "rootGameObjects": [
+        {
+            "name": "Cube",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "localRotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "localScale": [
+                        1,
+                        1,
+                        1
+                    ]
+                },
+                {
+                    "type": "MeshRenderComponent",
+                    "enabled": true,
+                    "meshAssetPath": "Assets/Meshes/Cube.vemesh",
+                    "materialAssetPath": "Assets/Materials/Default.vematerial",
+                    "boundsCenter": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "boundsExtents": [
+                        1,
+                        1,
+                        1
+                    ]
+                }
+            ],
+            "children": []
+        },
+        {
+            "name": "Main Camera",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [
+                        0,
+                        2,
+                        -6
+                    ],
+                    "localRotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "localScale": [
+                        1,
+                        1,
+                        1
+                    ]
+                },
+                {
+                    "type": "CameraComponent",
+                    "enabled": true,
+                    "primary": true,
+                    "projectionMode": "Perspective",
+                    "verticalFieldOfViewRadians": 1.0471975512,
+                    "orthographicSize": 5,
+                    "aspectRatio": 1.7777778,
+                    "nearClipPlane": 0.1,
+                    "farClipPlane": 1000
+                }
+            ],
+            "children": []
+        },
+        {
+            "name": "Directional Light",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [
+                        0,
+                        3,
+                        0
+                    ],
+                    "localRotation": [
+                        0,
+                        0,
+                        0,
+                        1
+                    ],
+                    "localScale": [
+                        1,
+                        1,
+                        1
+                    ]
+                },
+                {
+                    "type": "LightComponent",
+                    "enabled": true,
+                    "lightType": "Directional",
+                    "color": [
+                        1,
+                        1,
+                        1
+                    ],
+                    "direction": [
+                        0,
+                        -1,
+                        0
+                    ],
+                    "intensity": 1,
+                    "range": 0,
+                    "innerConeAngleRadians": 0,
+                    "outerConeAngleRadians": 0,
+                    "castShadows": false
+                }
+            ],
+            "children": []
+        }
+    ]
+}

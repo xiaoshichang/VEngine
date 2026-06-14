@@ -97,7 +97,7 @@ namespace ve
 
     void MeshRenderComponent::RegisterRenderItemToRenderThread()
     {
-        if (!IsEnabled())
+        if (!IsEnabled() || renderThreadRegistered_)
         {
             return;
         }
@@ -106,11 +106,18 @@ namespace ve
         VE_ASSERT(scene != nullptr);
         scene->RegisterRenderItem(rtRenderItem_);
         scene->UpdateRenderItem(rtRenderItem_, BuildRenderItemDesc());
+        renderThreadRegistered_ = true;
         ClearRenderItemTransformDirty();
     }
 
     void MeshRenderComponent::UnregisterRenderItemFromRenderThread() noexcept
     {
+        if (!renderThreadRegistered_)
+        {
+            return;
+        }
+
+        renderThreadRegistered_ = false;
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
         scene->UnregisterRenderItem(rtRenderItem_);
@@ -118,7 +125,7 @@ namespace ve
 
     void MeshRenderComponent::SubmitRenderItemUpdateToRenderThread()
     {
-        if (!IsEnabled())
+        if (!IsEnabled() || !renderThreadRegistered_)
         {
             return;
         }

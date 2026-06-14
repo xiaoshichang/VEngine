@@ -187,7 +187,7 @@ namespace ve
 
     void LightComponent::RegisterLightToRenderThread()
     {
-        if (!IsEnabled())
+        if (!IsEnabled() || renderThreadRegistered_)
         {
             return;
         }
@@ -196,11 +196,18 @@ namespace ve
         VE_ASSERT(scene != nullptr);
         scene->RegisterLight(rtLight_);
         scene->UpdateLight(rtLight_, BuildLightDesc());
+        renderThreadRegistered_ = true;
         ClearLightTransformDirty();
     }
 
     void LightComponent::UnregisterLightFromRenderThread() noexcept
     {
+        if (!renderThreadRegistered_)
+        {
+            return;
+        }
+
+        renderThreadRegistered_ = false;
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
         scene->UnregisterLight(rtLight_);
@@ -208,7 +215,7 @@ namespace ve
 
     void LightComponent::SubmitLightUpdateToRenderThread()
     {
-        if (!IsEnabled())
+        if (!IsEnabled() || !renderThreadRegistered_)
         {
             return;
         }

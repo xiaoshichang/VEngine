@@ -1,0 +1,6 @@
+{
+    "schemaVersion": 1,
+    "name": "DemoProject",
+    "engineVersion": "0.1.0",
+    "startScene": "Assets/Scenes/SampleScene.vescene"
+}

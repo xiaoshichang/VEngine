@@ -53,6 +53,7 @@ namespace ve
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
         bool renderItemTransformDirty_ = true;
+        bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;
         std::shared_ptr<RTRenderItem> rtRenderItem_;
     };

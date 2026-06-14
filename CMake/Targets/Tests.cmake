@@ -57,4 +57,21 @@ function(ve_add_tests)
         NAME VEngineViewportTests
         COMMAND $<TARGET_FILE:VEngineViewportTests>
     )
+
+    add_executable(VEngineSceneSerializationTests
+        Tests/Unit/SceneSerializationTests.cpp
+    )
+
+    target_link_libraries(VEngineSceneSerializationTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineSceneSerializationTests)
+
+    add_test(
+        NAME VEngineSceneSerializationTests
+        COMMAND $<TARGET_FILE:VEngineSceneSerializationTests>
+    )
+
 endfunction()

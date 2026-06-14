@@ -30,10 +30,14 @@ function(ve_add_windows_editor)
 
     if(WIN32)
         add_executable(VEngineEditor WIN32
+            Editor/Core/EditorAssetDatabase.cpp
+            Editor/Core/EditorAssetDatabase.h
             Editor/Core/Editor.cpp
             Editor/Core/Editor.h
             Editor/Core/EditorInput.cpp
             Editor/Core/EditorInput.h
+            Editor/Core/EditorProject.cpp
+            Editor/Core/EditorProject.h
             Editor/Core/EditorProjectDirectoryDialog.cpp
             Editor/Core/EditorProjectDirectoryDialog.h
             Editor/Core/EditorProjectEditingView.cpp

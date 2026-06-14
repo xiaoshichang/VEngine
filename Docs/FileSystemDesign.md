@@ -213,7 +213,42 @@ repo markers. Editor and tool code should set the project root when they know it
 - Relative paths are joined to the configured project root.
 - If the project root is empty, the relative path is returned normalized.
 
-## 10. Platform Notes
+## 10. Project Layout
+
+The standard project root is intentionally minimal:
+
+```text
+ProjectRoot/
+  VEProject.json
+  Assets/
+  Library/
+```
+
+Editor code can use `ve::editor::EditorProject::EnsureLayout()` to create this shape and
+`ve::editor::EditorProject::LoadDescriptor()` / `ve::editor::EditorProject::SaveDescriptor()` to read and write the
+descriptor. This logic intentionally lives under `Editor/` instead of `Engine/Runtime/`; runtime code should not own
+project creation or editor workspace policy. `Assets/` and `Library/` are code-level conventions, so the descriptor does
+not repeat those paths. All JSON emitted by these helpers is pretty-printed with line breaks and four-space indentation.
+
+`VEProject.json` fields in the first schema:
+
+```json
+{
+    "schemaVersion": 1,
+    "name": "DemoProject",
+    "engineVersion": "0.1.0",
+    "startScene": "Assets/Scenes/SampleScene.vescene"
+}
+```
+
+`Assets/` stores project-visible content. `Library/` stores generated local content and import/cache products. `Library/`
+is part of the directory convention, but future production projects should usually ignore its generated contents.
+
+The Editor AssetDatabase currently scans `Assets/` for `.obj`, `.vemesh`, `.vematerial`, and `.vescene` files. `.obj`
+files are native source assets; missing `.vemesh` descriptors are generated beside them and reference the source OBJ
+rather than copying actual mesh data.
+
+## 11. Platform Notes
 
 ### Windows
 
@@ -228,7 +263,7 @@ from UTF-8.
 The first implementation does not add UIKit or bundle-resource APIs. The UTF-8 path and synchronous IO layer should still
 compile with the iOS toolchain, but iOS app bundle, documents directory, and packaged-resource handling are future work.
 
-## 11. Future Mount Points
+## 12. Future Mount Points
 
 Virtual mounts are intentionally deferred.
 
@@ -243,7 +278,7 @@ Expected future mount names may include:
 The future mount layer should map virtual paths to platform-specific physical roots and preserve the same normalized path
 rules used by `ve::Path`.
 
-## 12. Future Async IO
+## 13. Future Async IO
 
 FileSystem remains the synchronous file access foundation.
 
@@ -252,7 +287,7 @@ its completion queue. Future ResourceSystem code should decide where those resul
 back to Game Thread or asset-loading state. The synchronous APIs in this document remain useful for tests, tools,
 startup paths, and small metadata files.
 
-## 13. Testing
+## 14. Testing
 
 The test target is:
 

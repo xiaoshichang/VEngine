@@ -69,6 +69,7 @@ namespace ve
         Float32 nearClipPlane_ = 0.1f;
         Float32 farClipPlane_ = 1000.0f;
         bool cameraTransformDirty_ = true;
+        bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;
         std::shared_ptr<RTCamera> rtCamera_;
     };

@@ -48,7 +48,8 @@ namespace ve::editor
         gameViewPanel_.Render(editor,
                               ImVec2(centerX + splitCenterWidth + PanelGap, origin.y),
                               ImVec2(splitCenterWidth, centerHeight));
-        assetsPanel_.Render(ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
+        assetsPanel_.Render(
+            editor, ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
 
         inspectorPanel_.Render(ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
     }

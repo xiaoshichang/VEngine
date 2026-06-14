@@ -49,13 +49,14 @@ namespace ve
         void RegisterLight(std::shared_ptr<RTLight> light);
         void UnregisterLight(std::shared_ptr<RTLight> light) noexcept;
         void UpdateLight(std::shared_ptr<RTLight> light, RTLightDesc desc);
+        [[nodiscard]] Result<GameObject*> CreateRootGameObjectWithoutRenderRegistration(std::string name = {});
 
         void Update(Float32 deltaSeconds);
         void LateUpdate(Float32 deltaSeconds);
         void BeforeRender();
+        void RebuildRenderThreadScene();
 
     private:
-        void RebuildRTScene();
         void RegisterRenderItemsRecursive(GameObject& gameObject);
         void SyncRenderItemsBeforeRenderRecursive(GameObject& gameObject);
         void SubmitRTSceneCommand(std::string debugName, std::function<void()> function) const;

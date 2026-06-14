@@ -1,0 +1,7 @@
+{
+    "schemaVersion": 1,
+    "type": "Mesh",
+    "sourceAsset": "Assets/Meshes/Cube.obj",
+    "importer": "ObjMeshImporter",
+    "importSettings": {}
+}

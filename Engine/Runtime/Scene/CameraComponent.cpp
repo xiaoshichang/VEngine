@@ -175,7 +175,7 @@ namespace ve
 
     void CameraComponent::RegisterCameraToRenderThread()
     {
-        if (!IsEnabled())
+        if (!IsEnabled() || renderThreadRegistered_)
         {
             return;
         }
@@ -184,11 +184,18 @@ namespace ve
         VE_ASSERT(scene != nullptr);
         scene->RegisterCamera(rtCamera_);
         scene->UpdateCamera(rtCamera_, BuildCameraDesc());
+        renderThreadRegistered_ = true;
         ClearCameraTransformDirty();
     }
 
     void CameraComponent::UnregisterCameraFromRenderThread() noexcept
     {
+        if (!renderThreadRegistered_)
+        {
+            return;
+        }
+
+        renderThreadRegistered_ = false;
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
         scene->UnregisterCamera(rtCamera_);
@@ -196,7 +203,7 @@ namespace ve
 
     void CameraComponent::SubmitCameraUpdateToRenderThread()
     {
-        if (!IsEnabled())
+        if (!IsEnabled() || !renderThreadRegistered_)
         {
             return;
         }

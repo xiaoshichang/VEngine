@@ -1,0 +1,13 @@
+{
+    "schemaVersion": 1,
+    "name": "Default",
+    "shader": "Engine/Shaders/BasicMesh",
+    "parameters": {
+        "baseColor": [
+            1,
+            1,
+            1,
+            1
+        ]
+    }
+}

@@ -2,7 +2,10 @@
 
 #include "Editor/Core/EditorProjectEditingView.h"
 #include "Editor/Core/EditorProjectSelectionView.h"
+#include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Core/Result.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -17,6 +20,9 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#ifdef GetMessage
+#undef GetMessage
+#endif
 #include <d3d11.h>
 #endif
 
@@ -294,6 +300,16 @@ namespace ve::editor
         return *renderSystem_;
     }
 
+    EditorAssetDatabase& Editor::GetAssetDatabase() noexcept
+    {
+        return assetDatabase_;
+    }
+
+    const EditorAssetDatabase& Editor::GetAssetDatabase() const noexcept
+    {
+        return assetDatabase_;
+    }
+
     void Editor::KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture)
     {
         VE_ASSERT_SCENE_THREAD();
@@ -316,7 +332,35 @@ namespace ve::editor
             return;
         }
 
+        const Path projectRoot(projectPath);
+        const ErrorCode layoutResult = EditorProject::EnsureLayout(projectRoot);
+        if (layoutResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR_CATEGORY("Editor", "Failed to prepare project layout '{}': {}", projectPath, ToString(layoutResult));
+            return;
+        }
+
+        Result<EditorProjectDescriptor> descriptorResult = EditorProject::LoadDescriptor(projectRoot);
+        if (!descriptorResult)
+        {
+            VE_LOG_ERROR_CATEGORY("Editor",
+                                  "Failed to load project descriptor '{}': {}",
+                                  EditorProject::GetDescriptorPath(projectRoot).GetString(),
+                                  descriptorResult.GetError().GetMessage());
+            return;
+        }
+
+        FileSystem::SetProjectRoot(projectRoot);
         SetCurrentProject(std::move(projectPath));
+        currentProjectName_ = descriptorResult.GetValue().name.empty() ? currentProjectName_ : descriptorResult.GetValue().name;
+        const ErrorCode assetDatabaseResult = assetDatabase_.Initialize(projectRoot);
+        if (assetDatabaseResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR_CATEGORY(
+                "Editor", "Failed to initialize asset database '{}': {}", projectPath, ToString(assetDatabaseResult));
+            return;
+        }
+
         AddRecentProject(currentProjectPath_);
         VE_ASSERT_MESSAGE(projectEditingView_ != nullptr, "Editor::OpenProject requires a project editing view.");
         projectEditingView_->Init(*this);

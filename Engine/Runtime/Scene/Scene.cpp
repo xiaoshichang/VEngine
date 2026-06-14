@@ -95,7 +95,12 @@ namespace ve
         const bool hadRootGameObjects = !rootGameObjects_.empty();
         rootGameObjects_.clear();
 
-        if (!hadRootGameObjects && sceneSystem_ == nullptr)
+        if (sceneSystem_ == nullptr)
+        {
+            return;
+        }
+
+        if (!hadRootGameObjects)
         {
             return;
         }
@@ -109,7 +114,7 @@ namespace ve
         sceneSystem_ = sceneSystem;
         if (sceneSystem_ != nullptr)
         {
-            RebuildRTScene();
+            RebuildRenderThreadScene();
         }
     }
 
@@ -239,6 +244,21 @@ namespace ve
         }
     }
 
+    Result<GameObject*> Scene::CreateRootGameObjectWithoutRenderRegistration(std::string name)
+    {
+        try
+        {
+            std::unique_ptr<GameObject> gameObject = std::make_unique<GameObject>(*this, std::move(name));
+            GameObject* gameObjectPointer = gameObject.get();
+            rootGameObjects_.push_back(std::move(gameObject));
+            return Result<GameObject*>::Success(gameObjectPointer);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return Result<GameObject*>::Failure(Error(ErrorCode::OutOfMemory, "Scene GameObject allocation failed."));
+        }
+    }
+
     void Scene::LateUpdate(Float32 deltaSeconds)
     {
         for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
@@ -255,8 +275,13 @@ namespace ve
         }
     }
 
-    void Scene::RebuildRTScene()
+    void Scene::RebuildRenderThreadScene()
     {
+        if (sceneSystem_ == nullptr)
+        {
+            return;
+        }
+
         std::shared_ptr<RTScene> rtScene = rtScene_;
         SubmitRTSceneCommand("RTSceneClear", [rtScene]() { rtScene->Clear(); });
 

@@ -860,6 +860,26 @@ Shaders/
 
 Editor and tools are responsible for importing source assets. Runtime is responsible for loading VEngine-native assets.
 
+VEngine projects use a small fixed directory convention at the project root:
+
+```text
+ProjectRoot/
+  VEProject.json
+  Assets/
+  Library/
+```
+
+`VEProject.json` is the project descriptor. It is UTF-8 JSON, written with stable indentation, and records the project
+name, engine version used to create the descriptor, and the initial scene path. `Assets/` and `Library/` are fixed
+code-level conventions and are not repeated in the descriptor. `Assets/` contains user-authored and imported asset
+metadata such as `.vescene`, `.veasset`, `.vematerial`, `.veprefab`, `.vemesh`, and `.vetex`. `Library/` contains
+generated local data, imported caches, shader/resource build products, and other machine-local files. First-stage sample
+projects keep an empty `Library/.gitkeep` only so the directory shape is visible.
+Project creation, descriptor editing, and workspace policy belong to the Editor layer; runtime systems only consume
+explicit paths and project-root resolution supplied by higher-level code.
+The Editor AssetDatabase scans this `Assets/` tree, tracks native source assets and imported descriptors, and generates
+first-stage `.vemesh` descriptors from `.obj` sources without copying mesh payload data.
+
 Recommended asset pipeline:
 
 ```text

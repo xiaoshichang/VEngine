@@ -75,6 +75,7 @@ namespace ve
         Float32 outerConeAngleRadians_ = 0.0f;
         bool castShadows_ = false;
         bool lightTransformDirty_ = true;
+        bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;
         std::shared_ptr<RTLight> rtLight_;
     };

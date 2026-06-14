@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/Core/EditorAssetDatabase.h"
 #include "Editor/Core/EditorInput.h"
 #include "Editor/Core/EditorProjectRegistry.h"
 #include "Engine/Runtime/Application/ApplicationCommandQueue.h"
@@ -33,6 +34,8 @@ namespace ve::editor
         void UnInit() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
+        [[nodiscard]] EditorAssetDatabase& GetAssetDatabase() noexcept;
+        [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
         void KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture);
 
         void OpenProject(std::string projectPath);
@@ -66,6 +69,7 @@ namespace ve::editor
         ProjectSelectionView* projectSelectionView_ = nullptr;
         ProjectEditingView* projectEditingView_ = nullptr;
         RenderBackend renderBackend_ = RenderBackend::D3D12;
+        EditorAssetDatabase assetDatabase_;
         std::atomic_bool initialized_{false};
         MainView mainView_ = MainView::ProjectSelection;
 
