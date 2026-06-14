@@ -2,7 +2,10 @@
 
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Math/Vector3.h"
+#include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Scene/Component.h"
+
+#include <memory>
 
 namespace ve
 {
@@ -17,7 +20,8 @@ namespace ve
     class LightComponent final : public Component
     {
     public:
-        LightComponent(Scene& scene, GameObject& owner) noexcept;
+        LightComponent(Scene& scene, GameObject& owner);
+        ~LightComponent() override;
 
         [[nodiscard]] LightType GetLightType() const noexcept;
         void SetLightType(LightType type) noexcept;
@@ -43,7 +47,25 @@ namespace ve
         [[nodiscard]] bool CastShadows() const noexcept;
         void SetCastShadows(bool castShadows) noexcept;
 
+        [[nodiscard]] std::shared_ptr<RTLight> GetRTLight() noexcept;
+        [[nodiscard]] std::shared_ptr<const RTLight> GetRTLight() const noexcept;
+
+        void SetEnabled(bool enabled) noexcept override;
+
     private:
+        friend class GameObject;
+        friend class Scene;
+
+        [[nodiscard]] RTLightDesc BuildLightDesc() const;
+        [[nodiscard]] bool IsLightTransformDirty() const noexcept;
+        void MarkLightTransformDirty() noexcept;
+        void ClearLightTransformDirty() noexcept;
+        void UnregisterTransformChangedCallback() noexcept;
+        void RegisterLightToRenderThread();
+        void UnregisterLightFromRenderThread() noexcept;
+        void SubmitLightUpdateToRenderThread();
+        void SubmitLightTransformUpdateToRenderThread();
+
         LightType type_ = LightType::Directional;
         Vector3 color_ = Vector3::One();
         Vector3 direction_ = Vector3::UnitZ();
@@ -52,5 +74,8 @@ namespace ve
         Float32 innerConeAngleRadians_ = 0.0f;
         Float32 outerConeAngleRadians_ = 0.0f;
         bool castShadows_ = false;
+        bool lightTransformDirty_ = true;
+        UInt64 transformChangedCallbackId_ = 0;
+        std::shared_ptr<RTLight> rtLight_;
     };
 } // namespace ve

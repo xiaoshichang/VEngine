@@ -159,6 +159,78 @@ namespace ve
                              { item->SetDesc(std::move(desc)); });
     }
 
+    void Scene::RegisterCamera(std::shared_ptr<RTCamera> camera)
+    {
+        if (camera == nullptr)
+        {
+            return;
+        }
+
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneAddCamera",
+                             [rtScene, camera = std::move(camera)]() { rtScene->AddCamera(camera); });
+    }
+
+    void Scene::UnregisterCamera(std::shared_ptr<RTCamera> camera) noexcept
+    {
+        if (camera == nullptr)
+        {
+            return;
+        }
+
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneRemoveCamera",
+                             [rtScene, camera = std::move(camera)]() { rtScene->RemoveCamera(camera); });
+    }
+
+    void Scene::UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraDesc desc)
+    {
+        if (camera == nullptr)
+        {
+            return;
+        }
+
+        SubmitRTSceneCommand("RTSceneUpdateCamera",
+                             [camera = std::move(camera), desc = std::move(desc)]() mutable
+                             { camera->SetDesc(std::move(desc)); });
+    }
+
+    void Scene::RegisterLight(std::shared_ptr<RTLight> light)
+    {
+        if (light == nullptr)
+        {
+            return;
+        }
+
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneAddLight",
+                             [rtScene, light = std::move(light)]() { rtScene->AddLight(light); });
+    }
+
+    void Scene::UnregisterLight(std::shared_ptr<RTLight> light) noexcept
+    {
+        if (light == nullptr)
+        {
+            return;
+        }
+
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneRemoveLight",
+                             [rtScene, light = std::move(light)]() { rtScene->RemoveLight(light); });
+    }
+
+    void Scene::UpdateLight(std::shared_ptr<RTLight> light, RTLightDesc desc)
+    {
+        if (light == nullptr)
+        {
+            return;
+        }
+
+        SubmitRTSceneCommand("RTSceneUpdateLight",
+                             [light = std::move(light), desc = std::move(desc)]() mutable
+                             { light->SetDesc(std::move(desc)); });
+    }
+
     void Scene::Update(Float32 deltaSeconds)
     {
         for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
@@ -201,6 +273,16 @@ namespace ve
             mesh->RegisterRenderItemToRenderThread();
         }
 
+        if (CameraComponent* camera = gameObject.GetComponent<CameraComponent>(); camera != nullptr)
+        {
+            camera->RegisterCameraToRenderThread();
+        }
+
+        if (LightComponent* light = gameObject.GetComponent<LightComponent>(); light != nullptr)
+        {
+            light->RegisterLightToRenderThread();
+        }
+
         TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
         if (transform == nullptr)
         {
@@ -224,6 +306,22 @@ namespace ve
             if (mesh->IsRenderItemTransformDirty())
             {
                 mesh->SubmitRenderItemTransformUpdateToRenderThread();
+            }
+        }
+
+        if (CameraComponent* camera = gameObject.GetComponent<CameraComponent>(); camera != nullptr)
+        {
+            if (camera->IsCameraTransformDirty())
+            {
+                camera->SubmitCameraTransformUpdateToRenderThread();
+            }
+        }
+
+        if (LightComponent* light = gameObject.GetComponent<LightComponent>(); light != nullptr)
+        {
+            if (light->IsLightTransformDirty())
+            {
+                light->SubmitLightTransformUpdateToRenderThread();
             }
         }
 

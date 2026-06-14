@@ -70,6 +70,14 @@ namespace ve
                 {
                     componentPointer->RegisterRenderItemToRenderThread();
                 }
+                else if constexpr (std::is_same_v<TComponent, CameraComponent>)
+                {
+                    componentPointer->RegisterCameraToRenderThread();
+                }
+                else if constexpr (std::is_same_v<TComponent, LightComponent>)
+                {
+                    componentPointer->RegisterLightToRenderThread();
+                }
                 return Result<TComponent*>::Success(componentPointer);
             }
             catch (const std::bad_alloc&)
@@ -127,6 +135,14 @@ namespace ve
             }
 
             if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+            {
+                (*componentSlot)->UnregisterTransformChangedCallback();
+            }
+            else if constexpr (std::is_same_v<TComponent, CameraComponent>)
+            {
+                (*componentSlot)->UnregisterTransformChangedCallback();
+            }
+            else if constexpr (std::is_same_v<TComponent, LightComponent>)
             {
                 (*componentSlot)->UnregisterTransformChangedCallback();
             }

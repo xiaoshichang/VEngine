@@ -43,6 +43,12 @@ namespace ve
         void RegisterRenderItem(std::shared_ptr<RTRenderItem> item);
         void UnregisterRenderItem(std::shared_ptr<RTRenderItem> item) noexcept;
         void UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemDesc desc);
+        void RegisterCamera(std::shared_ptr<RTCamera> camera);
+        void UnregisterCamera(std::shared_ptr<RTCamera> camera) noexcept;
+        void UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraDesc desc);
+        void RegisterLight(std::shared_ptr<RTLight> light);
+        void UnregisterLight(std::shared_ptr<RTLight> light) noexcept;
+        void UpdateLight(std::shared_ptr<RTLight> light, RTLightDesc desc);
 
         void Update(Float32 deltaSeconds);
         void LateUpdate(Float32 deltaSeconds);
