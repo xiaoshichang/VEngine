@@ -68,7 +68,7 @@ namespace ve
                 *componentSlot = std::move(component);
                 if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
                 {
-                    componentPointer->RegisterRTState();
+                    componentPointer->RegisterRenderItemToRenderThread();
                 }
                 return Result<TComponent*>::Success(componentPointer);
             }
@@ -126,12 +126,17 @@ namespace ve
                 return false;
             }
 
+            if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+            {
+                (*componentSlot)->UnregisterTransformChangedCallback();
+            }
             (*componentSlot)->ClearOwner();
             componentSlot->reset();
             return true;
         }
 
         void Update(Float32 deltaSeconds);
+        void LateUpdate(Float32 deltaSeconds);
 
     private:
         friend class Scene;

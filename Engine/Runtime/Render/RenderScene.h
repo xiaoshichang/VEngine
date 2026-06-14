@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Vector3.h"
 
 #include <memory>
@@ -28,7 +29,7 @@ namespace ve
         std::string materialAssetPath;
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
-        bool visible = true;
+        Matrix44 localToWorld = Matrix44::Identity();
     };
 
     /// Render-thread representation of one MeshRenderComponent.

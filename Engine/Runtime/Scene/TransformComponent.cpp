@@ -64,12 +64,6 @@ namespace ve
         return worldMatrixCache_;
     }
 
-    UInt64 TransformComponent::GetHierarchyRevision() const noexcept
-    {
-        UpdateWorldCache();
-        return worldRevision_;
-    }
-
     TransformComponent* TransformComponent::GetParent() noexcept
     {
         return parent_;
@@ -179,13 +173,30 @@ namespace ve
         for (std::unique_ptr<GameObject>& child : children_)
         {
             TransformComponent* childTransform = child->GetComponent<TransformComponent>();
-            if (childTransform != nullptr)
-            {
-                childTransform->SetParent(nullptr);
-            }
+            VE_ASSERT(childTransform != nullptr);
+            childTransform->SetParent(nullptr);
         }
 
         children_.clear();
+    }
+
+    UInt64 TransformComponent::AddTransformChangedCallback(TransformChangedCallback callback)
+    {
+        VE_ASSERT(callback != nullptr);
+        const UInt64 id = nextTransformChangedCallbackId_++;
+        transformChangedCallbacks_.push_back(TransformChangedCallbackEntry{id, std::move(callback)});
+        return id;
+    }
+
+    void TransformComponent::RemoveTransformChangedCallback(UInt64 callbackId) noexcept
+    {
+        VE_ASSERT(callbackId != 0);
+
+        transformChangedCallbacks_.erase(
+            std::remove_if(transformChangedCallbacks_.begin(),
+                           transformChangedCallbacks_.end(),
+                           [callbackId](const TransformChangedCallbackEntry& entry) { return entry.id == callbackId; }),
+            transformChangedCallbacks_.end());
     }
 
     void TransformComponent::SetParent(TransformComponent* parent) noexcept
@@ -197,22 +208,37 @@ namespace ve
     void TransformComponent::MarkHierarchyDirty() noexcept
     {
         transformDirty_ = true;
-        ++hierarchyRevision_;
-        worldRevision_ = 0;
+
+        NotifyTransformChanged();
+
+        for (std::unique_ptr<GameObject>& child : children_)
+        {
+            TransformComponent* childTransform = child->GetComponent<TransformComponent>();
+            VE_ASSERT(childTransform);
+            childTransform->MarkHierarchyDirty();
+        }
+    }
+
+    void TransformComponent::NotifyTransformChanged() noexcept
+    {
+        for (TransformChangedCallbackEntry& entry : transformChangedCallbacks_)
+        {
+            if (entry.callback)
+            {
+                entry.callback();
+            }
+        }
     }
 
     void TransformComponent::UpdateWorldCache() const noexcept
     {
-        const UInt64 parentHierarchyRevision = parent_ != nullptr ? parent_->GetHierarchyRevision() : 0;
-        if (!transformDirty_ && cachedParentHierarchyRevision_ == parentHierarchyRevision)
+        if (!transformDirty_)
         {
             return;
         }
 
         localMatrixCache_ = Matrix44::Translation(localPosition_) * localRotation_.ToMatrix44() * Matrix44::Scale(localScale_);
         worldMatrixCache_ = parent_ != nullptr ? parent_->GetWorldMatrix() * localMatrixCache_ : localMatrixCache_;
-        cachedParentHierarchyRevision_ = parentHierarchyRevision;
-        worldRevision_ = (parentHierarchyRevision * 1315423911ULL) ^ hierarchyRevision_;
         transformDirty_ = false;
     }
 } // namespace ve

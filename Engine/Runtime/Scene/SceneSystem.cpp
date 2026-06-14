@@ -73,6 +73,15 @@ namespace ve
             if (impl.scene != nullptr)
             {
                 impl.scene->Update(deltaSeconds);
+                impl.scene->LateUpdate(deltaSeconds);
+            }
+        }
+
+        void BeforeRenderScene(SceneSystemImpl& impl)
+        {
+            if (impl.scene != nullptr)
+            {
+                impl.scene->BeforeRender();
             }
         }
 
@@ -162,6 +171,7 @@ namespace ve
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
 
+                    BeforeRenderScene(impl);
                     SceneThreadLoop_Render(impl);
                     SceneThreadLoop_EndFrame(impl);
                     

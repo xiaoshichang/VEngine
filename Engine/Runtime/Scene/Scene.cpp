@@ -167,6 +167,22 @@ namespace ve
         }
     }
 
+    void Scene::LateUpdate(Float32 deltaSeconds)
+    {
+        for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
+        {
+            gameObject->LateUpdate(deltaSeconds);
+        }
+    }
+
+    void Scene::BeforeRender()
+    {
+        for (std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
+        {
+            SyncRenderItemsBeforeRenderRecursive(*gameObject);
+        }
+    }
+
     void Scene::RebuildRTScene()
     {
         std::shared_ptr<RTScene> rtScene = rtScene_;
@@ -182,7 +198,7 @@ namespace ve
     {
         if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
         {
-            mesh->RegisterRTState();
+            mesh->RegisterRenderItemToRenderThread();
         }
 
         TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
@@ -197,6 +213,30 @@ namespace ve
             if (child != nullptr)
             {
                 RegisterRenderItemsRecursive(*child);
+            }
+        }
+    }
+
+    void Scene::SyncRenderItemsBeforeRenderRecursive(GameObject& gameObject)
+    {
+        if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
+        {
+            if (mesh->IsRenderItemTransformDirty())
+            {
+                mesh->SubmitRenderItemTransformUpdateToRenderThread();
+            }
+        }
+
+        TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+        if (transform != nullptr)
+        {
+            for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
+            {
+                GameObject* child = transform->GetChildGameObject(childIndex);
+                if (child != nullptr)
+                {
+                    SyncRenderItemsBeforeRenderRecursive(*child);
+                }
             }
         }
     }

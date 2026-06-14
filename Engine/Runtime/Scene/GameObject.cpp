@@ -161,6 +161,37 @@ namespace ve
         }
     }
 
+    void GameObject::LateUpdate(Float32 deltaSeconds)
+    {
+        Component* componentSlots[] = {
+            transformCmpt_.get(),
+            meshRenderCmpt_.get(),
+            cameraCmpt_.get(),
+            lightCmpt_.get(),
+        };
+        for (Component* component : componentSlots)
+        {
+            if (component != nullptr && component->IsEnabled())
+            {
+                component->OnLateUpdate(deltaSeconds);
+            }
+        }
+
+        if (transformCmpt_ == nullptr)
+        {
+            return;
+        }
+
+        for (SizeT childIndex = 0; childIndex < transformCmpt_->GetChildCount(); ++childIndex)
+        {
+            GameObject* child = transformCmpt_->GetChildGameObject(childIndex);
+            if (child != nullptr)
+            {
+                child->LateUpdate(deltaSeconds);
+            }
+        }
+    }
+
     void GameObject::InitializeRequiredComponents()
     {
         transformCmpt_ = std::make_unique<TransformComponent>(*scene_, *this);

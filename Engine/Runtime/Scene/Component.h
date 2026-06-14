@@ -27,10 +27,13 @@ namespace ve
         [[nodiscard]] bool IsEnabled() const noexcept;
 
         /// Enables or disables Scene update for this component.
-        void SetEnabled(bool enabled) noexcept;
+        virtual void SetEnabled(bool enabled) noexcept;
 
         /// Called by Scene update while this component and its owner are enabled.
         virtual void OnUpdate(Float32 deltaSeconds);
+
+        /// Called after all Scene update work for the frame has completed.
+        virtual void OnLateUpdate(Float32 deltaSeconds);
 
     private:
         friend class GameObject;

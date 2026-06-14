@@ -33,6 +33,11 @@ namespace ve
         static_cast<void>(deltaSeconds);
     }
 
+    void Component::OnLateUpdate(Float32 deltaSeconds)
+    {
+        static_cast<void>(deltaSeconds);
+    }
+
     void Component::ClearOwner() noexcept
     {
         owner_ = nullptr;

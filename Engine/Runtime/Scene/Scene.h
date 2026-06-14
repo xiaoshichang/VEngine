@@ -45,10 +45,13 @@ namespace ve
         void UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemDesc desc);
 
         void Update(Float32 deltaSeconds);
+        void LateUpdate(Float32 deltaSeconds);
+        void BeforeRender();
 
     private:
         void RebuildRTScene();
         void RegisterRenderItemsRecursive(GameObject& gameObject);
+        void SyncRenderItemsBeforeRenderRecursive(GameObject& gameObject);
         void SubmitRTSceneCommand(std::string debugName, std::function<void()> function) const;
 
         std::string name_;

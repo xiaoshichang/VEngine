@@ -29,26 +29,31 @@ namespace ve
         [[nodiscard]] const Vector3& GetBoundsExtents() const noexcept;
         void SetBoundsExtents(const Vector3& boundsExtents) noexcept;
 
-        [[nodiscard]] bool IsVisible() const noexcept;
-        void SetVisible(bool visible) noexcept;
-
         [[nodiscard]] std::shared_ptr<RTRenderItem> GetRTRenderItem() noexcept;
         [[nodiscard]] std::shared_ptr<const RTRenderItem> GetRTRenderItem() const noexcept;
+
+        void SetEnabled(bool enabled) noexcept override;
 
     private:
         friend class GameObject;
         friend class Scene;
 
-        [[nodiscard]] RTRenderItemDesc BuildRTDesc() const;
-        void RegisterRTState();
-        void UnregisterRTState() noexcept;
-        void SubmitRTUpdate();
+        [[nodiscard]] RTRenderItemDesc BuildRenderItemDesc() const;
+        [[nodiscard]] bool IsRenderItemTransformDirty() const noexcept;
+        void MarkRenderItemTransformDirty() noexcept;
+        void ClearRenderItemTransformDirty() noexcept;
+        void UnregisterTransformChangedCallback() noexcept;
+        void RegisterRenderItemToRenderThread();
+        void UnregisterRenderItemFromRenderThread() noexcept;
+        void SubmitRenderItemUpdateToRenderThread();
+        void SubmitRenderItemTransformUpdateToRenderThread();
 
         std::string meshAssetPath_;
         std::string materialAssetPath_;
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
-        bool visible_ = true;
+        bool renderItemTransformDirty_ = true;
+        UInt64 transformChangedCallbackId_ = 0;
         std::shared_ptr<RTRenderItem> rtRenderItem_;
     };
 } // namespace ve

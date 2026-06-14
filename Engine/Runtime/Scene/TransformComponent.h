@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/Component.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -33,7 +34,6 @@ namespace ve
 
         [[nodiscard]] Matrix44 GetLocalMatrix() const noexcept;
         [[nodiscard]] Matrix44 GetWorldMatrix() const noexcept;
-        [[nodiscard]] UInt64 GetHierarchyRevision() const noexcept;
 
         [[nodiscard]] TransformComponent* GetParent() noexcept;
         [[nodiscard]] const TransformComponent* GetParent() const noexcept;
@@ -49,23 +49,34 @@ namespace ve
         [[nodiscard]] bool DestroyChild(GameObject& child) noexcept;
         void ClearChildren() noexcept;
 
+        using TransformChangedCallback = std::function<void()>;
+
+        [[nodiscard]] UInt64 AddTransformChangedCallback(TransformChangedCallback callback);
+        void RemoveTransformChangedCallback(UInt64 callbackId) noexcept;
+
     private:
         friend class GameObject;
 
         void SetParent(TransformComponent* parent) noexcept;
         void MarkHierarchyDirty() noexcept;
+        void NotifyTransformChanged() noexcept;
         void UpdateWorldCache() const noexcept;
+
+        struct TransformChangedCallbackEntry
+        {
+            UInt64 id = 0;
+            TransformChangedCallback callback;
+        };
 
         Vector3 localPosition_ = Vector3::Zero();
         Quaternion localRotation_ = Quaternion::Identity();
         Vector3 localScale_ = Vector3::One();
         TransformComponent* parent_ = nullptr;
         std::vector<std::unique_ptr<GameObject>> children_;
+        std::vector<TransformChangedCallbackEntry> transformChangedCallbacks_;
         mutable Matrix44 localMatrixCache_ = Matrix44::Identity();
         mutable Matrix44 worldMatrixCache_ = Matrix44::Identity();
-        mutable UInt64 hierarchyRevision_ = 0;
-        mutable UInt64 cachedParentHierarchyRevision_ = 0;
-        mutable UInt64 worldRevision_ = 0;
         mutable bool transformDirty_ = true;
+        UInt64 nextTransformChangedCallbackId_ = 1;
     };
 } // namespace ve
