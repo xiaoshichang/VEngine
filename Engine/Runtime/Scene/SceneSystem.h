@@ -79,6 +79,12 @@ namespace ve
         /// Queues one OS event for Scene Thread processing.
         [[nodiscard]] ErrorCode EnqueueOSEvent(const OSEvent& event);
 
+        /// Queues one render command through the RenderSystem bound to this SceneSystem.
+        [[nodiscard]] ErrorCode EnqueueRenderCommand(RenderCommand command);
+
+        /// Returns true when this SceneSystem has an initialized RenderSystem binding.
+        [[nodiscard]] bool HasRenderSystem() const noexcept;
+
         /// Marks one Main Thread frame end and blocks when Main Thread is ahead by more than one frame.
         void NotifyMainThreadFrameEnd();
 

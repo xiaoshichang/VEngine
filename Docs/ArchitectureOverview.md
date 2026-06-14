@@ -519,7 +519,17 @@ Responsibilities:
 - Viewport rendering.
 - Editor viewport support.
 
-The render layer should avoid directly depending on GameObject instances on the Render Thread. It should consume render proxies, snapshots, or render commands produced by the Game Thread.
+The render layer should avoid directly depending on GameObject instances on the Render Thread. Scene-thread objects hold
+shared references to render-thread objects and update them by submitting render commands.
+
+First-stage scene/render ownership shape:
+
+- `Scene` owns an `RTScene`.
+- `MeshRenderComponent` owns an `RTRenderItem`.
+- `RTRenderItem` owns or references render-thread `RHIResource` objects such as mesh and material resources.
+- Scene-thread components ask `Scene` to add, remove, and update their RT objects. `Scene` submits those render
+  commands through `SceneSystem`, which is the only scene-side binding point to `RenderSystem`.
+- Renderer, viewport, and render texture code should consume `RTScene` when triggering scene rendering.
 
 `RenderSystem` owns Render Thread lifecycle and the render command queue. Detailed first-stage service, thread, and
 command queue rules are defined in `Docs/RenderSystemDesign.md`. RHI documents remain focused on backend graphics

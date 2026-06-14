@@ -26,6 +26,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/FrameRenderer.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderPass.cpp
+            Engine/Runtime/Render/RenderScene.cpp
             Engine/Runtime/Render/RenderSystem.cpp
             Engine/Runtime/Scene/CameraComponent.cpp
             Engine/Runtime/Scene/Component.cpp
@@ -74,6 +75,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/FrameRenderer.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderPass.h
+            Engine/Runtime/Render/RenderScene.h
             Engine/Runtime/Render/RenderSystem.h
             Engine/Runtime/Scene/CameraComponent.h
             Engine/Runtime/Scene/Component.h

@@ -1,4 +1,7 @@
 #include "Engine/Runtime/Render/FrameRenderer.h"
+#include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
+#include "Engine/Runtime/Scene/SceneSystem.h"
 
 #include <iostream>
 #include <memory>
@@ -184,11 +187,110 @@ namespace
 
         return passed;
     }
+
+    bool TestSceneMaintainsRTSceneThroughRenderCommands()
+    {
+        bool passed = true;
+
+        ve::RenderSystem renderSystem;
+        passed &= ExpectOk(renderSystem.Initialize(ve::RenderSystemInitParam{}),
+                           "RenderSystem should initialize for RTScene command tests");
+        ve::TimeSystem timeSystem;
+        passed &= ExpectOk(timeSystem.Initialize(ve::TimeSystemInitParam{}),
+                           "TimeSystem should initialize for RTScene command tests");
+        ve::InputSystem inputSystem;
+        passed &= ExpectOk(inputSystem.Initialize(ve::InputSystemInitParam{}),
+                           "InputSystem should initialize for RTScene command tests");
+        ve::SceneSystem sceneSystem;
+        passed &= ExpectOk(sceneSystem.Initialize(ve::SceneSystemInitParam{}, timeSystem, inputSystem, renderSystem),
+                           "SceneSystem should initialize with the RenderSystem");
+        if (!passed)
+        {
+            sceneSystem.Shutdown();
+            inputSystem.Shutdown();
+            timeSystem.Shutdown();
+            renderSystem.Shutdown();
+            return false;
+        }
+
+        ve::Scene* scene = sceneSystem.GetScene();
+        passed &= Expect(scene != nullptr, "SceneSystem should own an active Scene");
+        if (scene == nullptr)
+        {
+            sceneSystem.Shutdown();
+            inputSystem.Shutdown();
+            timeSystem.Shutdown();
+            renderSystem.Shutdown();
+            return false;
+        }
+        scene->SetName("RTScene");
+
+        ve::Result<ve::GameObject*> rootResult = scene->CreateRootGameObject("RootMesh");
+        passed &= Expect(rootResult.IsOk(), "Scene should create a root GameObject");
+        if (!rootResult.IsOk())
+        {
+            sceneSystem.Shutdown();
+            inputSystem.Shutdown();
+            timeSystem.Shutdown();
+            renderSystem.Shutdown();
+            return false;
+        }
+
+        ve::GameObject* root = rootResult.MoveValue();
+        ve::Result<ve::MeshRenderComponent*> meshResult = root->AddComponent<ve::MeshRenderComponent>();
+        passed &= Expect(meshResult.IsOk(), "GameObject should add MeshRenderComponent");
+        if (!meshResult.IsOk())
+        {
+            return false;
+        }
+
+        ve::MeshRenderComponent* mesh = meshResult.MoveValue();
+        passed &= Expect(mesh != nullptr, "GameObject should own MeshRenderComponent");
+
+        if (mesh != nullptr)
+        {
+            mesh->SetMeshAssetPath("Assets/Meshes/Cube.veasset");
+            mesh->SetMaterialAssetPath("Assets/Materials/Default.vematerial");
+            mesh->SetBoundsCenter(ve::Vector3(1.0f, 2.0f, 3.0f));
+            mesh->SetBoundsExtents(ve::Vector3(4.0f, 5.0f, 6.0f));
+        }
+
+        passed &= ExpectOk(renderSystem.Flush(), "RenderSystem should flush RTScene add/update commands");
+
+        std::shared_ptr<ve::RTScene> rtScene = scene->GetRTScene();
+        passed &= Expect(rtScene != nullptr, "Scene should own an RTScene");
+        passed &= Expect(rtScene->GetRenderItemCount() == 1, "RTScene should contain one RTRenderItem");
+
+        std::shared_ptr<ve::RTRenderItem> rtRenderItem = rtScene->GetRenderItem(0);
+        passed &= Expect(rtRenderItem == mesh->GetRTRenderItem(), "MeshRenderComponent should reference its RTRenderItem");
+        if (rtRenderItem != nullptr)
+        {
+            const ve::RTRenderItemDesc& desc = rtRenderItem->GetDesc();
+            passed &= Expect(desc.meshAssetPath == "Assets/Meshes/Cube.veasset",
+                             "RTRenderItem should carry the mesh asset path");
+            passed &= Expect(desc.materialAssetPath == "Assets/Materials/Default.vematerial",
+                             "RTRenderItem should carry the material asset path");
+            passed &= Expect(desc.boundsCenter == ve::Vector3(1.0f, 2.0f, 3.0f),
+                             "RTRenderItem should carry bounds center");
+        }
+
+        passed &= Expect(root->RemoveComponent<ve::MeshRenderComponent>(),
+                         "GameObject should remove MeshRenderComponent");
+        passed &= ExpectOk(renderSystem.Flush(), "RenderSystem should flush RTScene remove commands");
+        passed &= Expect(rtScene->GetRenderItemCount() == 0, "RTScene should remove the RTRenderItem");
+
+        sceneSystem.Shutdown();
+        renderSystem.Shutdown();
+        inputSystem.Shutdown();
+        timeSystem.Shutdown();
+
+        return passed;
+    }
 } // namespace
 
 int main()
 {
-    if (TestFrameRendererBuildsAndExecutesPass())
+    if (TestFrameRendererBuildsAndExecutesPass() && TestSceneMaintainsRTSceneThroughRenderCommands())
     {
         std::cout << "VEngineRenderTests passed" << '\n';
         return 0;

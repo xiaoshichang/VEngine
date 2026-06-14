@@ -17,18 +17,40 @@ namespace ve
     class LightComponent final : public Component
     {
     public:
+        LightComponent(Scene& scene, GameObject& owner) noexcept;
+
         [[nodiscard]] LightType GetLightType() const noexcept;
         void SetLightType(LightType type) noexcept;
 
         [[nodiscard]] const Vector3& GetColor() const noexcept;
         void SetColor(const Vector3& color) noexcept;
 
+        [[nodiscard]] const Vector3& GetDirection() const noexcept;
+        void SetDirection(const Vector3& direction) noexcept;
+
         [[nodiscard]] Float32 GetIntensity() const noexcept;
         void SetIntensity(Float32 intensity) noexcept;
+
+        [[nodiscard]] Float32 GetRange() const noexcept;
+        void SetRange(Float32 range) noexcept;
+
+        [[nodiscard]] Float32 GetInnerConeAngleRadians() const noexcept;
+        void SetInnerConeAngleRadians(Float32 innerConeAngleRadians) noexcept;
+
+        [[nodiscard]] Float32 GetOuterConeAngleRadians() const noexcept;
+        void SetOuterConeAngleRadians(Float32 outerConeAngleRadians) noexcept;
+
+        [[nodiscard]] bool CastShadows() const noexcept;
+        void SetCastShadows(bool castShadows) noexcept;
 
     private:
         LightType type_ = LightType::Directional;
         Vector3 color_ = Vector3::One();
+        Vector3 direction_ = Vector3::UnitZ();
         Float32 intensity_ = 1.0f;
+        Float32 range_ = 0.0f;
+        Float32 innerConeAngleRadians_ = 0.0f;
+        Float32 outerConeAngleRadians_ = 0.0f;
+        bool castShadows_ = false;
     };
 } // namespace ve

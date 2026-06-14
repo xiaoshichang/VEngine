@@ -18,6 +18,8 @@
 
 namespace ve
 {
+    class Scene;
+
     /// Node in a Scene-owned hierarchy.
     ///
     /// GameObject owns a fixed first-stage component set.
@@ -25,8 +27,8 @@ namespace ve
     class GameObject final : public NonMovable
     {
     public:
-        GameObject();
-        explicit GameObject(std::string name);
+        explicit GameObject(Scene& scene);
+        GameObject(Scene& scene, std::string name);
         ~GameObject();
 
         [[nodiscard]] const std::string& GetName() const noexcept;
@@ -60,10 +62,14 @@ namespace ve
 
             try
             {
-                std::unique_ptr<TComponent> component = std::make_unique<TComponent>(std::forward<TArgs>(args)...);
+                std::unique_ptr<TComponent> component =
+                    std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
                 TComponent* componentPointer = component.get();
-                componentPointer->SetOwner(this);
                 *componentSlot = std::move(component);
+                if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+                {
+                    componentPointer->RegisterRTState();
+                }
                 return Result<TComponent*>::Success(componentPointer);
             }
             catch (const std::bad_alloc&)
@@ -120,7 +126,7 @@ namespace ve
                 return false;
             }
 
-            (*componentSlot)->SetOwner(nullptr);
+            (*componentSlot)->ClearOwner();
             componentSlot->reset();
             return true;
         }
@@ -128,6 +134,9 @@ namespace ve
         void Update(Float32 deltaSeconds);
 
     private:
+        friend class Scene;
+        friend class TransformComponent;
+
         template<typename TComponent>
         static constexpr bool IsSupportedComponentTypeV =
                 std::is_same_v<TComponent, TransformComponent> ||
@@ -188,6 +197,7 @@ namespace ve
         void InitializeRequiredComponents();
 
         std::string name_;
+        Scene* scene_ = nullptr;
         std::unique_ptr<TransformComponent> transformCmpt_;
         std::unique_ptr<MeshRenderComponent> meshRenderCmpt_;
         std::unique_ptr<CameraComponent> cameraCmpt_;

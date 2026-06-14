@@ -6,6 +6,7 @@
 namespace ve
 {
     class GameObject;
+    class Scene;
 
     /// Base type for data and behavior attached to a GameObject.
     ///
@@ -14,13 +15,12 @@ namespace ve
     class Component : public NonCopyable
     {
     public:
-        Component() = default;
         virtual ~Component() = default;
 
-        /// Returns the GameObject that owns this component, or nullptr before attachment.
+        /// Returns the GameObject that owns this component, or nullptr during teardown after removal.
         [[nodiscard]] GameObject* GetOwner() noexcept;
 
-        /// Returns the GameObject that owns this component, or nullptr before attachment.
+        /// Returns the GameObject that owns this component, or nullptr during teardown after removal.
         [[nodiscard]] const GameObject* GetOwner() const noexcept;
 
         /// Returns true when this component participates in Scene update.
@@ -35,9 +35,16 @@ namespace ve
     private:
         friend class GameObject;
 
-        void SetOwner(GameObject* owner) noexcept;
+        void ClearOwner() noexcept;
+
+    protected:
+        Component(Scene& scene, GameObject& owner) noexcept;
+
+        [[nodiscard]] Scene* GetScene() noexcept;
+        [[nodiscard]] const Scene* GetScene() const noexcept;
 
         GameObject* owner_ = nullptr;
+        Scene* scene_ = nullptr;
         bool enabled_ = true;
     };
 } // namespace ve

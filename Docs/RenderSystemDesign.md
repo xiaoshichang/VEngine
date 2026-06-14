@@ -372,6 +372,32 @@ registries, upload scheduling, frame begin/end commands, viewport registration, 
 Those features should build on the explicit lifecycle APIs above instead of bypassing them with ad hoc public render
 commands.
 
+Scene/render synchronization should use RT objects instead of a full-scene `BuildRenderSnapshot()` pass. First-stage
+ownership is:
+
+```text
+Scene
+  -> shared_ptr<RTScene>
+
+MeshRenderComponent
+  -> shared_ptr<RTRenderItem>
+      -> shared_ptr<RHIResource> mesh/material resources
+```
+
+Scene-thread objects must not mutate RT objects directly once a `RenderSystem` is attached. They enqueue render commands
+to add, remove, and update objects inside `RTScene`, but `Scene` does not bind directly to `RenderSystem`. The command
+route is:
+
+```text
+Scene
+  -> SceneSystem
+      -> RenderSystem
+```
+
+`SceneSystem` owns the scene-side service boundary and exposes the narrow render-command enqueue path used by `Scene`.
+The first implementation requires this binding to exist; there is no inline or unbound fallback for RTScene updates.
+Future renderer, viewport, and render-texture entry points should consume `RTScene` when deciding what scene to render.
+
 ## 12. Testing Plan
 
 Required tests:

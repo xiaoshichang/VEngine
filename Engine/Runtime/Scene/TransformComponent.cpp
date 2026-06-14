@@ -9,6 +9,11 @@
 
 namespace ve
 {
+    TransformComponent::TransformComponent(Scene& scene, GameObject& owner) noexcept
+        : Component(scene, owner)
+    {
+    }
+
     TransformComponent::~TransformComponent()
     {
         ClearChildren();
@@ -22,6 +27,7 @@ namespace ve
     void TransformComponent::SetLocalPosition(const Vector3& position) noexcept
     {
         localPosition_ = position;
+        MarkHierarchyDirty();
     }
 
     const Quaternion& TransformComponent::GetLocalRotation() const noexcept
@@ -32,6 +38,7 @@ namespace ve
     void TransformComponent::SetLocalRotation(const Quaternion& rotation) noexcept
     {
         localRotation_ = rotation.Normalized();
+        MarkHierarchyDirty();
     }
 
     const Vector3& TransformComponent::GetLocalScale() const noexcept
@@ -42,11 +49,25 @@ namespace ve
     void TransformComponent::SetLocalScale(const Vector3& scale) noexcept
     {
         localScale_ = scale;
+        MarkHierarchyDirty();
     }
 
     Matrix44 TransformComponent::GetLocalMatrix() const noexcept
     {
-        return Matrix44::Translation(localPosition_) * localRotation_.ToMatrix44() * Matrix44::Scale(localScale_);
+        UpdateWorldCache();
+        return localMatrixCache_;
+    }
+
+    Matrix44 TransformComponent::GetWorldMatrix() const noexcept
+    {
+        UpdateWorldCache();
+        return worldMatrixCache_;
+    }
+
+    UInt64 TransformComponent::GetHierarchyRevision() const noexcept
+    {
+        UpdateWorldCache();
+        return worldRevision_;
     }
 
     TransformComponent* TransformComponent::GetParent() noexcept
@@ -110,7 +131,7 @@ namespace ve
     {
         try
         {
-            std::unique_ptr<GameObject> child = std::make_unique<GameObject>(std::move(name));
+            std::unique_ptr<GameObject> child = std::make_unique<GameObject>(*GetScene(), std::move(name));
             GameObject* childPointer = child.get();
 
             TransformComponent* childTransform = childPointer->GetComponent<TransformComponent>();
@@ -170,5 +191,28 @@ namespace ve
     void TransformComponent::SetParent(TransformComponent* parent) noexcept
     {
         parent_ = parent;
+        MarkHierarchyDirty();
+    }
+
+    void TransformComponent::MarkHierarchyDirty() noexcept
+    {
+        transformDirty_ = true;
+        ++hierarchyRevision_;
+        worldRevision_ = 0;
+    }
+
+    void TransformComponent::UpdateWorldCache() const noexcept
+    {
+        const UInt64 parentHierarchyRevision = parent_ != nullptr ? parent_->GetHierarchyRevision() : 0;
+        if (!transformDirty_ && cachedParentHierarchyRevision_ == parentHierarchyRevision)
+        {
+            return;
+        }
+
+        localMatrixCache_ = Matrix44::Translation(localPosition_) * localRotation_.ToMatrix44() * Matrix44::Scale(localScale_);
+        worldMatrixCache_ = parent_ != nullptr ? parent_->GetWorldMatrix() * localMatrixCache_ : localMatrixCache_;
+        cachedParentHierarchyRevision_ = parentHierarchyRevision;
+        worldRevision_ = (parentHierarchyRevision * 1315423911ULL) ^ hierarchyRevision_;
+        transformDirty_ = false;
     }
 } // namespace ve

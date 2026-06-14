@@ -2,13 +2,15 @@
 
 namespace ve
 {
-    GameObject::GameObject()
+    GameObject::GameObject(Scene& scene)
+        : scene_(&scene)
     {
         InitializeRequiredComponents();
     }
 
-    GameObject::GameObject(std::string name)
+    GameObject::GameObject(Scene& scene, std::string name)
         : name_(std::move(name))
+        , scene_(&scene)
     {
         InitializeRequiredComponents();
     }
@@ -17,22 +19,22 @@ namespace ve
     {
         if (lightCmpt_ != nullptr)
         {
-            lightCmpt_->SetOwner(nullptr);
+            lightCmpt_->ClearOwner();
         }
 
         if (cameraCmpt_ != nullptr)
         {
-            cameraCmpt_->SetOwner(nullptr);
+            cameraCmpt_->ClearOwner();
         }
 
         if (meshRenderCmpt_ != nullptr)
         {
-            meshRenderCmpt_->SetOwner(nullptr);
+            meshRenderCmpt_->ClearOwner();
         }
 
         if (transformCmpt_ != nullptr)
         {
-            transformCmpt_->SetOwner(nullptr);
+            transformCmpt_->ClearOwner();
         }
     }
 
@@ -161,7 +163,6 @@ namespace ve
 
     void GameObject::InitializeRequiredComponents()
     {
-        transformCmpt_ = std::make_unique<TransformComponent>();
-        transformCmpt_->SetOwner(this);
+        transformCmpt_ = std::make_unique<TransformComponent>(*scene_, *this);
     }
 } // namespace ve
