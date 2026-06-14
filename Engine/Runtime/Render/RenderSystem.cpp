@@ -85,48 +85,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
         std::unique_ptr<rhi::RhiShaderModule> triangleFragmentShader;
         std::unique_ptr<rhi::RhiPipelineState> trianglePipelineState;
         std::unique_ptr<rhi::RhiCommandList> frameCommandList;
-        FrameRenderer frameRenderer;
     };
 
     namespace
     {
-        class TriangleRenderPass final : public RenderPass
-        {
-        public:
-            TriangleRenderPass(rhi::RhiBuffer& vertexBuffer, rhi::RhiPipelineState& pipelineState)
-                : vertexBuffer_(&vertexBuffer)
-                , pipelineState_(&pipelineState)
-            {
-            }
-
-            [[nodiscard]] const char* GetName() const noexcept override
-            {
-                return "TriangleForwardPass";
-            }
-
-            void Setup(RenderPassBuilder& builder) override
-            {
-                builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear,
-                                                    rhi::RhiStoreAction::Store,
-                                                    rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
-            }
-
-            void Execute(RenderPassContext& context) override
-            {
-                VE_ASSERT(vertexBuffer_ != nullptr);
-                VE_ASSERT(pipelineState_ != nullptr);
-
-                rhi::RhiCommandList& commandList = context.GetCommandList();
-                commandList.SetPipeline(*pipelineState_);
-                commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(TriangleVertex), 0);
-                commandList.Draw(3, 0);
-            }
-
-        private:
-            rhi::RhiBuffer* vertexBuffer_ = nullptr;
-            rhi::RhiPipelineState* pipelineState_ = nullptr;
-        };
-
         [[nodiscard]] const char* ToString(RenderBackend backend) noexcept
         {
             switch (backend)
@@ -204,9 +166,45 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return nullptr;
         }
 
+        class TriangleRenderPass final : public RenderPass
+        {
+        public:
+            explicit TriangleRenderPass(RenderSystemImpl& impl)
+                : impl_(&impl)
+            {
+            }
+
+            [[nodiscard]] const char* GetName() const noexcept override
+            {
+                return "TriangleForwardPass";
+            }
+
+            void Setup(RenderPassBuilder& builder) override
+            {
+                builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear,
+                                                    rhi::RhiStoreAction::Store,
+                                                    rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+            }
+
+            void Execute(RenderPassContext& context) override
+            {
+                VE_ASSERT_RENDER_THREAD();
+                VE_ASSERT(impl_ != nullptr);
+                VE_ASSERT(impl_->triangleVertexBuffer != nullptr);
+                VE_ASSERT(impl_->trianglePipelineState != nullptr);
+
+                rhi::RhiCommandList& commandList = context.GetCommandList();
+                commandList.SetPipeline(*impl_->trianglePipelineState);
+                commandList.SetVertexBuffer(0, *impl_->triangleVertexBuffer, sizeof(TriangleVertex), 0);
+                commandList.Draw(3, 0);
+            }
+
+        private:
+            RenderSystemImpl* impl_ = nullptr;
+        };
+
         void DestroyTriangleResources(RenderSystemImpl& impl)
         {
-            impl.frameRenderer.ClearPasses();
             impl.frameCommandList.reset();
             impl.trianglePipelineState.reset();
             impl.triangleFragmentShader.reset();
@@ -288,41 +286,30 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 return ErrorCode::PlatformError;
             }
 
-            impl.frameRenderer.ClearPasses();
-            impl.frameRenderer.AddPass(
-                std::make_unique<TriangleRenderPass>(*impl.triangleVertexBuffer, *impl.trianglePipelineState));
-
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode BeginMainSwapchainFrame(RenderSystemImpl& impl)
+        [[nodiscard]] ErrorCode RenderMainSwapchainFrame(RenderSystemImpl& impl, FrameRenderer& renderer)
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
             VE_ASSERT(impl.mainSwapchain != nullptr);
             VE_ASSERT(impl.frameCommandList != nullptr);
 
-            return impl.frameRenderer.BeginFrame(*impl.frameCommandList, *impl.mainSwapchain);
-        }
+            ErrorCode beginResult = renderer.BeginFrame(*impl.frameCommandList, *impl.mainSwapchain);
+            if (beginResult != ErrorCode::None)
+            {
+                return beginResult;
+            }
 
-        [[nodiscard]] ErrorCode DrawTriangleFrame(RenderSystemImpl& impl)
-        {
-            VE_ASSERT_RENDER_THREAD();
-            VE_ASSERT(impl.triangleVertexBuffer != nullptr);
-            VE_ASSERT(impl.trianglePipelineState != nullptr);
-            VE_ASSERT(impl.frameCommandList != nullptr);
+            ErrorCode executeResult = renderer.ExecutePassesInOrder();
+            if (executeResult != ErrorCode::None)
+            {
+                renderer.EndFrame();
+                return executeResult;
+            }
 
-            return impl.frameRenderer.ExecutePassesInOrder();
-        }
-
-        [[nodiscard]] ErrorCode EndMainSwapchainFrame(RenderSystemImpl& impl)
-        {
-            VE_ASSERT_RENDER_THREAD();
-            VE_ASSERT(impl.device != nullptr);
-            VE_ASSERT(impl.mainSwapchain != nullptr);
-            VE_ASSERT(impl.frameCommandList != nullptr);
-
-            impl.frameRenderer.EndFrame();
+            renderer.EndFrame();
 
             auto ok = impl.device->Submit(*impl.frameCommandList);
             VE_ASSERT(ok);
@@ -651,43 +638,26 @@ float4 PSMain(VSOutput input) : SV_TARGET
         VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to destroy its main swapchain.");
     }
 
-    ErrorCode RenderSystem::BeginRenderFrame()
+    std::unique_ptr<RenderPass> RenderSystem::CreateTriangleForwardPass()
     {
         VE_ASSERT_SCENE_THREAD();
-
-        ErrorCode submitResult = EnqueueCommand("RenderSystemBeginRenderFrame",
-                                                [this]()
-                                                {
-                                                    const ErrorCode result = BeginMainSwapchainFrame(*impl_);
-                                                    VE_ASSERT_MESSAGE(result == ErrorCode::None,
-                                                                      "RenderSystem::BeginRenderFrame failed.");
-                                                });
-        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "RenderSystem::BeginRenderFrame enqueue failed.");
-        return submitResult;
+        return std::make_unique<TriangleRenderPass>(*impl_);
     }
 
-    ErrorCode RenderSystem::EndRenderFrame()
+    ErrorCode RenderSystem::RenderFrame(std::shared_ptr<FrameRenderer> renderer)
     {
         VE_ASSERT_SCENE_THREAD();
 
-        ErrorCode submitResult = EnqueueCommand("RenderSystemEndRenderFrame",
-                                                [this]()
-                                                {
-                                                    const ErrorCode result = EndMainSwapchainFrame(*impl_);
-                                                    VE_ASSERT_MESSAGE(result == ErrorCode::None,
-                                                                      "RenderSystem::EndRenderFrame failed.");
-                                                });
-        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "RenderSystem::EndRenderFrame enqueue failed.");
-        return submitResult;
-    }
+        if (renderer == nullptr)
+        {
+            return ErrorCode::InvalidArgument;
+        }
 
-    ErrorCode RenderSystem::RenderFrame()
-    {
-        VE_ASSERT_SCENE_THREAD();
-        ErrorCode submitResult = EnqueueCommand("RenderSystemRenderTriangleFrame",
-                                                [this]()
+        ErrorCode submitResult = EnqueueCommand("RenderSystemRenderFrame",
+                                                [this, renderer = std::move(renderer)]()
                                                 {
-                                                    const ErrorCode result = DrawTriangleFrame(*impl_);
+                                                    const ErrorCode result =
+                                                        RenderMainSwapchainFrame(*impl_, *renderer);
                                                     VE_ASSERT_MESSAGE(result == ErrorCode::None,
                                                                       "RenderSystem::RenderFrame failed.");
                                                 });

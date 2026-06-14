@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Render/RenderSystem.h"
 
 #include <atomic>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -28,7 +29,7 @@ namespace ve::editor
                                      ApplicationCommandQueue& mainThreadCommandQueue,
                                      void* nativeWindowHandle);
         void StartFrame();
-        void Render();
+        [[nodiscard]] std::unique_ptr<RenderPass> Render();
         void UnInit() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
 

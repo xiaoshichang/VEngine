@@ -4,6 +4,8 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Render/FrameRenderer.h"
+#include "Engine/Runtime/Render/RenderPass.h"
 #include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/Thread.h"
 
@@ -79,7 +81,6 @@ namespace ve
 
     /// Callable payload executed on the Render Thread.
     using RenderCommandFunction = std::function<void()>;
-    using RenderFrameOverlayFunction = std::function<void()>;
 
     /// Callable payload used by RenderSystem for synchronous lifecycle operations on the Render Thread.
     using RenderSynchronousFunction = std::function<ErrorCode()>;
@@ -159,22 +160,19 @@ namespace ve
         /// Destroys the main swapchain on the Render Thread if one exists.
         void DestroyMainSwapchain() noexcept;
 
-        /// Begins one main-swapchain render frame on the Render Thread.
+        /// Creates the first-stage triangle pass object for a Scene Thread-owned renderer.
         ///
-        /// This clears the current back buffer, begins the render pass, and sets the default viewport and scissor for
-        /// subsequent frame draw commands.
-        [[nodiscard]] ErrorCode BeginRenderFrame();
+        /// The returned pass references RenderSystem-owned RHI resources, but pass ownership belongs to the caller's
+        /// FrameRenderer. This keeps frame orchestration on the Scene Thread while RenderSystem keeps low-level RHI
+        /// resource ownership on the Render Thread.
+        [[nodiscard]] std::unique_ptr<RenderPass> CreateTriangleForwardPass();
 
-        /// Ends the current main-swapchain render frame on the Render Thread.
+        /// Enqueues one complete main-swapchain frame on the Render Thread.
         ///
-        /// This ends the active render pass, submits the frame command list, and presents the main swapchain.
-        [[nodiscard]] ErrorCode EndRenderFrame();
-
-        /// Enqueues the first-stage triangle draw into the active render frame.
-        ///
-        /// SceneSystem wraps this with BeginRenderFrame() and EndRenderFrame() for Player. Editor uses the same frame
-        /// lifecycle and submits its UI draw commands instead.
-        [[nodiscard]] ErrorCode RenderFrame();
+        /// The renderer is prepared and owned by Scene Thread code, then captured by shared_ptr so already queued frame
+        /// work remains valid even if Scene Thread replaces its current renderer before the Render Thread consumes the
+        /// command.
+        [[nodiscard]] ErrorCode RenderFrame(std::shared_ptr<FrameRenderer> renderer);
 
         /// Submits a command to execute on the Render Thread.
         ///

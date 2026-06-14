@@ -90,23 +90,53 @@ namespace ve
             ProcessOSEvents(impl);
         }
 
+
+        [[nodiscard]] std::shared_ptr<FrameRenderer> CreatePlayerRenderer(SceneSystemImpl& impl)
+        {
+            VE_ASSERT_SCENE_THREAD();
+            VE_ASSERT(impl.renderSystem != nullptr);
+
+            auto renderer = std::make_shared<FrameRenderer>();
+            renderer->AddPass(impl.renderSystem->CreateTriangleForwardPass());
+            return renderer;
+        }
+
+        void SceneThreadLoop_Render_Editor(SceneSystemImpl& impl)
+        {
+            VE_ASSERT_SCENE_THREAD();
+            VE_ASSERT(impl.renderSystem != nullptr);
+            VE_ASSERT(impl.editorCallback.onRender != nullptr);
+
+            auto renderer = std::make_shared<FrameRenderer>();
+            std::unique_ptr<RenderPass> editorPass = impl.editorCallback.onRender();
+            if (editorPass != nullptr)
+            {
+                renderer->AddPass(std::move(editorPass));
+            }
+
+            const ErrorCode renderResult = impl.renderSystem->RenderFrame(std::move(renderer));
+            VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "SceneThreadLoop_Render_Editor failed.");
+        }
+
+        void SceneThreadLoop_Render_Player(SceneSystemImpl& impl)
+        {
+            VE_ASSERT_SCENE_THREAD();
+            VE_ASSERT(impl.renderSystem != nullptr);
+
+            const ErrorCode renderResult = impl.renderSystem->RenderFrame(CreatePlayerRenderer(impl));
+            VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "SceneThreadLoop_Render_Player failed.");
+        }
+
         void SceneThreadLoop_Render(SceneSystemImpl& impl)
         {
-            ErrorCode beginRenderFrameResult = impl.renderSystem->BeginRenderFrame();
-            VE_ASSERT_MESSAGE(beginRenderFrameResult == ErrorCode::None, "BeginRenderFrame with error.");
-
             if (impl.editorCallback.onRender != nullptr)
             {
-                impl.editorCallback.onRender();
+                SceneThreadLoop_Render_Editor(impl);
             }
             else
             {
-                ErrorCode renderResult = impl.renderSystem->RenderFrame();
-                VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "RenderFrame with error.");
+                SceneThreadLoop_Render_Player(impl);
             }
-
-            ErrorCode endRenderFrameResult = impl.renderSystem->EndRenderFrame();
-            VE_ASSERT_MESSAGE(endRenderFrameResult == ErrorCode::None, "EndRenderFrame with error.");
         }
 
         void SceneThreadLoop_EndFrame(SceneSystemImpl& impl)

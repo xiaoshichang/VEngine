@@ -529,7 +529,38 @@ Viewport clients model one active binding at a time:
 The viewport client keeps these modes mutually exclusive so camera data can stay separate and be merged later when scene
 render work is assembled for the Render Thread.
 
-The render layer should avoid directly depending on GameObject instances on the Render Thread. It should consume render proxies, snapshots, or render commands produced by the Game Thread.
+Render-facing resource ownership follows an Unreal-style split between the Scene Thread and Render Thread:
+
+- Scene Thread owns CPU-side render objects such as `RenderTarget`, future mesh render data, material state, texture
+  resources, and viewport state.
+- Render Thread owns matching render proxies whose type names use an `RT` prefix, such as `RTRenderTarget`.
+- CPU-side render objects may keep a `std::shared_ptr` to their RT proxy so the Render Thread can finish already
+  queued work after the Scene Thread object is destroyed.
+- Objects with RT proxies must not call RHI directly from the Scene Thread. They initialize or update render-side state
+  through an `InitRenderResource`-style API that submits work through the `RenderSystem` render command queue.
+- RT proxy objects are the only side that creates, mutates, or destroys live RHI resources.
+
+Example:
+
+```text
+Scene Thread:
+  RenderTarget
+    Describes kind, extent, format, and logical ownership.
+    Holds shared_ptr<RTRenderTarget>.
+    Calls InitRenderResource(RenderSystem&) when RHI-backed state is needed.
+
+Render Thread:
+  RTRenderTarget
+    Owns RHI texture / view / swapchain attachment references.
+    Receives initialization, resize, and release commands.
+```
+
+This model lets Scene Thread code keep ordinary CPU descriptions while Render Thread code owns the backend-specific
+objects and timing-sensitive destruction. `RenderTarget` can be destroyed on the Scene Thread while `RTRenderTarget`
+survives until the last render command that captured it has completed.
+
+The render layer should avoid directly depending on live `GameObject` instances on the Render Thread. It should consume
+render proxies, snapshots, or render commands produced by the Scene Thread.
 
 `RenderSystem` owns Render Thread lifecycle and the render command queue. Detailed first-stage service, thread, and
 command queue rules are defined in `Docs/RenderSystemDesign.md`. RHI documents remain focused on backend graphics
@@ -654,13 +685,15 @@ The design should follow Unreal-style separation between Main Thread and Game Th
 Important rules:
 
 - Platform lifecycle events are owned by Main Thread.
-- Scene mutation is owned by Game Thread.
+- Scene mutation and CPU-side render resource mutation are owned by Game Thread / Scene Thread.
 - RHI command submission is owned by Render Thread.
 - File reads are routed through FileSystem and IO Thread.
 - Parallel jobs do not directly mutate GameObject hierarchy unless explicitly synchronized.
 - Render Thread does not directly access live GameObject data.
+- Render Thread does not directly access Scene Thread render objects except through captured RT proxies, render
+  snapshots, or render commands.
 
-Game Thread and Render Thread communicate through the `RenderSystem` render command queue. Later render snapshots or
+Scene Thread and Render Thread communicate through the `RenderSystem` render command queue. Later render snapshots or
 render world state may use double or triple buffering when scene-to-render synchronization needs a stable frame boundary.
 
 Recommended frame flow:
@@ -668,20 +701,20 @@ Recommended frame flow:
 ```text
 Main Thread
   Pump platform messages
-  Handle main-thread-only OS events
-  Push remaining OS events to Scene Thread through OSEventQueue
+  Push OS events and window state deltas to Scene Thread through OSEventQueue
   Tick application shell
 
-Game Thread
-  Consume input snapshot
+Scene Thread
+  Consume OS events and update input snapshot
+  Update CPU-side render resources such as viewport and render target descriptions
   Update scripts
   Update components
   Update scene
-  Build render commands / render snapshot
+  Build render commands / render snapshot, capturing RT proxies where needed
 
 Render Thread
   Consume render commands
-  Update render resources
+  Initialize/update RT proxies and RHI resources
   Build RHI command lists
   Submit to GPU queue
 

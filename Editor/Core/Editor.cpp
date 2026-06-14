@@ -33,6 +33,60 @@ namespace ve::editor
         std::vector<std::unique_ptr<ImDrawList>> ownedCmdLists;
     };
 
+    class EditorImGuiRenderPass final : public RenderPass
+    {
+    public:
+        EditorImGuiRenderPass(RenderBackend backend,
+                              const std::atomic_bool& editorInitialized,
+                              std::shared_ptr<EditorFrameDrawData> frameDrawData)
+            : backend_(backend)
+            , editorInitialized_(&editorInitialized)
+            , frameDrawData_(std::move(frameDrawData))
+        {
+        }
+
+        [[nodiscard]] const char* GetName() const noexcept override
+        {
+            return "EditorImGuiPass";
+        }
+
+        void Setup(RenderPassBuilder& builder) override
+        {
+            builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear,
+                                                rhi::RhiStoreAction::Store,
+                                                rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+        }
+
+        void Execute(RenderPassContext& context) override
+        {
+            (void)context;
+            VE_ASSERT_RENDER_THREAD();
+
+            if (editorInitialized_ == nullptr || !editorInitialized_->load(std::memory_order_acquire) ||
+                frameDrawData_ == nullptr)
+            {
+                return;
+            }
+
+            switch (backend_)
+            {
+            case RenderBackend::D3D11:
+#if VE_PLATFORM_WINDOWS
+                ImGui_ImplDX11_RenderDrawData(&frameDrawData_->drawData);
+#endif
+                break;
+            case RenderBackend::D3D12:
+            case RenderBackend::Metal:
+                break;
+            }
+        }
+
+    private:
+        RenderBackend backend_ = RenderBackend::D3D12;
+        const std::atomic_bool* editorInitialized_ = nullptr;
+        std::shared_ptr<EditorFrameDrawData> frameDrawData_;
+    };
+
     namespace
     {
         [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CloneFrameDrawData(const ImDrawData* sourceDrawData)
@@ -120,7 +174,7 @@ namespace ve::editor
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
             .onStartFrame = [this]() { StartFrame(); },
             .onOSEvent = [this](const OSEvent& event) { return input_.OnOSEvent(event); },
-            .onRender = [this]() { Render(); },
+            .onRender = [this]() { return Render(); },
         });
 
         VE_LOG_INFO_CATEGORY("Editor", "Editor initialized.");
@@ -151,12 +205,12 @@ namespace ve::editor
         ImGui::NewFrame();
     }
 
-    void Editor::Render()
+    std::unique_ptr<RenderPass> Editor::Render()
     {
         VE_ASSERT_SCENE_THREAD();
         if (!initialized_.load(std::memory_order_acquire))
         {
-            return;
+            return nullptr;
         }
 
         switch (mainView_)
@@ -174,29 +228,7 @@ namespace ve::editor
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
         VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
 
-        auto lambda = [this, frameDrawData = std::move(frameDrawData)]()
-        {
-            VE_ASSERT_RENDER_THREAD();
-            if (!initialized_.load(std::memory_order_acquire))
-            {
-                return;
-            }
-
-            switch (renderBackend_)
-            {
-            case RenderBackend::D3D11:
-#if VE_PLATFORM_WINDOWS
-                ImGui_ImplDX11_RenderDrawData(&frameDrawData->drawData);
-#endif
-                break;
-            case RenderBackend::D3D12:
-            case RenderBackend::Metal:
-                break;
-            }
-        };
-
-        ErrorCode submitResult = renderSystem_->EnqueueCommand(RenderCommand{"RenderEditor", std::move(lambda)});
-        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "Editor::Render failed to submit render command.");
+        return std::make_unique<EditorImGuiRenderPass>(renderBackend_, initialized_, std::move(frameDrawData));
     }
 
     void Editor::UnInit() noexcept

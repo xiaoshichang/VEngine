@@ -28,7 +28,7 @@ namespace ve
         /// Return true when the event should continue to InputSystem. This lets Editor-owned views decide when
         /// keyboard and mouse input belongs to game runtime input instead of editor UI.
         std::function<bool(const OSEvent& event)> onOSEvent = nullptr;
-        std::function<void()> onRender = nullptr;
+        std::function<std::unique_ptr<RenderPass>()> onRender = nullptr;
     };
 
     /// Describes the Scene Thread created by SceneSystem::Initialize().

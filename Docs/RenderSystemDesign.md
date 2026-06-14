@@ -18,6 +18,53 @@ The first version intentionally keeps the renderer narrow while making the runti
 - Leave RenderWorld, render-resource registries, upload scheduling, full frame graph dependency analysis, and viewport
   registration for later renderer work.
 
+## 1.1 Render Resource Ownership Model
+
+VEngine should follow an Unreal-style split between Scene Thread ownership and Render Thread ownership for render
+resources.
+
+The Scene Thread owns CPU-side render descriptions and render-facing gameplay state. The Render Thread owns the
+matching backend proxy objects.
+
+Recommended naming:
+
+- Scene Thread CPU object: `RenderTarget`
+- Render Thread proxy object: `RTRenderTarget`
+- Any Render Thread proxy class should use an `RT` prefix to make the ownership boundary obvious in code review and
+  debugging.
+
+Ownership rules:
+
+- Scene Thread objects describe logical render state such as binding kind, extent, format, and editor-facing metadata.
+- RT proxy objects own live RHI resources and any render-thread-only handles.
+- Scene Thread objects may hold `std::shared_ptr` to their RT proxy so render commands already in flight can keep the RT
+  proxy alive after the CPU object is destroyed.
+- RT proxy destruction must be safe after the Scene Thread object has been released.
+- Scene Thread code must not call RHI directly when it needs to create or update a render resource.
+- Scene Thread code should instead use an `InitRenderResource`-style API that submits work through the
+  `RenderSystem` render command queue.
+
+Suggested lifecycle:
+
+```text
+Scene Thread
+  Construct RenderTarget
+  Initialize CPU-side fields
+  Call InitRenderResource(RenderSystem&)
+  Update logical state through scene events
+  Release RenderTarget when scene data no longer needs it
+
+Render Thread
+  Create RTRenderTarget
+  Build or refresh RHI resources
+  Consume render commands that captured shared_ptr<RTRenderTarget>
+  Release RHI resources when the last RT reference goes away
+```
+
+This model keeps render-side lifetime explicit while allowing the Scene Thread to own ordinary engine objects. It also
+fits the later viewport merge flow: camera data, viewport description, and RT proxy references can be combined when the
+render command is assembled, rather than binding camera objects directly to platform surfaces.
+
 ## 2. Relationship To RHI
 
 `RenderSystem` and RHI documents have different responsibilities.
@@ -202,6 +249,28 @@ using RenderCommandFunction = std::function<void()>;
 device access, frame state, upload helpers, and render-resource registries should be exposed through explicit
 RenderSystem or renderer-owned APIs rather than a generic command context.
 
+When a Scene Thread object needs to touch RHI-backed state, it should expose a dedicated initialization or update method
+that submits a render command and forwards the RT proxy:
+
+```cpp
+void RenderTarget::InitRenderResource(RenderSystem& renderSystem)
+{
+    std::shared_ptr<RTRenderTarget> rtRenderTarget = rtRenderTarget_;
+    renderSystem.EnqueueCommand(
+        "InitRenderTarget",
+        [rtRenderTarget = std::move(rtRenderTarget)]()
+        {
+            if (rtRenderTarget != nullptr)
+            {
+                rtRenderTarget->InitRenderResource();
+            }
+        });
+}
+```
+
+The exact public API can change, but the rule should stay stable: RHI-facing work travels through render commands, not
+through direct Scene Thread calls.
+
 ## 8. Flush And Shutdown Semantics
 
 `Flush()` waits until all commands submitted before the flush call have completed on the Render Thread.
@@ -371,6 +440,15 @@ After RHI device and main swapchain lifecycle are connected, later RenderSystem 
 registries, upload scheduling, frame begin/end commands, viewport registration, and RenderWorld/RenderScene ownership.
 Those features should build on the explicit lifecycle APIs above instead of bypassing them with ad hoc public render
 commands.
+
+The first resource registry should distinguish:
+
+- CPU-side resource records owned by Scene Thread or ResourceSystem.
+- RT proxy objects owned by Render Thread.
+- Shared ownership bridges used only to keep RT proxies alive long enough for queued render commands to complete.
+
+That separation is especially important for viewport and render-target objects, because a scene or editor tab may drop
+its CPU-side object while the Render Thread is still draining the previous frame.
 
 ## 12. Testing Plan
 
