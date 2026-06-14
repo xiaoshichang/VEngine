@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Math/Math.h"
+#include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -52,8 +53,8 @@ namespace
         ve::Result<ve::MeshRenderComponent*> meshResult = root->AddComponentWithoutRenderRegistration<ve::MeshRenderComponent>();
         passed &= Expect(meshResult.IsOk(), "MeshRenderComponent should be added");
         ve::MeshRenderComponent* mesh = meshResult.GetValue();
-        mesh->SetMeshAssetGuid("11111111-1111-1111-1111-111111111111");
-        mesh->SetMaterialAssetGuid("22222222-2222-2222-2222-222222222222");
+        mesh->SetMeshAssetGuid(ve::Guid::Parse("11111111-1111-1111-1111-111111111111").GetValue());
+        mesh->SetMaterialAssetGuid(ve::Guid::Parse("22222222-2222-2222-2222-222222222222").GetValue());
         mesh->SetBoundsCenter(ve::Vector3(0.0f, 0.5f, 0.0f));
         mesh->SetBoundsExtents(ve::Vector3(1.0f, 2.0f, 3.0f));
 
@@ -102,7 +103,7 @@ namespace
                          "Root position should round-trip");
         ve::MeshRenderComponent* loadedMesh = loadedRoot->GetComponent<ve::MeshRenderComponent>();
         passed &= Expect(loadedMesh != nullptr, "Mesh component should round-trip");
-        passed &= Expect(loadedMesh->GetMeshAssetGuid() == "11111111-1111-1111-1111-111111111111",
+        passed &= Expect(loadedMesh->GetMeshAssetGuid().ToString() == "11111111-1111-1111-1111-111111111111",
                          "Mesh GUID should round-trip");
 
         ve::GameObject* loadedCameraObject = loadedRootTransform->GetChildGameObject(0);

@@ -2,6 +2,7 @@
 
 #include "Editor/Core/Editor.h"
 #include "Editor/Core/EditorAssetDatabase.h"
+#include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -61,6 +62,41 @@ namespace ve::editor
             }
 
             return false;
+        }
+
+        [[nodiscard]] std::string ResolveAssetPathFromGuid(const EditorAssetDatabase& assetDatabase, const Guid& guid)
+        {
+            if (guid.IsEmpty())
+            {
+                return {};
+            }
+
+            const EditorAssetRecord* asset = assetDatabase.FindAssetByGuid(guid);
+            if (asset != nullptr)
+            {
+                return asset->path.GetString();
+            }
+
+            return "Missing asset: " + guid.ToString();
+        }
+
+        void RenderAssetReferenceField(const char* label,
+                                       const char* pathInputId,
+                                       const char* buttonId,
+                                       const std::string& assetPath)
+        {
+            std::array<char, TextBufferSize> pathBuffer = ToTextBuffer(assetPath);
+            const ImGuiStyle& style = ImGui::GetStyle();
+            const float buttonWidth = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.0f;
+
+            ImGui::TextUnformatted(label);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(-buttonWidth - style.ItemSpacing.x);
+            ImGui::InputText(pathInputId, pathBuffer.data(), pathBuffer.size(), ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::Button(buttonId))
+            {
+            }
         }
     } // namespace
 
@@ -182,17 +218,20 @@ namespace ve::editor
         {
             RenderEnabledCheckbox(mesh);
 
-            std::array<char, TextBufferSize> meshGuidBuffer = ToTextBuffer(mesh.GetMeshAssetGuid());
-            if (ImGui::InputText("Mesh GUID", meshGuidBuffer.data(), meshGuidBuffer.size()))
-            {
-                mesh.SetMeshAssetGuid(meshGuidBuffer.data());
-            }
+            const EditorAssetDatabase* assetDatabase = editor_ != nullptr ? &editor_->GetAssetDatabase() : nullptr;
+            const std::string meshAssetPath = assetDatabase != nullptr
+                                                  ? ResolveAssetPathFromGuid(*assetDatabase, mesh.GetMeshAssetGuid())
+                                                  : "";
+            RenderAssetReferenceField("Mesh", "##MeshReferencePath", "##MeshReference", meshAssetPath);
 
-            std::array<char, TextBufferSize> materialGuidBuffer = ToTextBuffer(mesh.GetMaterialAssetGuid());
-            if (ImGui::InputText("Material GUID", materialGuidBuffer.data(), materialGuidBuffer.size()))
-            {
-                mesh.SetMaterialAssetGuid(materialGuidBuffer.data());
-            }
+            const std::string materialAssetPath = assetDatabase != nullptr
+                                                      ? ResolveAssetPathFromGuid(*assetDatabase,
+                                                                                 mesh.GetMaterialAssetGuid())
+                                                      : "";
+            RenderAssetReferenceField("Material",
+                                      "##MaterialReferencePath",
+                                      "##MaterialReference",
+                                      materialAssetPath);
 
             std::array<float, 3> boundsCenter = ToFloat3(mesh.GetBoundsCenter());
             if (ImGui::InputFloat3("Bounds Center", boundsCenter.data(), "%.3f"))
@@ -324,7 +363,7 @@ namespace ve::editor
         if (ImGui::CollapsingHeader("Asset", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Text("Type: %s", EditorAssetDatabase::ToString(asset.type));
-            ImGui::TextWrapped("GUID: %s", asset.guid.c_str());
+            ImGui::TextWrapped("GUID: %s", asset.guid.ToString().c_str());
             ImGui::TextWrapped("Path: %s", asset.path.GetString().c_str());
             ImGui::TextWrapped("Meta: %s", asset.metaPath.GetString().c_str());
             ImGui::TextWrapped("Physical Path: %s",

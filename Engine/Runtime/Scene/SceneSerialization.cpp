@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -117,6 +118,23 @@ namespace ve
             return fallback;
         }
 
+        [[nodiscard]] Guid ReadGuid(const boost::json::object& object, boost::json::string_view key, const Guid& fallback)
+        {
+            const std::string text = ReadString(object, key);
+            if (text.empty())
+            {
+                return fallback;
+            }
+
+            Result<Guid> guid = Guid::Parse(text);
+            if (!guid)
+            {
+                return fallback;
+            }
+
+            return guid.GetValue();
+        }
+
         [[nodiscard]] bool ReadBool(const boost::json::object& object, boost::json::string_view key, bool fallback)
         {
             if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_bool())
@@ -220,8 +238,8 @@ namespace ve
             boost::json::object object;
             object["type"] = "MeshRenderComponent";
             object["enabled"] = mesh.IsEnabled();
-            object["meshAssetGuid"] = mesh.GetMeshAssetGuid();
-            object["materialAssetGuid"] = mesh.GetMaterialAssetGuid();
+            object["meshAssetGuid"] = mesh.GetMeshAssetGuid().ToString();
+            object["materialAssetGuid"] = mesh.GetMaterialAssetGuid().ToString();
             object["boundsCenter"] = WriteVector3(mesh.GetBoundsCenter());
             object["boundsExtents"] = WriteVector3(mesh.GetBoundsExtents());
             return object;
@@ -374,8 +392,8 @@ namespace ve
                 mesh = result.GetValue();
             }
 
-            mesh->SetMeshAssetGuid(ReadString(object, "meshAssetGuid", mesh->GetMeshAssetGuid()));
-            mesh->SetMaterialAssetGuid(ReadString(object, "materialAssetGuid", mesh->GetMaterialAssetGuid()));
+            mesh->SetMeshAssetGuid(ReadGuid(object, "meshAssetGuid", mesh->GetMeshAssetGuid()));
+            mesh->SetMaterialAssetGuid(ReadGuid(object, "materialAssetGuid", mesh->GetMaterialAssetGuid()));
 
             if (const boost::json::value* value = object.if_contains("boundsCenter"); value != nullptr)
             {

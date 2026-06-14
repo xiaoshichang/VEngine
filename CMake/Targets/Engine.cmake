@@ -14,6 +14,7 @@ function(ve_add_engine)
             Engine/Runtime/Application/EngineRuntime.cpp
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
+            Engine/Runtime/Core/Guid.cpp
             Engine/Runtime/Core/JsonUtils.cpp
             Engine/Runtime/Core/Version.cpp
             Engine/Runtime/FileSystem/FileSystem.cpp
@@ -55,6 +56,7 @@ function(ve_add_engine)
             Engine/Runtime/Core/Compiler.h
             Engine/Runtime/Core/EnumFlags.h
             Engine/Runtime/Core/Error.h
+            Engine/Runtime/Core/Guid.h
             Engine/Runtime/Core/JsonUtils.h
             Engine/Runtime/Core/NonCopyable.h
             Engine/Runtime/Core/Platform.h

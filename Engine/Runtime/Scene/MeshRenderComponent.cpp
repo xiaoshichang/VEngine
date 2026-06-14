@@ -27,23 +27,23 @@ namespace ve
         UnregisterRenderItemFromRenderThread();
     }
 
-    const std::string& MeshRenderComponent::GetMeshAssetGuid() const noexcept
+    const Guid& MeshRenderComponent::GetMeshAssetGuid() const noexcept
     {
         return meshAssetGuid_;
     }
 
-    void MeshRenderComponent::SetMeshAssetGuid(std::string meshAssetGuid)
+    void MeshRenderComponent::SetMeshAssetGuid(Guid meshAssetGuid)
     {
         meshAssetGuid_ = std::move(meshAssetGuid);
         SubmitRenderItemUpdateToRenderThread();
     }
 
-    const std::string& MeshRenderComponent::GetMaterialAssetGuid() const noexcept
+    const Guid& MeshRenderComponent::GetMaterialAssetGuid() const noexcept
     {
         return materialAssetGuid_;
     }
 
-    void MeshRenderComponent::SetMaterialAssetGuid(std::string materialAssetGuid)
+    void MeshRenderComponent::SetMaterialAssetGuid(Guid materialAssetGuid)
     {
         materialAssetGuid_ = std::move(materialAssetGuid);
         SubmitRenderItemUpdateToRenderThread();

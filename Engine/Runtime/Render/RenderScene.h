@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Vector3.h"
@@ -25,8 +26,8 @@ namespace ve
 
     struct RTRenderItemDesc
     {
-        std::string meshAssetGuid;
-        std::string materialAssetGuid;
+        Guid meshAssetGuid;
+        Guid materialAssetGuid;
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
         Matrix44 localToWorld = Matrix44::Identity();

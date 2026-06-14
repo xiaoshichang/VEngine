@@ -52,10 +52,9 @@ namespace ve::editor
 
         [[nodiscard]] bool DirectoryContainsAsset(const EditorAssetDatabase& assetDatabase, const Path& directory)
         {
-            return std::any_of(assetDatabase.GetAssets().begin(),
-                               assetDatabase.GetAssets().end(),
-                               [&directory](const EditorAssetRecord& asset)
-                               { return IsDirectChildAsset(asset, directory); });
+            const auto& assets = assetDatabase.GetAssets();
+            return std::any_of(assets.begin(), assets.end(), [&directory](const auto& pair)
+                               { return IsDirectChildAsset(pair.second, directory); });
         }
     } // namespace
 
@@ -193,41 +192,51 @@ namespace ve::editor
             ImGui::TableSetupColumn("Imported", ImGuiTableColumnFlags_WidthFixed, 76.0F);
             ImGui::TableHeadersRow();
 
-            for (const EditorAssetRecord& asset : assetDatabase.GetAssets())
+            std::vector<const EditorAssetRecord*> assetsInDirectory;
+            assetsInDirectory.reserve(assetDatabase.GetAssetCount());
+            for (const auto& pair : assetDatabase.GetAssets())
             {
-                if (!IsDirectChildAsset(asset, currentDirectory_))
+                if (IsDirectChildAsset(pair.second, currentDirectory_))
                 {
-                    continue;
+                    assetsInDirectory.push_back(&pair.second);
                 }
+            }
 
+            std::sort(assetsInDirectory.begin(),
+                      assetsInDirectory.end(),
+                      [](const EditorAssetRecord* left, const EditorAssetRecord* right)
+                      { return left->path.GetString() < right->path.GetString(); });
+
+            for (const EditorAssetRecord* asset : assetsInDirectory)
+            {
                 const bool selected = editor_->GetSelectionType() == EditorSelectionType::Asset &&
-                                      editor_->GetSelectedAssetPath() == asset.path;
+                                      editor_->GetSelectedAssetPath() == asset->path;
 
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
-                const std::string filename = asset.path.GetFilename();
+                const std::string filename = asset->path.GetFilename();
                 const ImGuiSelectableFlags selectableFlags =
                     ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 if (ImGui::Selectable(filename.c_str(), selected, selectableFlags))
                 {
-                    editor_->SetSelectedAsset(asset.path);
+                    editor_->SetSelectedAsset(asset->path);
                 }
 
                 if (ImGui::BeginPopupContextItem())
                 {
                     if (ImGui::MenuItem("Reimport"))
                     {
-                        editor_->SetSelectedAsset(asset.path);
-                        (void)assetDatabase.ReimportAsset(asset.path);
+                        editor_->SetSelectedAsset(asset->path);
+                        (void)assetDatabase.ReimportAsset(asset->path);
                     }
                     ImGui::EndPopup();
                 }
 
                 ImGui::TableSetColumnIndex(1);
-                ImGui::TextUnformatted(GetAssetTypeLabel(asset.type));
+                ImGui::TextUnformatted(GetAssetTypeLabel(asset->type));
 
                 ImGui::TableSetColumnIndex(2);
-                ImGui::TextUnformatted(asset.imported ? "Yes" : "No");
+                ImGui::TextUnformatted(asset->imported ? "Yes" : "No");
             }
 
             ImGui::EndTable();
