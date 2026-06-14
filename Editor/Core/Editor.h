@@ -29,9 +29,11 @@ namespace ve::editor
                                      ApplicationCommandQueue& mainThreadCommandQueue,
                                      void* nativeWindowHandle);
         void StartFrame();
-        [[nodiscard]] std::unique_ptr<RenderPass> Render();
+        [[nodiscard]] std::shared_ptr<FrameRenderer> Render();
         void UnInit() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
+        [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
+        void KeepImGuiTextureAlive(std::shared_ptr<RTRenderTarget> renderTarget);
 
         void OpenProject(std::string projectPath);
         void ShowProjectSelection() noexcept;
@@ -66,6 +68,7 @@ namespace ve::editor
         RenderBackend renderBackend_ = RenderBackend::D3D12;
         std::atomic_bool initialized_{false};
         MainView mainView_ = MainView::ProjectSelection;
+        std::vector<std::shared_ptr<RTRenderTarget>> pendingImGuiTextureRenderTargets_;
         std::vector<std::string> recentProjects_;
         std::string currentProjectPath_;
         std::string currentProjectName_;

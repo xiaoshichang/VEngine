@@ -30,6 +30,11 @@ namespace ve
                                          rhi::RhiStoreAction storeAction,
                                          rhi::RhiColor clearColor) noexcept;
 
+        void AddTextureColorAttachment(rhi::RhiTexture& texture,
+                                       rhi::RhiLoadAction loadAction,
+                                       rhi::RhiStoreAction storeAction,
+                                       rhi::RhiColor clearColor) noexcept;
+
         [[nodiscard]] const rhi::RhiRenderPassDesc& GetRenderPassDesc() const noexcept;
         [[nodiscard]] const rhi::RhiViewport& GetViewport() const noexcept;
         [[nodiscard]] const rhi::RhiScissorRect& GetScissor() const noexcept;

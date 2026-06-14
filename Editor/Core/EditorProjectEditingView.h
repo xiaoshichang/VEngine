@@ -7,6 +7,9 @@
 #include "Editor/Panels/InspectorPanel.h"
 #include "Editor/Panels/SceneViewPanel.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/Render/RenderTarget.h"
+
+#include <memory>
 
 namespace ve::editor
 {
@@ -18,6 +21,7 @@ namespace ve::editor
         ProjectEditingView() = default;
 
         void Render(Editor& editor);
+        [[nodiscard]] std::shared_ptr<RTRenderTarget> GetGameViewRenderTarget() const noexcept;
 
     private:
         void RenderMainMenu();

@@ -42,6 +42,16 @@ namespace ve::rhi
 
         /// Returns the texture format.
         [[nodiscard]] virtual RhiFormat GetFormat() const noexcept = 0;
+
+        /// Returns a backend-native sampled view handle when the backend exposes one.
+        ///
+        /// D3D11 returns ID3D11ShaderResourceView* so editor ImGui can display texture-backed viewports. Backends that
+        /// require descriptor allocation or a different binding path should leave this null until their editor texture
+        /// bridge is implemented.
+        [[nodiscard]] virtual void* GetNativeSampledViewHandle() const noexcept
+        {
+            return nullptr;
+        }
     };
 
     /// Represents a graphics queue synchronization point.

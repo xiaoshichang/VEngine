@@ -107,12 +107,8 @@ namespace ve
             VE_ASSERT(impl.renderSystem != nullptr);
             VE_ASSERT(impl.editorCallback.onRender != nullptr);
 
-            auto renderer = std::make_shared<FrameRenderer>();
-            std::unique_ptr<RenderPass> editorPass = impl.editorCallback.onRender();
-            if (editorPass != nullptr)
-            {
-                renderer->AddPass(std::move(editorPass));
-            }
+            std::shared_ptr<FrameRenderer> renderer = impl.editorCallback.onRender();
+            VE_ASSERT_MESSAGE(renderer != nullptr, "SceneThreadLoop_Render_Editor requires a renderer.");
 
             const ErrorCode renderResult = impl.renderSystem->RenderFrame(std::move(renderer));
             VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "SceneThreadLoop_Render_Editor failed.");

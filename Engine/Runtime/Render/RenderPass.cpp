@@ -56,6 +56,29 @@ namespace ve
         ++renderPassDesc_.colorAttachmentCount;
     }
 
+    void RenderPassBuilder::AddTextureColorAttachment(rhi::RhiTexture& texture,
+                                                      rhi::RhiLoadAction loadAction,
+                                                      rhi::RhiStoreAction storeAction,
+                                                      rhi::RhiColor clearColor) noexcept
+    {
+        VE_ASSERT_MESSAGE(renderPassDesc_.colorAttachmentCount < rhi::RhiMaxColorAttachments,
+                          "RenderPassBuilder color attachment count exceeded RhiMaxColorAttachments.");
+
+        rhi::RhiRenderPassColorAttachmentDesc& attachment =
+            renderPassDesc_.colorAttachments[renderPassDesc_.colorAttachmentCount];
+        attachment.texture = &texture;
+        attachment.loadAction = loadAction;
+        attachment.storeAction = storeAction;
+        attachment.clearColor = clearColor;
+        ++renderPassDesc_.colorAttachmentCount;
+
+        const UInt32 width = texture.GetWidth();
+        const UInt32 height = texture.GetHeight();
+        renderPassDesc_.renderArea = rhi::RhiRenderArea{0, 0, width, height};
+        viewport_ = rhi::RhiViewport{0.0f, 0.0f, static_cast<Float32>(width), static_cast<Float32>(height), 0.0f, 1.0f};
+        scissorRect_ = rhi::RhiScissorRect{0, 0, width, height};
+    }
+
     const rhi::RhiRenderPassDesc& RenderPassBuilder::GetRenderPassDesc() const noexcept
     {
         return renderPassDesc_;

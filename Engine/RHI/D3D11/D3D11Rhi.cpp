@@ -104,8 +104,13 @@ namespace ve::rhi
         class D3D11Texture final : public RhiTexture
         {
         public:
-            D3D11Texture(ComPtr<ID3D11Texture2D> texture, RhiTextureDesc desc)
+            D3D11Texture(ComPtr<ID3D11Texture2D> texture,
+                         ComPtr<ID3D11RenderTargetView> renderTargetView,
+                         ComPtr<ID3D11ShaderResourceView> shaderResourceView,
+                         RhiTextureDesc desc)
                 : texture_(std::move(texture))
+                , renderTargetView_(std::move(renderTargetView))
+                , shaderResourceView_(std::move(shaderResourceView))
                 , desc_(desc)
             {
             }
@@ -135,8 +140,25 @@ namespace ve::rhi
                 return texture_.Get();
             }
 
+            [[nodiscard]] ID3D11RenderTargetView* GetRenderTargetView() const noexcept
+            {
+                return renderTargetView_.Get();
+            }
+
+            [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceView() const noexcept
+            {
+                return shaderResourceView_.Get();
+            }
+
+            [[nodiscard]] void* GetNativeSampledViewHandle() const noexcept override
+            {
+                return shaderResourceView_.Get();
+            }
+
         private:
             ComPtr<ID3D11Texture2D> texture_;
+            ComPtr<ID3D11RenderTargetView> renderTargetView_;
+            ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
             RhiTextureDesc desc_ = {};
         };
 
@@ -378,15 +400,39 @@ namespace ve::rhi
 
             [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassDesc& desc) override
             {
-                auto* d3dSwapchain = dynamic_cast<D3D11Swapchain*>(&swapchain);
-
-                if (d3dSwapchain == nullptr || desc.colorAttachmentCount == 0)
+                if (desc.colorAttachmentCount == 0)
                 {
                     return false;
                 }
 
                 const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
-                ID3D11RenderTargetView* renderTargetView = d3dSwapchain->GetRenderTargetView();
+                ID3D11RenderTargetView* renderTargetView = nullptr;
+                if (colorAttachment.texture != nullptr)
+                {
+                    auto* d3dTexture = dynamic_cast<D3D11Texture*>(colorAttachment.texture);
+                    if (d3dTexture == nullptr)
+                    {
+                        return false;
+                    }
+
+                    renderTargetView = d3dTexture->GetRenderTargetView();
+                }
+                else
+                {
+                    auto* d3dSwapchain = dynamic_cast<D3D11Swapchain*>(&swapchain);
+                    if (d3dSwapchain == nullptr)
+                    {
+                        return false;
+                    }
+
+                    renderTargetView = d3dSwapchain->GetRenderTargetView();
+                }
+
+                if (renderTargetView == nullptr)
+                {
+                    return false;
+                }
+
                 context_->OMSetRenderTargets(1, &renderTargetView, nullptr);
 
                 if (colorAttachment.loadAction == RhiLoadAction::Clear)
@@ -658,7 +704,31 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11Texture>(texture, desc);
+                const auto usageValue = static_cast<uint32_t>(desc.usage);
+                ComPtr<ID3D11RenderTargetView> renderTargetView;
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
+                {
+                    result = device_->CreateRenderTargetView(texture.Get(), nullptr, &renderTargetView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateRenderTargetView texture", result));
+                        return nullptr;
+                    }
+                }
+
+                ComPtr<ID3D11ShaderResourceView> shaderResourceView;
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Sampled)) != 0)
+                {
+                    result = device_->CreateShaderResourceView(texture.Get(), nullptr, &shaderResourceView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateShaderResourceView texture", result));
+                        return nullptr;
+                    }
+                }
+
+                return std::make_unique<D3D11Texture>(
+                    texture, std::move(renderTargetView), std::move(shaderResourceView), desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override

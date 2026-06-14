@@ -31,6 +31,7 @@ namespace ve::editor
         ImDrawData drawData;
         ImVector<ImTextureData*> textureRefs;
         std::vector<std::unique_ptr<ImDrawList>> ownedCmdLists;
+        std::vector<std::shared_ptr<RTRenderTarget>> retainedRenderTargets;
     };
 
     class EditorImGuiRenderPass final : public RenderPass
@@ -38,9 +39,11 @@ namespace ve::editor
     public:
         EditorImGuiRenderPass(RenderBackend backend,
                               const std::atomic_bool& editorInitialized,
+                              rhi::RhiLoadAction colorLoadAction,
                               std::shared_ptr<EditorFrameDrawData> frameDrawData)
             : backend_(backend)
             , editorInitialized_(&editorInitialized)
+            , colorLoadAction_(colorLoadAction)
             , frameDrawData_(std::move(frameDrawData))
         {
         }
@@ -52,7 +55,7 @@ namespace ve::editor
 
         void Setup(RenderPassBuilder& builder) override
         {
-            builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear,
+            builder.AddSwapchainColorAttachment(colorLoadAction_,
                                                 rhi::RhiStoreAction::Store,
                                                 rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
         }
@@ -84,6 +87,7 @@ namespace ve::editor
     private:
         RenderBackend backend_ = RenderBackend::D3D12;
         const std::atomic_bool* editorInitialized_ = nullptr;
+        rhi::RhiLoadAction colorLoadAction_ = rhi::RhiLoadAction::Clear;
         std::shared_ptr<EditorFrameDrawData> frameDrawData_;
     };
 
@@ -94,10 +98,10 @@ namespace ve::editor
             if (sourceDrawData == nullptr || !sourceDrawData->Valid)
             {
                 return nullptr;
-            }
+        }
 
-            auto frameDrawData = std::make_shared<EditorFrameDrawData>();
-            frameDrawData->drawData.Valid = sourceDrawData->Valid;
+        auto frameDrawData = std::make_shared<EditorFrameDrawData>();
+        frameDrawData->drawData.Valid = sourceDrawData->Valid;
             frameDrawData->drawData.TotalIdxCount = 0;
             frameDrawData->drawData.TotalVtxCount = 0;
             frameDrawData->drawData.DisplayPos = sourceDrawData->DisplayPos;
@@ -205,7 +209,7 @@ namespace ve::editor
         ImGui::NewFrame();
     }
 
-    std::unique_ptr<RenderPass> Editor::Render()
+    std::shared_ptr<FrameRenderer> Editor::Render()
     {
         VE_ASSERT_SCENE_THREAD();
         if (!initialized_.load(std::memory_order_acquire))
@@ -227,8 +231,21 @@ namespace ve::editor
 
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
         VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
+        frameDrawData->retainedRenderTargets = std::move(pendingImGuiTextureRenderTargets_);
+        pendingImGuiTextureRenderTargets_.clear();
 
-        return std::make_unique<EditorImGuiRenderPass>(renderBackend_, initialized_, std::move(frameDrawData));
+        auto renderer = std::make_shared<FrameRenderer>();
+
+        const bool hasGameViewScenePass = mainView_ == MainView::ProjectEditing;
+        if (hasGameViewScenePass)
+        {
+            std::shared_ptr<RTRenderTarget> gameViewRenderTarget = projectEditingView_->GetGameViewRenderTarget();
+            renderer->AddPass(renderSystem_->CreateTriangleForwardPass(std::move(gameViewRenderTarget)));
+        }
+
+        renderer->AddPass(std::make_unique<EditorImGuiRenderPass>(
+            renderBackend_, initialized_, rhi::RhiLoadAction::Clear, std::move(frameDrawData)));
+        return renderer;
     }
 
     void Editor::UnInit() noexcept
@@ -269,6 +286,21 @@ namespace ve::editor
     bool Editor::IsInitialized() const noexcept
     {
         return initialized_.load(std::memory_order_acquire);
+    }
+
+    RenderSystem& Editor::GetRenderSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::GetRenderSystem requires an initialized editor.");
+        return *renderSystem_;
+    }
+
+    void Editor::KeepImGuiTextureAlive(std::shared_ptr<RTRenderTarget> renderTarget)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        if (renderTarget != nullptr)
+        {
+            pendingImGuiTextureRenderTargets_.push_back(std::move(renderTarget));
+        }
     }
 
     void Editor::OpenProject(std::string projectPath)

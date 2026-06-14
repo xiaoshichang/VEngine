@@ -255,21 +255,16 @@ that submits a render command and forwards the RT proxy:
 ```cpp
 void RenderTarget::InitRenderResource(RenderSystem& renderSystem)
 {
-    std::shared_ptr<RTRenderTarget> rtRenderTarget = rtRenderTarget_;
-    renderSystem.EnqueueCommand(
-        "InitRenderTarget",
-        [rtRenderTarget = std::move(rtRenderTarget)]()
-        {
-            if (rtRenderTarget != nullptr)
-            {
-                rtRenderTarget->InitRenderResource();
-            }
-        });
+    EnsureRenderThreadProxy();
+    RenderTargetDesc desc = BuildCurrentDesc();
+    renderSystem.InitRenderResource(rtRenderTarget_, std::move(desc));
 }
 ```
 
-The exact public API can change, but the rule should stay stable: RHI-facing work travels through render commands, not
-through direct Scene Thread calls.
+`RenderSystem::InitRenderResource()` copies the CPU-side description when the command is submitted. The Render Thread
+then updates `RTRenderTarget` and creates or replaces the RHI texture from that snapshot. The exact public API can
+change, but the rule should stay stable: RHI-facing work travels through render commands, not through direct Scene
+Thread calls or shared mutable CPU descriptions.
 
 ## 8. Flush And Shutdown Semantics
 
