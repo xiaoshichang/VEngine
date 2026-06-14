@@ -79,14 +79,6 @@ namespace ve::editor
         }
 
         EditorAssetDatabase& assetDatabase = editor_->GetAssetDatabase();
-        ImGui::Text("Assets (%zu)", assetDatabase.GetAssetCount());
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh"))
-        {
-            (void)assetDatabase.Refresh();
-        }
-        ImGui::Separator();
-
         if (!assetDatabase.IsInitialized())
         {
             ImGui::TextDisabled("No project is open.");
@@ -104,6 +96,16 @@ namespace ve::editor
         if (ImGui::BeginChild("AssetDirectories", ImVec2(DirectoryTreeWidth, 0.0F), ImGuiChildFlags_ResizeX))
         {
             RenderDirectoryTree(directories, Path("Assets"));
+            if (ImGui::BeginPopupContextWindow("AssetDirectoryContext",
+                                               ImGuiPopupFlags_MouseButtonRight |
+                                                   ImGuiPopupFlags_NoOpenOverItems))
+            {
+                if (ImGui::MenuItem("Reimport All"))
+                {
+                    (void)assetDatabase.ReimportAll();
+                }
+                ImGui::EndPopup();
+            }
         }
         ImGui::EndChild();
 
@@ -112,6 +114,16 @@ namespace ve::editor
         if (ImGui::BeginChild("AssetFiles", ImVec2(0.0F, 0.0F)))
         {
             RenderAssetFiles(assetDatabase);
+            if (ImGui::BeginPopupContextWindow("AssetFilesContext",
+                                               ImGuiPopupFlags_MouseButtonRight |
+                                                   ImGuiPopupFlags_NoOpenOverItems))
+            {
+                if (ImGui::MenuItem("Reimport All"))
+                {
+                    (void)assetDatabase.ReimportAll();
+                }
+                ImGui::EndPopup();
+            }
         }
         ImGui::EndChild();
     }
@@ -199,6 +211,16 @@ namespace ve::editor
                 if (ImGui::Selectable(filename.c_str(), selected, selectableFlags))
                 {
                     editor_->SetSelectedAsset(asset.path);
+                }
+
+                if (ImGui::BeginPopupContextItem())
+                {
+                    if (ImGui::MenuItem("Reimport"))
+                    {
+                        editor_->SetSelectedAsset(asset.path);
+                        (void)assetDatabase.ReimportAsset(asset.path);
+                    }
+                    ImGui::EndPopup();
                 }
 
                 ImGui::TableSetColumnIndex(1);

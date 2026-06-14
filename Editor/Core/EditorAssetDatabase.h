@@ -42,6 +42,8 @@ namespace ve::editor
         [[nodiscard]] Path GetAssetsRootPath() const;
 
         [[nodiscard]] ErrorCode Refresh();
+        [[nodiscard]] ErrorCode ReimportAll();
+        [[nodiscard]] ErrorCode ReimportAsset(const Path& projectRelativePath);
         [[nodiscard]] SizeT GetAssetCount() const noexcept;
         [[nodiscard]] const EditorAssetRecord* GetAsset(SizeT index) const noexcept;
         [[nodiscard]] const EditorAssetRecord* FindAsset(const Path& projectRelativePath) const noexcept;
@@ -50,9 +52,9 @@ namespace ve::editor
         [[nodiscard]] static const char* ToString(EditorAssetType type) noexcept;
 
     private:
-        [[nodiscard]] ErrorCode ScanAndImportDirectory(const Path& physicalDirectoryPath);
+        [[nodiscard]] ErrorCode ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force);
         [[nodiscard]] ErrorCode ScanRecordsDirectory(const Path& physicalDirectoryPath);
-        [[nodiscard]] ErrorCode ImportObjAsMesh(const Path& objProjectPath);
+        [[nodiscard]] ErrorCode ImportObjAsMesh(const Path& objProjectPath, bool force);
         [[nodiscard]] Result<Path> ReadMeshSourcePath(const Path& meshPhysicalPath) const;
         [[nodiscard]] Path ToProjectRelativePath(const Path& physicalPath) const;
         void AddAssetRecord(EditorAssetRecord record);

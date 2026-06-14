@@ -29,9 +29,6 @@ namespace ve
         [[nodiscard]] const Vector3& GetColor() const noexcept;
         void SetColor(const Vector3& color) noexcept;
 
-        [[nodiscard]] const Vector3& GetDirection() const noexcept;
-        void SetDirection(const Vector3& direction) noexcept;
-
         [[nodiscard]] Float32 GetIntensity() const noexcept;
         void SetIntensity(Float32 intensity) noexcept;
 
@@ -68,7 +65,6 @@ namespace ve
 
         LightType type_ = LightType::Directional;
         Vector3 color_ = Vector3::One();
-        Vector3 direction_ = Vector3::UnitZ();
         Float32 intensity_ = 1.0f;
         Float32 range_ = 0.0f;
         Float32 innerConeAngleRadians_ = 0.0f;

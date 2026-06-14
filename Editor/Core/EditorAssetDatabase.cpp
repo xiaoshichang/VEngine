@@ -147,7 +147,7 @@ namespace ve::editor
 
         assets_.clear();
 
-        ErrorCode result = ScanAndImportDirectory(assetsRoot);
+        ErrorCode result = ScanAndImportDirectory(assetsRoot, false);
         if (result != ErrorCode::None)
         {
             return result;
@@ -170,6 +170,66 @@ namespace ve::editor
     SizeT EditorAssetDatabase::GetAssetCount() const noexcept
     {
         return assets_.size();
+    }
+
+    ErrorCode EditorAssetDatabase::ReimportAll()
+    {
+        if (!initialized_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const Path assetsRoot = GetAssetsRootPath();
+        if (!FileSystem::IsDirectory(assetsRoot))
+        {
+            return ErrorCode::NotFound;
+        }
+
+        ErrorCode result = ScanAndImportDirectory(assetsRoot, true);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        return Refresh();
+    }
+
+    ErrorCode EditorAssetDatabase::ReimportAsset(const Path& projectRelativePath)
+    {
+        if (!initialized_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const EditorAssetRecord* asset = FindAsset(projectRelativePath);
+        if (asset == nullptr)
+        {
+            return ErrorCode::NotFound;
+        }
+
+        ErrorCode result = ErrorCode::None;
+        switch (asset->type)
+        {
+        case EditorAssetType::ObjSource:
+            result = ImportObjAsMesh(asset->path, true);
+            break;
+        case EditorAssetType::Mesh:
+            result =
+                asset->sourcePath.IsEmpty() ? ErrorCode::InvalidArgument : ImportObjAsMesh(asset->sourcePath, true);
+            break;
+        case EditorAssetType::Material:
+        case EditorAssetType::Scene:
+        case EditorAssetType::Unknown:
+            result = ErrorCode::None;
+            break;
+        }
+
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        return Refresh();
     }
 
     const EditorAssetRecord* EditorAssetDatabase::GetAsset(SizeT index) const noexcept
@@ -215,7 +275,7 @@ namespace ve::editor
         return "Unknown";
     }
 
-    ErrorCode EditorAssetDatabase::ScanAndImportDirectory(const Path& physicalDirectoryPath)
+    ErrorCode EditorAssetDatabase::ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force)
     {
         Result<std::vector<FileSystem::DirectoryEntry>> entries = FileSystem::ListDirectory(physicalDirectoryPath);
         if (!entries)
@@ -227,7 +287,7 @@ namespace ve::editor
         {
             if (entry.type == FileSystem::DirectoryEntryType::Directory)
             {
-                const ErrorCode result = ScanAndImportDirectory(entry.path);
+                const ErrorCode result = ScanAndImportDirectory(entry.path, force);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -236,7 +296,7 @@ namespace ve::editor
             else if (entry.type == FileSystem::DirectoryEntryType::File &&
                      GetAssetTypeFromExtension(entry.path) == EditorAssetType::ObjSource)
             {
-                const ErrorCode result = ImportObjAsMesh(ToProjectRelativePath(entry.path));
+                const ErrorCode result = ImportObjAsMesh(ToProjectRelativePath(entry.path), force);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -288,7 +348,7 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    ErrorCode EditorAssetDatabase::ImportObjAsMesh(const Path& objProjectPath)
+    ErrorCode EditorAssetDatabase::ImportObjAsMesh(const Path& objProjectPath, bool force)
     {
         if (objProjectPath.IsEmpty())
         {
@@ -298,7 +358,7 @@ namespace ve::editor
         const Path meshProjectPath = ReplaceExtension(objProjectPath, ".vemesh");
         const Path meshPhysicalPath = projectRoot_ / meshProjectPath;
 
-        if (FileSystem::IsFile(meshPhysicalPath))
+        if (!force && FileSystem::IsFile(meshPhysicalPath))
         {
             return ErrorCode::None;
         }

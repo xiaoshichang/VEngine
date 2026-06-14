@@ -249,7 +249,6 @@ namespace ve
             object["enabled"] = light.IsEnabled();
             object["lightType"] = ToString(light.GetLightType());
             object["color"] = WriteVector3(light.GetColor());
-            object["direction"] = WriteVector3(light.GetDirection());
             object["intensity"] = light.GetIntensity();
             object["range"] = light.GetRange();
             object["innerConeAngleRadians"] = light.GetInnerConeAngleRadians();
@@ -450,16 +449,6 @@ namespace ve
                     return result.GetError().GetCode();
                 }
                 light->SetColor(result.GetValue());
-            }
-
-            if (const boost::json::value* value = object.if_contains("direction"); value != nullptr)
-            {
-                Result<Vector3> result = ReadVector3(*value, "LightComponent.direction");
-                if (!result)
-                {
-                    return result.GetError().GetCode();
-                }
-                light->SetDirection(result.GetValue());
             }
 
             light->SetIntensity(ReadFloat(object, "intensity", light->GetIntensity()));

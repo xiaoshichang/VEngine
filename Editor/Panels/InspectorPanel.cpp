@@ -283,12 +283,6 @@ namespace ve::editor
                 light.SetColor(FromFloat3(color));
             }
 
-            std::array<float, 3> direction = ToFloat3(light.GetDirection());
-            if (ImGui::InputFloat3("Direction", direction.data(), "%.3f"))
-            {
-                light.SetDirection(FromFloat3(direction));
-            }
-
             float intensity = light.GetIntensity();
             if (ImGui::InputFloat("Intensity", &intensity, 0.1f, 1.0f, "%.3f"))
             {

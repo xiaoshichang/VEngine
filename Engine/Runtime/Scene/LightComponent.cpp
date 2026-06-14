@@ -20,6 +20,12 @@ namespace ve
 
             return RTLightType::Directional;
         }
+
+        [[nodiscard]] Vector3 GetDirectionFromTransform(const TransformComponent* transform) noexcept
+        {
+            return transform != nullptr ? transform->GetWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized()
+                                        : Vector3::UnitZ();
+        }
     } // namespace
 
     LightComponent::LightComponent(Scene& scene, GameObject& owner)
@@ -56,17 +62,6 @@ namespace ve
     void LightComponent::SetColor(const Vector3& color) noexcept
     {
         color_ = color;
-        SubmitLightUpdateToRenderThread();
-    }
-
-    const Vector3& LightComponent::GetDirection() const noexcept
-    {
-        return direction_;
-    }
-
-    void LightComponent::SetDirection(const Vector3& direction) noexcept
-    {
-        direction_ = direction.Normalized();
         SubmitLightUpdateToRenderThread();
     }
 
@@ -143,7 +138,7 @@ namespace ve
         return RTLightDesc{
             ToRTLightType(type_),
             color_,
-            direction_,
+            GetDirectionFromTransform(transform),
             intensity_,
             range_,
             innerConeAngleRadians_,
