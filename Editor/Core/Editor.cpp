@@ -170,6 +170,7 @@ namespace ve::editor
         const ErrorCode inputResult = input_.Init(nativeWindowHandle);
         VE_ASSERT(inputResult == ErrorCode::None);
 
+        runtime_ = &runtime;
         renderSystem_ = &runtime.GetRenderSystem();
         mainThreadCommandQueue_ = &mainThreadCommandQueue;
         const ErrorCode renderBackendResult = InitRenderBackend(*renderSystem_);
@@ -286,6 +287,7 @@ namespace ve::editor
 
         mainThreadCommandQueue_ = nullptr;
         nativeWindowHandle_ = nullptr;
+        runtime_ = nullptr;
         renderSystem_ = nullptr;
         VE_LOG_INFO_CATEGORY("Editor", "Editor uninitialized.");
     }
@@ -430,6 +432,12 @@ namespace ve::editor
             VE_LOG_ERROR_CATEGORY(
                 "Editor", "Failed to initialize asset database '{}': {}", projectPath, ToString(assetDatabaseResult));
             return;
+        }
+
+        if (runtime_ != nullptr && runtime_->GetResourceSystem().IsInitialized())
+        {
+            runtime_->GetResourceSystem().SetProjectRoot(projectRoot);
+            assetDatabase_.RegisterResourceSystemCallbacks(runtime_->GetResourceSystem());
         }
 
         AddRecentProject(currentProjectPath_);

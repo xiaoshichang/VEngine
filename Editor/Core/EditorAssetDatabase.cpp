@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Resource/ResourceSystem.h"
 
 #include <boost/json.hpp>
 #include <algorithm>
@@ -328,6 +329,25 @@ namespace ve::editor
             object["submeshes"] = std::move(submeshes);
             return object;
         }
+
+        [[nodiscard]] ResourceType ToResourceType(EditorAssetType type) noexcept
+        {
+            switch (type)
+            {
+            case EditorAssetType::ObjSource:
+                return ResourceType::Mesh;
+            case EditorAssetType::Material:
+                return ResourceType::Material;
+            case EditorAssetType::Scene:
+                return ResourceType::Scene;
+            case EditorAssetType::Mesh:
+            case EditorAssetType::Unknown:
+                break;
+            }
+
+            return ResourceType::Unknown;
+        }
+
     } // namespace
 
     ErrorCode EditorAssetDatabase::Initialize(const Path& projectRoot)
@@ -433,7 +453,28 @@ namespace ve::editor
             }
         }
 
-        return Refresh();
+        const ErrorCode refreshResult = Refresh();
+        if (refreshResult != ErrorCode::None)
+        {
+            return refreshResult;
+        }
+        return ErrorCode::None;
+    }
+
+    void EditorAssetDatabase::RegisterResourceSystemCallbacks(ve::ResourceSystem& resourceSystem)
+    {
+        resourceSystem.SetResourceResolveCallback(
+            [this](const Guid& guid) -> Result<ResourceRecord> 
+            {
+                const EditorAssetRecord* asset = FindAssetByGuid(guid);
+                if (asset == nullptr)
+                {
+                    return Result<ResourceRecord>::Failure(Error(ErrorCode::NotFound, "Resource not found."));
+                }
+
+                return Result<ResourceRecord>::Success(BuildResourceRecord(*asset));
+            });
+
     }
 
     SizeT EditorAssetDatabase::GetAssetCount() const noexcept
@@ -481,6 +522,15 @@ namespace ve::editor
         }
 
         return "Unknown";
+    }
+
+    ResourceRecord EditorAssetDatabase::BuildResourceRecord(const EditorAssetRecord& asset) const
+    {
+        ResourceRecord record;
+        record.guid = asset.guid;
+        record.type = ToResourceType(asset.type);
+        record.runtimePath = asset.imported ? asset.importedPath : asset.path;
+        return record;
     }
 
     ErrorCode EditorAssetDatabase::ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force)

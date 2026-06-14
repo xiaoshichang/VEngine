@@ -6,6 +6,7 @@
 #include "Engine/Runtime/IO/IOSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
+#include "Engine/Runtime/Resource/ResourceSystem.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
 #include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Time/Time.h"
@@ -127,6 +128,9 @@ namespace ve
         /// The runtime must be initialized before callers use the returned service.
         [[nodiscard]] const RenderSystem& GetRenderSystem() const noexcept;
 
+        [[nodiscard]] ResourceSystem& GetResourceSystem() noexcept;
+        [[nodiscard]] const ResourceSystem& GetResourceSystem() const noexcept;
+
         /// Returns the runtime-owned Scene System.
         ///
         /// The runtime must be initialized before callers use the returned service.
@@ -144,6 +148,7 @@ namespace ve
         TimeSystem timeSystem_;
         SceneSystem sceneSystem_;
         RenderSystem renderSystem_;
+        ResourceSystem resourceSystem_;
         MainThreadSceneThreadFrameEndSync mainThreadSceneThreadFrameEndSync_;
         SceneThreadRenderThreadFrameEndSync sceneThreadRenderThreadFrameEndSync_;
         EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;

@@ -83,6 +83,7 @@ namespace ve::editor
         [[nodiscard]] const char* GetRenderBackendName() const noexcept;
 
         SceneSystem* sceneSystem_ = nullptr;
+        EngineRuntime* runtime_ = nullptr;
         RenderSystem* renderSystem_ = nullptr;
         ApplicationCommandQueue* mainThreadCommandQueue_ = nullptr;
         void* nativeWindowHandle_ = nullptr;

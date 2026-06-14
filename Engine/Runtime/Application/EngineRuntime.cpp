@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Application/EngineRuntime.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 
 #include <exception>
@@ -83,6 +84,14 @@ namespace ve
         }
         VE_LOG_INFO("SceneSystem initialized.");
 
+        const Path projectRoot = FileSystem::GetProjectRoot();
+        ErrorCode resourceSystemResult = resourceSystem_.Initialize(ResourceSystemInitParam{projectRoot});
+        if (resourceSystemResult != ErrorCode::None)
+        {
+            TerminateRuntimeInitialization("ResourceSystem", resourceSystemResult);
+        }
+        VE_LOG_INFO("ResourceSystem initialized.");
+
         state_ = EngineRuntimeState::Initialized;
         VE_LOG_INFO("all systems initialized.");
         return ErrorCode::None;
@@ -96,6 +105,7 @@ namespace ve
         }
 
         sceneSystem_.Shutdown();
+        resourceSystem_.Shutdown();
         timeSystem_.Shutdown();
         renderSystem_.Shutdown();
         inputSystem_.Shutdown();
@@ -184,5 +194,17 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetSceneSystem requires an initialized runtime.");
         return sceneSystem_;
+    }
+
+    ResourceSystem& EngineRuntime::GetResourceSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetResourceSystem requires an initialized runtime.");
+        return resourceSystem_;
+    }
+
+    const ResourceSystem& EngineRuntime::GetResourceSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetResourceSystem requires an initialized runtime.");
+        return resourceSystem_;
     }
 } // namespace ve
