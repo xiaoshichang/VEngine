@@ -1,17 +1,28 @@
 #include "Engine/Runtime/Scene/Scene.h"
 
+#include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Scene/SceneSystem.h"
+
 #include <algorithm>
+#include <utility>
 
 namespace ve
 {
-    Scene::Scene() = default;
-
-    Scene::Scene(std::string name)
-        : name_(std::move(name))
+    Scene::Scene()
+        : rtScene_(std::make_shared<RTScene>())
     {
     }
 
-    Scene::~Scene() = default;
+    Scene::Scene(std::string name)
+        : name_(std::move(name))
+        , rtScene_(std::make_shared<RTScene>())
+    {
+    }
+
+    Scene::~Scene()
+    {
+        Clear();
+    }
 
     const std::string& Scene::GetName() const noexcept
     {
@@ -52,7 +63,7 @@ namespace ve
     {
         try
         {
-            std::unique_ptr<GameObject> gameObject = std::make_unique<GameObject>(std::move(name));
+            std::unique_ptr<GameObject> gameObject = std::make_unique<GameObject>(*this, std::move(name));
             GameObject* gameObjectPointer = gameObject.get();
             rootGameObjects_.push_back(std::move(gameObject));
             return Result<GameObject*>::Success(gameObjectPointer);
@@ -81,7 +92,71 @@ namespace ve
 
     void Scene::Clear() noexcept
     {
+        const bool hadRootGameObjects = !rootGameObjects_.empty();
         rootGameObjects_.clear();
+
+        if (!hadRootGameObjects && sceneSystem_ == nullptr)
+        {
+            return;
+        }
+
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneClear", [rtScene]() { rtScene->Clear(); });
+    }
+
+    void Scene::SetSceneSystem(SceneSystem* sceneSystem) noexcept
+    {
+        sceneSystem_ = sceneSystem;
+        if (sceneSystem_ != nullptr)
+        {
+            RebuildRTScene();
+        }
+    }
+
+    std::shared_ptr<RTScene> Scene::GetRTScene() noexcept
+    {
+        return rtScene_;
+    }
+
+    std::shared_ptr<const RTScene> Scene::GetRTScene() const noexcept
+    {
+        return rtScene_;
+    }
+
+    void Scene::RegisterRenderItem(std::shared_ptr<RTRenderItem> item)
+    {
+        if (item == nullptr)
+        {
+            return;
+        }
+
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneAddRenderItem",
+                             [rtScene, item = std::move(item)]() { rtScene->AddRenderItem(item); });
+    }
+
+    void Scene::UnregisterRenderItem(std::shared_ptr<RTRenderItem> item) noexcept
+    {
+        if (item == nullptr)
+        {
+            return;
+        }
+
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneRemoveRenderItem",
+                             [rtScene, item = std::move(item)]() { rtScene->RemoveRenderItem(item); });
+    }
+
+    void Scene::UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemDesc desc)
+    {
+        if (item == nullptr)
+        {
+            return;
+        }
+
+        SubmitRTSceneCommand("RTSceneUpdateRenderItem",
+                             [item = std::move(item), desc = std::move(desc)]() mutable
+                             { item->SetDesc(std::move(desc)); });
     }
 
     void Scene::Update(Float32 deltaSeconds)
@@ -90,5 +165,58 @@ namespace ve
         {
             gameObject->Update(deltaSeconds);
         }
+    }
+
+    void Scene::RebuildRTScene()
+    {
+        std::shared_ptr<RTScene> rtScene = rtScene_;
+        SubmitRTSceneCommand("RTSceneClear", [rtScene]() { rtScene->Clear(); });
+
+        for (std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
+        {
+            RegisterRenderItemsRecursive(*gameObject);
+        }
+    }
+
+    void Scene::RegisterRenderItemsRecursive(GameObject& gameObject)
+    {
+        if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
+        {
+            mesh->RegisterRTState();
+        }
+
+        TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+        if (transform == nullptr)
+        {
+            return;
+        }
+
+        for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
+        {
+            GameObject* child = transform->GetChildGameObject(childIndex);
+            if (child != nullptr)
+            {
+                RegisterRenderItemsRecursive(*child);
+            }
+        }
+    }
+
+    void Scene::SubmitRTSceneCommand(std::string debugName, std::function<void()> function) const
+    {
+        if (!function)
+        {
+            return;
+        }
+
+        if (sceneSystem_ == nullptr || !sceneSystem_->HasRenderSystem())
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false,
+                                     "Scene RTScene commands require a SceneSystem with an initialized RenderSystem.");
+            return;
+        }
+
+        ErrorCode submitResult =
+            sceneSystem_->EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
+        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "Scene failed to enqueue an RTScene command.");
     }
 } // namespace ve

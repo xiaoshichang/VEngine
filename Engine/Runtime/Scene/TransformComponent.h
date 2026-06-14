@@ -19,6 +19,7 @@ namespace ve
     class TransformComponent final : public Component
     {
     public:
+        TransformComponent(Scene& scene, GameObject& owner) noexcept;
         ~TransformComponent() override;
 
         [[nodiscard]] const Vector3& GetLocalPosition() const noexcept;
@@ -31,6 +32,8 @@ namespace ve
         void SetLocalScale(const Vector3& scale) noexcept;
 
         [[nodiscard]] Matrix44 GetLocalMatrix() const noexcept;
+        [[nodiscard]] Matrix44 GetWorldMatrix() const noexcept;
+        [[nodiscard]] UInt64 GetHierarchyRevision() const noexcept;
 
         [[nodiscard]] TransformComponent* GetParent() noexcept;
         [[nodiscard]] const TransformComponent* GetParent() const noexcept;
@@ -50,11 +53,19 @@ namespace ve
         friend class GameObject;
 
         void SetParent(TransformComponent* parent) noexcept;
+        void MarkHierarchyDirty() noexcept;
+        void UpdateWorldCache() const noexcept;
 
         Vector3 localPosition_ = Vector3::Zero();
         Quaternion localRotation_ = Quaternion::Identity();
         Vector3 localScale_ = Vector3::One();
         TransformComponent* parent_ = nullptr;
         std::vector<std::unique_ptr<GameObject>> children_;
+        mutable Matrix44 localMatrixCache_ = Matrix44::Identity();
+        mutable Matrix44 worldMatrixCache_ = Matrix44::Identity();
+        mutable UInt64 hierarchyRevision_ = 0;
+        mutable UInt64 cachedParentHierarchyRevision_ = 0;
+        mutable UInt64 worldRevision_ = 0;
+        mutable bool transformDirty_ = true;
     };
 } // namespace ve

@@ -179,6 +179,7 @@ namespace ve
         void StopAndJoinSceneThread(SceneSystemImpl& impl) noexcept
         {
             impl.stopRequested.store(true, std::memory_order_release);
+            impl.startLoopEvent.Set();
             if (impl.mainThreadSceneThreadFrameEndSync != nullptr)
             {
                 impl.mainThreadSceneThreadFrameEndSync->UnblockAllWaiters();
@@ -199,6 +200,17 @@ namespace ve
             impl.stopRequested.store(false, std::memory_order_release);
             impl.timeSystem = nullptr;
             impl.inputSystem = nullptr;
+            if (impl.scene != nullptr)
+            {
+                impl.scene->Clear();
+                if (impl.renderSystem != nullptr)
+                {
+                    [[maybe_unused]] const ErrorCode flushResult = impl.renderSystem->Flush();
+                    VE_ASSERT_MESSAGE(flushResult == ErrorCode::None,
+                                      "SceneSystem failed to flush RTScene shutdown commands.");
+                }
+                impl.scene->SetSceneSystem(nullptr);
+            }
             impl.renderSystem = nullptr;
             impl.runtimeOSEventCallback = nullptr;
             impl.osEventQueue.ClearForConsumer();
@@ -230,10 +242,26 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
+        if (!inputSystem.IsInitialized())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (!renderSystem.IsInitialized())
+        {
+            return ErrorCode::InvalidState;
+        }
+
         impl_->timeSystem = &timeSystem;
         impl_->inputSystem = &inputSystem;
         impl_->renderSystem = &renderSystem;
         impl_->stopRequested.store(false, std::memory_order_release);
+        impl_->startLoopEvent.Reset();
+        if (impl_->scene == nullptr)
+        {
+            impl_->scene = std::make_unique<Scene>();
+        }
+        impl_->scene->SetSceneSystem(this);
 
         if (impl_->mainThreadSceneThreadFrameEndSync != nullptr)
         {
@@ -289,6 +317,21 @@ namespace ve
     ErrorCode SceneSystem::EnqueueOSEvent(const OSEvent& event)
     {
         return impl_->osEventQueue.Push(event);
+    }
+
+    ErrorCode SceneSystem::EnqueueRenderCommand(RenderCommand command)
+    {
+        if (!HasRenderSystem())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        return impl_->renderSystem->EnqueueCommand(std::move(command));
+    }
+
+    bool SceneSystem::HasRenderSystem() const noexcept
+    {
+        return impl_->renderSystem != nullptr && impl_->renderSystem->IsInitialized();
     }
 
     void SceneSystem::NotifyMainThreadFrameEnd()

@@ -2,6 +2,12 @@
 
 namespace ve
 {
+    Component::Component(Scene& scene, GameObject& owner) noexcept
+        : owner_(&owner)
+        , scene_(&scene)
+    {
+    }
+
     GameObject* Component::GetOwner() noexcept
     {
         return owner_;
@@ -27,8 +33,19 @@ namespace ve
         static_cast<void>(deltaSeconds);
     }
 
-    void Component::SetOwner(GameObject* owner) noexcept
+    void Component::ClearOwner() noexcept
     {
-        owner_ = owner;
+        owner_ = nullptr;
     }
+
+    Scene* Component::GetScene() noexcept
+    {
+        return scene_;
+    }
+
+    const Scene* Component::GetScene() const noexcept
+    {
+        return scene_;
+    }
+
 } // namespace ve
