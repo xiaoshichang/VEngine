@@ -182,16 +182,16 @@ namespace ve::editor
         {
             RenderEnabledCheckbox(mesh);
 
-            std::array<char, TextBufferSize> meshPathBuffer = ToTextBuffer(mesh.GetMeshAssetPath());
-            if (ImGui::InputText("Mesh", meshPathBuffer.data(), meshPathBuffer.size()))
+            std::array<char, TextBufferSize> meshGuidBuffer = ToTextBuffer(mesh.GetMeshAssetGuid());
+            if (ImGui::InputText("Mesh GUID", meshGuidBuffer.data(), meshGuidBuffer.size()))
             {
-                mesh.SetMeshAssetPath(meshPathBuffer.data());
+                mesh.SetMeshAssetGuid(meshGuidBuffer.data());
             }
 
-            std::array<char, TextBufferSize> materialPathBuffer = ToTextBuffer(mesh.GetMaterialAssetPath());
-            if (ImGui::InputText("Material", materialPathBuffer.data(), materialPathBuffer.size()))
+            std::array<char, TextBufferSize> materialGuidBuffer = ToTextBuffer(mesh.GetMaterialAssetGuid());
+            if (ImGui::InputText("Material GUID", materialGuidBuffer.data(), materialGuidBuffer.size()))
             {
-                mesh.SetMaterialAssetPath(materialPathBuffer.data());
+                mesh.SetMaterialAssetGuid(materialGuidBuffer.data());
             }
 
             std::array<float, 3> boundsCenter = ToFloat3(mesh.GetBoundsCenter());
@@ -324,14 +324,16 @@ namespace ve::editor
         if (ImGui::CollapsingHeader("Asset", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Text("Type: %s", EditorAssetDatabase::ToString(asset.type));
+            ImGui::TextWrapped("GUID: %s", asset.guid.c_str());
             ImGui::TextWrapped("Path: %s", asset.path.GetString().c_str());
+            ImGui::TextWrapped("Meta: %s", asset.metaPath.GetString().c_str());
             ImGui::TextWrapped("Physical Path: %s",
                                (editor_->GetAssetDatabase().GetProjectRoot() / asset.path).GetString().c_str());
             ImGui::Text("Imported: %s", asset.imported ? "Yes" : "No");
 
-            if (!asset.sourcePath.IsEmpty())
+            if (!asset.importedPath.IsEmpty())
             {
-                ImGui::TextWrapped("Source: %s", asset.sourcePath.GetString().c_str());
+                ImGui::TextWrapped("Imported Path: %s", asset.importedPath.GetString().c_str());
             }
         }
     }

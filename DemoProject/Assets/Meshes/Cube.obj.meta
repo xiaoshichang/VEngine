@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "guid": "11111111-1111-1111-1111-111111111111",
+    "assetType": "ObjSource",
+    "sourcePath": "Assets/Meshes/Cube.obj",
+    "importer": "ObjMeshImporter",
+    "importSettings": {}
+}

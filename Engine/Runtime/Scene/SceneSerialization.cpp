@@ -220,8 +220,8 @@ namespace ve
             boost::json::object object;
             object["type"] = "MeshRenderComponent";
             object["enabled"] = mesh.IsEnabled();
-            object["meshAssetPath"] = mesh.GetMeshAssetPath();
-            object["materialAssetPath"] = mesh.GetMaterialAssetPath();
+            object["meshAssetGuid"] = mesh.GetMeshAssetGuid();
+            object["materialAssetGuid"] = mesh.GetMaterialAssetGuid();
             object["boundsCenter"] = WriteVector3(mesh.GetBoundsCenter());
             object["boundsExtents"] = WriteVector3(mesh.GetBoundsExtents());
             return object;
@@ -374,8 +374,8 @@ namespace ve
                 mesh = result.GetValue();
             }
 
-            mesh->SetMeshAssetPath(ReadString(object, "meshAssetPath", mesh->GetMeshAssetPath()));
-            mesh->SetMaterialAssetPath(ReadString(object, "materialAssetPath", mesh->GetMaterialAssetPath()));
+            mesh->SetMeshAssetGuid(ReadString(object, "meshAssetGuid", mesh->GetMeshAssetGuid()));
+            mesh->SetMaterialAssetGuid(ReadString(object, "materialAssetGuid", mesh->GetMaterialAssetGuid()));
 
             if (const boost::json::value* value = object.if_contains("boundsCenter"); value != nullptr)
             {

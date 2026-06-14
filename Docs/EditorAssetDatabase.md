@@ -6,48 +6,114 @@
 resources. It owns project workspace policy and import metadata generation, so it intentionally lives under `Editor/`
 instead of `Engine/Runtime/`.
 
-The first supported asset types are:
+The first supported native asset types are:
 
 - `.obj` source mesh files.
-- `.vemesh` imported mesh descriptors.
 - `.vematerial` material descriptors.
 - `.vescene` scene files.
 
-## OBJ Import
+Every native asset has a sidecar `.meta` file. The `.meta` file owns the stable asset GUID used by scenes, materials,
+and future runtime resource references.
 
-The first OBJ import path does not copy mesh payload data. When the asset database sees:
-
-```text
-Assets/Meshes/Cube.obj
-```
-
-it creates the imported descriptor:
+## Project Layout
 
 ```text
-Assets/Meshes/Cube.vemesh
+Assets/
+  Meshes/
+    Cube.obj
+    Cube.obj.meta
+  Materials/
+    Default.vematerial
+    Default.vematerial.meta
+  Scenes/
+    SampleScene.vescene
+    SampleScene.vescene.meta
+Library/
+  Imported/
+    11111111-1111-1111-1111-111111111111/
+      Cube.vemesh
 ```
 
-The `.vemesh` file references the source OBJ:
+## Meta Files
+
+Meta files are text JSON:
 
 ```json
 {
-    "schemaVersion": 1,
-    "type": "Mesh",
-    "sourceAsset": "Assets/Meshes/Cube.obj",
+    "version": 1,
+    "guid": "11111111-1111-1111-1111-111111111111",
+    "assetType": "ObjSource",
+    "sourcePath": "Assets/Meshes/Cube.obj",
     "importer": "ObjMeshImporter",
     "importSettings": {}
 }
 ```
 
-This keeps the first-stage workflow simple: the native source asset remains the source of truth, and the imported asset
-is a JSON descriptor that later runtime/resource code can resolve.
+`.vematerial` and `.vescene` also get `.meta` files, but they do not produce imported artifacts in the first version.
+
+## OBJ Import
+
+The first OBJ import path writes a native mesh asset under `Library/Imported/<guid>/<source-name>.vemesh`.
+
+When the asset database sees:
+
+```text
+Assets/Meshes/Cube.obj
+```
+
+and its meta GUID is:
+
+```text
+11111111-1111-1111-1111-111111111111
+```
+
+it writes:
+
+```text
+Library/Imported/11111111-1111-1111-1111-111111111111/Cube.vemesh
+```
+
+The imported `.vemesh` file is the runtime mesh asset. It contains the mesh data needed by runtime loaders and does not
+reference the source OBJ:
+
+```json
+{
+    "version": 1,
+    "type": "Mesh",
+    "guid": "11111111-1111-1111-1111-111111111111",
+    "name": "Cube",
+    "vertexFormat": "Position",
+    "vertices": [
+        [-0.5, -0.5, -0.5],
+        [0.5, -0.5, -0.5],
+        [0.5, 0.5, -0.5]
+    ],
+    "indices": [0, 1, 2],
+    "boundsCenter": [0, 0, 0],
+    "boundsExtents": [0.5, 0.5, 0.5],
+    "importer": "ObjMeshImporter",
+    "importSettings": {},
+    "submeshes": [
+        {
+            "name": "Cube",
+            "indexStart": 0,
+            "indexCount": 3
+        }
+    ]
+}
+```
+
+Runtime resource references should use GUIDs. The runtime loads native VEngine assets, such as `.vemesh`, rather than
+loading original source files directly.
 
 ## Refresh Flow
 
-`EditorAssetDatabase::Refresh()` does two passes:
+`EditorAssetDatabase::Refresh()` recursively scans `Assets/` and:
 
-1. Recursively scan `Assets/` for `.obj` files and create missing `.vemesh` descriptors.
-2. Recursively scan supported files and build asset records for `.obj`, `.vemesh`, `.vematerial`, and `.vescene`.
+1. Creates missing `.meta` files for supported native assets.
+2. Reads GUIDs from existing `.meta` files.
+3. Imports `.obj` sources into `Library/Imported/<guid>/<source-name>.vemesh` when the imported file is missing.
+4. Builds editor asset records with source path, meta path, GUID, type, and imported path where applicable.
 
-Asset records contain the project-relative path, the asset type, whether it is imported, and the source asset path for
-imported mesh descriptors.
+`ReimportAll()` forces all OBJ imports to be regenerated. `ReimportAsset()` currently forces regeneration for a selected
+`.obj`; `.vematerial` and `.vescene` only refresh their records because they do not have importers yet.

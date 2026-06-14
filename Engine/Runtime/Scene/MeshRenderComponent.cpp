@@ -27,25 +27,25 @@ namespace ve
         UnregisterRenderItemFromRenderThread();
     }
 
-    const std::string& MeshRenderComponent::GetMeshAssetPath() const noexcept
+    const std::string& MeshRenderComponent::GetMeshAssetGuid() const noexcept
     {
-        return meshAssetPath_;
+        return meshAssetGuid_;
     }
 
-    void MeshRenderComponent::SetMeshAssetPath(std::string meshAssetPath)
+    void MeshRenderComponent::SetMeshAssetGuid(std::string meshAssetGuid)
     {
-        meshAssetPath_ = std::move(meshAssetPath);
+        meshAssetGuid_ = std::move(meshAssetGuid);
         SubmitRenderItemUpdateToRenderThread();
     }
 
-    const std::string& MeshRenderComponent::GetMaterialAssetPath() const noexcept
+    const std::string& MeshRenderComponent::GetMaterialAssetGuid() const noexcept
     {
-        return materialAssetPath_;
+        return materialAssetGuid_;
     }
 
-    void MeshRenderComponent::SetMaterialAssetPath(std::string materialAssetPath)
+    void MeshRenderComponent::SetMaterialAssetGuid(std::string materialAssetGuid)
     {
-        materialAssetPath_ = std::move(materialAssetPath);
+        materialAssetGuid_ = std::move(materialAssetGuid);
         SubmitRenderItemUpdateToRenderThread();
     }
 
@@ -87,8 +87,8 @@ namespace ve
         const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
 
         return RTRenderItemDesc{
-            meshAssetPath_,
-            materialAssetPath_,
+            meshAssetGuid_,
+            materialAssetGuid_,
             boundsCenter_,
             boundsExtents_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),

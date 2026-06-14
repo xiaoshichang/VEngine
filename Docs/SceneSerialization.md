@@ -56,8 +56,8 @@ model: children are serialized under the owning `TransformComponent`'s GameObjec
 `MeshRenderComponent`:
 
 - `enabled`
-- `meshAssetPath`
-- `materialAssetPath`
+- `meshAssetGuid`
+- `materialAssetGuid`
 - `boundsCenter`
 - `boundsExtents`
 

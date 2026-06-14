@@ -5,16 +5,34 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 
 #include <boost/json.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <limits>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ve::editor
 {
     namespace
     {
+        constexpr const char* ImportedDirectoryName = "Imported";
+
+        struct ObjMeshData
+        {
+            std::string name;
+            std::vector<std::array<double, 3>> vertices;
+            std::vector<UInt32> indices;
+            std::array<double, 3> boundsCenter = {0.0, 0.0, 0.0};
+            std::array<double, 3> boundsExtents = {0.0, 0.0, 0.0};
+        };
+
         [[nodiscard]] std::string ToLowerCopy(std::string text)
         {
             std::transform(text.begin(),
@@ -32,11 +50,6 @@ namespace ve::editor
                 return EditorAssetType::ObjSource;
             }
 
-            if (extension == ".vemesh")
-            {
-                return EditorAssetType::Mesh;
-            }
-
             if (extension == ".vematerial")
             {
                 return EditorAssetType::Material;
@@ -50,39 +63,45 @@ namespace ve::editor
             return EditorAssetType::Unknown;
         }
 
-        [[nodiscard]] bool IsSupportedAssetFile(const Path& path)
+        [[nodiscard]] bool IsMetaFile(const Path& path)
         {
-            return GetAssetTypeFromExtension(path) != EditorAssetType::Unknown;
+            return ToLowerCopy(path.GetString()).ends_with(".meta");
         }
 
-        [[nodiscard]] Path ReplaceExtension(const Path& path, std::string_view extension)
+        [[nodiscard]] bool IsSupportedNativeAssetFile(const Path& path)
         {
-            std::string text = path.GetString();
-            const std::string filename = path.GetFilename();
-            const size_t filenameStart = text.size() - filename.size();
-            const size_t dot = filename.find_last_of('.');
-            if (dot == std::string::npos || dot == 0)
-            {
-                text += extension;
-            }
-            else
-            {
-                text.resize(filenameStart + dot);
-                text += extension;
-            }
-
-            return Path(text);
+            return GetAssetTypeFromExtension(path) != EditorAssetType::Unknown && !IsMetaFile(path);
         }
 
-        [[nodiscard]] boost::json::object BuildMeshAssetJson(const Path& objProjectPath)
+        [[nodiscard]] const char* ToMetaAssetType(EditorAssetType type) noexcept
         {
-            boost::json::object object;
-            object["schemaVersion"] = 1;
-            object["type"] = "Mesh";
-            object["sourceAsset"] = objProjectPath.GetString();
-            object["importer"] = "ObjMeshImporter";
-            object["importSettings"] = boost::json::object{};
-            return object;
+            switch (type)
+            {
+            case EditorAssetType::ObjSource:
+                return "ObjSource";
+            case EditorAssetType::Mesh:
+                return "Mesh";
+            case EditorAssetType::Material:
+                return "Material";
+            case EditorAssetType::Scene:
+                return "Scene";
+            case EditorAssetType::Unknown:
+                break;
+            }
+
+            return "Unknown";
+        }
+
+        [[nodiscard]] const char* GetDefaultImporter(EditorAssetType type) noexcept
+        {
+            return type == EditorAssetType::ObjSource ? "ObjMeshImporter" : "";
+        }
+
+        [[nodiscard]] std::string GenerateGuid()
+        {
+            static boost::uuids::random_generator generator;
+            const boost::uuids::uuid uuid = generator();
+            return boost::uuids::to_string(uuid);
         }
 
         [[nodiscard]] std::string ReadString(const boost::json::object& object,
@@ -95,6 +114,230 @@ namespace ve::editor
             }
 
             return fallback;
+        }
+
+        [[nodiscard]] std::string GetStem(const Path& path)
+        {
+            const std::string filename = path.GetFilename();
+            const std::string extension = path.GetExtension();
+            if (extension.empty() || extension.size() >= filename.size())
+            {
+                return filename;
+            }
+
+            return filename.substr(0, filename.size() - extension.size());
+        }
+
+        [[nodiscard]] std::string GetImportedMeshFilename(const Path& objProjectPath)
+        {
+            return GetStem(objProjectPath) + ".vemesh";
+        }
+
+        [[nodiscard]] boost::json::array WriteVector3(const std::array<double, 3>& value)
+        {
+            boost::json::array array;
+            array.emplace_back(value[0]);
+            array.emplace_back(value[1]);
+            array.emplace_back(value[2]);
+            return array;
+        }
+
+        [[nodiscard]] boost::json::array WriteVertices(const std::vector<std::array<double, 3>>& vertices)
+        {
+            boost::json::array array;
+            for (const std::array<double, 3>& vertex : vertices)
+            {
+                array.emplace_back(WriteVector3(vertex));
+            }
+
+            return array;
+        }
+
+        [[nodiscard]] boost::json::array WriteIndices(const std::vector<UInt32>& indices)
+        {
+            boost::json::array array;
+            for (UInt32 index : indices)
+            {
+                array.emplace_back(index);
+            }
+
+            return array;
+        }
+
+        [[nodiscard]] Result<UInt32> ParseObjVertexIndex(std::string_view token, SizeT vertexCount)
+        {
+            const size_t slash = token.find('/');
+            const std::string indexText(slash == std::string_view::npos ? token : token.substr(0, slash));
+            if (indexText.empty())
+            {
+                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face has an empty vertex index."));
+            }
+
+            int objIndex = 0;
+            try
+            {
+                objIndex = std::stoi(indexText);
+            }
+            catch (const std::exception&)
+            {
+                return Result<UInt32>::Failure(
+                    Error(ErrorCode::InvalidArgument, "OBJ face has an invalid vertex index: " + indexText));
+            }
+
+            const int zeroBasedIndex = objIndex > 0 ? objIndex - 1 : static_cast<int>(vertexCount) + objIndex;
+            if (zeroBasedIndex < 0 || static_cast<SizeT>(zeroBasedIndex) >= vertexCount)
+            {
+                return Result<UInt32>::Failure(
+                    Error(ErrorCode::InvalidArgument, "OBJ face vertex index is outside the vertex array."));
+            }
+
+            return Result<UInt32>::Success(static_cast<UInt32>(zeroBasedIndex));
+        }
+
+        void UpdateBounds(ObjMeshData& mesh)
+        {
+            std::array<double, 3> minimum = {
+                std::numeric_limits<double>::max(),
+                std::numeric_limits<double>::max(),
+                std::numeric_limits<double>::max(),
+            };
+            std::array<double, 3> maximum = {
+                std::numeric_limits<double>::lowest(),
+                std::numeric_limits<double>::lowest(),
+                std::numeric_limits<double>::lowest(),
+            };
+
+            for (const std::array<double, 3>& vertex : mesh.vertices)
+            {
+                for (SizeT axis = 0; axis < 3; ++axis)
+                {
+                    minimum[axis] = std::min(minimum[axis], vertex[axis]);
+                    maximum[axis] = std::max(maximum[axis], vertex[axis]);
+                }
+            }
+
+            for (SizeT axis = 0; axis < 3; ++axis)
+            {
+                mesh.boundsCenter[axis] = (minimum[axis] + maximum[axis]) * 0.5;
+                mesh.boundsExtents[axis] = (maximum[axis] - minimum[axis]) * 0.5;
+            }
+        }
+
+        [[nodiscard]] Result<ObjMeshData> ParseObjMesh(const Path& objPhysicalPath, const Path& objProjectPath)
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(objPhysicalPath);
+            if (!text)
+            {
+                return Result<ObjMeshData>::Failure(text.GetError());
+            }
+
+            ObjMeshData mesh;
+            mesh.name = GetStem(objProjectPath);
+
+            std::istringstream input(text.GetValue());
+            std::string line;
+            while (std::getline(input, line))
+            {
+                std::istringstream lineInput(line);
+                std::string command;
+                lineInput >> command;
+
+                if (command == "o" || command == "g")
+                {
+                    std::string name;
+                    lineInput >> name;
+                    if (!name.empty())
+                    {
+                        mesh.name = name;
+                    }
+                }
+                else if (command == "v")
+                {
+                    std::array<double, 3> vertex = {0.0, 0.0, 0.0};
+                    if (!(lineInput >> vertex[0] >> vertex[1] >> vertex[2]))
+                    {
+                        return Result<ObjMeshData>::Failure(
+                            Error(ErrorCode::InvalidArgument, "OBJ vertex line must contain three numeric values."));
+                    }
+
+                    mesh.vertices.push_back(vertex);
+                }
+                else if (command == "f")
+                {
+                    std::vector<UInt32> faceIndices;
+                    std::string token;
+                    while (lineInput >> token)
+                    {
+                        Result<UInt32> indexResult = ParseObjVertexIndex(token, mesh.vertices.size());
+                        if (!indexResult)
+                        {
+                            return Result<ObjMeshData>::Failure(indexResult.GetError());
+                        }
+
+                        faceIndices.push_back(indexResult.GetValue());
+                    }
+
+                    if (faceIndices.size() < 3)
+                    {
+                        return Result<ObjMeshData>::Failure(
+                            Error(ErrorCode::InvalidArgument, "OBJ face line must contain at least three vertices."));
+                    }
+
+                    for (SizeT index = 1; index + 1 < faceIndices.size(); ++index)
+                    {
+                        mesh.indices.push_back(faceIndices[0]);
+                        mesh.indices.push_back(faceIndices[index]);
+                        mesh.indices.push_back(faceIndices[index + 1]);
+                    }
+                }
+            }
+
+            if (mesh.vertices.empty() || mesh.indices.empty())
+            {
+                return Result<ObjMeshData>::Failure(
+                    Error(ErrorCode::InvalidArgument, "OBJ mesh must contain vertices and faces."));
+            }
+
+            UpdateBounds(mesh);
+            return Result<ObjMeshData>::Success(std::move(mesh));
+        }
+
+        [[nodiscard]] boost::json::object BuildMetaJson(const EditorAssetRecord& record)
+        {
+            boost::json::object object;
+            object["version"] = 1;
+            object["guid"] = record.guid;
+            object["assetType"] = ToMetaAssetType(record.type);
+            object["sourcePath"] = record.path.GetString();
+            object["importer"] = GetDefaultImporter(record.type);
+            object["importSettings"] = boost::json::object{};
+            return object;
+        }
+
+        [[nodiscard]] boost::json::object BuildMeshAssetJson(const ObjMeshData& mesh, const std::string& guid)
+        {
+            boost::json::object object;
+            object["version"] = 1;
+            object["type"] = "Mesh";
+            object["guid"] = guid;
+            object["name"] = mesh.name;
+            object["vertexFormat"] = "Position";
+            object["vertices"] = WriteVertices(mesh.vertices);
+            object["indices"] = WriteIndices(mesh.indices);
+            object["boundsCenter"] = WriteVector3(mesh.boundsCenter);
+            object["boundsExtents"] = WriteVector3(mesh.boundsExtents);
+            object["importer"] = "ObjMeshImporter";
+            object["importSettings"] = boost::json::object{};
+
+            boost::json::object submesh;
+            submesh["name"] = mesh.name;
+            submesh["indexStart"] = 0;
+            submesh["indexCount"] = mesh.indices.size();
+
+            boost::json::array submeshes;
+            submeshes.emplace_back(std::move(submesh));
+            object["submeshes"] = std::move(submeshes);
+            return object;
         }
     } // namespace
 
@@ -146,15 +389,7 @@ namespace ve::editor
         }
 
         assets_.clear();
-
-        ErrorCode result = ScanAndImportDirectory(assetsRoot, false);
-        if (result != ErrorCode::None)
-        {
-            return result;
-        }
-
-        assets_.clear();
-        result = ScanRecordsDirectory(assetsRoot);
+        const ErrorCode result = ScanAndImportDirectory(assetsRoot, false);
         if (result != ErrorCode::None)
         {
             return result;
@@ -165,11 +400,6 @@ namespace ve::editor
                   [](const EditorAssetRecord& left, const EditorAssetRecord& right)
                   { return left.path.GetString() < right.path.GetString(); });
         return ErrorCode::None;
-    }
-
-    SizeT EditorAssetDatabase::GetAssetCount() const noexcept
-    {
-        return assets_.size();
     }
 
     ErrorCode EditorAssetDatabase::ReimportAll()
@@ -185,13 +415,18 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        ErrorCode result = ScanAndImportDirectory(assetsRoot, true);
+        assets_.clear();
+        const ErrorCode result = ScanAndImportDirectory(assetsRoot, true);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        return Refresh();
+        std::sort(assets_.begin(),
+                  assets_.end(),
+                  [](const EditorAssetRecord& left, const EditorAssetRecord& right)
+                  { return left.path.GetString() < right.path.GetString(); });
+        return ErrorCode::None;
     }
 
     ErrorCode EditorAssetDatabase::ReimportAsset(const Path& projectRelativePath)
@@ -207,29 +442,21 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        ErrorCode result = ErrorCode::None;
-        switch (asset->type)
+        if (asset->type == EditorAssetType::ObjSource)
         {
-        case EditorAssetType::ObjSource:
-            result = ImportObjAsMesh(asset->path, true);
-            break;
-        case EditorAssetType::Mesh:
-            result =
-                asset->sourcePath.IsEmpty() ? ErrorCode::InvalidArgument : ImportObjAsMesh(asset->sourcePath, true);
-            break;
-        case EditorAssetType::Material:
-        case EditorAssetType::Scene:
-        case EditorAssetType::Unknown:
-            result = ErrorCode::None;
-            break;
-        }
-
-        if (result != ErrorCode::None)
-        {
-            return result;
+            const ErrorCode result = ImportObjAsMesh(asset->path, asset->guid, true);
+            if (result != ErrorCode::None)
+            {
+                return result;
+            }
         }
 
         return Refresh();
+    }
+
+    SizeT EditorAssetDatabase::GetAssetCount() const noexcept
+    {
+        return assets_.size();
     }
 
     const EditorAssetRecord* EditorAssetDatabase::GetAsset(SizeT index) const noexcept
@@ -248,6 +475,14 @@ namespace ve::editor
                                      assets_.end(),
                                      [&projectRelativePath](const EditorAssetRecord& record)
                                      { return record.path == projectRelativePath; });
+        return it != assets_.end() ? &(*it) : nullptr;
+    }
+
+    const EditorAssetRecord* EditorAssetDatabase::FindAssetByGuid(const std::string& guid) const noexcept
+    {
+        const auto it = std::find_if(assets_.begin(),
+                                     assets_.end(),
+                                     [&guid](const EditorAssetRecord& record) { return record.guid == guid; });
         return it != assets_.end() ? &(*it) : nullptr;
     }
 
@@ -293,52 +528,30 @@ namespace ve::editor
                     return result;
                 }
             }
-            else if (entry.type == FileSystem::DirectoryEntryType::File &&
-                     GetAssetTypeFromExtension(entry.path) == EditorAssetType::ObjSource)
-            {
-                const ErrorCode result = ImportObjAsMesh(ToProjectRelativePath(entry.path), force);
-                if (result != ErrorCode::None)
-                {
-                    return result;
-                }
-            }
-        }
-
-        return ErrorCode::None;
-    }
-
-    ErrorCode EditorAssetDatabase::ScanRecordsDirectory(const Path& physicalDirectoryPath)
-    {
-        Result<std::vector<FileSystem::DirectoryEntry>> entries = FileSystem::ListDirectory(physicalDirectoryPath);
-        if (!entries)
-        {
-            return entries.GetError().GetCode();
-        }
-
-        for (const FileSystem::DirectoryEntry& entry : entries.GetValue())
-        {
-            if (entry.type == FileSystem::DirectoryEntryType::Directory)
-            {
-                const ErrorCode result = ScanRecordsDirectory(entry.path);
-                if (result != ErrorCode::None)
-                {
-                    return result;
-                }
-            }
-            else if (entry.type == FileSystem::DirectoryEntryType::File && IsSupportedAssetFile(entry.path))
+            else if (entry.type == FileSystem::DirectoryEntryType::File && IsSupportedNativeAssetFile(entry.path))
             {
                 EditorAssetRecord record;
                 record.path = ToProjectRelativePath(entry.path);
+                record.metaPath = GetMetaPath(record.path);
                 record.type = GetAssetTypeFromExtension(entry.path);
-                record.imported = record.type == EditorAssetType::Mesh;
 
-                if (record.type == EditorAssetType::Mesh)
+                Result<std::string> guidResult = EnsureMeta(record);
+                if (!guidResult)
                 {
-                    Result<Path> sourcePath = ReadMeshSourcePath(entry.path);
-                    if (sourcePath)
+                    return guidResult.GetError().GetCode();
+                }
+
+                record.guid = guidResult.MoveValue();
+                if (record.type == EditorAssetType::ObjSource)
+                {
+                    const ErrorCode importResult = ImportObjAsMesh(record.path, record.guid, force);
+                    if (importResult != ErrorCode::None)
                     {
-                        record.sourcePath = sourcePath.GetValue();
+                        return importResult;
                     }
+
+                    record.imported = true;
+                    record.importedPath = GetImportedMeshPath(record.guid, record.path);
                 }
 
                 AddAssetRecord(std::move(record));
@@ -348,47 +561,87 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    ErrorCode EditorAssetDatabase::ImportObjAsMesh(const Path& objProjectPath, bool force)
+    ErrorCode EditorAssetDatabase::ImportObjAsMesh(const Path& objProjectPath, const std::string& guid, bool force)
     {
-        if (objProjectPath.IsEmpty())
+        if (objProjectPath.IsEmpty() || guid.empty())
         {
             return ErrorCode::InvalidArgument;
         }
 
-        const Path meshProjectPath = ReplaceExtension(objProjectPath, ".vemesh");
+        const Path meshProjectPath = GetImportedMeshPath(guid, objProjectPath);
         const Path meshPhysicalPath = projectRoot_ / meshProjectPath;
-
         if (!force && FileSystem::IsFile(meshPhysicalPath))
         {
             return ErrorCode::None;
         }
 
-        const boost::json::value meshJson(BuildMeshAssetJson(objProjectPath));
+        Result<ObjMeshData> meshData = ParseObjMesh(projectRoot_ / objProjectPath, objProjectPath);
+        if (!meshData)
+        {
+            return meshData.GetError().GetCode();
+        }
+
+        const boost::json::value meshJson(BuildMeshAssetJson(meshData.GetValue(), guid));
         return FileSystem::WriteTextFile(meshPhysicalPath, JsonUtils::SerializePretty(meshJson));
     }
 
-    Result<Path> EditorAssetDatabase::ReadMeshSourcePath(const Path& meshPhysicalPath) const
+    Result<std::string> EditorAssetDatabase::EnsureMeta(const EditorAssetRecord& record) const
     {
-        Result<std::string> text = FileSystem::ReadTextFile(meshPhysicalPath);
+        const Path metaPhysicalPath = projectRoot_ / record.metaPath;
+        if (FileSystem::IsFile(metaPhysicalPath))
+        {
+            Result<std::string> guidResult = ReadMetaGuid(metaPhysicalPath);
+            if (guidResult && !guidResult.GetValue().empty())
+            {
+                return guidResult;
+            }
+        }
+
+        EditorAssetRecord metaRecord = record;
+        metaRecord.guid = GenerateGuid();
+
+        const boost::json::value metaJson(BuildMetaJson(metaRecord));
+        const ErrorCode result = FileSystem::WriteTextFile(metaPhysicalPath, JsonUtils::SerializePretty(metaJson));
+        if (result != ErrorCode::None)
+        {
+            return Result<std::string>::Failure(Error(result, "Failed to write asset meta file."));
+        }
+
+        return Result<std::string>::Success(std::move(metaRecord.guid));
+    }
+
+    Result<std::string> EditorAssetDatabase::ReadMetaGuid(const Path& metaPhysicalPath) const
+    {
+        Result<std::string> text = FileSystem::ReadTextFile(metaPhysicalPath);
         if (!text)
         {
-            return Result<Path>::Failure(text.GetError());
+            return Result<std::string>::Failure(text.GetError());
         }
 
         Result<boost::json::value> json = JsonUtils::Parse(text.GetValue());
         if (!json)
         {
-            return Result<Path>::Failure(json.GetError());
+            return Result<std::string>::Failure(json.GetError());
         }
 
         if (!json.GetValue().is_object())
         {
-            return Result<Path>::Failure(
-                Error(ErrorCode::InvalidArgument, "Mesh asset descriptor root must be a JSON object."));
+            return Result<std::string>::Failure(
+                Error(ErrorCode::InvalidArgument, "Asset meta descriptor root must be a JSON object."));
         }
 
-        const std::string sourceAsset = ReadString(json.GetValue().as_object(), "sourceAsset");
-        return Result<Path>::Success(Path(sourceAsset));
+        return Result<std::string>::Success(ReadString(json.GetValue().as_object(), "guid"));
+    }
+
+    Path EditorAssetDatabase::GetImportedMeshPath(const std::string& guid, const Path& objProjectPath) const
+    {
+        return Path(EditorProject::LibraryDirectoryName) / ImportedDirectoryName / guid /
+               GetImportedMeshFilename(objProjectPath);
+    }
+
+    Path EditorAssetDatabase::GetMetaPath(const Path& assetProjectPath) const
+    {
+        return Path(assetProjectPath.GetString() + ".meta");
     }
 
     Path EditorAssetDatabase::ToProjectRelativePath(const Path& physicalPath) const

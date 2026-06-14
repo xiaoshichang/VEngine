@@ -17,11 +17,11 @@ namespace ve
         MeshRenderComponent(Scene& scene, GameObject& owner);
         ~MeshRenderComponent() override;
 
-        [[nodiscard]] const std::string& GetMeshAssetPath() const noexcept;
-        void SetMeshAssetPath(std::string meshAssetPath);
+        [[nodiscard]] const std::string& GetMeshAssetGuid() const noexcept;
+        void SetMeshAssetGuid(std::string meshAssetGuid);
 
-        [[nodiscard]] const std::string& GetMaterialAssetPath() const noexcept;
-        void SetMaterialAssetPath(std::string materialAssetPath);
+        [[nodiscard]] const std::string& GetMaterialAssetGuid() const noexcept;
+        void SetMaterialAssetGuid(std::string materialAssetGuid);
 
         [[nodiscard]] const Vector3& GetBoundsCenter() const noexcept;
         void SetBoundsCenter(const Vector3& boundsCenter) noexcept;
@@ -48,8 +48,8 @@ namespace ve
         void SubmitRenderItemUpdateToRenderThread();
         void SubmitRenderItemTransformUpdateToRenderThread();
 
-        std::string meshAssetPath_;
-        std::string materialAssetPath_;
+        std::string meshAssetGuid_;
+        std::string materialAssetGuid_;
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
         bool renderItemTransformDirty_ = true;

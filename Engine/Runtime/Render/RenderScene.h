@@ -25,8 +25,8 @@ namespace ve
 
     struct RTRenderItemDesc
     {
-        std::string meshAssetPath;
-        std::string materialAssetPath;
+        std::string meshAssetGuid;
+        std::string materialAssetGuid;
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
         Matrix44 localToWorld = Matrix44::Identity();

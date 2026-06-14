@@ -23,9 +23,11 @@ namespace ve::editor
     struct EditorAssetRecord
     {
         Path path;
+        Path metaPath;
+        std::string guid;
         EditorAssetType type = EditorAssetType::Unknown;
         bool imported = false;
-        Path sourcePath;
+        Path importedPath;
     };
 
     class EditorAssetDatabase : public NonMovable
@@ -47,15 +49,18 @@ namespace ve::editor
         [[nodiscard]] SizeT GetAssetCount() const noexcept;
         [[nodiscard]] const EditorAssetRecord* GetAsset(SizeT index) const noexcept;
         [[nodiscard]] const EditorAssetRecord* FindAsset(const Path& projectRelativePath) const noexcept;
+        [[nodiscard]] const EditorAssetRecord* FindAssetByGuid(const std::string& guid) const noexcept;
         [[nodiscard]] const std::vector<EditorAssetRecord>& GetAssets() const noexcept;
 
         [[nodiscard]] static const char* ToString(EditorAssetType type) noexcept;
 
     private:
         [[nodiscard]] ErrorCode ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force);
-        [[nodiscard]] ErrorCode ScanRecordsDirectory(const Path& physicalDirectoryPath);
-        [[nodiscard]] ErrorCode ImportObjAsMesh(const Path& objProjectPath, bool force);
-        [[nodiscard]] Result<Path> ReadMeshSourcePath(const Path& meshPhysicalPath) const;
+        [[nodiscard]] ErrorCode ImportObjAsMesh(const Path& objProjectPath, const std::string& guid, bool force);
+        [[nodiscard]] Result<std::string> EnsureMeta(const EditorAssetRecord& record) const;
+        [[nodiscard]] Result<std::string> ReadMetaGuid(const Path& metaPhysicalPath) const;
+        [[nodiscard]] Path GetImportedMeshPath(const std::string& guid, const Path& objProjectPath) const;
+        [[nodiscard]] Path GetMetaPath(const Path& assetProjectPath) const;
         [[nodiscard]] Path ToProjectRelativePath(const Path& physicalPath) const;
         void AddAssetRecord(EditorAssetRecord record);
 
