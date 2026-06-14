@@ -9,6 +9,34 @@ namespace ve::JsonUtils
             output.append(static_cast<size_t>(depth * indentSpaces), ' ');
         }
 
+        [[nodiscard]] bool ShouldSerializeArrayInline(const boost::json::array& array) noexcept
+        {
+            for (const boost::json::value& item : array)
+            {
+                if (item.is_object() || item.is_array())
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        void SerializeInlineArray(std::string& output, const boost::json::array& array)
+        {
+            output += "[";
+            for (size_t index = 0; index < array.size(); ++index)
+            {
+                if (index > 0)
+                {
+                    output += ", ";
+                }
+
+                output += boost::json::serialize(array[index]);
+            }
+            output += "]";
+        }
+
         void SerializePrettyImpl(std::string& output, const boost::json::value& value, int depth, int indentSpaces)
         {
             switch (value.kind())
@@ -46,6 +74,12 @@ namespace ve::JsonUtils
                 if (array.empty())
                 {
                     output += "[]";
+                    return;
+                }
+
+                if (ShouldSerializeArrayInline(array))
+                {
+                    SerializeInlineArray(output, array);
                     return;
                 }
 

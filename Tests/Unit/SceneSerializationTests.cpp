@@ -86,6 +86,8 @@ namespace
         passed &= Expect(serialized.IsOk(), "Scene should serialize to JSON text");
         passed &= Expect(serialized.GetValue().find("\n    \"rootGameObjects\"") != std::string::npos,
                          "Scene JSON should be pretty-printed");
+        passed &= Expect(serialized.GetValue().find("\"localPosition\": [1E0, 2E0, 3E0]") != std::string::npos,
+                         "Scene vector JSON should stay on one line");
 
         ve::Scene loadedScene;
         passed &= ExpectOk(ve::SceneSerialization::LoadFromString(loadedScene, serialized.GetValue()),
