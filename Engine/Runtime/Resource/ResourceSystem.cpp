@@ -9,6 +9,7 @@ namespace ve
     ErrorCode ResourceSystem::Initialize(const ResourceSystemInitParam& desc)
     {
         projectRoot_ = desc.projectRoot;
+        environment_ = desc.environment;
         initialized_ = true;
         return ErrorCode::None;
     }
@@ -20,6 +21,7 @@ namespace ve
         projectRoot_ = Path();
         manifestPath_ = Path();
         resourceResolveCallback_ = nullptr;
+        environment_ = ResourceSystemEnvironment::Player;
         initialized_ = false;
     }
 
@@ -36,6 +38,11 @@ namespace ve
     bool ResourceSystem::IsInitialized() const noexcept
     {
         return initialized_;
+    }
+
+    ResourceSystemEnvironment ResourceSystem::GetEnvironment() const noexcept
+    {
+        return environment_;
     }
 
     const Path& ResourceSystem::GetProjectRoot() const noexcept
@@ -63,28 +70,6 @@ namespace ve
         resourceResolveCallback_ = std::move(callback);
     }
 
-    ErrorCode ResourceSystem::ReloadManifest()
-    {
-        if (!initialized_)
-        {
-            return ErrorCode::InvalidState;
-        }
-
-        if (manifestPath_.IsEmpty())
-        {
-            return ErrorCode::InvalidState;
-        }
-
-        manifest_.Clear();
-        return manifest_.LoadFromFile(manifestPath_);
-    }
-
-    ErrorCode ResourceSystem::ReloadManifest(Path manifestPath)
-    {
-        SetManifestPath(std::move(manifestPath));
-        return ReloadManifest();
-    }
-
     Result<ResourceRecord> ResourceSystem::FindResource(const Guid& guid) const
     {
         if (guid.IsEmpty())
@@ -92,42 +77,36 @@ namespace ve
             return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
         }
 
-        const ResourceRecord* record = manifest_.Find(guid);
-        if (record != nullptr)
+        if (environment_ == ResourceSystemEnvironment::Player)
         {
-            return Result<ResourceRecord>::Success(*record);
-        }
-
-        if (resourceResolveCallback_ == nullptr)
-        {
+            const ResourceRecord* record = manifest_.Find(guid);
+            if (record != nullptr)
+            {
+                return Result<ResourceRecord>::Success(*record);
+            }
             return Result<ResourceRecord>::Failure(Error(ErrorCode::NotFound, "Resource not found."));
         }
-
-        Result<ResourceRecord> resolved = resourceResolveCallback_(guid);
-        if (!resolved)
+        else if(environment_ == ResourceSystemEnvironment::Editor)
         {
-            return Result<ResourceRecord>::Failure(resolved.GetError());
-        }
+            if (resourceResolveCallback_ == nullptr)
+            {
+                return Result<ResourceRecord>::Failure(
+                    Error(ErrorCode::InvalidState, "Editor resource lookup requires a resolve callback."));
+            }
 
-        ResourceRecord recordValue = resolved.MoveValue();
-        if (recordValue.guid.IsEmpty())
+            Result<ResourceRecord> resolved = resourceResolveCallback_(guid);
+            if (!resolved)
+            {
+                return Result<ResourceRecord>::Failure(resolved.GetError());
+            }
+
+            ResourceRecord record = resolved.MoveValue();
+            return Result<ResourceRecord>::Success(std::move(record));
+        }
+        else
         {
-            recordValue.guid = guid;
+            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidState, "Unknown resource system environment."));
         }
-
-        ErrorCode addResult = manifest_.AddOrUpdate(recordValue);
-        if (addResult != ErrorCode::None)
-        {
-            return Result<ResourceRecord>::Failure(Error(addResult, "Failed to register resource."));
-        }
-
-        const ResourceRecord* registered = manifest_.Find(guid);
-        if (registered == nullptr)
-        {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::NotFound, "Resource not found after resolve."));
-        }
-
-        return Result<ResourceRecord>::Success(*registered);
     }
 
     Result<LoadedResourceData> ResourceSystem::LoadResource(const Guid& guid)

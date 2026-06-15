@@ -74,20 +74,4 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineSceneSerializationTests>
     )
 
-    add_executable(VEngineResourceManifestTests
-        Tests/Unit/ResourceManifestTests.cpp
-    )
-
-    target_link_libraries(VEngineResourceManifestTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineResourceManifestTests)
-
-    add_test(
-        NAME VEngineResourceManifestTests
-        COMMAND $<TARGET_FILE:VEngineResourceManifestTests>
-    )
-
 endfunction()

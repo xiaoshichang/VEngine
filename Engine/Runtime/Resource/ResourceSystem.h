@@ -13,9 +13,16 @@
 
 namespace ve
 {
+    enum class ResourceSystemEnvironment
+    {
+        Player,
+        Editor,
+    };
+
     struct ResourceSystemInitParam
     {
         Path projectRoot;
+        ResourceSystemEnvironment environment = ResourceSystemEnvironment::Player;
     };
 
     using ResourceResolveCallback = std::function<Result<ResourceRecord>(const Guid&)>;
@@ -41,6 +48,7 @@ namespace ve
         void SetManifestPath(Path manifestPath) noexcept;
 
         [[nodiscard]] bool IsInitialized() const noexcept;
+        [[nodiscard]] ResourceSystemEnvironment GetEnvironment() const noexcept;
         [[nodiscard]] const Path& GetProjectRoot() const noexcept;
         [[nodiscard]] const Path& GetManifestPath() const noexcept;
         [[nodiscard]] const ResourceManifest& GetManifest() const noexcept;
@@ -48,8 +56,6 @@ namespace ve
 
         void SetResourceResolveCallback(ResourceResolveCallback callback) noexcept;
 
-        [[nodiscard]] ErrorCode ReloadManifest();
-        [[nodiscard]] ErrorCode ReloadManifest(Path manifestPath);
         [[nodiscard]] Result<ResourceRecord> FindResource(const Guid& guid) const;
         [[nodiscard]] Result<LoadedResourceData> LoadResource(const Guid& guid);
         void ClearCache() noexcept;
@@ -63,6 +69,7 @@ namespace ve
         mutable ResourceManifest manifest_;
         ResourceResolveCallback resourceResolveCallback_;
         std::unordered_map<Guid, LoadedResourceData> cache_;
+        ResourceSystemEnvironment environment_ = ResourceSystemEnvironment::Player;
         bool initialized_ = false;
     };
 } // namespace ve
