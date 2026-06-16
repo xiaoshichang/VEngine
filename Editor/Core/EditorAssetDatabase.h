@@ -6,8 +6,6 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/FileSystem/Path.h"
-#include "Engine/Runtime/Resource/ResourceManifest.h"
-#include "Engine/Runtime/Resource/ResourceSystem.h"
 
 #include <string>
 #include <unordered_map>
@@ -56,9 +54,6 @@ namespace ve::editor
         [[nodiscard]] const EditorAssetRecord* FindAssetByGuid(const Guid& guid) const noexcept;
         [[nodiscard]] const std::unordered_map<Guid, EditorAssetRecord>& GetAssetsByGuid() const noexcept;
         [[nodiscard]] const std::unordered_map<std::string, Guid>& GetGuidsByAssetPath() const noexcept;
-        [[nodiscard]] Result<ResourceRecord> FindResource(const Guid& guid) const;
-        [[nodiscard]] Result<LoadedResourceData> LoadResource(const Guid& guid,
-                                                              ve::ResourceSystem& resourceSystem) const;
 
         [[nodiscard]] static const char* ToString(EditorAssetType type) noexcept;
 
@@ -71,7 +66,6 @@ namespace ve::editor
         [[nodiscard]] Path GetMetaPath(const Path& assetProjectPath) const;
         [[nodiscard]] Path ToProjectRelativePath(const Path& physicalPath) const;
         void AddAssetRecord(EditorAssetRecord record);
-        [[nodiscard]] ResourceRecord BuildResourceRecord(const EditorAssetRecord& asset) const;
 
         Path projectRoot_;
         std::unordered_map<Guid, EditorAssetRecord> assetsByGuid_;

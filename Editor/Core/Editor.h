@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorAssetDatabase.h"
 #include "Editor/Core/EditorInput.h"
 #include "Editor/Core/EditorProjectRegistry.h"
+#include "Editor/Core/EditorResourceLoader.h"
 #include "Engine/Runtime/Application/ApplicationCommandQueue.h"
 #include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/Core/Error.h"
@@ -50,6 +51,8 @@ namespace ve::editor
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
         [[nodiscard]] EditorAssetDatabase& GetAssetDatabase() noexcept;
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
+        [[nodiscard]] EditorResourceLoader& GetResourceLoader() noexcept;
+        [[nodiscard]] const EditorResourceLoader& GetResourceLoader() const noexcept;
         void SetSelectedGameObject(ve::GameObject* gameObject);
         void SetSelectedAsset(Path assetPath);
         void ClearSelection();
@@ -94,6 +97,7 @@ namespace ve::editor
         ProjectEditingView* projectEditingView_ = nullptr;
         RenderBackend renderBackend_ = RenderBackend::D3D12;
         EditorAssetDatabase assetDatabase_;
+        EditorResourceLoader resourceLoader_;
         EditorSelectionType selectionType_ = EditorSelectionType::None;
         ve::GameObject* selectedGameObject_ = nullptr;
         Path selectedAssetPath_;

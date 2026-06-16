@@ -497,28 +497,33 @@ Responsibilities:
 
 - Loading engine-native resource payloads from explicit platform paths.
 - Deserializing resource files into CPU-side resource data.
-- Creating concrete runtime objects and, where needed, submitting render-resource creation through Render.
-- Resource handles, caching, reference counting, and lifetime tracking.
-- Explicit resource unload and unused resource collection.
+- Creating concrete `ResourceObject` instances and, where needed, submitting render-resource creation through Render.
+- Resource object caching, reference counting, and lifetime tracking.
+- Runtime explicit release and runtime-owned cache lifetime tracking.
 - Synchronous loading and low-level asynchronous loading operations for runtime-facing loaders.
 
-Resource indexing and dependency ownership live one layer above `ResourceSystem`:
+Resource indexing and dependency ownership live above the physical loading layer:
 
 - `EditorAssetDatabase` owns editor asset records, project-relative asset path to GUID lookup, GUID to asset-record
   lookup, import artifacts, dependency records, and live editor updates while a project is open.
-- `RuntimeResourceLoader` owns the read-only player resource manifest exported during packaging, GUID to resource-record
-  lookup, packaged runtime path to GUID lookup, dependency traversal, and player-facing load requests.
+- `EditorResourceLoader` owns editor-side typed path loading, conversion from editor asset records to concrete asset
+  records, editor resource object caching, dependency load order, and unused-resource collection.
+- `RuntimeResourceLoader` owns the read-only player asset manifest exported during packaging, packaged runtime path
+  to GUID lookup, internal GUID to asset-record lookup, dependency traversal, typed path load requests, and explicit
+  runtime release requests.
 
-Both layers call `ResourceSystem` after they have resolved a GUID to a concrete `ResourceRecord`. Runtime should load
-processed engine assets rather than arbitrary source files. Editor and tools handle source import.
+Editor and runtime resource loading are intentionally separated. `EditorResourceLoader` loads from editable project
+records owned by `EditorAssetDatabase`. `RuntimeResourceLoader` resolves packaged manifest asset records and calls
+`ResourceSystem`. Runtime should load processed engine assets rather than arbitrary source files. Editor and tools
+handle source import.
 
 Editor resource lifetime follows an unused-resource collection model instead of per-load release calls from
 `EditorAssetDatabase`. Editor currently gathers root GUIDs from the active scene and selection state when the selection
-changes, when switching back to project selection, and around project opening. `ResourceSystem` marks those loaded
+changes, when switching back to project selection, and around project opening. `EditorResourceLoader` marks those loaded
 resources and their already-loaded dependencies as reachable, then unloads unreachable cached payloads. Preview panes,
 thumbnail jobs, and importer views should add their own active roots before they start loading resource payloads.
-Project close and runtime shutdown clear the entire `ResourceSystem` cache. Player resource lifetime can use stricter
-handle/reference-counting on top of `RuntimeResourceLoader` as the runtime object model grows.
+Project close clears the editor loader cache. Runtime shutdown clears the `ResourceSystem` cache. Player resource
+lifetime uses `RuntimeResourceLoader::ReleaseResource()` to release references acquired by typed path loads.
 
 ### 7.12 Render
 
@@ -903,30 +908,35 @@ Editor:
     -> keeps asset path -> GUID and GUID -> asset-record indexes current
     -> tracks imported artifact path and direct dependencies
     -> updates records as editor operations create, delete, move, reimport, or save assets
-    -> calls ResourceSystem synchronously with concrete ResourceRecord values when editor code needs resource payloads
+
+  EditorResourceLoader
+    -> derives asset records from EditorAssetDatabase asset records
+    -> exposes typed synchronous path loads for editor tools
+    -> creates and caches editor ResourceObject instances
+    -> collects unused editor cached resources from active root GUIDs
 
 Player:
   RuntimeResourceLoader
-    -> reads a packaged, read-only ResourceManifest exported during build/cook
-    -> resolves GUIDs through the GUID -> ResourceRecord table
+    -> reads a packaged, read-only AssetManifest exported during build/cook
     -> resolves packaged runtime paths through the runtimePath -> GUID map
-    -> resolves dependency order from that manifest
-    -> calls ResourceSystem with concrete ResourceRecord values
-    -> supports synchronous and asynchronous load entry points
-    -> never scans Assets/ and never mutates the manifest at runtime
+    -> resolves GUIDs internally through the GUID -> AssetRecord table
+    -> resolves dependency order from that asset manifest
+    -> exposes typed synchronous path loads
+    -> releases loaded runtime resources explicitly through ResourceSystem
+    -> never scans Assets/ and never mutates the asset manifest at runtime
 
 Shared low-level loading:
   ResourceSystem
     -> loads files from concrete platform paths
     -> deserializes engine-native resource formats
-    -> creates CPU-side resource data and future runtime resource objects
-    -> unloads explicit resources and collects unused cached resources from root GUIDs
-    -> provides synchronous and asynchronous loading entry points
+    -> creates ResourceObject instances such as MeshResource and MaterialResource
+    -> tracks runtime reference counts
+    -> releases runtime-owned resources
 ```
 
 The Editor AssetDatabase scans the `Assets/` tree, tracks native source assets and imported descriptors, and generates
 first-stage `.vemesh` descriptors from `.obj` sources without copying mesh payload data. Player builds export a runtime
-manifest and resource payload set from the editor/tooling asset records.
+asset manifest and resource payload set from the editor/tooling asset records.
 
 Recommended asset pipeline:
 
@@ -934,7 +944,7 @@ Recommended asset pipeline:
 Source Asset
   -> AssetImporter
   -> Editor Asset Metadata / Imported Artifact
-  -> Runtime Manifest + Packaged Resource Payload
+  -> Runtime AssetManifest + Packaged Resource Payload
   -> RuntimeResourceLoader
   -> ResourceSystem
 ```

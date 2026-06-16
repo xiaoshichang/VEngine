@@ -14,20 +14,20 @@ namespace ve
 
     ErrorCode RuntimeResourceLoader::Initialize(const RuntimeResourceLoaderInitParam& desc)
     {
-        if (desc.manifestPath.IsEmpty())
+        if (desc.assetManifestPath.IsEmpty())
         {
             return ErrorCode::InvalidArgument;
         }
 
         projectRoot_ = desc.projectRoot;
-        manifestPath_ = desc.manifestPath;
-        manifest_.Clear();
+        assetManifestPath_ = desc.assetManifestPath;
+        assetManifest_.Clear();
 
-        const ErrorCode loadResult = manifest_.LoadFromFile(manifestPath_);
+        const ErrorCode loadResult = assetManifest_.LoadFromFile(assetManifestPath_);
         if (loadResult != ErrorCode::None)
         {
             projectRoot_ = Path();
-            manifestPath_ = Path();
+            assetManifestPath_ = Path();
             return loadResult;
         }
 
@@ -37,9 +37,9 @@ namespace ve
 
     void RuntimeResourceLoader::Shutdown() noexcept
     {
-        manifest_.Clear();
+        assetManifest_.Clear();
         projectRoot_ = Path();
-        manifestPath_ = Path();
+        assetManifestPath_ = Path();
         initialized_ = false;
     }
 
@@ -53,158 +53,144 @@ namespace ve
         return projectRoot_;
     }
 
-    const Path& RuntimeResourceLoader::GetManifestPath() const noexcept
+    const Path& RuntimeResourceLoader::GetAssetManifestPath() const noexcept
     {
-        return manifestPath_;
+        return assetManifestPath_;
     }
 
-    const ResourceManifest& RuntimeResourceLoader::GetManifest() const noexcept
+    const AssetManifest& RuntimeResourceLoader::GetAssetManifest() const noexcept
     {
-        return manifest_;
+        return assetManifest_;
     }
 
-    Result<ResourceRecord> RuntimeResourceLoader::FindResource(const Guid& guid) const
+    Result<AssetRecord> RuntimeResourceLoader::FindAsset(const Guid& guid) const
     {
         if (!initialized_)
         {
-            return Result<ResourceRecord>::Failure(
+            return Result<AssetRecord>::Failure(
                 Error(ErrorCode::InvalidState, "RuntimeResourceLoader is not initialized."));
         }
 
         if (guid.IsEmpty())
         {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
+            return Result<AssetRecord>::Failure(Error(ErrorCode::InvalidArgument, "Asset GUID is empty."));
         }
 
-        const ResourceRecord* record = manifest_.Find(guid);
+        const AssetRecord* record = assetManifest_.Find(guid);
         if (record == nullptr)
         {
-            return Result<ResourceRecord>::Failure(
-                Error(ErrorCode::NotFound, "Resource not found in runtime manifest."));
+            return Result<AssetRecord>::Failure(
+                Error(ErrorCode::NotFound, "Asset not found in runtime asset manifest."));
         }
 
-        return Result<ResourceRecord>::Success(*record);
+        return Result<AssetRecord>::Success(*record);
     }
 
-    Result<ResourceRecord> RuntimeResourceLoader::FindResource(const Path& runtimePath) const
+    Result<AssetRecord> RuntimeResourceLoader::FindAsset(const Path& runtimePath) const
     {
         if (!initialized_)
         {
-            return Result<ResourceRecord>::Failure(
+            return Result<AssetRecord>::Failure(
                 Error(ErrorCode::InvalidState, "RuntimeResourceLoader is not initialized."));
         }
 
         if (runtimePath.IsEmpty())
         {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidArgument, "Resource path is empty."));
+            return Result<AssetRecord>::Failure(Error(ErrorCode::InvalidArgument, "Asset path is empty."));
         }
 
-        const ResourceRecord* record = manifest_.FindByRuntimePath(runtimePath);
+        const AssetRecord* record = assetManifest_.FindByRuntimePath(runtimePath);
         if (record == nullptr)
         {
-            return Result<ResourceRecord>::Failure(
-                Error(ErrorCode::NotFound, "Resource path not found in runtime manifest."));
+            return Result<AssetRecord>::Failure(
+                Error(ErrorCode::NotFound, "Asset path not found in runtime asset manifest."));
         }
 
-        return Result<ResourceRecord>::Success(*record);
+        return Result<AssetRecord>::Success(*record);
     }
 
-    Result<std::vector<ResourceRecord>> RuntimeResourceLoader::ResolveLoadOrder(const Guid& guid) const
+    Result<std::vector<AssetRecord>> RuntimeResourceLoader::ResolveLoadOrder(const Guid& guid) const
     {
-        std::vector<ResourceRecord> loadOrder;
+        std::vector<AssetRecord> loadOrder;
         std::vector<Guid> visiting;
         std::vector<Guid> visited;
         return ResolveLoadOrderRecursive(guid, loadOrder, visiting, visited);
     }
 
-    Result<std::vector<ResourceRecord>> RuntimeResourceLoader::ResolveLoadOrder(const Path& runtimePath) const
+    Result<ResourceObject*> RuntimeResourceLoader::LoadResourceObject(const AssetRecord& rootRecord,
+                                                                      ResourceSystem& resourceSystem)
     {
-        Result<ResourceRecord> record = FindResource(runtimePath);
-        if (!record)
-        {
-            return Result<std::vector<ResourceRecord>>::Failure(record.GetError());
-        }
-
-        return ResolveLoadOrder(record.GetValue().guid);
-    }
-
-    Result<LoadedResourceData> RuntimeResourceLoader::LoadResource(const Guid& guid, ResourceSystem& resourceSystem)
-    {
-        Result<std::vector<ResourceRecord>> loadOrder = ResolveLoadOrder(guid);
+        Result<std::vector<AssetRecord>> loadOrder = ResolveLoadOrder(rootRecord.guid);
         if (!loadOrder)
         {
-            return Result<LoadedResourceData>::Failure(loadOrder.GetError());
+            return Result<ResourceObject*>::Failure(loadOrder.GetError());
         }
 
-        Result<LoadedResourceData> rootResource =
-            Result<LoadedResourceData>::Failure(Error(ErrorCode::NotFound, "Root resource was not loaded."));
-        for (const ResourceRecord& record : loadOrder.GetValue())
+        ResourceObject* rootResource = nullptr;
+        std::vector<ResourceObject*> loadedResources;
+        for (const AssetRecord& record : loadOrder.GetValue())
         {
-            Result<LoadedResourceData> loaded = resourceSystem.LoadResource(record);
+            Result<ResourceObject*> loaded = resourceSystem.LoadResource(record);
             if (!loaded)
             {
+                for (auto it = loadedResources.rbegin(); it != loadedResources.rend(); ++it)
+                {
+                    (void)resourceSystem.ReleaseResource(*it);
+                }
                 return loaded;
             }
 
-            if (record.guid == guid)
+            loadedResources.push_back(loaded.GetValue());
+            if (record.guid == rootRecord.guid)
             {
-                rootResource = std::move(loaded);
+                rootResource = loaded.GetValue();
             }
         }
 
-        return rootResource;
-    }
-
-    Result<LoadedResourceData> RuntimeResourceLoader::LoadResource(const Path& runtimePath,
-                                                                   ResourceSystem& resourceSystem)
-    {
-        Result<ResourceRecord> record = FindResource(runtimePath);
-        if (!record)
+        if (rootResource == nullptr)
         {
-            return Result<LoadedResourceData>::Failure(record.GetError());
+            for (auto it = loadedResources.rbegin(); it != loadedResources.rend(); ++it)
+            {
+                (void)resourceSystem.ReleaseResource(*it);
+            }
+            return Result<ResourceObject*>::Failure(Error(ErrorCode::NotFound, "Root resource was not loaded."));
         }
 
-        return LoadResource(record.GetValue().guid, resourceSystem);
+        return Result<ResourceObject*>::Success(rootResource);
     }
 
-    ResourceLoadOperation RuntimeResourceLoader::LoadResourceAsync(const Guid& guid, ResourceSystem& resourceSystem)
+    ErrorCode RuntimeResourceLoader::ReleaseResource(ResourceObject* resource, ResourceSystem& resourceSystem)
     {
-        return ResourceLoadOperation(LoadResource(guid, resourceSystem));
+        return resourceSystem.ReleaseResource(resource);
     }
 
-    ResourceLoadOperation RuntimeResourceLoader::LoadResourceAsync(const Path& runtimePath,
-                                                                   ResourceSystem& resourceSystem)
-    {
-        return ResourceLoadOperation(LoadResource(runtimePath, resourceSystem));
-    }
-
-    Result<std::vector<ResourceRecord>> RuntimeResourceLoader::ResolveLoadOrderRecursive(
+    Result<std::vector<AssetRecord>> RuntimeResourceLoader::ResolveLoadOrderRecursive(
         const Guid& guid,
-        std::vector<ResourceRecord>& loadOrder,
+        std::vector<AssetRecord>& loadOrder,
         std::vector<Guid>& visiting,
         std::vector<Guid>& visited) const
     {
         if (ContainsGuid(visited, guid))
         {
-            return Result<std::vector<ResourceRecord>>::Success(loadOrder);
+            return Result<std::vector<AssetRecord>>::Success(loadOrder);
         }
 
         if (ContainsGuid(visiting, guid))
         {
-            return Result<std::vector<ResourceRecord>>::Failure(
+            return Result<std::vector<AssetRecord>>::Failure(
                 Error(ErrorCode::InvalidState, "Resource dependency cycle detected."));
         }
 
-        Result<ResourceRecord> record = FindResource(guid);
+        Result<AssetRecord> record = FindAsset(guid);
         if (!record)
         {
-            return Result<std::vector<ResourceRecord>>::Failure(record.GetError());
+            return Result<std::vector<AssetRecord>>::Failure(record.GetError());
         }
 
         visiting.push_back(guid);
         for (const Guid& dependency : record.GetValue().dependencies)
         {
-            Result<std::vector<ResourceRecord>> dependencyResult =
+            Result<std::vector<AssetRecord>> dependencyResult =
                 ResolveLoadOrderRecursive(dependency, loadOrder, visiting, visited);
             if (!dependencyResult)
             {
@@ -215,6 +201,6 @@ namespace ve
 
         visited.push_back(guid);
         loadOrder.push_back(record.GetValue());
-        return Result<std::vector<ResourceRecord>>::Success(loadOrder);
+        return Result<std::vector<AssetRecord>>::Success(loadOrder);
     }
 } // namespace ve

@@ -319,6 +319,8 @@ namespace ve::editor
         VE_ASSERT_MESSAGE(flushResult == ErrorCode::None || flushResult == ErrorCode::InvalidState,
                           "Editor::UnInit flush render queue failed.");
         retainedImGuiRenderTextures_.clear();
+        resourceLoader_.Shutdown();
+        assetDatabase_.Shutdown();
 
         delete projectSelectionView_;
         delete projectEditingView_;
@@ -370,6 +372,16 @@ namespace ve::editor
     const EditorAssetDatabase& Editor::GetAssetDatabase() const noexcept
     {
         return assetDatabase_;
+    }
+
+    EditorResourceLoader& Editor::GetResourceLoader() noexcept
+    {
+        return resourceLoader_;
+    }
+
+    const EditorResourceLoader& Editor::GetResourceLoader() const noexcept
+    {
+        return resourceLoader_;
     }
 
     void Editor::SetSelectedGameObject(ve::GameObject* gameObject)
@@ -454,14 +466,14 @@ namespace ve::editor
 
     void Editor::CollectUnusedResources()
     {
-        if (runtime_ == nullptr || !runtime_->GetResourceSystem().IsInitialized())
+        if (!resourceLoader_.IsInitialized())
         {
             return;
         }
 
-        ResourceCollectUnusedParams params;
+        EditorResourceCollectUnusedParams params;
         params.rootGuids = CollectActiveResourceRoots();
-        const SizeT unloadedCount = runtime_->GetResourceSystem().CollectUnusedResources(params);
+        const SizeT unloadedCount = resourceLoader_.CollectUnusedResources(params);
         if (unloadedCount > 0)
         {
             VE_LOG_DEBUG_CATEGORY("Editor", "Collected {} unused resource(s).", unloadedCount);
@@ -475,10 +487,8 @@ namespace ve::editor
             return;
         }
 
-        if (runtime_ != nullptr && runtime_->GetResourceSystem().IsInitialized())
-        {
-            runtime_->GetResourceSystem().ClearCache();
-        }
+        resourceLoader_.Shutdown();
+        assetDatabase_.Shutdown();
 
         const Path projectRoot(projectPath);
         const ErrorCode layoutResult = EditorProject::EnsureLayout(projectRoot);
@@ -526,9 +536,12 @@ namespace ve::editor
             return;
         }
 
-        if (runtime_ != nullptr && runtime_->GetResourceSystem().IsInitialized())
+        const ErrorCode resourceLoaderResult = resourceLoader_.Initialize(projectRoot);
+        if (resourceLoaderResult != ErrorCode::None)
         {
-            runtime_->GetResourceSystem().SetProjectRoot(projectRoot);
+            VE_LOG_ERROR_CATEGORY(
+                "Editor", "Failed to initialize resource loader '{}': {}", projectPath, ToString(resourceLoaderResult));
+            return;
         }
 
         AddRecentProject(currentProjectPath_);
@@ -617,8 +630,8 @@ namespace ve::editor
             return;
         }
 
-        const int requiredLength =
-            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title.data(), static_cast<int>(title.size()), nullptr, 0);
+        const int requiredLength = MultiByteToWideChar(
+            CP_UTF8, MB_ERR_INVALID_CHARS, title.data(), static_cast<int>(title.size()), nullptr, 0);
         if (requiredLength <= 0)
         {
             return;

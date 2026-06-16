@@ -1,4 +1,4 @@
-#include "Engine/Runtime/Resource/ResourceManifest.h"
+#include "Engine/Runtime/Resource/AssetManifest.h"
 
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
@@ -64,29 +64,29 @@ namespace ve
         }
     } // namespace
 
-    bool ResourceManifest::IsEmpty() const noexcept
+    bool AssetManifest::IsEmpty() const noexcept
     {
-        return resources_.empty();
+        return assets_.empty();
     }
 
-    void ResourceManifest::Clear() noexcept
+    void AssetManifest::Clear() noexcept
     {
-        resources_.clear();
+        assets_.clear();
         guidsByRuntimePath_.clear();
     }
 
-    SizeT ResourceManifest::GetResourceCount() const noexcept
+    SizeT AssetManifest::GetAssetCount() const noexcept
     {
-        return resources_.size();
+        return assets_.size();
     }
 
-    const ResourceRecord* ResourceManifest::Find(const Guid& guid) const noexcept
+    const AssetRecord* AssetManifest::Find(const Guid& guid) const noexcept
     {
-        const auto it = resources_.find(guid);
-        return it != resources_.end() ? &it->second : nullptr;
+        const auto it = assets_.find(guid);
+        return it != assets_.end() ? &it->second : nullptr;
     }
 
-    const ResourceRecord* ResourceManifest::FindByRuntimePath(const Path& runtimePath) const noexcept
+    const AssetRecord* AssetManifest::FindByRuntimePath(const Path& runtimePath) const noexcept
     {
         const auto guidIt = guidsByRuntimePath_.find(runtimePath.GetString());
         if (guidIt == guidsByRuntimePath_.end())
@@ -97,17 +97,17 @@ namespace ve
         return Find(guidIt->second);
     }
 
-    const std::unordered_map<Guid, ResourceRecord>& ResourceManifest::GetResources() const noexcept
+    const std::unordered_map<Guid, AssetRecord>& AssetManifest::GetAssets() const noexcept
     {
-        return resources_;
+        return assets_;
     }
 
-    const std::unordered_map<std::string, Guid>& ResourceManifest::GetGuidsByRuntimePath() const noexcept
+    const std::unordered_map<std::string, Guid>& AssetManifest::GetGuidsByRuntimePath() const noexcept
     {
         return guidsByRuntimePath_;
     }
 
-    ErrorCode ResourceManifest::AddOrUpdate(ResourceRecord record)
+    ErrorCode AssetManifest::AddOrUpdate(AssetRecord record)
     {
         if (record.guid.IsEmpty())
         {
@@ -121,16 +121,16 @@ namespace ve
             if (const auto existingGuid = guidsByRuntimePath_.find(runtimePathKey);
                 existingGuid != guidsByRuntimePath_.end() && existingGuid->second != guid)
             {
-                resources_.erase(existingGuid->second);
+                assets_.erase(existingGuid->second);
             }
         }
 
-        if (const auto existing = resources_.find(guid); existing != resources_.end())
+        if (const auto existing = assets_.find(guid); existing != assets_.end())
         {
             guidsByRuntimePath_.erase(existing->second.runtimePath.GetString());
         }
 
-        resources_.insert_or_assign(guid, std::move(record));
+        assets_.insert_or_assign(guid, std::move(record));
         if (!runtimePathKey.empty())
         {
             guidsByRuntimePath_.insert_or_assign(runtimePathKey, guid);
@@ -138,7 +138,7 @@ namespace ve
         return ErrorCode::None;
     }
 
-    ErrorCode ResourceManifest::LoadFromFile(const Path& path)
+    ErrorCode AssetManifest::LoadFromFile(const Path& path)
     {
         Clear();
 
@@ -160,20 +160,20 @@ namespace ve
         }
 
         const boost::json::object& object = json.GetValue().as_object();
-        const boost::json::value* resourcesValue = object.if_contains("resources");
-        if (resourcesValue == nullptr || !resourcesValue->is_array())
+        const boost::json::value* assetsValue = object.if_contains("assets");
+        if (assetsValue == nullptr || !assetsValue->is_array())
         {
             return ErrorCode::InvalidArgument;
         }
 
-        for (const boost::json::value& value : resourcesValue->as_array())
+        for (const boost::json::value& value : assetsValue->as_array())
         {
             if (!value.is_object())
             {
                 return ErrorCode::InvalidArgument;
             }
 
-            Result<ResourceRecord> record = ReadRecord(value.as_object());
+            Result<AssetRecord> record = ReadRecord(value.as_object());
             if (!record)
             {
                 return record.GetError().GetCode();
@@ -189,22 +189,22 @@ namespace ve
         return ErrorCode::None;
     }
 
-    ErrorCode ResourceManifest::SaveToFile(const Path& path) const
+    ErrorCode AssetManifest::SaveToFile(const Path& path) const
     {
         boost::json::object object;
         object["version"] = 1;
 
-        boost::json::array resources;
-        for (const auto& pair : resources_)
+        boost::json::array assets;
+        for (const auto& pair : assets_)
         {
-            resources.emplace_back(WriteRecord(pair.second));
+            assets.emplace_back(WriteRecord(pair.second));
         }
 
-        object["resources"] = std::move(resources);
+        object["assets"] = std::move(assets);
         return FileSystem::WriteTextFile(path, JsonUtils::SerializePretty(object));
     }
 
-    const char* ResourceManifest::ToString(ResourceType type) noexcept
+    const char* AssetManifest::ToString(ResourceType type) noexcept
     {
         switch (type)
         {
@@ -225,7 +225,7 @@ namespace ve
         return "Unknown";
     }
 
-    ResourceType ResourceManifest::ParseType(std::string_view text) noexcept
+    ResourceType AssetManifest::ParseType(std::string_view text) noexcept
     {
         if (text == "Mesh")
         {
@@ -255,7 +255,7 @@ namespace ve
         return ResourceType::Unknown;
     }
 
-    boost::json::object ResourceManifest::WriteRecord(const ResourceRecord& record)
+    boost::json::object AssetManifest::WriteRecord(const AssetRecord& record)
     {
         boost::json::object object;
         object["guid"] = record.guid.ToString();
@@ -266,19 +266,19 @@ namespace ve
         return object;
     }
 
-    Result<ResourceRecord> ResourceManifest::ReadRecord(const boost::json::object& object)
+    Result<AssetRecord> AssetManifest::ReadRecord(const boost::json::object& object)
     {
-        ResourceRecord record;
+        AssetRecord record;
         record.guid = ReadGuid(object, "guid");
         if (record.guid.IsEmpty())
         {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is invalid."));
+            return Result<AssetRecord>::Failure(Error(ErrorCode::InvalidArgument, "Asset GUID is invalid."));
         }
 
         record.type = ParseType(ReadString(object, "type"));
         record.runtimePath = Path(ReadString(object, "runtimePath"));
         record.dependencies = ReadGuidArray(object, "dependencies");
         record.contentHash = ReadString(object, "contentHash");
-        return Result<ResourceRecord>::Success(std::move(record));
+        return Result<AssetRecord>::Success(std::move(record));
     }
 } // namespace ve

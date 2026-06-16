@@ -46,6 +46,8 @@ function(ve_add_windows_editor)
             Editor/Core/EditorProjectRegistry.h
             Editor/Core/EditorProjectSelectionView.cpp
             Editor/Core/EditorProjectSelectionView.h
+            "../../Editor/Core/EditorResourceLoader.cpp"
+            "../../Editor/Core/EditorResourceLoader.h"
             Editor/Panels/AssetsPanel.cpp
             Editor/Panels/AssetsPanel.h
             Editor/Panels/BasePanel.cpp

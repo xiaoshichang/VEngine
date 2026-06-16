@@ -4,8 +4,10 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/Path.h"
-#include "Engine/Runtime/Resource/ResourceManifest.h"
+#include "Engine/Runtime/Resource/AssetManifest.h"
+#include "Engine/Runtime/Resource/ResourceObject.h"
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -17,32 +19,17 @@ namespace ve
         Path projectRoot;
     };
 
-    struct LoadedResourceData
-    {
-        Guid guid;
-        ResourceType type = ResourceType::Unknown;
-        Path runtimePath;
-        std::string text;
-        std::vector<std::byte> bytes;
-    };
-
-    struct ResourceCollectUnusedParams
-    {
-        std::vector<Guid> rootGuids;
-        bool unloadPinnedResources = false;
-    };
-
     class ResourceLoadOperation
     {
     public:
-        explicit ResourceLoadOperation(Result<LoadedResourceData> result);
+        explicit ResourceLoadOperation(Result<ResourceObject*> result);
 
         [[nodiscard]] bool IsComplete() const noexcept;
-        [[nodiscard]] const Result<LoadedResourceData>& GetResult() const noexcept;
-        [[nodiscard]] Result<LoadedResourceData>& GetResult() noexcept;
+        [[nodiscard]] const Result<ResourceObject*>& GetResult() const noexcept;
+        [[nodiscard]] Result<ResourceObject*>& GetResult() noexcept;
 
     private:
-        Result<LoadedResourceData> result_;
+        Result<ResourceObject*> result_;
     };
 
     class ResourceSystem : public NonMovable
@@ -58,26 +45,55 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] const Path& GetProjectRoot() const noexcept;
 
-        [[nodiscard]] Result<LoadedResourceData> LoadResource(const ResourceRecord& record);
-        [[nodiscard]] ResourceLoadOperation LoadResourceAsync(const ResourceRecord& record);
-        [[nodiscard]] ErrorCode UnloadResource(const Guid& guid);
-        [[nodiscard]] SizeT CollectUnusedResources(const ResourceCollectUnusedParams& params);
+        [[nodiscard]] Result<ResourceObject*> LoadResource(const AssetRecord& record);
+
+        template<typename TResource>
+        [[nodiscard]] Result<TResource*> LoadResource(const AssetRecord& record);
+
+        [[nodiscard]] ResourceLoadOperation LoadResourceAsync(const AssetRecord& record);
+
+        [[nodiscard]] ErrorCode ReleaseResource(ResourceObject* resource);
         void ClearCache() noexcept;
 
     private:
         struct LoadedResourceEntry
         {
-            LoadedResourceData data;
+            std::unique_ptr<ResourceObject> resource;
             std::vector<Guid> dependencies;
-            bool pinned = false;
+            SizeT referenceCount = 0;
         };
 
-        [[nodiscard]] Path ResolveRuntimePath(const ResourceRecord& record) const;
-        [[nodiscard]] Result<LoadedResourceData> LoadFromRecord(const ResourceRecord& record);
-        void MarkReachableResource(const Guid& guid, std::vector<Guid>& reachableResources) const;
+        [[nodiscard]] Path ResolveRuntimePath(const AssetRecord& record) const;
+        [[nodiscard]] Result<std::unique_ptr<ResourceObject>> CreateResourceObject(const AssetRecord& record);
+        [[nodiscard]] ErrorCode ReleaseResource(const Guid& guid);
 
         Path projectRoot_;
         std::unordered_map<Guid, LoadedResourceEntry> cache_;
         bool initialized_ = false;
     };
+
+    template<typename TResource>
+    Result<TResource*> ResourceSystem::LoadResource(const AssetRecord& record)
+    {
+        if (record.type != ResourceObjectTraits<TResource>::Type)
+        {
+            return Result<TResource*>::Failure(
+                Error(ErrorCode::InvalidArgument, "Requested resource type does not match the asset record."));
+        }
+
+        Result<ResourceObject*> resource = LoadResource(record);
+        if (!resource)
+        {
+            return Result<TResource*>::Failure(resource.GetError());
+        }
+
+        TResource* typedResource = dynamic_cast<TResource*>(resource.GetValue());
+        if (typedResource == nullptr)
+        {
+            return Result<TResource*>::Failure(
+                Error(ErrorCode::InvalidState, "Loaded resource object has an unexpected concrete type."));
+        }
+
+        return Result<TResource*>::Success(typedResource);
+    }
 } // namespace ve

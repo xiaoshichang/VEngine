@@ -2,12 +2,12 @@
 
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 
-#include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace ve
 {
-    ResourceLoadOperation::ResourceLoadOperation(Result<LoadedResourceData> result)
+    ResourceLoadOperation::ResourceLoadOperation(Result<ResourceObject*> result)
         : result_(std::move(result))
     {
     }
@@ -17,12 +17,12 @@ namespace ve
         return true;
     }
 
-    const Result<LoadedResourceData>& ResourceLoadOperation::GetResult() const noexcept
+    const Result<ResourceObject*>& ResourceLoadOperation::GetResult() const noexcept
     {
         return result_;
     }
 
-    Result<LoadedResourceData>& ResourceLoadOperation::GetResult() noexcept
+    Result<ResourceObject*>& ResourceLoadOperation::GetResult() noexcept
     {
         return result_;
     }
@@ -56,71 +56,90 @@ namespace ve
         return projectRoot_;
     }
 
-    Result<LoadedResourceData> ResourceSystem::LoadResource(const ResourceRecord& record)
+    Result<ResourceObject*> ResourceSystem::LoadResource(const AssetRecord& record)
     {
+        if (!initialized_)
+        {
+            return Result<ResourceObject*>::Failure(
+                Error(ErrorCode::InvalidState, "ResourceSystem is not initialized."));
+        }
+
         if (record.guid.IsEmpty())
         {
-            return Result<LoadedResourceData>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
+            return Result<ResourceObject*>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
         }
 
         if (const auto cached = cache_.find(record.guid); cached != cache_.end())
         {
-            return Result<LoadedResourceData>::Success(cached->second.data);
+            ++cached->second.referenceCount;
+            return Result<ResourceObject*>::Success(cached->second.resource.get());
         }
 
-        Result<LoadedResourceData> loaded = LoadFromRecord(record);
-        if (!loaded)
+        Result<std::unique_ptr<ResourceObject>> resource = CreateResourceObject(record);
+        if (!resource)
         {
-            return loaded;
+            return Result<ResourceObject*>::Failure(resource.GetError());
         }
 
         LoadedResourceEntry entry;
-        entry.data = loaded.GetValue();
+        entry.resource = resource.MoveValue();
         entry.dependencies = record.dependencies;
+        entry.referenceCount = 1;
+
+        ResourceObject* resourcePointer = entry.resource.get();
         cache_.insert_or_assign(record.guid, std::move(entry));
-        return loaded;
+        return Result<ResourceObject*>::Success(resourcePointer);
     }
 
-    ResourceLoadOperation ResourceSystem::LoadResourceAsync(const ResourceRecord& record)
+    ResourceLoadOperation ResourceSystem::LoadResourceAsync(const AssetRecord& record)
     {
         return ResourceLoadOperation(LoadResource(record));
     }
 
-    ErrorCode ResourceSystem::UnloadResource(const Guid& guid)
+    ErrorCode ResourceSystem::ReleaseResource(ResourceObject* resource)
+    {
+        if (resource == nullptr)
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        return ReleaseResource(resource->GetGuid());
+    }
+
+    ErrorCode ResourceSystem::ReleaseResource(const Guid& guid)
     {
         if (guid.IsEmpty())
         {
             return ErrorCode::InvalidArgument;
         }
 
-        const auto removed = cache_.erase(guid);
-        return removed > 0 ? ErrorCode::None : ErrorCode::NotFound;
-    }
-
-    SizeT ResourceSystem::CollectUnusedResources(const ResourceCollectUnusedParams& params)
-    {
-        std::vector<Guid> reachableResources;
-        for (const Guid& rootGuid : params.rootGuids)
+        const auto it = cache_.find(guid);
+        if (it == cache_.end())
         {
-            MarkReachableResource(rootGuid, reachableResources);
+            return ErrorCode::NotFound;
         }
 
-        SizeT unloadedCount = 0;
-        for (auto it = cache_.begin(); it != cache_.end();)
+        if (it->second.referenceCount == 0)
         {
-            const bool reachable =
-                std::find(reachableResources.begin(), reachableResources.end(), it->first) != reachableResources.end();
-            if (reachable || (it->second.pinned && !params.unloadPinnedResources))
+            return ErrorCode::InvalidState;
+        }
+
+        const std::vector<Guid> dependencies = it->second.dependencies;
+        --it->second.referenceCount;
+        if (it->second.referenceCount == 0)
+        {
+            cache_.erase(it);
+        }
+
+        for (const Guid& dependency : dependencies)
+        {
+            if (!dependency.IsEmpty())
             {
-                ++it;
-                continue;
+                (void)ReleaseResource(dependency);
             }
-
-            it = cache_.erase(it);
-            ++unloadedCount;
         }
 
-        return unloadedCount;
+        return ErrorCode::None;
     }
 
     void ResourceSystem::ClearCache() noexcept
@@ -128,7 +147,7 @@ namespace ve
         cache_.clear();
     }
 
-    Path ResourceSystem::ResolveRuntimePath(const ResourceRecord& record) const
+    Path ResourceSystem::ResolveRuntimePath(const AssetRecord& record) const
     {
         if (record.runtimePath.IsEmpty())
         {
@@ -138,77 +157,78 @@ namespace ve
         return projectRoot_ / record.runtimePath;
     }
 
-    Result<LoadedResourceData> ResourceSystem::LoadFromRecord(const ResourceRecord& record)
+    Result<std::unique_ptr<ResourceObject>> ResourceSystem::CreateResourceObject(const AssetRecord& record)
     {
         const Path physicalPath = ResolveRuntimePath(record);
         if (physicalPath.IsEmpty())
         {
-            return Result<LoadedResourceData>::Failure(
+            return Result<std::unique_ptr<ResourceObject>>::Failure(
                 Error(ErrorCode::InvalidArgument, "Resource runtime path is empty."));
         }
-
-        LoadedResourceData data;
-        data.guid = record.guid;
-        data.type = record.type;
-        data.runtimePath = record.runtimePath;
 
         switch (record.type)
         {
         case ResourceType::Mesh:
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(physicalPath);
+            if (!text)
+            {
+                return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
+            }
+
+            return Result<std::unique_ptr<ResourceObject>>::Success(
+                std::make_unique<MeshResource>(record.guid, record.runtimePath, text.MoveValue()));
+        }
         case ResourceType::Material:
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(physicalPath);
+            if (!text)
+            {
+                return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
+            }
+
+            return Result<std::unique_ptr<ResourceObject>>::Success(
+                std::make_unique<MaterialResource>(record.guid, record.runtimePath, text.MoveValue()));
+        }
         case ResourceType::Scene:
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(physicalPath);
+            if (!text)
+            {
+                return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
+            }
+
+            return Result<std::unique_ptr<ResourceObject>>::Success(
+                std::make_unique<SceneResource>(record.guid, record.runtimePath, text.MoveValue()));
+        }
         case ResourceType::Text:
         {
             Result<std::string> text = FileSystem::ReadTextFile(physicalPath);
             if (!text)
             {
-                return Result<LoadedResourceData>::Failure(text.GetError());
+                return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
             }
 
-            data.text = text.MoveValue();
-            return Result<LoadedResourceData>::Success(std::move(data));
+            return Result<std::unique_ptr<ResourceObject>>::Success(
+                std::make_unique<TextResource>(record.guid, record.runtimePath, text.MoveValue()));
         }
         case ResourceType::Binary:
         {
             Result<std::vector<std::byte>> bytes = FileSystem::ReadBinaryFile(physicalPath);
             if (!bytes)
             {
-                return Result<LoadedResourceData>::Failure(bytes.GetError());
+                return Result<std::unique_ptr<ResourceObject>>::Failure(bytes.GetError());
             }
 
-            data.bytes = bytes.MoveValue();
-            return Result<LoadedResourceData>::Success(std::move(data));
+            return Result<std::unique_ptr<ResourceObject>>::Success(
+                std::make_unique<BinaryResource>(record.guid, record.runtimePath, bytes.MoveValue()));
         }
         case ResourceType::Unknown:
             break;
         }
 
-        return Result<LoadedResourceData>::Failure(
+        return Result<std::unique_ptr<ResourceObject>>::Failure(
             Error(ErrorCode::Unsupported, "Unsupported resource type for runtime loading."));
     }
 
-    void ResourceSystem::MarkReachableResource(const Guid& guid, std::vector<Guid>& reachableResources) const
-    {
-        if (guid.IsEmpty())
-        {
-            return;
-        }
-
-        if (std::find(reachableResources.begin(), reachableResources.end(), guid) != reachableResources.end())
-        {
-            return;
-        }
-
-        const auto it = cache_.find(guid);
-        if (it == cache_.end())
-        {
-            return;
-        }
-
-        reachableResources.push_back(guid);
-        for (const Guid& dependency : it->second.dependencies)
-        {
-            MarkReachableResource(dependency, reachableResources);
-        }
-    }
 } // namespace ve

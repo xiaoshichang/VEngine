@@ -3,7 +3,6 @@
 #include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
-#include "Engine/Runtime/Resource/ResourceSystem.h"
 
 #include <boost/json.hpp>
 #include <algorithm>
@@ -160,7 +159,8 @@ namespace ve::editor
             const std::string indexText(slash == std::string_view::npos ? token : token.substr(0, slash));
             if (indexText.empty())
             {
-                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face has an empty vertex index."));
+                return Result<UInt32>::Failure(
+                    Error(ErrorCode::InvalidArgument, "OBJ face has an empty vertex index."));
             }
 
             int objIndex = 0;
@@ -330,24 +330,6 @@ namespace ve::editor
             return object;
         }
 
-        [[nodiscard]] ResourceType ToResourceType(EditorAssetType type) noexcept
-        {
-            switch (type)
-            {
-            case EditorAssetType::ObjSource:
-                return ResourceType::Mesh;
-            case EditorAssetType::Material:
-                return ResourceType::Material;
-            case EditorAssetType::Scene:
-                return ResourceType::Scene;
-            case EditorAssetType::Mesh:
-            case EditorAssetType::Unknown:
-                break;
-            }
-
-            return ResourceType::Unknown;
-        }
-
     } // namespace
 
     ErrorCode EditorAssetDatabase::Initialize(const Path& projectRoot)
@@ -493,40 +475,6 @@ namespace ve::editor
         return guidsByAssetPath_;
     }
 
-    Result<ResourceRecord> EditorAssetDatabase::FindResource(const Guid& guid) const
-    {
-        if (!initialized_)
-        {
-            return Result<ResourceRecord>::Failure(
-                Error(ErrorCode::InvalidState, "EditorAssetDatabase is not initialized."));
-        }
-
-        if (guid.IsEmpty())
-        {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
-        }
-
-        const EditorAssetRecord* asset = FindAssetByGuid(guid);
-        if (asset == nullptr)
-        {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::NotFound, "Resource not found."));
-        }
-
-        return Result<ResourceRecord>::Success(BuildResourceRecord(*asset));
-    }
-
-    Result<LoadedResourceData> EditorAssetDatabase::LoadResource(const Guid& guid,
-                                                                 ve::ResourceSystem& resourceSystem) const
-    {
-        Result<ResourceRecord> record = FindResource(guid);
-        if (!record)
-        {
-            return Result<LoadedResourceData>::Failure(record.GetError());
-        }
-
-        return resourceSystem.LoadResource(record.GetValue());
-    }
-
     const char* EditorAssetDatabase::ToString(EditorAssetType type) noexcept
     {
         switch (type)
@@ -544,16 +492,6 @@ namespace ve::editor
         }
 
         return "Unknown";
-    }
-
-    ResourceRecord EditorAssetDatabase::BuildResourceRecord(const EditorAssetRecord& asset) const
-    {
-        ResourceRecord record;
-        record.guid = asset.guid;
-        record.type = ToResourceType(asset.type);
-        record.runtimePath = asset.imported ? asset.importedPath : asset.path;
-        record.dependencies = asset.dependencies;
-        return record;
     }
 
     ErrorCode EditorAssetDatabase::ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force)

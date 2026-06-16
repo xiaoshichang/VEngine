@@ -3,29 +3,41 @@
 ## Purpose
 
 `EditorAssetDatabase` is an Editor-layer service that scans the open project's `Assets/` directory and records project
-resources. It owns project workspace policy, import metadata generation, GUID lookup, direct dependencies, and live
+assets. It owns project workspace policy, import metadata generation, GUID lookup, direct dependencies, and live
 editor updates, so it intentionally lives under `Editor/` instead of `Engine/Runtime/`.
 
-Editor resource loading is performed by `EditorAssetDatabase + ResourceSystem`:
+Editor resource loading is performed by `EditorAssetDatabase + EditorResourceLoader`:
 
-- `EditorAssetDatabase` resolves GUIDs to `ResourceRecord` values and keeps the editable resource list current.
-- `ResourceSystem` receives concrete records and performs physical file loading, deserialization, and runtime object
-  creation.
+- `EditorAssetDatabase` keeps the editable asset list current and exposes project-relative asset path and GUID
+  lookups for `EditorAssetRecord` metadata.
+- `EditorResourceLoader` derives concrete `AssetRecord` values from asset records, then performs editor-side file
+  loading, deserialization, runtime object creation, caching, and unused-resource collection.
 - Editor loading is synchronous at this layer. Asynchronous resource loading is reserved for runtime-facing loaders.
 - `EditorAssetDatabase` does not own loaded resource lifetime and does not expose per-load release APIs.
 
-This mirrors player loading, where `RuntimeResourceLoader + ResourceSystem` performs the same split against a packaged
-read-only manifest.
+This is intentionally separate from player loading, where `RuntimeResourceLoader + ResourceSystem` performs runtime
+loading against a packaged read-only asset manifest.
 
-Internally the editor database keeps the same lookup shape as the runtime manifest:
+Internally the editor database keeps the same lookup shape as the runtime asset manifest:
 
 - `asset path -> Guid` resolves project-relative paths without scanning the asset table.
 - `Guid -> EditorAssetRecord` is the authoritative editor asset record table.
 
 Editor UI panels that need path-ordered presentation should iterate `asset path -> Guid` and resolve each GUID through
 the authoritative record table. `EditorAssetRecord` also carries direct dependency GUIDs so editor loads can hand the
-same dependency shape to `ResourceSystem` that runtime loads receive from `ResourceManifest`; first-stage importers only
-reserve the field and do not yet parse every asset format's dependency list.
+same dependency shape to `EditorResourceLoader` that runtime loads receive from `AssetManifest`; first-stage
+importers only reserve the field and do not yet parse every asset format's dependency list.
+
+Editor loading uses the same typed shape as runtime loading:
+
+```cpp
+Result<MeshResource*> mesh =
+    editorResourceLoader.LoadResource<MeshResource>(Path("Assets/Meshes/Cube.obj"), assetDatabase);
+```
+
+Unlike runtime loading, editor loads do not acquire manual release references. The editor keeps resources alive through
+active roots such as scene references, selected assets, previews, and thumbnail jobs, then relies on
+`EditorResourceLoader::CollectUnusedResources()` to unload cached objects that are no longer reachable.
 
 The first supported native asset types are:
 
@@ -140,8 +152,8 @@ loading original source files directly.
 `.obj`; `.vematerial` and `.vescene` only refresh their records because they do not have importers yet.
 
 Editor operations that create, delete, move, save, or reimport assets should update the in-memory asset records
-immediately and use `Refresh()` as the fallback rescan path. Player manifests are generated from these editor/tooling
-records during packaging; the editor asset database itself is not used by player runtime code.
+immediately and use `Refresh()` as the fallback rescan path. Player asset manifests are generated from these
+editor/tooling records during packaging; the editor asset database itself is not used by player runtime code.
 
 ## Resource Lifetime
 
@@ -149,11 +161,12 @@ Editor asset records and imported artifacts have different lifetimes from loaded
 
 - Asset records live in `EditorAssetDatabase` for the open project and are cleared on project close.
 - Imported artifacts under `Library/` are disk caches and are not deleted by ordinary resource unloads.
-- Loaded payloads live in `ResourceSystem` and can be cleared, explicitly unloaded, or collected as unused.
+- Loaded resource objects live in `EditorResourceLoader` and can be cleared or collected as unused.
 
 The editor gathers root GUIDs from the active scene and selection state when the selection changes, when switching back
-to project selection, and around project opening, then calls `ResourceSystem::CollectUnusedResources()`. The collection
-pass keeps loaded root resources and their already-loaded dependencies, and unloads unrelated cached payloads. Preview
-panes, thumbnail jobs, and importer views should add their own active roots before they start loading resource payloads.
-Reimport and delete workflows may call `ResourceSystem::UnloadResource()` for the affected GUID or clear the cache
-during broader project changes.
+to project selection, and around project opening, then calls `EditorResourceLoader::CollectUnusedResources()`. The
+collection pass keeps loaded root resources and their already-loaded dependencies, and unloads unrelated cached
+payloads. Preview panes, thumbnail jobs, and importer views should add their own active roots before they start loading
+resource payloads.
+Reimport and delete workflows may clear the cache during broader project changes. Targeted editor invalidation can be
+added later without exposing a manual release API on `EditorAssetDatabase`.
