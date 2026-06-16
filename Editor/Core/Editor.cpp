@@ -7,7 +7,9 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
+#include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <imgui.h>
@@ -99,6 +101,51 @@ namespace ve::editor
 
     namespace
     {
+        void AddGuidIfValid(std::vector<Guid>& guids, const Guid& guid)
+        {
+            if (!guid.IsEmpty() && std::find(guids.begin(), guids.end(), guid) == guids.end())
+            {
+                guids.push_back(guid);
+            }
+        }
+
+        void CollectGameObjectResourceRoots(const GameObject& gameObject, std::vector<Guid>& guids)
+        {
+            if (const MeshRenderComponent* meshRender = gameObject.GetComponent<MeshRenderComponent>();
+                meshRender != nullptr)
+            {
+                AddGuidIfValid(guids, meshRender->GetMeshAssetGuid());
+                AddGuidIfValid(guids, meshRender->GetMaterialAssetGuid());
+            }
+
+            const TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+            if (transform == nullptr)
+            {
+                return;
+            }
+
+            for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
+            {
+                const GameObject* child = transform->GetChildGameObject(childIndex);
+                if (child != nullptr)
+                {
+                    CollectGameObjectResourceRoots(*child, guids);
+                }
+            }
+        }
+
+        void CollectSceneResourceRoots(const Scene& scene, std::vector<Guid>& guids)
+        {
+            for (SizeT rootIndex = 0; rootIndex < scene.GetRootGameObjectCount(); ++rootIndex)
+            {
+                const GameObject* rootObject = scene.GetRootGameObject(rootIndex);
+                if (rootObject != nullptr)
+                {
+                    CollectGameObjectResourceRoots(*rootObject, guids);
+                }
+            }
+        }
+
         [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CloneFrameDrawData(const ImDrawData* sourceDrawData)
         {
             if (sourceDrawData == nullptr || !sourceDrawData->Valid)
@@ -325,11 +372,12 @@ namespace ve::editor
         return assetDatabase_;
     }
 
-    void Editor::SetSelectedGameObject(ve::GameObject* gameObject) noexcept
+    void Editor::SetSelectedGameObject(ve::GameObject* gameObject)
     {
         selectionType_ = gameObject != nullptr ? EditorSelectionType::GameObject : EditorSelectionType::None;
         selectedGameObject_ = gameObject;
         selectedAssetPath_ = Path();
+        CollectUnusedResources();
     }
 
     void Editor::SetSelectedAsset(Path assetPath)
@@ -337,13 +385,15 @@ namespace ve::editor
         selectionType_ = assetPath.IsEmpty() ? EditorSelectionType::None : EditorSelectionType::Asset;
         selectedGameObject_ = nullptr;
         selectedAssetPath_ = std::move(assetPath);
+        CollectUnusedResources();
     }
 
-    void Editor::ClearSelection() noexcept
+    void Editor::ClearSelection()
     {
         selectionType_ = EditorSelectionType::None;
         selectedGameObject_ = nullptr;
         selectedAssetPath_ = Path();
+        CollectUnusedResources();
     }
 
     EditorSelectionType Editor::GetSelectionType() const noexcept
@@ -381,11 +431,53 @@ namespace ve::editor
         }
     }
 
+    std::vector<Guid> Editor::CollectActiveResourceRoots() const
+    {
+        std::vector<Guid> roots;
+
+        if (mainView_ == MainView::ProjectEditing && sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr)
+        {
+            CollectSceneResourceRoots(*sceneSystem_->GetScene(), roots);
+        }
+
+        if (selectionType_ == EditorSelectionType::Asset)
+        {
+            const EditorAssetRecord* selectedAsset = assetDatabase_.FindAsset(selectedAssetPath_);
+            if (selectedAsset != nullptr)
+            {
+                AddGuidIfValid(roots, selectedAsset->guid);
+            }
+        }
+
+        return roots;
+    }
+
+    void Editor::CollectUnusedResources()
+    {
+        if (runtime_ == nullptr || !runtime_->GetResourceSystem().IsInitialized())
+        {
+            return;
+        }
+
+        ResourceCollectUnusedParams params;
+        params.rootGuids = CollectActiveResourceRoots();
+        const SizeT unloadedCount = runtime_->GetResourceSystem().CollectUnusedResources(params);
+        if (unloadedCount > 0)
+        {
+            VE_LOG_DEBUG_CATEGORY("Editor", "Collected {} unused resource(s).", unloadedCount);
+        }
+    }
+
     void Editor::OpenProject(std::string projectPath)
     {
         if (projectPath.empty())
         {
             return;
+        }
+
+        if (runtime_ != nullptr && runtime_->GetResourceSystem().IsInitialized())
+        {
+            runtime_->GetResourceSystem().ClearCache();
         }
 
         const Path projectRoot(projectPath);
@@ -437,21 +529,21 @@ namespace ve::editor
         if (runtime_ != nullptr && runtime_->GetResourceSystem().IsInitialized())
         {
             runtime_->GetResourceSystem().SetProjectRoot(projectRoot);
-            assetDatabase_.RegisterResourceSystemCallbacks(runtime_->GetResourceSystem());
         }
 
         AddRecentProject(currentProjectPath_);
         VE_ASSERT_MESSAGE(projectEditingView_ != nullptr, "Editor::OpenProject requires a project editing view.");
         projectEditingView_->Init(*this);
         mainView_ = MainView::ProjectEditing;
+        CollectUnusedResources();
         EnqueueMainWindowTitleUpdate();
         VE_LOG_INFO_CATEGORY("Editor", "Opened editor project: {}", currentProjectPath_);
     }
 
-    void Editor::ShowProjectSelection() noexcept
+    void Editor::ShowProjectSelection()
     {
-        ClearSelection();
         mainView_ = MainView::ProjectSelection;
+        ClearSelection();
     }
 
     const std::string& Editor::GetCurrentProjectPath() const noexcept

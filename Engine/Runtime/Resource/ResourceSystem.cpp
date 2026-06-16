@@ -2,14 +2,34 @@
 
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace ve
 {
+    ResourceLoadOperation::ResourceLoadOperation(Result<LoadedResourceData> result)
+        : result_(std::move(result))
+    {
+    }
+
+    bool ResourceLoadOperation::IsComplete() const noexcept
+    {
+        return true;
+    }
+
+    const Result<LoadedResourceData>& ResourceLoadOperation::GetResult() const noexcept
+    {
+        return result_;
+    }
+
+    Result<LoadedResourceData>& ResourceLoadOperation::GetResult() noexcept
+    {
+        return result_;
+    }
+
     ErrorCode ResourceSystem::Initialize(const ResourceSystemInitParam& desc)
     {
         projectRoot_ = desc.projectRoot;
-        environment_ = desc.environment;
         initialized_ = true;
         return ErrorCode::None;
     }
@@ -17,11 +37,7 @@ namespace ve
     void ResourceSystem::Shutdown() noexcept
     {
         ClearCache();
-        manifest_.Clear();
         projectRoot_ = Path();
-        manifestPath_ = Path();
-        resourceResolveCallback_ = nullptr;
-        environment_ = ResourceSystemEnvironment::Player;
         initialized_ = false;
     }
 
@@ -30,19 +46,9 @@ namespace ve
         projectRoot_ = std::move(projectRoot);
     }
 
-    void ResourceSystem::SetManifestPath(Path manifestPath) noexcept
-    {
-        manifestPath_ = std::move(manifestPath);
-    }
-
     bool ResourceSystem::IsInitialized() const noexcept
     {
         return initialized_;
-    }
-
-    ResourceSystemEnvironment ResourceSystem::GetEnvironment() const noexcept
-    {
-        return environment_;
     }
 
     const Path& ResourceSystem::GetProjectRoot() const noexcept
@@ -50,91 +56,71 @@ namespace ve
         return projectRoot_;
     }
 
-    const Path& ResourceSystem::GetManifestPath() const noexcept
+    Result<LoadedResourceData> ResourceSystem::LoadResource(const ResourceRecord& record)
     {
-        return manifestPath_;
-    }
-
-    const ResourceManifest& ResourceSystem::GetManifest() const noexcept
-    {
-        return manifest_;
-    }
-
-    ResourceManifest& ResourceSystem::GetManifest() noexcept
-    {
-        return manifest_;
-    }
-
-    void ResourceSystem::SetResourceResolveCallback(ResourceResolveCallback callback) noexcept
-    {
-        resourceResolveCallback_ = std::move(callback);
-    }
-
-    Result<ResourceRecord> ResourceSystem::FindResource(const Guid& guid) const
-    {
-        if (guid.IsEmpty())
-        {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
-        }
-
-        if (environment_ == ResourceSystemEnvironment::Player)
-        {
-            const ResourceRecord* record = manifest_.Find(guid);
-            if (record != nullptr)
-            {
-                return Result<ResourceRecord>::Success(*record);
-            }
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::NotFound, "Resource not found."));
-        }
-        else if(environment_ == ResourceSystemEnvironment::Editor)
-        {
-            if (resourceResolveCallback_ == nullptr)
-            {
-                return Result<ResourceRecord>::Failure(
-                    Error(ErrorCode::InvalidState, "Editor resource lookup requires a resolve callback."));
-            }
-
-            Result<ResourceRecord> resolved = resourceResolveCallback_(guid);
-            if (!resolved)
-            {
-                return Result<ResourceRecord>::Failure(resolved.GetError());
-            }
-
-            ResourceRecord record = resolved.MoveValue();
-            return Result<ResourceRecord>::Success(std::move(record));
-        }
-        else
-        {
-            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidState, "Unknown resource system environment."));
-        }
-    }
-
-    Result<LoadedResourceData> ResourceSystem::LoadResource(const Guid& guid)
-    {
-        if (guid.IsEmpty())
+        if (record.guid.IsEmpty())
         {
             return Result<LoadedResourceData>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
         }
 
-        if (const auto cached = cache_.find(guid); cached != cache_.end())
+        if (const auto cached = cache_.find(record.guid); cached != cache_.end())
         {
-            return Result<LoadedResourceData>::Success(cached->second);
+            return Result<LoadedResourceData>::Success(cached->second.data);
         }
 
-        Result<ResourceRecord> recordResult = FindResource(guid);
-        if (!recordResult)
-        {
-            return Result<LoadedResourceData>::Failure(recordResult.GetError());
-        }
-
-        Result<LoadedResourceData> loaded = LoadFromRecord(recordResult.GetValue());
+        Result<LoadedResourceData> loaded = LoadFromRecord(record);
         if (!loaded)
         {
             return loaded;
         }
 
-        cache_.insert_or_assign(guid, loaded.GetValue());
+        LoadedResourceEntry entry;
+        entry.data = loaded.GetValue();
+        entry.dependencies = record.dependencies;
+        cache_.insert_or_assign(record.guid, std::move(entry));
         return loaded;
+    }
+
+    ResourceLoadOperation ResourceSystem::LoadResourceAsync(const ResourceRecord& record)
+    {
+        return ResourceLoadOperation(LoadResource(record));
+    }
+
+    ErrorCode ResourceSystem::UnloadResource(const Guid& guid)
+    {
+        if (guid.IsEmpty())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        const auto removed = cache_.erase(guid);
+        return removed > 0 ? ErrorCode::None : ErrorCode::NotFound;
+    }
+
+    SizeT ResourceSystem::CollectUnusedResources(const ResourceCollectUnusedParams& params)
+    {
+        std::vector<Guid> reachableResources;
+        for (const Guid& rootGuid : params.rootGuids)
+        {
+            MarkReachableResource(rootGuid, reachableResources);
+        }
+
+        SizeT unloadedCount = 0;
+        for (auto it = cache_.begin(); it != cache_.end();)
+        {
+            const bool reachable =
+                std::find(reachableResources.begin(), reachableResources.end(), it->first) != reachableResources.end();
+            if (reachable || (it->second.pinned && !params.unloadPinnedResources))
+            {
+                ++it;
+                continue;
+            }
+
+            it = cache_.erase(it);
+            ++unloadedCount;
+        }
+
+        return unloadedCount;
     }
 
     void ResourceSystem::ClearCache() noexcept
@@ -199,5 +185,30 @@ namespace ve
 
         return Result<LoadedResourceData>::Failure(
             Error(ErrorCode::Unsupported, "Unsupported resource type for runtime loading."));
+    }
+
+    void ResourceSystem::MarkReachableResource(const Guid& guid, std::vector<Guid>& reachableResources) const
+    {
+        if (guid.IsEmpty())
+        {
+            return;
+        }
+
+        if (std::find(reachableResources.begin(), reachableResources.end(), guid) != reachableResources.end())
+        {
+            return;
+        }
+
+        const auto it = cache_.find(guid);
+        if (it == cache_.end())
+        {
+            return;
+        }
+
+        reachableResources.push_back(guid);
+        for (const Guid& dependency : it->second.dependencies)
+        {
+            MarkReachableResource(dependency, reachableResources);
+        }
     }
 } // namespace ve

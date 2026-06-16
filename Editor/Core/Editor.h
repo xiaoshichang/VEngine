@@ -50,17 +50,19 @@ namespace ve::editor
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
         [[nodiscard]] EditorAssetDatabase& GetAssetDatabase() noexcept;
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
-        void SetSelectedGameObject(ve::GameObject* gameObject) noexcept;
+        void SetSelectedGameObject(ve::GameObject* gameObject);
         void SetSelectedAsset(Path assetPath);
-        void ClearSelection() noexcept;
+        void ClearSelection();
         [[nodiscard]] EditorSelectionType GetSelectionType() const noexcept;
         [[nodiscard]] ve::GameObject* GetSelectedGameObject() noexcept;
         [[nodiscard]] const ve::GameObject* GetSelectedGameObject() const noexcept;
         [[nodiscard]] const Path& GetSelectedAssetPath() const noexcept;
         void KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture);
+        [[nodiscard]] std::vector<Guid> CollectActiveResourceRoots() const;
+        void CollectUnusedResources();
 
         void OpenProject(std::string projectPath);
-        void ShowProjectSelection() noexcept;
+        void ShowProjectSelection();
         [[nodiscard]] const std::string& GetCurrentProjectPath() const noexcept;
         [[nodiscard]] const std::string& GetCurrentProjectName() const noexcept;
         [[nodiscard]] const std::vector<std::string>& GetRecentProjects() const noexcept;

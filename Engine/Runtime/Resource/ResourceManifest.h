@@ -46,7 +46,9 @@ namespace ve
 
         [[nodiscard]] SizeT GetResourceCount() const noexcept;
         [[nodiscard]] const ResourceRecord* Find(const Guid& guid) const noexcept;
+        [[nodiscard]] const ResourceRecord* FindByRuntimePath(const Path& runtimePath) const noexcept;
         [[nodiscard]] const std::unordered_map<Guid, ResourceRecord>& GetResources() const noexcept;
+        [[nodiscard]] const std::unordered_map<std::string, Guid>& GetGuidsByRuntimePath() const noexcept;
 
         [[nodiscard]] ErrorCode AddOrUpdate(ResourceRecord record);
         [[nodiscard]] ErrorCode LoadFromFile(const Path& path);
@@ -58,5 +60,6 @@ namespace ve
         [[nodiscard]] static Result<ResourceRecord> ReadRecord(const boost::json::object& object);
 
         std::unordered_map<Guid, ResourceRecord> resources_;
+        std::unordered_map<std::string, Guid> guidsByRuntimePath_;
     };
 } // namespace ve

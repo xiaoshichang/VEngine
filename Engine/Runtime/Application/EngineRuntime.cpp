@@ -85,8 +85,7 @@ namespace ve
         VE_LOG_INFO("SceneSystem initialized.");
 
         const Path projectRoot = FileSystem::GetProjectRoot();
-        ErrorCode resourceSystemResult =
-            resourceSystem_.Initialize(ResourceSystemInitParam{projectRoot, ResourceSystemEnvironment::Player});
+        ErrorCode resourceSystemResult = resourceSystem_.Initialize(ResourceSystemInitParam{projectRoot});
         if (resourceSystemResult != ErrorCode::None)
         {
             TerminateRuntimeInitialization("ResourceSystem", resourceSystemResult);

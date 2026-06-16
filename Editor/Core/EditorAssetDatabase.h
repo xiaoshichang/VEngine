@@ -7,15 +7,11 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Resource/ResourceManifest.h"
+#include "Engine/Runtime/Resource/ResourceSystem.h"
 
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-namespace ve
-{
-    class ResourceSystem;
-}
 
 namespace ve::editor
 {
@@ -36,6 +32,7 @@ namespace ve::editor
         EditorAssetType type = EditorAssetType::Unknown;
         bool imported = false;
         Path importedPath;
+        std::vector<Guid> dependencies;
     };
 
     class EditorAssetDatabase : public NonMovable
@@ -54,11 +51,14 @@ namespace ve::editor
         [[nodiscard]] ErrorCode Refresh();
         [[nodiscard]] ErrorCode ReimportAll();
         [[nodiscard]] ErrorCode ReimportAsset(const Path& projectRelativePath);
-        void RegisterResourceSystemCallbacks(ve::ResourceSystem& resourceSystem);
         [[nodiscard]] SizeT GetAssetCount() const noexcept;
         [[nodiscard]] const EditorAssetRecord* FindAsset(const Path& projectRelativePath) const noexcept;
         [[nodiscard]] const EditorAssetRecord* FindAssetByGuid(const Guid& guid) const noexcept;
-        [[nodiscard]] const std::unordered_map<std::string, EditorAssetRecord>& GetAssets() const noexcept;
+        [[nodiscard]] const std::unordered_map<Guid, EditorAssetRecord>& GetAssetsByGuid() const noexcept;
+        [[nodiscard]] const std::unordered_map<std::string, Guid>& GetGuidsByAssetPath() const noexcept;
+        [[nodiscard]] Result<ResourceRecord> FindResource(const Guid& guid) const;
+        [[nodiscard]] Result<LoadedResourceData> LoadResource(const Guid& guid,
+                                                              ve::ResourceSystem& resourceSystem) const;
 
         [[nodiscard]] static const char* ToString(EditorAssetType type) noexcept;
 
@@ -74,8 +74,8 @@ namespace ve::editor
         [[nodiscard]] ResourceRecord BuildResourceRecord(const EditorAssetRecord& asset) const;
 
         Path projectRoot_;
-        std::unordered_map<std::string, EditorAssetRecord> assets_;
-        std::unordered_map<Guid, std::string> assetPathsByGuid_;
+        std::unordered_map<Guid, EditorAssetRecord> assetsByGuid_;
+        std::unordered_map<std::string, Guid> guidsByAssetPath_;
         bool initialized_ = false;
     };
 } // namespace ve::editor

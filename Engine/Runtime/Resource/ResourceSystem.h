@@ -6,26 +6,16 @@
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Resource/ResourceManifest.h"
 
-#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace ve
 {
-    enum class ResourceSystemEnvironment
-    {
-        Player,
-        Editor,
-    };
-
     struct ResourceSystemInitParam
     {
         Path projectRoot;
-        ResourceSystemEnvironment environment = ResourceSystemEnvironment::Player;
     };
-
-    using ResourceResolveCallback = std::function<Result<ResourceRecord>(const Guid&)>;
 
     struct LoadedResourceData
     {
@@ -34,6 +24,25 @@ namespace ve
         Path runtimePath;
         std::string text;
         std::vector<std::byte> bytes;
+    };
+
+    struct ResourceCollectUnusedParams
+    {
+        std::vector<Guid> rootGuids;
+        bool unloadPinnedResources = false;
+    };
+
+    class ResourceLoadOperation
+    {
+    public:
+        explicit ResourceLoadOperation(Result<LoadedResourceData> result);
+
+        [[nodiscard]] bool IsComplete() const noexcept;
+        [[nodiscard]] const Result<LoadedResourceData>& GetResult() const noexcept;
+        [[nodiscard]] Result<LoadedResourceData>& GetResult() noexcept;
+
+    private:
+        Result<LoadedResourceData> result_;
     };
 
     class ResourceSystem : public NonMovable
@@ -45,31 +54,30 @@ namespace ve
         [[nodiscard]] ErrorCode Initialize(const ResourceSystemInitParam& desc);
         void Shutdown() noexcept;
         void SetProjectRoot(Path projectRoot) noexcept;
-        void SetManifestPath(Path manifestPath) noexcept;
 
         [[nodiscard]] bool IsInitialized() const noexcept;
-        [[nodiscard]] ResourceSystemEnvironment GetEnvironment() const noexcept;
         [[nodiscard]] const Path& GetProjectRoot() const noexcept;
-        [[nodiscard]] const Path& GetManifestPath() const noexcept;
-        [[nodiscard]] const ResourceManifest& GetManifest() const noexcept;
-        [[nodiscard]] ResourceManifest& GetManifest() noexcept;
 
-        void SetResourceResolveCallback(ResourceResolveCallback callback) noexcept;
-
-        [[nodiscard]] Result<ResourceRecord> FindResource(const Guid& guid) const;
-        [[nodiscard]] Result<LoadedResourceData> LoadResource(const Guid& guid);
+        [[nodiscard]] Result<LoadedResourceData> LoadResource(const ResourceRecord& record);
+        [[nodiscard]] ResourceLoadOperation LoadResourceAsync(const ResourceRecord& record);
+        [[nodiscard]] ErrorCode UnloadResource(const Guid& guid);
+        [[nodiscard]] SizeT CollectUnusedResources(const ResourceCollectUnusedParams& params);
         void ClearCache() noexcept;
 
     private:
+        struct LoadedResourceEntry
+        {
+            LoadedResourceData data;
+            std::vector<Guid> dependencies;
+            bool pinned = false;
+        };
+
         [[nodiscard]] Path ResolveRuntimePath(const ResourceRecord& record) const;
         [[nodiscard]] Result<LoadedResourceData> LoadFromRecord(const ResourceRecord& record);
+        void MarkReachableResource(const Guid& guid, std::vector<Guid>& reachableResources) const;
 
         Path projectRoot_;
-        Path manifestPath_;
-        mutable ResourceManifest manifest_;
-        ResourceResolveCallback resourceResolveCallback_;
-        std::unordered_map<Guid, LoadedResourceData> cache_;
-        ResourceSystemEnvironment environment_ = ResourceSystemEnvironment::Player;
+        std::unordered_map<Guid, LoadedResourceEntry> cache_;
         bool initialized_ = false;
     };
 } // namespace ve

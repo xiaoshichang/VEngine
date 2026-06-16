@@ -490,19 +490,35 @@ instead of freely coupling to scene internals.
 
 ### 7.11 Resource
 
-`Resource` manages runtime resources and editor asset metadata.
+`Resource` owns the low-level runtime resource loading primitives. It does not own editor asset indexing, project scans,
+or player manifest policy.
 
 Responsibilities:
 
-- Asset GUIDs.
-- Resource handles.
-- Reference counting or lifetime tracking.
-- Async loading.
-- Hot reload notification.
-- Dependency tracking.
-- Runtime loading of engine-native resource formats.
+- Loading engine-native resource payloads from explicit platform paths.
+- Deserializing resource files into CPU-side resource data.
+- Creating concrete runtime objects and, where needed, submitting render-resource creation through Render.
+- Resource handles, caching, reference counting, and lifetime tracking.
+- Explicit resource unload and unused resource collection.
+- Synchronous loading and low-level asynchronous loading operations for runtime-facing loaders.
 
-Runtime should load processed engine assets rather than arbitrary source files. Editor and tools handle source import.
+Resource indexing and dependency ownership live one layer above `ResourceSystem`:
+
+- `EditorAssetDatabase` owns editor asset records, project-relative asset path to GUID lookup, GUID to asset-record
+  lookup, import artifacts, dependency records, and live editor updates while a project is open.
+- `RuntimeResourceLoader` owns the read-only player resource manifest exported during packaging, GUID to resource-record
+  lookup, packaged runtime path to GUID lookup, dependency traversal, and player-facing load requests.
+
+Both layers call `ResourceSystem` after they have resolved a GUID to a concrete `ResourceRecord`. Runtime should load
+processed engine assets rather than arbitrary source files. Editor and tools handle source import.
+
+Editor resource lifetime follows an unused-resource collection model instead of per-load release calls from
+`EditorAssetDatabase`. Editor currently gathers root GUIDs from the active scene and selection state when the selection
+changes, when switching back to project selection, and around project opening. `ResourceSystem` marks those loaded
+resources and their already-loaded dependencies as reachable, then unloads unreachable cached payloads. Preview panes,
+thumbnail jobs, and importer views should add their own active roots before they start loading resource payloads.
+Project close and runtime shutdown clear the entire `ResourceSystem` cache. Player resource lifetime can use stricter
+handle/reference-counting on top of `RuntimeResourceLoader` as the runtime object model grows.
 
 ### 7.12 Render
 
@@ -877,17 +893,50 @@ generated local data, imported caches, shader/resource build products, and other
 projects keep an empty `Library/.gitkeep` only so the directory shape is visible.
 Project creation, descriptor editing, and workspace policy belong to the Editor layer; runtime systems only consume
 explicit paths and project-root resolution supplied by higher-level code.
-The Editor AssetDatabase scans this `Assets/` tree, tracks native source assets and imported descriptors, and generates
-first-stage `.vemesh` descriptors from `.obj` sources without copying mesh payload data.
+
+The resource pipeline has three explicit responsibility layers:
+
+```text
+Editor:
+  EditorAssetDatabase
+    -> scans Assets/ when a project opens
+    -> keeps asset path -> GUID and GUID -> asset-record indexes current
+    -> tracks imported artifact path and direct dependencies
+    -> updates records as editor operations create, delete, move, reimport, or save assets
+    -> calls ResourceSystem synchronously with concrete ResourceRecord values when editor code needs resource payloads
+
+Player:
+  RuntimeResourceLoader
+    -> reads a packaged, read-only ResourceManifest exported during build/cook
+    -> resolves GUIDs through the GUID -> ResourceRecord table
+    -> resolves packaged runtime paths through the runtimePath -> GUID map
+    -> resolves dependency order from that manifest
+    -> calls ResourceSystem with concrete ResourceRecord values
+    -> supports synchronous and asynchronous load entry points
+    -> never scans Assets/ and never mutates the manifest at runtime
+
+Shared low-level loading:
+  ResourceSystem
+    -> loads files from concrete platform paths
+    -> deserializes engine-native resource formats
+    -> creates CPU-side resource data and future runtime resource objects
+    -> unloads explicit resources and collects unused cached resources from root GUIDs
+    -> provides synchronous and asynchronous loading entry points
+```
+
+The Editor AssetDatabase scans the `Assets/` tree, tracks native source assets and imported descriptors, and generates
+first-stage `.vemesh` descriptors from `.obj` sources without copying mesh payload data. Player builds export a runtime
+manifest and resource payload set from the editor/tooling asset records.
 
 Recommended asset pipeline:
 
 ```text
 Source Asset
   -> AssetImporter
-  -> Engine Asset Metadata
-  -> Runtime Resource
-  -> ResourceManager
+  -> Editor Asset Metadata / Imported Artifact
+  -> Runtime Manifest + Packaged Resource Payload
+  -> RuntimeResourceLoader
+  -> ResourceSystem
 ```
 
 `assimp` is used for importing common model formats:

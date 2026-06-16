@@ -35,6 +35,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/ViewportClient.cpp
             Engine/Runtime/Resource/ResourceManifest.cpp
             Engine/Runtime/Resource/ResourceSystem.cpp
+            Engine/Runtime/Resource/RuntimeResourceLoader.cpp
             Engine/Runtime/Scene/CameraComponent.cpp
             Engine/Runtime/Scene/Component.cpp
             Engine/Runtime/Scene/GameObject.cpp
@@ -92,6 +93,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/ViewportClient.h
             Engine/Runtime/Resource/ResourceManifest.h
             Engine/Runtime/Resource/ResourceSystem.h
+            Engine/Runtime/Resource/RuntimeResourceLoader.h
             Engine/Runtime/Scene/CameraComponent.h
             Engine/Runtime/Scene/Component.h
             Engine/Runtime/Scene/GameObject.h

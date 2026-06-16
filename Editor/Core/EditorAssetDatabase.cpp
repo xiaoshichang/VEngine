@@ -364,8 +364,8 @@ namespace ve::editor
 
     void EditorAssetDatabase::Shutdown() noexcept
     {
-        assets_.clear();
-        assetPathsByGuid_.clear();
+        assetsByGuid_.clear();
+        guidsByAssetPath_.clear();
         projectRoot_ = Path();
         initialized_ = false;
     }
@@ -398,8 +398,8 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        assets_.clear();
-        assetPathsByGuid_.clear();
+        assetsByGuid_.clear();
+        guidsByAssetPath_.clear();
         const ErrorCode result = ScanAndImportDirectory(assetsRoot, false);
         if (result != ErrorCode::None)
         {
@@ -421,8 +421,8 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        assets_.clear();
-        assetPathsByGuid_.clear();
+        assetsByGuid_.clear();
+        guidsByAssetPath_.clear();
         const ErrorCode result = ScanAndImportDirectory(assetsRoot, true);
         if (result != ErrorCode::None)
         {
@@ -461,48 +461,70 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    void EditorAssetDatabase::RegisterResourceSystemCallbacks(ve::ResourceSystem& resourceSystem)
-    {
-        resourceSystem.SetResourceResolveCallback(
-            [this](const Guid& guid) -> Result<ResourceRecord> 
-            {
-                const EditorAssetRecord* asset = FindAssetByGuid(guid);
-                if (asset == nullptr)
-                {
-                    return Result<ResourceRecord>::Failure(Error(ErrorCode::NotFound, "Resource not found."));
-                }
-
-                return Result<ResourceRecord>::Success(BuildResourceRecord(*asset));
-            });
-
-    }
-
     SizeT EditorAssetDatabase::GetAssetCount() const noexcept
     {
-        return assets_.size();
+        return assetsByGuid_.size();
     }
 
     const EditorAssetRecord* EditorAssetDatabase::FindAsset(const Path& projectRelativePath) const noexcept
     {
-        const auto it = assets_.find(projectRelativePath.GetString());
-        return it != assets_.end() ? &it->second : nullptr;
-    }
-
-    const EditorAssetRecord* EditorAssetDatabase::FindAssetByGuid(const Guid& guid) const noexcept
-    {
-        const auto pathIt = assetPathsByGuid_.find(guid);
-        if (pathIt == assetPathsByGuid_.end())
+        const auto guidIt = guidsByAssetPath_.find(projectRelativePath.GetString());
+        if (guidIt == guidsByAssetPath_.end())
         {
             return nullptr;
         }
 
-        const auto assetIt = assets_.find(pathIt->second);
-        return assetIt != assets_.end() ? &assetIt->second : nullptr;
+        return FindAssetByGuid(guidIt->second);
     }
 
-    const std::unordered_map<std::string, EditorAssetRecord>& EditorAssetDatabase::GetAssets() const noexcept
+    const EditorAssetRecord* EditorAssetDatabase::FindAssetByGuid(const Guid& guid) const noexcept
     {
-        return assets_;
+        const auto assetIt = assetsByGuid_.find(guid);
+        return assetIt != assetsByGuid_.end() ? &assetIt->second : nullptr;
+    }
+
+    const std::unordered_map<Guid, EditorAssetRecord>& EditorAssetDatabase::GetAssetsByGuid() const noexcept
+    {
+        return assetsByGuid_;
+    }
+
+    const std::unordered_map<std::string, Guid>& EditorAssetDatabase::GetGuidsByAssetPath() const noexcept
+    {
+        return guidsByAssetPath_;
+    }
+
+    Result<ResourceRecord> EditorAssetDatabase::FindResource(const Guid& guid) const
+    {
+        if (!initialized_)
+        {
+            return Result<ResourceRecord>::Failure(
+                Error(ErrorCode::InvalidState, "EditorAssetDatabase is not initialized."));
+        }
+
+        if (guid.IsEmpty())
+        {
+            return Result<ResourceRecord>::Failure(Error(ErrorCode::InvalidArgument, "Resource GUID is empty."));
+        }
+
+        const EditorAssetRecord* asset = FindAssetByGuid(guid);
+        if (asset == nullptr)
+        {
+            return Result<ResourceRecord>::Failure(Error(ErrorCode::NotFound, "Resource not found."));
+        }
+
+        return Result<ResourceRecord>::Success(BuildResourceRecord(*asset));
+    }
+
+    Result<LoadedResourceData> EditorAssetDatabase::LoadResource(const Guid& guid,
+                                                                 ve::ResourceSystem& resourceSystem) const
+    {
+        Result<ResourceRecord> record = FindResource(guid);
+        if (!record)
+        {
+            return Result<LoadedResourceData>::Failure(record.GetError());
+        }
+
+        return resourceSystem.LoadResource(record.GetValue());
     }
 
     const char* EditorAssetDatabase::ToString(EditorAssetType type) noexcept
@@ -530,6 +552,7 @@ namespace ve::editor
         record.guid = asset.guid;
         record.type = ToResourceType(asset.type);
         record.runtimePath = asset.imported ? asset.importedPath : asset.path;
+        record.dependencies = asset.dependencies;
         return record;
     }
 
@@ -701,12 +724,18 @@ namespace ve::editor
         const std::string pathKey = record.path.GetString();
         const Guid guidKey = record.guid;
 
-        if (const auto existing = assets_.find(pathKey); existing != assets_.end() && existing->second.guid != guidKey)
+        if (const auto existingGuid = guidsByAssetPath_.find(pathKey);
+            existingGuid != guidsByAssetPath_.end() && existingGuid->second != guidKey)
         {
-            assetPathsByGuid_.erase(existing->second.guid);
+            assetsByGuid_.erase(existingGuid->second);
         }
 
-        assets_.insert_or_assign(pathKey, std::move(record));
-        assetPathsByGuid_.insert_or_assign(guidKey, pathKey);
+        if (const auto existingAsset = assetsByGuid_.find(guidKey); existingAsset != assetsByGuid_.end())
+        {
+            guidsByAssetPath_.erase(existingAsset->second.path.GetString());
+        }
+
+        assetsByGuid_.insert_or_assign(guidKey, std::move(record));
+        guidsByAssetPath_.insert_or_assign(pathKey, guidKey);
     }
 } // namespace ve::editor

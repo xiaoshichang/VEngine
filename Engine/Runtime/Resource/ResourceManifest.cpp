@@ -72,6 +72,7 @@ namespace ve
     void ResourceManifest::Clear() noexcept
     {
         resources_.clear();
+        guidsByRuntimePath_.clear();
     }
 
     SizeT ResourceManifest::GetResourceCount() const noexcept
@@ -85,9 +86,25 @@ namespace ve
         return it != resources_.end() ? &it->second : nullptr;
     }
 
+    const ResourceRecord* ResourceManifest::FindByRuntimePath(const Path& runtimePath) const noexcept
+    {
+        const auto guidIt = guidsByRuntimePath_.find(runtimePath.GetString());
+        if (guidIt == guidsByRuntimePath_.end())
+        {
+            return nullptr;
+        }
+
+        return Find(guidIt->second);
+    }
+
     const std::unordered_map<Guid, ResourceRecord>& ResourceManifest::GetResources() const noexcept
     {
         return resources_;
+    }
+
+    const std::unordered_map<std::string, Guid>& ResourceManifest::GetGuidsByRuntimePath() const noexcept
+    {
+        return guidsByRuntimePath_;
     }
 
     ErrorCode ResourceManifest::AddOrUpdate(ResourceRecord record)
@@ -97,7 +114,27 @@ namespace ve
             return ErrorCode::InvalidArgument;
         }
 
-        resources_.insert_or_assign(record.guid, std::move(record));
+        const Guid guid = record.guid;
+        const std::string runtimePathKey = record.runtimePath.GetString();
+        if (!runtimePathKey.empty())
+        {
+            if (const auto existingGuid = guidsByRuntimePath_.find(runtimePathKey);
+                existingGuid != guidsByRuntimePath_.end() && existingGuid->second != guid)
+            {
+                resources_.erase(existingGuid->second);
+            }
+        }
+
+        if (const auto existing = resources_.find(guid); existing != resources_.end())
+        {
+            guidsByRuntimePath_.erase(existing->second.runtimePath.GetString());
+        }
+
+        resources_.insert_or_assign(guid, std::move(record));
+        if (!runtimePathKey.empty())
+        {
+            guidsByRuntimePath_.insert_or_assign(runtimePathKey, guid);
+        }
         return ErrorCode::None;
     }
 
@@ -142,7 +179,11 @@ namespace ve
                 return record.GetError().GetCode();
             }
 
-            resources_.insert_or_assign(record.GetValue().guid, std::move(record.MoveValue()));
+            const ErrorCode addResult = AddOrUpdate(record.MoveValue());
+            if (addResult != ErrorCode::None)
+            {
+                return addResult;
+            }
         }
 
         return ErrorCode::None;
