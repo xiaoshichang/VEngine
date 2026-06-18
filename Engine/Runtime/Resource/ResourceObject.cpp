@@ -42,7 +42,7 @@ namespace ve
     {
         for (const AssetID& dependency : record_.dependencies)
         {
-            Result<ResourceObject*> dependencyResource = context.resourceSystem.RequestResource(dependency, context);
+            Result<ResourceObject*> dependencyResource = context.RequestDependency(dependency);
             if (!dependencyResource)
             {
                 return dependencyResource.GetError().GetCode();

@@ -516,13 +516,16 @@ Editor and runtime asset indexing are intentionally separated. `EditorResourceLo
 wrapper around `ResourceSystem::Request()`, while `RuntimeAssetLoader` resolves packaged manifest asset records.
 Runtime should load processed engine assets rather than arbitrary source files. Editor and tools handle source import.
 
-Components store resource references as `AssetRef<TResource>`. `AssetRef` serializes only its `AssetID`; after loading,
-it may also hold a non-owning pointer to the loaded `ResourceObject`.
+Components store resource references as `AssetRef<TResource>`. `AssetRef` serializes only its `AssetID`; after a
+successful `ResourceSystem::Request<TResource>()`, it owns that requested reference and holds the loaded
+`ResourceObject` pointer for CPU-side or render-facing access. `AssetRef` is movable but not copyable; resetting,
+reassigning, or destroying it releases its current requested reference through `ResourceSystem`.
 
 Editor resource lifetime follows root-reachability collection using active root `AssetID` values from the active scene,
-selection state, previews, thumbnails, and importer views. Player resource lifetime uses explicit
-`ResourceSystem::Request()` and `ResourceSystem::ReleaseResource()` calls. `ResourceSystem::CollectUnusedResources()`
-never unloads resources with nonzero reference counts.
+selection state, previews, thumbnails, and importer views. Player resource lifetime is normally expressed by owning
+`AssetRef` handles returned from `ResourceSystem::Request()`. Release is driven by `AssetRef` lifetime; `ResourceSystem`
+keeps internal release helpers for request rollback, type mismatch cleanup, dependency release, and `AssetRef`
+reset/destruction. `ResourceSystem::CollectUnusedResources()` never unloads resources with nonzero reference counts.
 
 ### 7.12 Render
 
@@ -926,7 +929,7 @@ Shared low-level loading:
     -> loads files from concrete platform paths
     -> deserializes engine-native resource formats
     -> creates ResourceObject instances such as SceneResource, MeshResource, MaterialResource, and TextureResource
-    -> supports recursive Request(assetID, provider)
+    -> supports public Request(assetID, provider) plus internal dependency requests
     -> tracks request/release reference counts
     -> supports root-reachability collection
 ```

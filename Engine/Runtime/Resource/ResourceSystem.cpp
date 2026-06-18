@@ -8,6 +8,11 @@
 
 namespace ve
 {
+    Result<ResourceObject*> ResourceLoadContext::RequestDependency(const AssetID& id)
+    {
+        return resourceSystem.RequestResourceInternal(id, *this);
+    }
+
     ErrorCode ResourceSystem::Initialize(const ResourceSystemInitParam& desc)
     {
         projectRoot_ = desc.projectRoot;
@@ -37,22 +42,7 @@ namespace ve
         return projectRoot_;
     }
 
-    Result<ResourceObject*> ResourceSystem::RequestResource(const AssetID& id, const IAssetRecordProvider& provider)
-    {
-        ResourceLoadContext context{*this, provider, {}, {}};
-        Result<ResourceObject*> resource = RequestResource(id, context);
-        if (!resource)
-        {
-            for (auto it = context.acquiredReferences.rbegin(); it != context.acquiredReferences.rend(); ++it)
-            {
-                (void)ReleaseResource(*it);
-            }
-        }
-
-        return resource;
-    }
-
-    Result<ResourceObject*> ResourceSystem::RequestResource(const AssetID& id, ResourceLoadContext& context)
+    Result<ResourceObject*> ResourceSystem::RequestResourceInternal(const AssetID& id, ResourceLoadContext& context)
     {
         if (!initialized_)
         {
@@ -110,17 +100,7 @@ namespace ve
         return Result<ResourceObject*>::Success(resourcePointer);
     }
 
-    ErrorCode ResourceSystem::ReleaseResource(ResourceObject* resource)
-    {
-        if (resource == nullptr)
-        {
-            return ErrorCode::InvalidArgument;
-        }
-
-        return ReleaseResource(resource->GetAssetID());
-    }
-
-    ErrorCode ResourceSystem::ReleaseResource(const AssetID& id)
+    ErrorCode ResourceSystem::ReleaseResourceInternal(const AssetID& id)
     {
         if (id.IsEmpty())
         {
@@ -138,18 +118,20 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        const std::vector<AssetID> dependencies = it->second.resource->GetDependencies();
         --it->second.referenceCount;
-        if (it->second.referenceCount == 0)
+        if (it->second.referenceCount > 0)
         {
-            cache_.erase(it);
+            return ErrorCode::None;
         }
+
+        const std::vector<AssetID> dependencies = it->second.resource->GetDependencies();
+        cache_.erase(it);
 
         for (const AssetID& dependency : dependencies)
         {
             if (!dependency.IsEmpty())
             {
-                (void)ReleaseResource(dependency);
+                (void)ReleaseResourceInternal(dependency);
             }
         }
 

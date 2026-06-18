@@ -92,7 +92,7 @@ namespace ve
         [[nodiscard]] Result<Scene*> LoadScene(const SceneLoadDesc& desc,
                                                const IAssetRecordProvider& provider,
                                                ResourceSystem& resourceSystem);
-        void UnloadActiveScene(ResourceSystem& resourceSystem) noexcept;
+        void UnloadActiveScene() noexcept;
 
         /// Queues one OS event for Scene Thread processing.
         [[nodiscard]] ErrorCode EnqueueOSEvent(const OSEvent& event);

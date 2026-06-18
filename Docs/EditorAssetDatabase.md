@@ -134,4 +134,5 @@ Editor active roots are `AssetID` values collected from:
 - Importer views.
 
 The editor calls `ResourceSystem::CollectUnusedResources()` with those roots. The collection pass keeps reachable
-resources and resources with nonzero request reference counts.
+resources and resources with nonzero request reference counts. Active loaded `AssetRef` handles also hold explicit
+references until they are reset, reassigned, or destroyed.

@@ -1,7 +1,6 @@
 #include "Engine/Runtime/Scene/Scene.h"
 
 #include "Engine/Runtime/Core/Assert.h"
-#include "Engine/Runtime/Resource/ResourceSystem.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
 
 #include <algorithm>
@@ -95,7 +94,6 @@ namespace ve
     {
         const bool hadRootGameObjects = !rootGameObjects_.empty();
         rootGameObjects_.clear();
-        retainedAssets_.clear();
 
         if (sceneSystem_ == nullptr)
         {
@@ -383,30 +381,5 @@ namespace ve
         ErrorCode submitResult =
             sceneSystem_->EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
         VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "Scene failed to enqueue an RTScene command.");
-    }
-
-    void Scene::RetainAsset(AssetID id)
-    {
-        if (id.IsEmpty())
-        {
-            return;
-        }
-
-        retainedAssets_.push_back(std::move(id));
-    }
-
-    void Scene::ClearRetainedAssets(ResourceSystem& resourceSystem) noexcept
-    {
-        for (const AssetID& id : retainedAssets_)
-        {
-            (void)resourceSystem.ReleaseResource(id);
-        }
-
-        retainedAssets_.clear();
-    }
-
-    const std::vector<AssetID>& Scene::GetRetainedAssets() const noexcept
-    {
-        return retainedAssets_;
     }
 } // namespace ve

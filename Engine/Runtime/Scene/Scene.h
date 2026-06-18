@@ -4,7 +4,6 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/RenderScene.h"
-#include "Engine/Runtime/Resource/AssetID.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 
 #include <functional>
@@ -17,7 +16,6 @@
 namespace ve
 {
     class SceneSystem;
-    class ResourceSystem;
 
     /// Owns a tree of root GameObjects and updates that hierarchy.
     class Scene final : public NonMovable
@@ -57,9 +55,6 @@ namespace ve
         void LateUpdate(Float32 deltaSeconds);
         void BeforeRender();
         void RebuildRenderThreadScene();
-        void RetainAsset(AssetID id);
-        void ClearRetainedAssets(ResourceSystem& resourceSystem) noexcept;
-        [[nodiscard]] const std::vector<AssetID>& GetRetainedAssets() const noexcept;
 
     private:
         void RegisterRenderItemsRecursive(GameObject& gameObject);
@@ -70,6 +65,5 @@ namespace ve
         SceneSystem* sceneSystem_ = nullptr;
         std::shared_ptr<RTScene> rtScene_;
         std::vector<std::unique_ptr<GameObject>> rootGameObjects_;
-        std::vector<AssetID> retainedAssets_;
     };
 } // namespace ve

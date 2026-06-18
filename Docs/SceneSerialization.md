@@ -115,5 +115,5 @@ emit only the structured `AssetID` shape.
 complete scene construction flow.
 
 `SceneSystem` owns live scene construction. It requests a `SceneResource`, deserializes the scene data, binds component
-`AssetRef` values through `ResourceSystem`, records retained asset IDs for release, and then rebuilds the render-thread
-scene.
+`AssetRef` values through `ResourceSystem`, and then rebuilds the render-thread scene. Bound `AssetRef` handles own their
+resource references; scene unload releases those references by destroying or resetting the components that hold them.
