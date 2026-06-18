@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Resource/ResourceSystem.h"
 
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 
 #include <algorithm>
 #include <memory>
@@ -40,6 +41,35 @@ namespace ve
     const Path& ResourceSystem::GetProjectRoot() const noexcept
     {
         return projectRoot_;
+    }
+
+    ErrorCode ResourceSystem::EnsureRenderResource(const AssetRefBase& assetRef, RenderSystem& renderSystem)
+    {
+        if (!initialized_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (!renderSystem.IsInitialized())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const AssetID& id = assetRef.GetAssetID();
+        if (id.IsEmpty() || !assetRef.IsLoaded())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        std::vector<AssetID> renderStack;
+        std::vector<AssetID> initializedResources;
+        const ErrorCode result = EnsureRenderResourceInternal(id, renderSystem, renderStack, initializedResources);
+        if (result != ErrorCode::None)
+        {
+            RollbackRenderResourceInit(initializedResources);
+        }
+
+        return result;
     }
 
     Result<ResourceObject*> ResourceSystem::RequestResourceInternal(const AssetID& id, ResourceLoadContext& context)
@@ -125,6 +155,7 @@ namespace ve
         }
 
         const std::vector<AssetID> dependencies = it->second.resource->GetDependencies();
+        ReleaseEntryRenderResource(it->second);
         cache_.erase(it);
 
         for (const AssetID& dependency : dependencies)
@@ -157,6 +188,7 @@ namespace ve
                 continue;
             }
 
+            ReleaseEntryRenderResource(it->second);
             it = cache_.erase(it);
             ++unloadedCount;
         }
@@ -166,7 +198,101 @@ namespace ve
 
     void ResourceSystem::ClearCache() noexcept
     {
+        for (auto& entry : cache_)
+        {
+            ReleaseEntryRenderResource(entry.second);
+        }
+
         cache_.clear();
+    }
+
+    ErrorCode ResourceSystem::EnsureRenderResourceInternal(const AssetID& id,
+                                                           RenderSystem& renderSystem,
+                                                           std::vector<AssetID>& renderStack,
+                                                           std::vector<AssetID>& initializedResources)
+    {
+        if (std::find(renderStack.begin(), renderStack.end(), id) != renderStack.end())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const auto it = cache_.find(id);
+        if (it == cache_.end())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        LoadedResourceEntry& entry = it->second;
+        if (entry.renderState == ResourceRenderState::Queued)
+        {
+            return entry.renderSystem == &renderSystem ? ErrorCode::None : ErrorCode::InvalidState;
+        }
+
+        if (entry.renderState == ResourceRenderState::Failed)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        renderStack.push_back(id);
+        for (const AssetID& dependency : entry.resource->GetDependencies())
+        {
+            if (dependency.IsEmpty())
+            {
+                continue;
+            }
+
+            const ErrorCode dependencyResult =
+                EnsureRenderResourceInternal(dependency, renderSystem, renderStack, initializedResources);
+            if (dependencyResult != ErrorCode::None)
+            {
+                renderStack.pop_back();
+                return dependencyResult;
+            }
+        }
+
+        const ErrorCode initResult = entry.resource->InitRenderResource(renderSystem);
+        renderStack.pop_back();
+        if (initResult != ErrorCode::None)
+        {
+            entry.renderState = ResourceRenderState::Failed;
+            entry.renderSystem = nullptr;
+            return initResult;
+        }
+
+        entry.renderState = ResourceRenderState::Queued;
+        entry.renderSystem = &renderSystem;
+        initializedResources.push_back(id);
+        return ErrorCode::None;
+    }
+
+    void ResourceSystem::RollbackRenderResourceInit(std::vector<AssetID>& initializedResources) noexcept
+    {
+        for (auto it = initializedResources.rbegin(); it != initializedResources.rend(); ++it)
+        {
+            const auto entryIt = cache_.find(*it);
+            if (entryIt == cache_.end())
+            {
+                continue;
+            }
+
+            ReleaseEntryRenderResource(entryIt->second);
+        }
+
+        initializedResources.clear();
+    }
+
+    void ResourceSystem::ReleaseEntryRenderResource(LoadedResourceEntry& entry) noexcept
+    {
+        if (entry.renderState != ResourceRenderState::Queued || entry.renderSystem == nullptr)
+        {
+            entry.renderState = ResourceRenderState::Uninitialized;
+            entry.renderSystem = nullptr;
+            return;
+        }
+
+        entry.resource->ReleaseRenderResource(*entry.renderSystem);
+        entry.renderState = ResourceRenderState::Uninitialized;
+        entry.renderSystem = nullptr;
     }
 
     Path ResourceSystem::ResolveRuntimePath(const AssetRecord& record) const

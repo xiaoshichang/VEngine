@@ -13,6 +13,8 @@
 
 namespace ve
 {
+    class RenderSystem;
+
     struct ResourceSystemInitParam
     {
         Path projectRoot;
@@ -21,6 +23,15 @@ namespace ve
     struct ResourceCollectUnusedParams
     {
         std::vector<AssetID> rootAssets;
+    };
+
+    enum class ResourceRenderState
+    {
+        Uninitialized,
+        // The render-thread initialization command has been accepted. Current RenderSystem resource uploads are
+        // command-queue based, so this state means "submitted" rather than GPU-complete.
+        Queued,
+        Failed,
     };
 
     class ResourceSystem;
@@ -52,6 +63,11 @@ namespace ve
         template<typename TResource>
         [[nodiscard]] Result<AssetRef<TResource>> Request(const AssetID& id, const IAssetRecordProvider& provider);
 
+        /// Ensures render-thread resources for this AssetRef and its dependencies.
+        ///
+        /// ResourceSystem owns dependency ordering: dependencies are initialized first, while release happens when
+        /// the owning CPU ResourceObject reference count reaches zero.
+        [[nodiscard]] ErrorCode EnsureRenderResource(const AssetRefBase& assetRef, RenderSystem& renderSystem);
         [[nodiscard]] SizeT CollectUnusedResources(const ResourceCollectUnusedParams& params);
         void ClearCache() noexcept;
 
@@ -63,10 +79,18 @@ namespace ve
         {
             std::unique_ptr<ResourceObject> resource;
             SizeT referenceCount = 0;
+            ResourceRenderState renderState = ResourceRenderState::Uninitialized;
+            RenderSystem* renderSystem = nullptr;
         };
 
         [[nodiscard]] Result<ResourceObject*> RequestResourceInternal(const AssetID& id, ResourceLoadContext& context);
         [[nodiscard]] ErrorCode ReleaseResourceInternal(const AssetID& id);
+        [[nodiscard]] ErrorCode EnsureRenderResourceInternal(const AssetID& id,
+                                                             RenderSystem& renderSystem,
+                                                             std::vector<AssetID>& renderStack,
+                                                             std::vector<AssetID>& initializedResources);
+        void RollbackRenderResourceInit(std::vector<AssetID>& initializedResources) noexcept;
+        void ReleaseEntryRenderResource(LoadedResourceEntry& entry) noexcept;
         [[nodiscard]] Path ResolveRuntimePath(const AssetRecord& record) const;
         [[nodiscard]] Result<std::unique_ptr<ResourceObject>> CreateResourceObject(const AssetRecord& record);
         void MarkReachableResource(const AssetID& id, std::vector<AssetID>& reachableResources) const;

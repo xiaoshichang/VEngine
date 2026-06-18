@@ -521,6 +521,12 @@ successful `ResourceSystem::Request<TResource>()`, it owns that requested refere
 `ResourceObject` pointer for CPU-side or render-facing access. `AssetRef` is movable but not copyable; resetting,
 reassigning, or destroying it releases its current requested reference through `ResourceSystem`.
 
+`ResourceSystem::Request<TResource>()` is a CPU-side load and lifetime operation. Render-facing state is initialized
+explicitly through `ResourceSystem::EnsureRenderResource(assetRef, renderSystem)` when an `AssetRef` enters a render
+path, such as during Scene construction for mesh and material components. `ResourceSystem` initializes dependency render
+resources before the requested resource, tracks whether init commands have been queued, and releases a resource's render
+state before releasing its dependency references when the CPU reference count reaches zero.
+
 Editor resource lifetime follows root-reachability collection using active root `AssetID` values from the active scene,
 selection state, previews, thumbnails, and importer views. Player resource lifetime is normally expressed by owning
 `AssetRef` handles returned from `ResourceSystem::Request()`. Release is driven by `AssetRef` lifetime; `ResourceSystem`

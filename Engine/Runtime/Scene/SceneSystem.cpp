@@ -231,7 +231,8 @@ namespace ve
 
         [[nodiscard]] ErrorCode BindGameObjectAssetRefs(GameObject& gameObject,
                                                         const IAssetRecordProvider& provider,
-                                                        ResourceSystem& resourceSystem)
+                                                        ResourceSystem& resourceSystem,
+                                                        RenderSystem* renderSystem)
         {
             if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
             {
@@ -245,6 +246,16 @@ namespace ve
                         return meshResource.GetError().GetCode();
                     }
 
+                    if (renderSystem != nullptr && renderSystem->IsInitialized())
+                    {
+                        const ErrorCode renderResult =
+                            resourceSystem.EnsureRenderResource(meshResource.GetValue(), *renderSystem);
+                        if (renderResult != ErrorCode::None)
+                        {
+                            return renderResult;
+                        }
+                    }
+
                     mesh->SetMesh(meshResource.MoveValue());
                 }
 
@@ -256,6 +267,16 @@ namespace ve
                     if (!materialResource)
                     {
                         return materialResource.GetError().GetCode();
+                    }
+
+                    if (renderSystem != nullptr && renderSystem->IsInitialized())
+                    {
+                        const ErrorCode renderResult =
+                            resourceSystem.EnsureRenderResource(materialResource.GetValue(), *renderSystem);
+                        if (renderResult != ErrorCode::None)
+                        {
+                            return renderResult;
+                        }
                     }
 
                     mesh->SetMaterial(materialResource.MoveValue());
@@ -276,7 +297,7 @@ namespace ve
                     continue;
                 }
 
-                const ErrorCode result = BindGameObjectAssetRefs(*child, provider, resourceSystem);
+                const ErrorCode result = BindGameObjectAssetRefs(*child, provider, resourceSystem, renderSystem);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -288,7 +309,8 @@ namespace ve
 
         [[nodiscard]] ErrorCode BindSceneAssetRefs(Scene& scene,
                                                    const IAssetRecordProvider& provider,
-                                                   ResourceSystem& resourceSystem)
+                                                   ResourceSystem& resourceSystem,
+                                                   RenderSystem* renderSystem)
         {
             for (SizeT rootIndex = 0; rootIndex < scene.GetRootGameObjectCount(); ++rootIndex)
             {
@@ -298,7 +320,7 @@ namespace ve
                     continue;
                 }
 
-                const ErrorCode result = BindGameObjectAssetRefs(*root, provider, resourceSystem);
+                const ErrorCode result = BindGameObjectAssetRefs(*root, provider, resourceSystem, renderSystem);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -340,7 +362,8 @@ namespace ve
 
         [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromResource(const SceneResource& sceneResource,
                                                                             const IAssetRecordProvider& provider,
-                                                                            ResourceSystem& resourceSystem)
+                                                                            ResourceSystem& resourceSystem,
+                                                                            RenderSystem* renderSystem)
         {
             Result<std::unique_ptr<Scene>> scene = CreateSceneFromResource(sceneResource);
             if (!scene)
@@ -348,7 +371,7 @@ namespace ve
                 return scene;
             }
 
-            const ErrorCode bindResult = BindSceneAssetRefs(*scene.GetValue(), provider, resourceSystem);
+            const ErrorCode bindResult = BindSceneAssetRefs(*scene.GetValue(), provider, resourceSystem, renderSystem);
             if (bindResult != ErrorCode::None)
             {
                 return Result<std::unique_ptr<Scene>>::Failure(
@@ -492,10 +515,11 @@ namespace ve
             return Result<Scene*>::Failure(sceneResource.GetError());
         }
 
-        // 3. Build a detached Scene and bind all component AssetRefs before committing it as the active scene. This
-        // keeps the old scene alive if scene deserialization or resource binding fails.
+        // 3. Build a detached Scene and bind all component AssetRefs before committing it as the active scene. Render
+        // resources are submitted here too, while the new scene is still detached, so failures leave the old scene
+        // untouched.
         Result<std::unique_ptr<Scene>> scene =
-            BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem);
+            BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem, impl_->renderSystem);
         if (!scene)
         {
             return Result<Scene*>::Failure(scene.GetError());
