@@ -2,6 +2,7 @@
 
 #include "Editor/Core/EditorAssetDatabase.h"
 #include "Editor/Core/EditorInput.h"
+#include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectRegistry.h"
 #include "Editor/Core/EditorResourceLoader.h"
 #include "Engine/Runtime/Application/ApplicationCommandQueue.h"
@@ -80,6 +81,16 @@ namespace ve::editor
 
         [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
         void ShutdownRenderBackend() noexcept;
+        void ShutdownOpenProjectState() noexcept;
+        [[nodiscard]] Result<EditorProjectDescriptor> PrepareOpenProjectDescriptor(const Path& projectRoot,
+                                                                                   const std::string& projectPath);
+        [[nodiscard]] ErrorCode InitializeOpenProjectAssetServices(const Path& projectRoot,
+                                                                   const std::string& projectPath);
+        void ActivateOpenProjectContext(std::string projectPath,
+                                        const Path& projectRoot,
+                                        const EditorProjectDescriptor& descriptor);
+        void LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor);
+        void EnterProjectEditingView();
         void AddRecentProject(const std::string& projectPath);
         void SetCurrentProject(std::string projectPath);
         void EnqueueMainWindowTitleUpdate();

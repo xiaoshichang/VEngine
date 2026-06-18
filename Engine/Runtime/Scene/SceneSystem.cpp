@@ -238,7 +238,8 @@ namespace ve
                 const AssetID meshID = mesh->GetMeshAssetID();
                 if (!meshID.IsEmpty())
                 {
-                    Result<AssetRef<MeshResource>> meshResource = resourceSystem.Request<MeshResource>(meshID, provider);
+                    Result<AssetRef<MeshResource>> meshResource =
+                        resourceSystem.Request<MeshResource>(meshID, provider);
                     if (!meshResource)
                     {
                         return meshResource.GetError().GetCode();
@@ -305,6 +306,73 @@ namespace ve
             }
 
             return ErrorCode::None;
+        }
+
+        [[nodiscard]] ErrorCode ValidateSceneLoadDesc(const SceneLoadDesc& desc)
+        {
+            if (desc.mode == SceneLoadMode::Additive)
+            {
+                return ErrorCode::Unsupported;
+            }
+
+            return ErrorCode::None;
+        }
+
+        [[nodiscard]] Result<AssetRef<SceneResource>> RequestSceneResource(const SceneLoadDesc& desc,
+                                                                           const IAssetRecordProvider& provider,
+                                                                           ResourceSystem& resourceSystem)
+        {
+            return resourceSystem.Request<SceneResource>(desc.scene, provider);
+        }
+
+        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromResource(const SceneResource& sceneResource)
+        {
+            auto scene = std::make_unique<Scene>();
+            const ErrorCode deserializeResult = SceneSerialization::LoadFromString(*scene, sceneResource.GetText());
+            if (deserializeResult != ErrorCode::None)
+            {
+                return Result<std::unique_ptr<Scene>>::Failure(
+                    Error(deserializeResult, "Failed to deserialize scene resource."));
+            }
+
+            return Result<std::unique_ptr<Scene>>::Success(std::move(scene));
+        }
+
+        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromResource(const SceneResource& sceneResource,
+                                                                            const IAssetRecordProvider& provider,
+                                                                            ResourceSystem& resourceSystem)
+        {
+            Result<std::unique_ptr<Scene>> scene = CreateSceneFromResource(sceneResource);
+            if (!scene)
+            {
+                return scene;
+            }
+
+            const ErrorCode bindResult = BindSceneAssetRefs(*scene.GetValue(), provider, resourceSystem);
+            if (bindResult != ErrorCode::None)
+            {
+                return Result<std::unique_ptr<Scene>>::Failure(
+                    Error(bindResult, "Failed to bind scene asset references."));
+            }
+
+            return scene;
+        }
+
+        [[nodiscard]] Scene* CommitLoadedScene(SceneSystemImpl& impl,
+                                               SceneSystem& owner,
+                                               SceneLoadMode mode,
+                                               std::unique_ptr<Scene> scene)
+        {
+            if (mode == SceneLoadMode::Single && impl.scene != nullptr)
+            {
+                impl.scene->Clear();
+                impl.scene->SetSceneSystem(nullptr);
+            }
+
+            Scene* loadedScene = scene.get();
+            impl.scene = std::move(scene);
+            impl.scene->SetSceneSystem(&owner);
+            return loadedScene;
         }
     } // namespace
 
@@ -409,38 +477,33 @@ namespace ve
                                           const IAssetRecordProvider& provider,
                                           ResourceSystem& resourceSystem)
     {
-        Result<AssetRef<SceneResource>> sceneResource = resourceSystem.Request<SceneResource>(desc.scene, provider);
+        // 1. Validate the requested mode before touching resource state. SceneSystem currently owns a single active
+        // Scene, so additive loading is rejected until multiple live Scene ownership is introduced.
+        const ErrorCode validateResult = ValidateSceneLoadDesc(desc);
+        if (validateResult != ErrorCode::None)
+        {
+            return Result<Scene*>::Failure(Error(validateResult, "Unsupported scene load mode."));
+        }
+
+        // 2. Request the serialized SceneResource first. A failure here leaves the current active scene untouched.
+        Result<AssetRef<SceneResource>> sceneResource = RequestSceneResource(desc, provider, resourceSystem);
         if (!sceneResource)
         {
             return Result<Scene*>::Failure(sceneResource.GetError());
         }
 
-        if (desc.mode == SceneLoadMode::Single)
+        // 3. Build a detached Scene and bind all component AssetRefs before committing it as the active scene. This
+        // keeps the old scene alive if scene deserialization or resource binding fails.
+        Result<std::unique_ptr<Scene>> scene =
+            BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem);
+        if (!scene)
         {
-            UnloadActiveScene();
+            return Result<Scene*>::Failure(scene.GetError());
         }
 
-        auto scene = std::make_unique<Scene>();
-        const ErrorCode deserializeResult =
-            SceneSerialization::LoadFromString(*scene, sceneResource.GetValue().Get()->GetText());
-        if (deserializeResult != ErrorCode::None)
-        {
-            return Result<Scene*>::Failure(Error(deserializeResult, "Failed to deserialize scene resource."));
-        }
-
-        const ErrorCode bindResult = BindSceneAssetRefs(*scene, provider, resourceSystem);
-        if (bindResult != ErrorCode::None)
-        {
-            return Result<Scene*>::Failure(Error(bindResult, "Failed to bind scene asset references."));
-        }
-
-        Scene* loadedScene = scene.get();
-        if (impl_->scene != nullptr)
-        {
-            impl_->scene->SetSceneSystem(nullptr);
-        }
-        impl_->scene = std::move(scene);
-        impl_->scene->SetSceneSystem(this);
+        // 4. Commit is the only phase that mutates the active scene pointer. SetSceneSystem() rebuilds render-thread
+        // scene state after the new GameObject hierarchy and AssetRefs are complete.
+        Scene* loadedScene = CommitLoadedScene(*impl_, *this, desc.mode, scene.MoveValue());
         return Result<Scene*>::Success(loadedScene);
     }
 

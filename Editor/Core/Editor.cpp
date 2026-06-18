@@ -8,7 +8,6 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
-#include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -481,23 +480,33 @@ namespace ve::editor
         }
     }
 
-    void Editor::OpenProject(std::string projectPath)
+    void Editor::ShutdownOpenProjectState() noexcept
     {
-        if (projectPath.empty())
+        ClearSelection();
+
+        if (sceneSystem_ != nullptr)
         {
-            return;
+            sceneSystem_->UnloadActiveScene();
         }
 
         resourceLoader_.Shutdown();
         assetDatabase_.Shutdown();
+        currentProjectPath_.clear();
+        currentProjectName_.clear();
+        mainView_ = MainView::ProjectSelection;
+        EnqueueMainWindowTitleUpdate();
+    }
 
-        const Path projectRoot(projectPath);
+    Result<EditorProjectDescriptor> Editor::PrepareOpenProjectDescriptor(const Path& projectRoot,
+                                                                         const std::string& projectPath)
+    {
         const ErrorCode layoutResult = EditorProject::EnsureLayout(projectRoot);
         if (layoutResult != ErrorCode::None)
         {
             VE_LOG_ERROR_CATEGORY(
                 "Editor", "Failed to prepare project layout '{}': {}", projectPath, ToString(layoutResult));
-            return;
+            return Result<EditorProjectDescriptor>::Failure(
+                Error(layoutResult, "Failed to prepare editor project layout."));
         }
 
         Result<EditorProjectDescriptor> descriptorResult = EditorProject::LoadDescriptor(projectRoot);
@@ -507,38 +516,20 @@ namespace ve::editor
                                   "Failed to load project descriptor '{}': {}",
                                   EditorProject::GetDescriptorPath(projectRoot).GetString(),
                                   descriptorResult.GetError().GetMessage());
-            return;
+            return descriptorResult;
         }
 
-        FileSystem::SetProjectRoot(projectRoot);
-        SetCurrentProject(std::move(projectPath));
-        ClearSelection();
-        currentProjectName_ =
-            descriptorResult.GetValue().name.empty() ? currentProjectName_ : descriptorResult.GetValue().name;
-        if (!descriptorResult.GetValue().startScene.empty() && sceneSystem_ != nullptr &&
-            sceneSystem_->GetScene() != nullptr)
-        {
-            Result<std::string> sceneText =
-                FileSystem::ReadTextFile(FileSystem::ResolveProjectPath(Path(descriptorResult.GetValue().startScene)));
-            const ErrorCode loadSceneResult = sceneText
-                                                  ? SceneSerialization::LoadFromString(*sceneSystem_->GetScene(),
-                                                                                      sceneText.GetValue())
-                                                  : sceneText.GetError().GetCode();
-            if (loadSceneResult != ErrorCode::None)
-            {
-                VE_LOG_WARN_CATEGORY("Editor",
-                                     "Failed to load project start scene '{}': {}",
-                                     descriptorResult.GetValue().startScene,
-                                     ToString(loadSceneResult));
-            }
-        }
+        return descriptorResult;
+    }
 
+    ErrorCode Editor::InitializeOpenProjectAssetServices(const Path& projectRoot, const std::string& projectPath)
+    {
         const ErrorCode assetDatabaseResult = assetDatabase_.Initialize(projectRoot);
         if (assetDatabaseResult != ErrorCode::None)
         {
             VE_LOG_ERROR_CATEGORY(
                 "Editor", "Failed to initialize asset database '{}': {}", projectPath, ToString(assetDatabaseResult));
-            return;
+            return assetDatabaseResult;
         }
 
         const ErrorCode resourceLoaderResult = resourceLoader_.Initialize(projectRoot);
@@ -546,13 +537,70 @@ namespace ve::editor
         {
             VE_LOG_ERROR_CATEGORY(
                 "Editor", "Failed to initialize resource loader '{}': {}", projectPath, ToString(resourceLoaderResult));
-            return;
+            assetDatabase_.Shutdown();
+            return resourceLoaderResult;
         }
+
+        return ErrorCode::None;
+    }
+
+    void Editor::ActivateOpenProjectContext(std::string projectPath,
+                                            const Path& projectRoot,
+                                            const EditorProjectDescriptor& descriptor)
+    {
+        FileSystem::SetProjectRoot(projectRoot);
         if (runtime_ != nullptr)
         {
             runtime_->GetResourceSystem().SetProjectRoot(projectRoot);
         }
 
+        SetCurrentProject(std::move(projectPath));
+        currentProjectName_ = descriptor.name.empty() ? currentProjectName_ : descriptor.name;
+    }
+
+    void Editor::LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor)
+    {
+        if (descriptor.startScene.empty())
+        {
+            return;
+        }
+
+        if (sceneSystem_ == nullptr || runtime_ == nullptr)
+        {
+            VE_LOG_WARN_CATEGORY("Editor",
+                                 "Skipped project start scene '{}' because runtime scene services are not ready.",
+                                 descriptor.startScene);
+            return;
+        }
+
+        const EditorAssetRecord* sceneAsset = assetDatabase_.FindAsset(Path(descriptor.startScene));
+        if (sceneAsset == nullptr)
+        {
+            VE_LOG_WARN_CATEGORY("Editor",
+                                 "Project start scene '{}' was not found in the asset database.",
+                                 descriptor.startScene);
+            return;
+        }
+
+        if (sceneAsset->type != EditorAssetType::Scene)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Project start scene '{}' is not a scene asset.", descriptor.startScene);
+            return;
+        }
+
+        Result<Scene*> sceneResult = sceneSystem_->LoadScene(
+            SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem());
+        if (!sceneResult)
+        {
+            VE_LOG_WARN_CATEGORY("Editor",
+                                 "Failed to construct project start scene '{}': {}",
+                                 descriptor.startScene,
+                                 sceneResult.GetError().GetMessage());
+        }
+    }
+
+    void Editor::EnterProjectEditingView()
+    {
         AddRecentProject(currentProjectPath_);
         VE_ASSERT_MESSAGE(projectEditingView_ != nullptr, "Editor::OpenProject requires a project editing view.");
         projectEditingView_->Init(*this);
@@ -560,6 +608,44 @@ namespace ve::editor
         CollectUnusedResources();
         EnqueueMainWindowTitleUpdate();
         VE_LOG_INFO_CATEGORY("Editor", "Opened editor project: {}", currentProjectPath_);
+    }
+
+    void Editor::OpenProject(std::string projectPath)
+    {
+        if (projectPath.empty())
+        {
+            return;
+        }
+
+        const Path projectRoot(projectPath);
+
+        // 1. Close the previous project before changing roots so existing AssetRefs release against the old resource
+        // cache and the old asset database is no longer queried by editor panels.
+        ShutdownOpenProjectState();
+
+        // 2. Ensure the project layout and descriptor exist before any runtime/editor service points at the project.
+        Result<EditorProjectDescriptor> descriptorResult = PrepareOpenProjectDescriptor(projectRoot, projectPath);
+        if (!descriptorResult)
+        {
+            return;
+        }
+
+        // 3. Scan/import assets before scene construction. Scene loading needs the scene AssetID and component
+        // dependencies resolved through EditorAssetDatabase records.
+        const ErrorCode assetServicesResult = InitializeOpenProjectAssetServices(projectRoot, projectPath);
+        if (assetServicesResult != ErrorCode::None)
+        {
+            return;
+        }
+
+        // 4. Activate project roots after asset services are valid and before ResourceSystem reads scene payloads.
+        ActivateOpenProjectContext(std::move(projectPath), projectRoot, descriptorResult.GetValue());
+
+        // 5. Construct the live scene through SceneSystem so serialized AssetRefs are requested and bound.
+        LoadOpenProjectStartScene(descriptorResult.GetValue());
+
+        // 6. Only enter the editing UI after project services and the optional start scene have settled.
+        EnterProjectEditingView();
     }
 
     void Editor::ShowProjectSelection()
