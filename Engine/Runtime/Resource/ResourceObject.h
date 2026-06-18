@@ -30,7 +30,7 @@ namespace ve
         ///
         /// Implementations should only create or update render-thread proxies through RenderSystem commands. The base
         /// implementation is a no-op for resource types that are CPU-only at the current milestone.
-        virtual ErrorCode InitRenderResource(RenderSystem& renderSystem);
+        virtual void InitRenderResource(RenderSystem& renderSystem);
         /// ResourceSystem calls this before the CPU ResourceObject is removed from cache.
         ///
         /// Release commands should be safe even when a queued init command has not executed yet; RT proxies should be

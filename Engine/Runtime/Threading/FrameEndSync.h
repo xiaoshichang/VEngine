@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Threading/Atomic.h"
@@ -58,8 +57,7 @@ namespace ve
 
             mainThreadFenceIndex_ = (mainThreadFenceIndex_ + 1) & 1u;
 
-            const ErrorCode enqueueResult = std::forward<EnqueueFenceSignalFunction>(enqueueFenceSignal)(signalFenceIndex);
-            VE_ASSERT(enqueueResult == ErrorCode::None);
+            std::forward<EnqueueFenceSignalFunction>(enqueueFenceSignal)(signalFenceIndex);
             sceneThreadFrameEndFences_[mainThreadFenceIndex_].Wait();
         }
 
@@ -111,8 +109,7 @@ namespace ve
 
             sceneThreadFenceIndex_ = (sceneThreadFenceIndex_ + 1) & 1u;
 
-            const ErrorCode enqueueResult = std::forward<EnqueueFenceSignalFunction>(enqueueFenceSignal)(signalFenceIndex);
-            VE_ASSERT(enqueueResult == ErrorCode::None);
+            std::forward<EnqueueFenceSignalFunction>(enqueueFenceSignal)(signalFenceIndex);
 
             // Shutdown path should call UnblockAllWaiters() to release this wait.
             renderThreadFrameEndFences_[sceneThreadFenceIndex_].Wait();

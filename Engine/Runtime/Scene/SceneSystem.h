@@ -95,10 +95,10 @@ namespace ve
         void UnloadActiveScene() noexcept;
 
         /// Queues one OS event for Scene Thread processing.
-        [[nodiscard]] ErrorCode EnqueueOSEvent(const OSEvent& event);
+        void EnqueueOSEvent(const OSEvent& event);
 
         /// Queues one render command through the RenderSystem bound to this SceneSystem.
-        [[nodiscard]] ErrorCode EnqueueRenderCommand(RenderCommand command);
+        void EnqueueRenderCommand(RenderCommand command);
 
         /// Returns true when this SceneSystem has an initialized RenderSystem binding.
         [[nodiscard]] bool HasRenderSystem() const noexcept;

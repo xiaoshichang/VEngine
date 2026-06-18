@@ -84,8 +84,7 @@ namespace ve::editor
         VE_ASSERT_SCENE_THREAD();
 
         gameViewTexture_->Resize(extent);
-        ErrorCode initResult = gameViewTexture_->InitRenderResource(editor.GetRenderSystem());
-        VE_ASSERT_MESSAGE(initResult == ErrorCode::None, "GameViewPanel failed to initialize render texture resource.");
+        gameViewTexture_->InitRenderResource(editor.GetRenderSystem());
 
         renderTargetExtent_ = extent;
     }

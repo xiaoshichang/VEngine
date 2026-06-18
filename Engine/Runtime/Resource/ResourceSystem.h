@@ -31,7 +31,6 @@ namespace ve
         // The render-thread initialization command has been accepted. Current RenderSystem resource uploads are
         // command-queue based, so this state means "submitted" rather than GPU-complete.
         Queued,
-        Failed,
     };
 
     class ResourceSystem;
@@ -67,7 +66,7 @@ namespace ve
         ///
         /// ResourceSystem owns dependency ordering: dependencies are initialized first, while release happens when
         /// the owning CPU ResourceObject reference count reaches zero.
-        [[nodiscard]] ErrorCode EnsureRenderResource(const AssetRefBase& assetRef, RenderSystem& renderSystem);
+        void EnsureRenderResource(const AssetRefBase& assetRef, RenderSystem& renderSystem);
         [[nodiscard]] SizeT CollectUnusedResources(const ResourceCollectUnusedParams& params);
         void ClearCache() noexcept;
 
@@ -84,12 +83,8 @@ namespace ve
         };
 
         [[nodiscard]] Result<ResourceObject*> RequestResourceInternal(const AssetID& id, ResourceLoadContext& context);
-        [[nodiscard]] ErrorCode ReleaseResourceInternal(const AssetID& id);
-        [[nodiscard]] ErrorCode EnsureRenderResourceInternal(const AssetID& id,
-                                                             RenderSystem& renderSystem,
-                                                             std::vector<AssetID>& renderStack,
-                                                             std::vector<AssetID>& initializedResources);
-        void RollbackRenderResourceInit(std::vector<AssetID>& initializedResources) noexcept;
+        void ReleaseResourceInternal(const AssetID& id);
+        void EnsureRenderResourceInternal(const AssetID& id, RenderSystem& renderSystem, std::vector<AssetID>& renderStack);
         void ReleaseEntryRenderResource(LoadedResourceEntry& entry) noexcept;
         [[nodiscard]] Path ResolveRuntimePath(const AssetRecord& record) const;
         [[nodiscard]] Result<std::unique_ptr<ResourceObject>> CreateResourceObject(const AssetRecord& record);
@@ -109,7 +104,7 @@ namespace ve
         {
             for (auto it = context.acquiredReferences.rbegin(); it != context.acquiredReferences.rend(); ++it)
             {
-                (void)ReleaseResourceInternal(*it);
+                ReleaseResourceInternal(*it);
             }
 
             return Result<AssetRef<TResource>>::Failure(resource.GetError());
@@ -117,7 +112,7 @@ namespace ve
 
         if (resource.GetValue()->GetType() != ResourceObjectTraits<TResource>::Type)
         {
-            (void)ReleaseResourceInternal(id);
+            ReleaseResourceInternal(id);
             return Result<AssetRef<TResource>>::Failure(
                 Error(ErrorCode::InvalidArgument, "Requested resource type does not match the asset record."));
         }
@@ -125,7 +120,7 @@ namespace ve
         TResource* typedResource = dynamic_cast<TResource*>(resource.GetValue());
         if (typedResource == nullptr)
         {
-            (void)ReleaseResourceInternal(id);
+            ReleaseResourceInternal(id);
             return Result<AssetRef<TResource>>::Failure(
                 Error(ErrorCode::InvalidState, "Loaded resource object has an unexpected concrete type."));
         }

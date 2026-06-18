@@ -122,8 +122,7 @@ namespace ve
             std::shared_ptr<FrameRenderer> renderer = impl.editorCallback.onRender();
             VE_ASSERT_MESSAGE(renderer != nullptr, "SceneThreadLoop_Render_Editor requires a renderer.");
 
-            const ErrorCode renderResult = impl.renderSystem->RenderFrame(std::move(renderer));
-            VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "SceneThreadLoop_Render_Editor failed.");
+            impl.renderSystem->RenderFrame(std::move(renderer));
         }
 
         void SceneThreadLoop_Render_Player(SceneSystemImpl& impl)
@@ -131,8 +130,7 @@ namespace ve
             VE_ASSERT_SCENE_THREAD();
             VE_ASSERT(impl.renderSystem != nullptr);
 
-            const ErrorCode renderResult = impl.renderSystem->RenderFrame(CreatePlayerRenderer(impl));
-            VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "SceneThreadLoop_Render_Player failed.");
+            impl.renderSystem->RenderFrame(CreatePlayerRenderer(impl));
         }
 
         void SceneThreadLoop_Render(SceneSystemImpl& impl)
@@ -151,7 +149,7 @@ namespace ve
         {
             impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
                 impl.stopRequested,
-                [&impl](UInt32 fenceIndex) { return impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex); });
+                [&impl](UInt32 fenceIndex) { impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex); });
         }
 
         void SceneThreadLoop(SceneSystemImpl& impl)
@@ -218,9 +216,7 @@ namespace ve
                 impl.scene->Clear();
                 if (impl.renderSystem != nullptr)
                 {
-                    [[maybe_unused]] const ErrorCode flushResult = impl.renderSystem->Flush();
-                    VE_ASSERT_MESSAGE(flushResult == ErrorCode::None,
-                                      "SceneSystem failed to flush RTScene shutdown commands.");
+                    impl.renderSystem->Flush();
                 }
                 impl.scene->SetSceneSystem(nullptr);
             }
@@ -248,12 +244,7 @@ namespace ve
 
                     if (renderSystem != nullptr && renderSystem->IsInitialized())
                     {
-                        const ErrorCode renderResult =
-                            resourceSystem.EnsureRenderResource(meshResource.GetValue(), *renderSystem);
-                        if (renderResult != ErrorCode::None)
-                        {
-                            return renderResult;
-                        }
+                        resourceSystem.EnsureRenderResource(meshResource.GetValue(), *renderSystem);
                     }
 
                     mesh->SetMesh(meshResource.MoveValue());
@@ -271,12 +262,7 @@ namespace ve
 
                     if (renderSystem != nullptr && renderSystem->IsInitialized())
                     {
-                        const ErrorCode renderResult =
-                            resourceSystem.EnsureRenderResource(materialResource.GetValue(), *renderSystem);
-                        if (renderResult != ErrorCode::None)
-                        {
-                            return renderResult;
-                        }
+                        resourceSystem.EnsureRenderResource(materialResource.GetValue(), *renderSystem);
                     }
 
                     mesh->SetMaterial(materialResource.MoveValue());
@@ -516,8 +502,8 @@ namespace ve
         }
 
         // 3. Build a detached Scene and bind all component AssetRefs before committing it as the active scene. Render
-        // resources are submitted here too, while the new scene is still detached, so failures leave the old scene
-        // untouched.
+        // resources are submitted here too, while the new scene is still detached, so scene deserialization or asset
+        // binding failures leave the old scene untouched.
         Result<std::unique_ptr<Scene>> scene =
             BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem, impl_->renderSystem);
         if (!scene)
@@ -541,19 +527,17 @@ namespace ve
         impl_->scene->Clear();
     }
 
-    ErrorCode SceneSystem::EnqueueOSEvent(const OSEvent& event)
+    void SceneSystem::EnqueueOSEvent(const OSEvent& event)
     {
-        return impl_->osEventQueue.Push(event);
+        const ErrorCode pushResult = impl_->osEventQueue.Push(event);
+        VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "SceneSystem failed to enqueue OS event.");
     }
 
-    ErrorCode SceneSystem::EnqueueRenderCommand(RenderCommand command)
+    void SceneSystem::EnqueueRenderCommand(RenderCommand command)
     {
-        if (!HasRenderSystem())
-        {
-            return ErrorCode::InvalidState;
-        }
+        VE_ASSERT_MESSAGE(HasRenderSystem(), "SceneSystem::EnqueueRenderCommand requires an initialized RenderSystem.");
 
-        return impl_->renderSystem->EnqueueCommand(std::move(command));
+        impl_->renderSystem->EnqueueCommand(std::move(command));
     }
 
     bool SceneSystem::HasRenderSystem() const noexcept
@@ -566,13 +550,15 @@ namespace ve
         impl_->mainThreadSceneThreadFrameEndSync->NotifyMainThreadFrameEnd(
             [this](UInt32 fenceIndex)
             {
-                return impl_->osEventQueue.Push(
+                const ErrorCode pushResult = impl_->osEventQueue.Push(
                     OSEvent{
                         OSEventType::FrameEndFenceSignal,
                         0,
                         0,
                         fenceIndex,
                     });
+                VE_ASSERT_MESSAGE(pushResult == ErrorCode::None,
+                                  "SceneSystem failed to enqueue frame-end fence event.");
             });
     }
 

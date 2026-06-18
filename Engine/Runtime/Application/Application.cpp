@@ -34,11 +34,7 @@ namespace ve
 
         void EnqueueOSEventToSceneThread(SceneSystem& sceneSystem, OSEvent event)
         {
-            ErrorCode queueResult = sceneSystem.EnqueueOSEvent(event);
-            if (queueResult != ErrorCode::None)
-            {
-                VE_LOG_WARN("Failed to enqueue OS event for Scene Thread: {}", ToString(queueResult));
-            }
+            sceneSystem.EnqueueOSEvent(event);
         }
 
         [[nodiscard]] SizeT CollectWindowStateDeltaEvents(std::array<OSEvent, MaxWindowOSEventChangesPerFrame>& events,

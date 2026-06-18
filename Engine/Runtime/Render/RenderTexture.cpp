@@ -69,17 +69,13 @@ namespace ve
         renderTarget_.SetExtent(extent);
     }
 
-    ErrorCode RenderTexture::InitRenderResource(RenderSystem& renderSystem)
+    void RenderTexture::InitRenderResource(RenderSystem& renderSystem)
     {
         VE_ASSERT_SCENE_THREAD();
-
-        if (!IsValid())
-        {
-            return ErrorCode::InvalidArgument;
-        }
+        VE_ASSERT_MESSAGE(IsValid(), "RenderTexture::InitRenderResource requires a valid extent.");
 
         EnsureRenderThreadProxy();
-        return renderSystem.InitRenderResource(rtRenderTexture_, BuildDesc());
+        renderSystem.InitRenderResource(rtRenderTexture_, BuildDesc());
     }
 
     std::shared_ptr<RTRenderTexture> RenderTexture::GetRTRenderTexture() const noexcept
@@ -135,7 +131,7 @@ namespace ve
         return nativeSampledViewHandle_.load(std::memory_order_acquire);
     }
 
-    ErrorCode RTRenderTexture::InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc)
+    void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
@@ -150,14 +146,12 @@ namespace ve
             nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
         }
 
-        if (desc_.extent.width == 0 || desc_.extent.height == 0)
-        {
-            return ErrorCode::InvalidArgument;
-        }
+        VE_ASSERT_MESSAGE(desc_.extent.width != 0 && desc_.extent.height != 0,
+                          "RTRenderTexture::InitRenderResource requires a valid extent.");
 
         if (IsInitialized())
         {
-            return ErrorCode::None;
+            return;
         }
 
         rhi::RhiTextureDesc textureDesc = {};
@@ -171,13 +165,9 @@ namespace ve
         textureDesc.debugName = desc_.name.c_str();
 
         texture_ = device.CreateTexture(textureDesc);
-        if (texture_ == nullptr)
-        {
-            return ErrorCode::PlatformError;
-        }
+        VE_ASSERT_MESSAGE(texture_ != nullptr, "RTRenderTexture failed to create RHI texture.");
 
         nativeSampledViewHandle_.store(texture_->GetNativeSampledViewHandle(), std::memory_order_release);
-        return ErrorCode::None;
     }
 
     void RTRenderTexture::ResetRenderResource() noexcept

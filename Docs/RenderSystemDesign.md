@@ -286,7 +286,8 @@ Shutdown behavior:
 4. Join the Render Thread.
 5. Clear runtime state.
 
-Commands submitted after shutdown starts fail with `ErrorCode::InvalidState`.
+Submitting commands after shutdown starts is API misuse and is asserted. Command submission APIs are lifecycle
+contracts: callers should not branch on an `ErrorCode` for normal flow.
 
 ## 9. Lifecycle Rules
 
@@ -298,9 +299,9 @@ lifecycle.
 
 Repeated `RenderSystem::Initialize()` while running returns `ErrorCode::InvalidState`.
 
-`Submit()` before initialization, after shutdown, or during shutdown returns `ErrorCode::InvalidState`.
+`EnqueueCommand()` before initialization, after shutdown, or during shutdown asserts.
 
-Submitting an empty command function returns `ErrorCode::InvalidArgument`.
+Submitting an empty command function asserts.
 
 ## 10. RHI Device And Swapchain Lifecycle
 
@@ -365,7 +366,7 @@ ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
 void DestroyMainSwapchain() noexcept;
 void ShutdownDevice() noexcept;
 RenderBackend GetDeviceBackend() const noexcept;
-ErrorCode RenderFrame();
+void RenderFrame();
 ```
 
 `Application` obtains native surface information through the `Window` base interface instead of branching on a platform

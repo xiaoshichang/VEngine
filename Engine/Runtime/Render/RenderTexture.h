@@ -43,7 +43,7 @@ namespace ve
 
         void Resize(WindowExtent extent);
 
-        [[nodiscard]] ErrorCode InitRenderResource(RenderSystem& renderSystem);
+        void InitRenderResource(RenderSystem& renderSystem);
 
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetRTRenderTexture() const noexcept;
         [[nodiscard]] void* GetRenderResourceViewHandle() const noexcept;
@@ -73,7 +73,7 @@ namespace ve
         [[nodiscard]] const rhi::RhiTexture* GetTexture() const noexcept;
         [[nodiscard]] void* GetRenderResourceViewHandle() const noexcept;
 
-        [[nodiscard]] ErrorCode InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc);
+        void InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc);
         void ResetRenderResource() noexcept;
 
     private:

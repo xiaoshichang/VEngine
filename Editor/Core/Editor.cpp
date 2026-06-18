@@ -314,9 +314,10 @@ namespace ve::editor
         }
 
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::UnInit requires renderSystem_ to be valid.");
-        ErrorCode flushResult = renderSystem_->Flush();
-        VE_ASSERT_MESSAGE(flushResult == ErrorCode::None || flushResult == ErrorCode::InvalidState,
-                          "Editor::UnInit flush render queue failed.");
+        if (renderSystem_->IsInitialized())
+        {
+            renderSystem_->Flush();
+        }
         retainedImGuiRenderTextures_.clear();
         resourceLoader_.Shutdown();
         assetDatabase_.Shutdown();

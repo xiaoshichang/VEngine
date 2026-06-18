@@ -508,14 +508,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
         impl_->sceneThreadRenderThreadFrameEndSync = sync;
     }
 
-    ErrorCode RenderSystem::SubmitFrameEndFenceSignal(UInt32 fenceIndex)
+    void RenderSystem::SubmitFrameEndFenceSignal(UInt32 fenceIndex)
     {
         VE_ASSERT_SCENE_THREAD();
-        return EnqueueCommand("RenderSystemFrameEndFenceSignal",
-                              [sync = impl_->sceneThreadRenderThreadFrameEndSync, fenceIndex]()
-                              {
-                                  sync->NotifyRenderThreadFrameEnd(fenceIndex);
-                              });
+        EnqueueCommand("RenderSystemFrameEndFenceSignal",
+                       [sync = impl_->sceneThreadRenderThreadFrameEndSync, fenceIndex]()
+                       {
+                           sync->NotifyRenderThreadFrameEnd(fenceIndex);
+                       });
     }
 
     ErrorCode RenderSystem::InitializeDevice(const RenderDeviceDesc& desc)
@@ -655,71 +655,45 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return std::make_unique<TriangleRenderPass>(*impl_, std::move(colorTexture));
     }
 
-    ErrorCode RenderSystem::InitRenderResource(std::shared_ptr<RTRenderTexture> renderTexture, RenderTextureDesc desc)
+    void RenderSystem::InitRenderResource(std::shared_ptr<RTRenderTexture> renderTexture, RenderTextureDesc desc)
     {
         VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(renderTexture != nullptr, "RenderSystem::InitRenderResource requires a render texture.");
 
-        if (renderTexture == nullptr)
-        {
-            return ErrorCode::InvalidArgument;
-        }
-
-        ErrorCode submitResult =
-            EnqueueCommand("RenderSystemInitRenderResource",
-                           [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
-                           {
-                               VE_ASSERT(impl_->device != nullptr);
-                               const ErrorCode result =
-                                   renderTexture->InitRenderResource(*impl_->device, std::move(desc));
-                               VE_ASSERT(result == ErrorCode::None);
-                           });
-        VE_ASSERT(submitResult == ErrorCode::None);
-        return submitResult;
+        EnqueueCommand("RenderSystemInitRenderResource",
+                       [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
+                       {
+                           VE_ASSERT(impl_->device != nullptr);
+                           renderTexture->InitRenderResource(*impl_->device, std::move(desc));
+                       });
     }
 
-    ErrorCode RenderSystem::RenderFrame(std::shared_ptr<FrameRenderer> renderer)
+    void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderer> renderer)
     {
         VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(renderer != nullptr, "RenderSystem::RenderFrame requires a renderer.");
 
-        if (renderer == nullptr)
-        {
-            return ErrorCode::InvalidArgument;
-        }
-
-        ErrorCode submitResult = EnqueueCommand("RenderSystemRenderFrame",
-                                                [this, renderer = std::move(renderer)]()
-                                                {
-                                                    const ErrorCode result =
-                                                        RenderMainSwapchainFrame(*impl_, *renderer);
-                                                    VE_ASSERT_MESSAGE(result == ErrorCode::None,
-                                                                      "RenderSystem::RenderFrame failed.");
-                                                });
-        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "RenderSystem::RenderFrame enqueue failed.");
-        return submitResult;
+        EnqueueCommand("RenderSystemRenderFrame",
+                       [this, renderer = std::move(renderer)]()
+                       {
+                           const ErrorCode result = RenderMainSwapchainFrame(*impl_, *renderer);
+                           VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem::RenderFrame failed.");
+                       });
     }
 
-    ErrorCode RenderSystem::EnqueueCommand(RenderCommand command)
+    void RenderSystem::EnqueueCommand(RenderCommand command)
     {
-        return EnqueueCommand(std::move(command.debugName), std::move(command.function));
+        EnqueueCommand(std::move(command.debugName), std::move(command.function));
     }
 
-    ErrorCode RenderSystem::Flush()
+    void RenderSystem::Flush()
     {
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
-        {
-            return ErrorCode::InvalidState;
-        }
+        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire),
+                          "RenderSystem::Flush requires RenderSystem to accept commands.");
 
         auto completed = std::make_shared<ManualResetEvent>(false);
-        ErrorCode submitResult = EnqueueCommand("RenderSystemFlush", [completed]() { completed->Set(); });
-
-        if (submitResult != ErrorCode::None)
-        {
-            return submitResult;
-        }
-
+        EnqueueCommand("RenderSystemFlush", [completed]() { completed->Set(); });
         completed->Wait();
-        return ErrorCode::None;
     }
 
     ErrorCode RenderSystem::ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function)
@@ -737,45 +711,31 @@ float4 PSMain(VSOutput input) : SV_TARGET
         auto completed = std::make_shared<ManualResetEvent>(false);
         auto operationResult = std::make_shared<ErrorCode>(ErrorCode::None);
 
-        ErrorCode submitResult = EnqueueCommand(std::move(debugName),
-                                                [completed, operationResult, function = std::move(function)]()
-                                                {
-                                                    *operationResult = function();
-                                                    completed->Set();
-                                                });
-
-        if (submitResult != ErrorCode::None)
-        {
-            return submitResult;
-        }
+        EnqueueCommand(std::move(debugName),
+                       [completed, operationResult, function = std::move(function)]()
+                       {
+                           *operationResult = function();
+                           completed->Set();
+                       });
 
         completed->Wait();
         return *operationResult;
     }
 
-    ErrorCode RenderSystem::EnqueueCommand(std::string debugName, RenderCommandFunction function)
+    void RenderSystem::EnqueueCommand(std::string debugName, RenderCommandFunction function)
     {
-        if (!function)
-        {
-            return ErrorCode::InvalidArgument;
-        }
+        VE_ASSERT_MESSAGE(function != nullptr, "RenderSystem::EnqueueCommand requires a callable function.");
 
         impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
         auto submitCounterGuard =
             MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
-        {
-            return ErrorCode::InvalidState;
-        }
+        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire),
+                          "RenderSystem::EnqueueCommand requires RenderSystem to accept commands.");
 
         ErrorCode pushResult = impl_->commandQueue.Push(RenderCommand{std::move(debugName), std::move(function)});
-        if (pushResult != ErrorCode::None)
-        {
-            return pushResult;
-        }
+        VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "RenderSystem failed to enqueue render command.");
 
         impl_->commandSemaphore.Release();
-        return ErrorCode::None;
     }
 } // namespace ve

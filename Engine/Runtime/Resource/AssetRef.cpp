@@ -78,7 +78,7 @@ namespace ve
     {
         if (resourceSystem_ != nullptr && !assetID_.IsEmpty())
         {
-            (void)resourceSystem_->ReleaseResourceInternal(assetID_);
+            resourceSystem_->ReleaseResourceInternal(assetID_);
         }
 
         assetID_ = AssetID();

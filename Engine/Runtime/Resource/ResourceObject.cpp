@@ -52,10 +52,9 @@ namespace ve
         return ErrorCode::None;
     }
 
-    ErrorCode ResourceObject::InitRenderResource(RenderSystem& renderSystem)
+    void ResourceObject::InitRenderResource(RenderSystem& renderSystem)
     {
         (void)renderSystem;
-        return ErrorCode::None;
     }
 
     void ResourceObject::ReleaseRenderResource(RenderSystem& renderSystem) noexcept

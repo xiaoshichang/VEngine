@@ -378,8 +378,6 @@ namespace ve
             return;
         }
 
-        ErrorCode submitResult =
-            sceneSystem_->EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
-        VE_ASSERT_MESSAGE(submitResult == ErrorCode::None, "Scene failed to enqueue an RTScene command.");
+        sceneSystem_->EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
     }
 } // namespace ve

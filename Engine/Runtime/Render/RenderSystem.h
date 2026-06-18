@@ -130,7 +130,7 @@ namespace ve
         void SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept;
 
         /// Enqueues one render-thread frame-end fence signal through RenderCommandQueue.
-        [[nodiscard]] ErrorCode SubmitFrameEndFenceSignal(UInt32 fenceIndex);
+        void SubmitFrameEndFenceSignal(UInt32 fenceIndex);
 
         /// Creates the RHI device on the Render Thread.
         ///
@@ -173,30 +173,30 @@ namespace ve
         ///
         /// The description is copied at submission time. This avoids sharing mutable CPU-side RenderTarget state with
         /// the Render Thread while still keeping the RT proxy alive through the captured shared_ptr.
-        [[nodiscard]] ErrorCode InitRenderResource(std::shared_ptr<RTRenderTexture> renderTexture, RenderTextureDesc desc);
+        void InitRenderResource(std::shared_ptr<RTRenderTexture> renderTexture, RenderTextureDesc desc);
 
         /// Enqueues one complete main-swapchain frame on the Render Thread.
         ///
         /// The renderer is prepared and owned by Scene Thread code, then captured by shared_ptr so already queued frame
         /// work remains valid even if Scene Thread replaces its current renderer before the Render Thread consumes the
         /// command.
-        [[nodiscard]] ErrorCode RenderFrame(std::shared_ptr<FrameRenderer> renderer);
+        void RenderFrame(std::shared_ptr<FrameRenderer> renderer);
 
         /// Submits a command to execute on the Render Thread.
         ///
-        /// Returns InvalidState before initialization, during shutdown, or after shutdown. Returns InvalidArgument when
-        /// the command has no callable function. A successful return means the command was accepted and will run before
-        /// a later successful Flush() completes or before Shutdown() returns.
-        [[nodiscard]] ErrorCode EnqueueCommand(RenderCommand command);
+        /// Calling before initialization, during shutdown, after shutdown, or with no callable function is API misuse
+        /// and is asserted. A successful call means the command was accepted and will run before a later Flush()
+        /// completes or before Shutdown() returns.
+        void EnqueueCommand(RenderCommand command);
 
         /// Blocks until every command accepted before this call has executed on the Render Thread.
         ///
         /// Flush() is a CPU render command queue fence. It does not wait for GPU idle or future RHI queue completion.
-        [[nodiscard]] ErrorCode Flush();
+        void Flush();
 
     private:
         [[nodiscard]] ErrorCode ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);
-        [[nodiscard]] ErrorCode EnqueueCommand(std::string debugName, RenderCommandFunction function);
+        void EnqueueCommand(std::string debugName, RenderCommandFunction function);
 
         std::unique_ptr<RenderSystemImpl> impl_;
     };
