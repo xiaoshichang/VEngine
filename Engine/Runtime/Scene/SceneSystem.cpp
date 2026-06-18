@@ -2,6 +2,9 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Scene/MeshRenderComponent.h"
+#include "Engine/Runtime/Scene/SceneSerialization.h"
+#include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -225,6 +228,87 @@ namespace ve
             impl.runtimeOSEventCallback = nullptr;
             impl.osEventQueue.ClearForConsumer();
         }
+
+        [[nodiscard]] ErrorCode BindGameObjectAssetRefs(GameObject& gameObject,
+                                                        const IAssetRecordProvider& provider,
+                                                        ResourceSystem& resourceSystem,
+                                                        Scene& scene)
+        {
+            if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
+            {
+                const AssetID meshID = mesh->GetMeshAssetID();
+                if (!meshID.IsEmpty())
+                {
+                    Result<AssetRef<MeshResource>> meshResource = resourceSystem.Request<MeshResource>(meshID, provider);
+                    if (!meshResource)
+                    {
+                        return meshResource.GetError().GetCode();
+                    }
+
+                    mesh->SetMesh(meshResource.MoveValue());
+                    scene.RetainAsset(meshID);
+                }
+
+                const AssetID materialID = mesh->GetMaterialAssetID();
+                if (!materialID.IsEmpty())
+                {
+                    Result<AssetRef<MaterialResource>> materialResource =
+                        resourceSystem.Request<MaterialResource>(materialID, provider);
+                    if (!materialResource)
+                    {
+                        return materialResource.GetError().GetCode();
+                    }
+
+                    mesh->SetMaterial(materialResource.MoveValue());
+                    scene.RetainAsset(materialID);
+                }
+            }
+
+            TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+            if (transform == nullptr)
+            {
+                return ErrorCode::None;
+            }
+
+            for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
+            {
+                GameObject* child = transform->GetChildGameObject(childIndex);
+                if (child == nullptr)
+                {
+                    continue;
+                }
+
+                const ErrorCode result = BindGameObjectAssetRefs(*child, provider, resourceSystem, scene);
+                if (result != ErrorCode::None)
+                {
+                    return result;
+                }
+            }
+
+            return ErrorCode::None;
+        }
+
+        [[nodiscard]] ErrorCode BindSceneAssetRefs(Scene& scene,
+                                                   const IAssetRecordProvider& provider,
+                                                   ResourceSystem& resourceSystem)
+        {
+            for (SizeT rootIndex = 0; rootIndex < scene.GetRootGameObjectCount(); ++rootIndex)
+            {
+                GameObject* root = scene.GetRootGameObject(rootIndex);
+                if (root == nullptr)
+                {
+                    continue;
+                }
+
+                const ErrorCode result = BindGameObjectAssetRefs(*root, provider, resourceSystem, scene);
+                if (result != ErrorCode::None)
+                {
+                    return result;
+                }
+            }
+
+            return ErrorCode::None;
+        }
     } // namespace
 
     SceneSystem::SceneSystem()
@@ -322,6 +406,59 @@ namespace ve
     const Scene* SceneSystem::GetScene() const noexcept
     {
         return impl_->scene.get();
+    }
+
+    Result<Scene*> SceneSystem::LoadScene(const SceneLoadDesc& desc,
+                                          const IAssetRecordProvider& provider,
+                                          ResourceSystem& resourceSystem)
+    {
+        Result<AssetRef<SceneResource>> sceneResource = resourceSystem.Request<SceneResource>(desc.scene, provider);
+        if (!sceneResource)
+        {
+            return Result<Scene*>::Failure(sceneResource.GetError());
+        }
+
+        if (desc.mode == SceneLoadMode::Single)
+        {
+            UnloadActiveScene(resourceSystem);
+        }
+
+        auto scene = std::make_unique<Scene>();
+        const ErrorCode deserializeResult =
+            SceneSerialization::LoadFromString(*scene, sceneResource.GetValue().Get()->GetText());
+        if (deserializeResult != ErrorCode::None)
+        {
+            (void)resourceSystem.ReleaseResource(desc.scene);
+            return Result<Scene*>::Failure(Error(deserializeResult, "Failed to deserialize scene resource."));
+        }
+
+        scene->RetainAsset(desc.scene);
+        const ErrorCode bindResult = BindSceneAssetRefs(*scene, provider, resourceSystem);
+        if (bindResult != ErrorCode::None)
+        {
+            scene->ClearRetainedAssets(resourceSystem);
+            return Result<Scene*>::Failure(Error(bindResult, "Failed to bind scene asset references."));
+        }
+
+        Scene* loadedScene = scene.get();
+        if (impl_->scene != nullptr)
+        {
+            impl_->scene->SetSceneSystem(nullptr);
+        }
+        impl_->scene = std::move(scene);
+        impl_->scene->SetSceneSystem(this);
+        return Result<Scene*>::Success(loadedScene);
+    }
+
+    void SceneSystem::UnloadActiveScene(ResourceSystem& resourceSystem) noexcept
+    {
+        if (impl_->scene == nullptr)
+        {
+            return;
+        }
+
+        impl_->scene->ClearRetainedAssets(resourceSystem);
+        impl_->scene->Clear();
     }
 
     ErrorCode SceneSystem::EnqueueOSEvent(const OSEvent& event)

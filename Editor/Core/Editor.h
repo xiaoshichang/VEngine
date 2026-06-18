@@ -61,7 +61,7 @@ namespace ve::editor
         [[nodiscard]] const ve::GameObject* GetSelectedGameObject() const noexcept;
         [[nodiscard]] const Path& GetSelectedAssetPath() const noexcept;
         void KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture);
-        [[nodiscard]] std::vector<Guid> CollectActiveResourceRoots() const;
+        [[nodiscard]] std::vector<AssetID> CollectActiveResourceRoots() const;
         void CollectUnusedResources();
 
         void OpenProject(std::string projectPath);

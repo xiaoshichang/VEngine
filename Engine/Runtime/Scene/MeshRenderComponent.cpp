@@ -27,25 +27,47 @@ namespace ve
         UnregisterRenderItemFromRenderThread();
     }
 
-    const Guid& MeshRenderComponent::GetMeshAssetGuid() const noexcept
+    const AssetRef<MeshResource>& MeshRenderComponent::GetMesh() const noexcept
     {
-        return meshAssetGuid_;
+        return mesh_;
     }
 
-    void MeshRenderComponent::SetMeshAssetGuid(Guid meshAssetGuid)
+    void MeshRenderComponent::SetMesh(AssetRef<MeshResource> mesh)
     {
-        meshAssetGuid_ = std::move(meshAssetGuid);
+        mesh_ = std::move(mesh);
         SubmitRenderItemUpdateToRenderThread();
     }
 
-    const Guid& MeshRenderComponent::GetMaterialAssetGuid() const noexcept
+    const AssetID& MeshRenderComponent::GetMeshAssetID() const noexcept
     {
-        return materialAssetGuid_;
+        return mesh_.GetAssetID();
     }
 
-    void MeshRenderComponent::SetMaterialAssetGuid(Guid materialAssetGuid)
+    void MeshRenderComponent::SetMeshAssetID(AssetID meshAssetID)
     {
-        materialAssetGuid_ = std::move(materialAssetGuid);
+        mesh_.SetAssetID(std::move(meshAssetID));
+        SubmitRenderItemUpdateToRenderThread();
+    }
+
+    const AssetRef<MaterialResource>& MeshRenderComponent::GetMaterial() const noexcept
+    {
+        return material_;
+    }
+
+    void MeshRenderComponent::SetMaterial(AssetRef<MaterialResource> material)
+    {
+        material_ = std::move(material);
+        SubmitRenderItemUpdateToRenderThread();
+    }
+
+    const AssetID& MeshRenderComponent::GetMaterialAssetID() const noexcept
+    {
+        return material_.GetAssetID();
+    }
+
+    void MeshRenderComponent::SetMaterialAssetID(AssetID materialAssetID)
+    {
+        material_.SetAssetID(std::move(materialAssetID));
         SubmitRenderItemUpdateToRenderThread();
     }
 
@@ -87,8 +109,8 @@ namespace ve
         const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
 
         return RTRenderItemDesc{
-            meshAssetGuid_,
-            materialAssetGuid_,
+            mesh_.GetAssetID(),
+            material_.GetAssetID(),
             boundsCenter_,
             boundsExtents_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),

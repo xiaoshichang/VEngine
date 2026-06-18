@@ -1,35 +1,70 @@
 #include "Engine/Runtime/Resource/ResourceObject.h"
 
+#include "Engine/Runtime/Resource/ResourceSystem.h"
+
 #include <utility>
 
 namespace ve
 {
-    ResourceObject::ResourceObject(Guid guid, ResourceType type, Path runtimePath)
-        : guid_(std::move(guid))
-        , type_(type)
-        , runtimePath_(std::move(runtimePath))
+    ResourceObject::ResourceObject(AssetRecord record)
+        : record_(std::move(record))
     {
     }
 
     ResourceObject::~ResourceObject() = default;
 
-    const Guid& ResourceObject::GetGuid() const noexcept
+    const AssetRecord& ResourceObject::GetAssetRecord() const noexcept
     {
-        return guid_;
+        return record_;
+    }
+
+    const AssetID& ResourceObject::GetAssetID() const noexcept
+    {
+        return record_.id;
     }
 
     ResourceType ResourceObject::GetType() const noexcept
     {
-        return type_;
+        return record_.type;
     }
 
     const Path& ResourceObject::GetRuntimePath() const noexcept
     {
-        return runtimePath_;
+        return record_.runtimePath;
     }
 
-    MeshResource::MeshResource(Guid guid, Path runtimePath, std::string text)
-        : ResourceObject(std::move(guid), ResourceType::Mesh, std::move(runtimePath))
+    const std::vector<AssetID>& ResourceObject::GetDependencies() const noexcept
+    {
+        return record_.dependencies;
+    }
+
+    ErrorCode ResourceObject::Load(ResourceLoadContext& context)
+    {
+        for (const AssetID& dependency : record_.dependencies)
+        {
+            Result<ResourceObject*> dependencyResource = context.resourceSystem.RequestResource(dependency, context);
+            if (!dependencyResource)
+            {
+                return dependencyResource.GetError().GetCode();
+            }
+        }
+
+        return ErrorCode::None;
+    }
+
+    ErrorCode ResourceObject::InitRenderResource(RenderSystem& renderSystem)
+    {
+        (void)renderSystem;
+        return ErrorCode::None;
+    }
+
+    void ResourceObject::ReleaseRenderResource(RenderSystem& renderSystem) noexcept
+    {
+        (void)renderSystem;
+    }
+
+    MeshResource::MeshResource(AssetRecord record, std::string text)
+        : ResourceObject(std::move(record))
         , text_(std::move(text))
     {
     }
@@ -39,8 +74,8 @@ namespace ve
         return text_;
     }
 
-    MaterialResource::MaterialResource(Guid guid, Path runtimePath, std::string text)
-        : ResourceObject(std::move(guid), ResourceType::Material, std::move(runtimePath))
+    MaterialResource::MaterialResource(AssetRecord record, std::string text)
+        : ResourceObject(std::move(record))
         , text_(std::move(text))
     {
     }
@@ -50,8 +85,8 @@ namespace ve
         return text_;
     }
 
-    SceneResource::SceneResource(Guid guid, Path runtimePath, std::string text)
-        : ResourceObject(std::move(guid), ResourceType::Scene, std::move(runtimePath))
+    SceneResource::SceneResource(AssetRecord record, std::string text)
+        : ResourceObject(std::move(record))
         , text_(std::move(text))
     {
     }
@@ -61,24 +96,13 @@ namespace ve
         return text_;
     }
 
-    TextResource::TextResource(Guid guid, Path runtimePath, std::string text)
-        : ResourceObject(std::move(guid), ResourceType::Text, std::move(runtimePath))
-        , text_(std::move(text))
-    {
-    }
-
-    const std::string& TextResource::GetText() const noexcept
-    {
-        return text_;
-    }
-
-    BinaryResource::BinaryResource(Guid guid, Path runtimePath, std::vector<std::byte> bytes)
-        : ResourceObject(std::move(guid), ResourceType::Binary, std::move(runtimePath))
+    TextureResource::TextureResource(AssetRecord record, std::vector<std::byte> bytes)
+        : ResourceObject(std::move(record))
         , bytes_(std::move(bytes))
     {
     }
 
-    const std::vector<std::byte>& BinaryResource::GetBytes() const noexcept
+    const std::vector<std::byte>& TextureResource::GetBytes() const noexcept
     {
         return bytes_;
     }

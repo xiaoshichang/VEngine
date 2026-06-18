@@ -52,12 +52,12 @@ namespace ve::editor
 
         [[nodiscard]] bool DirectoryContainsAsset(const EditorAssetDatabase& assetDatabase, const Path& directory)
         {
-            const auto& guidsByAssetPath = assetDatabase.GetGuidsByAssetPath();
-            return std::any_of(guidsByAssetPath.begin(),
-                               guidsByAssetPath.end(),
+            const auto& assetIDsByAssetPath = assetDatabase.GetAssetIDsByAssetPath();
+            return std::any_of(assetIDsByAssetPath.begin(),
+                               assetIDsByAssetPath.end(),
                                [&assetDatabase, &directory](const auto& pair)
                                {
-                                   const EditorAssetRecord* asset = assetDatabase.FindAssetByGuid(pair.second);
+                                   const EditorAssetRecord* asset = assetDatabase.FindAssetByID(pair.second);
                                    return asset != nullptr && IsDirectChildAsset(*asset, directory);
                                });
         }
@@ -199,9 +199,9 @@ namespace ve::editor
 
             std::vector<const EditorAssetRecord*> assetsInDirectory;
             assetsInDirectory.reserve(assetDatabase.GetAssetCount());
-            for (const auto& pair : assetDatabase.GetGuidsByAssetPath())
+            for (const auto& pair : assetDatabase.GetAssetIDsByAssetPath())
             {
-                const EditorAssetRecord* asset = assetDatabase.FindAssetByGuid(pair.second);
+                const EditorAssetRecord* asset = assetDatabase.FindAssetByID(pair.second);
                 if (asset != nullptr && IsDirectChildAsset(*asset, currentDirectory_))
                 {
                     assetsInDirectory.push_back(asset);

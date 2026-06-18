@@ -1,9 +1,10 @@
 #pragma once
 
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Resource/AssetRef.h"
+#include "Engine/Runtime/Resource/ResourceObject.h"
 #include "Engine/Runtime/Scene/Component.h"
 
 #include <memory>
@@ -17,11 +18,15 @@ namespace ve
         MeshRenderComponent(Scene& scene, GameObject& owner);
         ~MeshRenderComponent() override;
 
-        [[nodiscard]] const Guid& GetMeshAssetGuid() const noexcept;
-        void SetMeshAssetGuid(Guid meshAssetGuid);
+        [[nodiscard]] const AssetRef<MeshResource>& GetMesh() const noexcept;
+        void SetMesh(AssetRef<MeshResource> mesh);
+        [[nodiscard]] const AssetID& GetMeshAssetID() const noexcept;
+        void SetMeshAssetID(AssetID meshAssetID);
 
-        [[nodiscard]] const Guid& GetMaterialAssetGuid() const noexcept;
-        void SetMaterialAssetGuid(Guid materialAssetGuid);
+        [[nodiscard]] const AssetRef<MaterialResource>& GetMaterial() const noexcept;
+        void SetMaterial(AssetRef<MaterialResource> material);
+        [[nodiscard]] const AssetID& GetMaterialAssetID() const noexcept;
+        void SetMaterialAssetID(AssetID materialAssetID);
 
         [[nodiscard]] const Vector3& GetBoundsCenter() const noexcept;
         void SetBoundsCenter(const Vector3& boundsCenter) noexcept;
@@ -48,8 +53,8 @@ namespace ve
         void SubmitRenderItemUpdateToRenderThread();
         void SubmitRenderItemTransformUpdateToRenderThread();
 
-        Guid meshAssetGuid_;
-        Guid materialAssetGuid_;
+        AssetRef<MeshResource> mesh_;
+        AssetRef<MaterialResource> material_;
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
         bool renderItemTransformDirty_ = true;

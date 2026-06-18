@@ -490,40 +490,39 @@ instead of freely coupling to scene internals.
 
 ### 7.11 Resource
 
-`Resource` owns the low-level runtime resource loading primitives. It does not own editor asset indexing, project scans,
-or player manifest policy.
+`Resource` owns loaded resource objects and low-level runtime loading primitives. It does not own editor project scans,
+asset import policy, or player manifest export policy.
 
 Responsibilities:
 
 - Loading engine-native resource payloads from explicit platform paths.
 - Deserializing resource files into CPU-side resource data.
-- Creating concrete `ResourceObject` instances and, where needed, submitting render-resource creation through Render.
-- Resource object caching, reference counting, and lifetime tracking.
-- Runtime explicit release and runtime-owned cache lifetime tracking.
-- Synchronous loading and low-level asynchronous loading operations for runtime-facing loaders.
+- Creating concrete `ResourceObject` instances such as `SceneResource`, `MeshResource`, `MaterialResource`, and
+  `TextureResource`.
+- Storing the `AssetRecord` on each loaded `ResourceObject` so dependencies remain visible to resource lifetime logic.
+- Resource object caching, request/release reference counting, and root-reachability collection.
+- Preserving render-thread resource creation hooks through the Render command queue when a resource needs GPU state.
 
-Resource indexing and dependency ownership live above the physical loading layer:
+Asset indexing and manifest ownership live above the loaded-resource layer:
 
-- `EditorAssetDatabase` owns editor asset records, project-relative asset path to GUID lookup, GUID to asset-record
-  lookup, import artifacts, dependency records, and live editor updates while a project is open.
-- `EditorResourceLoader` owns editor-side typed path loading, conversion from editor asset records to concrete asset
-  records, editor resource object caching, dependency load order, and unused-resource collection.
-- `RuntimeResourceLoader` owns the read-only player asset manifest exported during packaging, packaged runtime path
-  to GUID lookup, internal GUID to asset-record lookup, dependency traversal, typed path load requests, and explicit
-  runtime release requests.
+- `AssetID` identifies a loadable asset or sub-asset through `GUID + subID`; first-stage assets use `subID = 0`.
+- `EditorAssetDatabase` owns editor asset records, project-relative asset path to `AssetID` lookup, `AssetID` to
+  asset-record lookup, import artifacts, dependency records, and live editor updates while a project is open.
+- `RuntimeAssetLoader` owns the read-only player asset manifest exported during packaging, packaged runtime path to
+  `AssetID` lookup, and internal `AssetID` to manifest-record lookup.
+- Both editor and runtime record sources provide common `AssetRecord` values through `IAssetRecordProvider`.
 
-Editor and runtime resource loading are intentionally separated. `EditorResourceLoader` loads from editable project
-records owned by `EditorAssetDatabase`. `RuntimeResourceLoader` resolves packaged manifest asset records and calls
-`ResourceSystem`. Runtime should load processed engine assets rather than arbitrary source files. Editor and tools
-handle source import.
+Editor and runtime asset indexing are intentionally separated. `EditorResourceLoader` is only an editor convenience
+wrapper around `ResourceSystem::Request()`, while `RuntimeAssetLoader` resolves packaged manifest asset records.
+Runtime should load processed engine assets rather than arbitrary source files. Editor and tools handle source import.
 
-Editor resource lifetime follows an unused-resource collection model instead of per-load release calls from
-`EditorAssetDatabase`. Editor currently gathers root GUIDs from the active scene and selection state when the selection
-changes, when switching back to project selection, and around project opening. `EditorResourceLoader` marks those loaded
-resources and their already-loaded dependencies as reachable, then unloads unreachable cached payloads. Preview panes,
-thumbnail jobs, and importer views should add their own active roots before they start loading resource payloads.
-Project close clears the editor loader cache. Runtime shutdown clears the `ResourceSystem` cache. Player resource
-lifetime uses `RuntimeResourceLoader::ReleaseResource()` to release references acquired by typed path loads.
+Components store resource references as `AssetRef<TResource>`. `AssetRef` serializes only its `AssetID`; after loading,
+it may also hold a non-owning pointer to the loaded `ResourceObject`.
+
+Editor resource lifetime follows root-reachability collection using active root `AssetID` values from the active scene,
+selection state, previews, thumbnails, and importer views. Player resource lifetime uses explicit
+`ResourceSystem::Request()` and `ResourceSystem::ReleaseResource()` calls. `ResourceSystem::CollectUnusedResources()`
+never unloads resources with nonzero reference counts.
 
 ### 7.12 Render
 
@@ -902,36 +901,34 @@ explicit paths and project-root resolution supplied by higher-level code.
 The resource pipeline has three explicit responsibility layers:
 
 ```text
-Editor:
+  Editor:
   EditorAssetDatabase
     -> scans Assets/ when a project opens
-    -> keeps asset path -> GUID and GUID -> asset-record indexes current
+    -> keeps asset path -> AssetID and AssetID -> asset-record indexes current
     -> tracks imported artifact path and direct dependencies
     -> updates records as editor operations create, delete, move, reimport, or save assets
 
   EditorResourceLoader
-    -> derives asset records from EditorAssetDatabase asset records
-    -> exposes typed synchronous path loads for editor tools
-    -> creates and caches editor ResourceObject instances
-    -> collects unused editor cached resources from active root GUIDs
+    -> resolves editor paths to AssetID values
+    -> forwards typed requests to ResourceSystem using EditorAssetDatabase as the record provider
+    -> does not own a separate ResourceObject cache
 
 Player:
-  RuntimeResourceLoader
+  RuntimeAssetLoader
     -> reads a packaged, read-only AssetManifest exported during build/cook
-    -> resolves packaged runtime paths through the runtimePath -> GUID map
-    -> resolves GUIDs internally through the GUID -> AssetRecord table
-    -> resolves dependency order from that asset manifest
-    -> exposes typed synchronous path loads
-    -> releases loaded runtime resources explicitly through ResourceSystem
+    -> resolves packaged runtime paths through the runtimePath -> AssetID map
+    -> resolves AssetIDs internally through the AssetID -> ManifestAssetRecord table
+    -> provides AssetRecord values to ResourceSystem
     -> never scans Assets/ and never mutates the asset manifest at runtime
 
 Shared low-level loading:
   ResourceSystem
     -> loads files from concrete platform paths
     -> deserializes engine-native resource formats
-    -> creates ResourceObject instances such as MeshResource and MaterialResource
-    -> tracks runtime reference counts
-    -> releases runtime-owned resources
+    -> creates ResourceObject instances such as SceneResource, MeshResource, MaterialResource, and TextureResource
+    -> supports recursive Request(assetID, provider)
+    -> tracks request/release reference counts
+    -> supports root-reachability collection
 ```
 
 The Editor AssetDatabase scans the `Assets/` tree, tracks native source assets and imported descriptors, and generates
@@ -945,7 +942,7 @@ Source Asset
   -> AssetImporter
   -> Editor Asset Metadata / Imported Artifact
   -> Runtime AssetManifest + Packaged Resource Payload
-  -> RuntimeResourceLoader
+  -> RuntimeAssetLoader
   -> ResourceSystem
 ```
 

@@ -56,10 +56,36 @@ model: children are serialized under the owning `TransformComponent`'s GameObjec
 `MeshRenderComponent`:
 
 - `enabled`
-- `meshAssetGuid`
-- `materialAssetGuid`
+- `mesh.assetID`
+- `material.assetID`
 - `boundsCenter`
 - `boundsExtents`
+
+Asset references are serialized as `AssetID` values:
+
+```json
+{
+    "type": "MeshRenderComponent",
+    "enabled": true,
+    "mesh": {
+        "assetID": {
+            "guid": "11111111-1111-1111-1111-111111111111",
+            "subID": 0
+        }
+    },
+    "material": {
+        "assetID": {
+            "guid": "22222222-2222-2222-2222-222222222222",
+            "subID": 0
+        }
+    },
+    "boundsCenter": [0, 0, 0],
+    "boundsExtents": [0.5, 0.5, 0.5]
+}
+```
+
+Readers accept legacy `meshAssetGuid` and `materialAssetGuid` fields and convert them to `AssetID(guid, 0)`. Writers
+emit only the structured `AssetID` shape.
 
 `CameraComponent`:
 
@@ -85,6 +111,9 @@ model: children are serialized under the owning `TransformComponent`'s GameObjec
 
 ## Runtime Notes
 
-Loading creates GameObjects and Components without incremental render-thread registration. After the full hierarchy has
-been read, `Scene::RebuildRenderThreadScene()` rebuilds the render-thread scene once, matching the current
-`Scene -> RTScene` ownership model.
+`SceneSerialization` is a data-only string serialization layer. It does not read files, request resources, or own the
+complete scene construction flow.
+
+`SceneSystem` owns live scene construction. It requests a `SceneResource`, deserializes the scene data, binds component
+`AssetRef` values through `ResourceSystem`, records retained asset IDs for release, and then rebuilds the render-thread
+scene.

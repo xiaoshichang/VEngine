@@ -2,7 +2,6 @@
 
 #include "Editor/Core/Editor.h"
 #include "Editor/Core/EditorAssetDatabase.h"
-#include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -64,20 +63,20 @@ namespace ve::editor
             return false;
         }
 
-        [[nodiscard]] std::string ResolveAssetPathFromGuid(const EditorAssetDatabase& assetDatabase, const Guid& guid)
+        [[nodiscard]] std::string ResolveAssetPathFromID(const EditorAssetDatabase& assetDatabase, const AssetID& id)
         {
-            if (guid.IsEmpty())
+            if (id.IsEmpty())
             {
                 return {};
             }
 
-            const EditorAssetRecord* asset = assetDatabase.FindAssetByGuid(guid);
+            const EditorAssetRecord* asset = assetDatabase.FindAssetByID(id);
             if (asset != nullptr)
             {
                 return asset->path.GetString();
             }
 
-            return "Missing asset: " + guid.ToString();
+            return "Missing asset: " + id.ToString();
         }
 
         void RenderAssetReferenceField(const char* label,
@@ -220,13 +219,13 @@ namespace ve::editor
 
             const EditorAssetDatabase* assetDatabase = editor_ != nullptr ? &editor_->GetAssetDatabase() : nullptr;
             const std::string meshAssetPath = assetDatabase != nullptr
-                                                  ? ResolveAssetPathFromGuid(*assetDatabase, mesh.GetMeshAssetGuid())
+                                                  ? ResolveAssetPathFromID(*assetDatabase, mesh.GetMeshAssetID())
                                                   : "";
             RenderAssetReferenceField("Mesh", "##MeshReferencePath", "##MeshReference", meshAssetPath);
 
             const std::string materialAssetPath = assetDatabase != nullptr
-                                                      ? ResolveAssetPathFromGuid(*assetDatabase,
-                                                                                 mesh.GetMaterialAssetGuid())
+                                                      ? ResolveAssetPathFromID(*assetDatabase,
+                                                                               mesh.GetMaterialAssetID())
                                                       : "";
             RenderAssetReferenceField("Material",
                                       "##MaterialReferencePath",
@@ -363,7 +362,7 @@ namespace ve::editor
         if (ImGui::CollapsingHeader("Asset", ImGuiTreeNodeFlags_DefaultOpen))
         {
             ImGui::Text("Type: %s", EditorAssetDatabase::ToString(asset.type));
-            ImGui::TextWrapped("GUID: %s", asset.guid.ToString().c_str());
+            ImGui::TextWrapped("AssetID: %s", asset.asset.id.ToString().c_str());
             ImGui::TextWrapped("Path: %s", asset.path.GetString().c_str());
             ImGui::TextWrapped("Meta: %s", asset.metaPath.GetString().c_str());
             ImGui::TextWrapped("Physical Path: %s",

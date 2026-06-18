@@ -101,21 +101,21 @@ namespace ve::editor
 
     namespace
     {
-        void AddGuidIfValid(std::vector<Guid>& guids, const Guid& guid)
+        void AddAssetIDIfValid(std::vector<AssetID>& ids, const AssetID& id)
         {
-            if (!guid.IsEmpty() && std::find(guids.begin(), guids.end(), guid) == guids.end())
+            if (!id.IsEmpty() && std::find(ids.begin(), ids.end(), id) == ids.end())
             {
-                guids.push_back(guid);
+                ids.push_back(id);
             }
         }
 
-        void CollectGameObjectResourceRoots(const GameObject& gameObject, std::vector<Guid>& guids)
+        void CollectGameObjectResourceRoots(const GameObject& gameObject, std::vector<AssetID>& ids)
         {
             if (const MeshRenderComponent* meshRender = gameObject.GetComponent<MeshRenderComponent>();
                 meshRender != nullptr)
             {
-                AddGuidIfValid(guids, meshRender->GetMeshAssetGuid());
-                AddGuidIfValid(guids, meshRender->GetMaterialAssetGuid());
+                AddAssetIDIfValid(ids, meshRender->GetMeshAssetID());
+                AddAssetIDIfValid(ids, meshRender->GetMaterialAssetID());
             }
 
             const TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
@@ -129,19 +129,19 @@ namespace ve::editor
                 const GameObject* child = transform->GetChildGameObject(childIndex);
                 if (child != nullptr)
                 {
-                    CollectGameObjectResourceRoots(*child, guids);
+                    CollectGameObjectResourceRoots(*child, ids);
                 }
             }
         }
 
-        void CollectSceneResourceRoots(const Scene& scene, std::vector<Guid>& guids)
+        void CollectSceneResourceRoots(const Scene& scene, std::vector<AssetID>& ids)
         {
             for (SizeT rootIndex = 0; rootIndex < scene.GetRootGameObjectCount(); ++rootIndex)
             {
                 const GameObject* rootObject = scene.GetRootGameObject(rootIndex);
                 if (rootObject != nullptr)
                 {
-                    CollectGameObjectResourceRoots(*rootObject, guids);
+                    CollectGameObjectResourceRoots(*rootObject, ids);
                 }
             }
         }
@@ -443,9 +443,9 @@ namespace ve::editor
         }
     }
 
-    std::vector<Guid> Editor::CollectActiveResourceRoots() const
+    std::vector<AssetID> Editor::CollectActiveResourceRoots() const
     {
-        std::vector<Guid> roots;
+        std::vector<AssetID> roots;
 
         if (mainView_ == MainView::ProjectEditing && sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr)
         {
@@ -457,7 +457,7 @@ namespace ve::editor
             const EditorAssetRecord* selectedAsset = assetDatabase_.FindAsset(selectedAssetPath_);
             if (selectedAsset != nullptr)
             {
-                AddGuidIfValid(roots, selectedAsset->guid);
+                AddAssetIDIfValid(roots, selectedAsset->asset.id);
             }
         }
 
@@ -471,9 +471,10 @@ namespace ve::editor
             return;
         }
 
-        EditorResourceCollectUnusedParams params;
-        params.rootGuids = CollectActiveResourceRoots();
-        const SizeT unloadedCount = resourceLoader_.CollectUnusedResources(params);
+        ResourceCollectUnusedParams params;
+        params.rootAssets = CollectActiveResourceRoots();
+        const SizeT unloadedCount =
+            runtime_ != nullptr ? runtime_->GetResourceSystem().CollectUnusedResources(params) : 0;
         if (unloadedCount > 0)
         {
             VE_LOG_DEBUG_CATEGORY("Editor", "Collected {} unused resource(s).", unloadedCount);
@@ -517,8 +518,12 @@ namespace ve::editor
         if (!descriptorResult.GetValue().startScene.empty() && sceneSystem_ != nullptr &&
             sceneSystem_->GetScene() != nullptr)
         {
-            const ErrorCode loadSceneResult = SceneSerialization::LoadFromFile(
-                *sceneSystem_->GetScene(), Path(descriptorResult.GetValue().startScene));
+            Result<std::string> sceneText =
+                FileSystem::ReadTextFile(FileSystem::ResolveProjectPath(Path(descriptorResult.GetValue().startScene)));
+            const ErrorCode loadSceneResult = sceneText
+                                                  ? SceneSerialization::LoadFromString(*sceneSystem_->GetScene(),
+                                                                                      sceneText.GetValue())
+                                                  : sceneText.GetError().GetCode();
             if (loadSceneResult != ErrorCode::None)
             {
                 VE_LOG_WARN_CATEGORY("Editor",
@@ -542,6 +547,10 @@ namespace ve::editor
             VE_LOG_ERROR_CATEGORY(
                 "Editor", "Failed to initialize resource loader '{}': {}", projectPath, ToString(resourceLoaderResult));
             return;
+        }
+        if (runtime_ != nullptr)
+        {
+            runtime_->GetResourceSystem().SetProjectRoot(projectRoot);
         }
 
         AddRecentProject(currentProjectPath_);

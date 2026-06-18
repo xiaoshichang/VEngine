@@ -93,6 +93,24 @@ namespace ve::editor
             return type == EditorAssetType::ObjSource ? "ObjMeshImporter" : "";
         }
 
+        [[nodiscard]] ResourceType ToResourceType(EditorAssetType type) noexcept
+        {
+            switch (type)
+            {
+            case EditorAssetType::ObjSource:
+            case EditorAssetType::Mesh:
+                return ResourceType::Mesh;
+            case EditorAssetType::Material:
+                return ResourceType::Material;
+            case EditorAssetType::Scene:
+                return ResourceType::Scene;
+            case EditorAssetType::Unknown:
+                break;
+            }
+
+            return ResourceType::Unknown;
+        }
+
         [[nodiscard]] std::string ReadString(const boost::json::object& object,
                                              boost::json::string_view key,
                                              std::string fallback = {})
@@ -296,7 +314,7 @@ namespace ve::editor
         {
             boost::json::object object;
             object["version"] = 1;
-            object["guid"] = record.guid.ToString();
+            object["guid"] = record.asset.id.GetGuid().ToString();
             object["assetType"] = ToMetaAssetType(record.type);
             object["sourcePath"] = record.path.GetString();
             object["importer"] = GetDefaultImporter(record.type);
@@ -346,8 +364,8 @@ namespace ve::editor
 
     void EditorAssetDatabase::Shutdown() noexcept
     {
-        assetsByGuid_.clear();
-        guidsByAssetPath_.clear();
+        assetsByID_.clear();
+        assetIDsByAssetPath_.clear();
         projectRoot_ = Path();
         initialized_ = false;
     }
@@ -380,8 +398,8 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        assetsByGuid_.clear();
-        guidsByAssetPath_.clear();
+        assetsByID_.clear();
+        assetIDsByAssetPath_.clear();
         const ErrorCode result = ScanAndImportDirectory(assetsRoot, false);
         if (result != ErrorCode::None)
         {
@@ -403,8 +421,8 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        assetsByGuid_.clear();
-        guidsByAssetPath_.clear();
+        assetsByID_.clear();
+        assetIDsByAssetPath_.clear();
         const ErrorCode result = ScanAndImportDirectory(assetsRoot, true);
         if (result != ErrorCode::None)
         {
@@ -428,7 +446,7 @@ namespace ve::editor
 
         if (asset->type == EditorAssetType::ObjSource)
         {
-            const ErrorCode result = ImportObjAsMesh(asset->path, asset->guid, true);
+            const ErrorCode result = ImportObjAsMesh(asset->path, asset->asset.id.GetGuid(), true);
             if (result != ErrorCode::None)
             {
                 return result;
@@ -445,34 +463,50 @@ namespace ve::editor
 
     SizeT EditorAssetDatabase::GetAssetCount() const noexcept
     {
-        return assetsByGuid_.size();
+        return assetsByID_.size();
     }
 
     const EditorAssetRecord* EditorAssetDatabase::FindAsset(const Path& projectRelativePath) const noexcept
     {
-        const auto guidIt = guidsByAssetPath_.find(projectRelativePath.GetString());
-        if (guidIt == guidsByAssetPath_.end())
+        const auto idIt = assetIDsByAssetPath_.find(projectRelativePath.GetString());
+        if (idIt == assetIDsByAssetPath_.end())
         {
             return nullptr;
         }
 
-        return FindAssetByGuid(guidIt->second);
+        return FindAssetByID(idIt->second);
     }
 
-    const EditorAssetRecord* EditorAssetDatabase::FindAssetByGuid(const Guid& guid) const noexcept
+    const EditorAssetRecord* EditorAssetDatabase::FindAssetByID(const AssetID& id) const noexcept
     {
-        const auto assetIt = assetsByGuid_.find(guid);
-        return assetIt != assetsByGuid_.end() ? &assetIt->second : nullptr;
+        const auto assetIt = assetsByID_.find(id);
+        return assetIt != assetsByID_.end() ? &assetIt->second : nullptr;
     }
 
-    const std::unordered_map<Guid, EditorAssetRecord>& EditorAssetDatabase::GetAssetsByGuid() const noexcept
+    Result<AssetRecord> EditorAssetDatabase::FindAssetRecord(const AssetID& id) const
     {
-        return assetsByGuid_;
+        if (!initialized_)
+        {
+            return Result<AssetRecord>::Failure(Error(ErrorCode::InvalidState, "EditorAssetDatabase is not initialized."));
+        }
+
+        const EditorAssetRecord* asset = FindAssetByID(id);
+        if (asset == nullptr)
+        {
+            return Result<AssetRecord>::Failure(Error(ErrorCode::NotFound, "Editor asset not found."));
+        }
+
+        return Result<AssetRecord>::Success(asset->asset);
     }
 
-    const std::unordered_map<std::string, Guid>& EditorAssetDatabase::GetGuidsByAssetPath() const noexcept
+    const std::unordered_map<AssetID, EditorAssetRecord>& EditorAssetDatabase::GetAssetsByID() const noexcept
     {
-        return guidsByAssetPath_;
+        return assetsByID_;
+    }
+
+    const std::unordered_map<std::string, AssetID>& EditorAssetDatabase::GetAssetIDsByAssetPath() const noexcept
+    {
+        return assetIDsByAssetPath_;
     }
 
     const char* EditorAssetDatabase::ToString(EditorAssetType type) noexcept
@@ -525,18 +559,21 @@ namespace ve::editor
                     return guidResult.GetError().GetCode();
                 }
 
-                record.guid = guidResult.MoveValue();
+                const Guid guid = guidResult.MoveValue();
+                record.asset.id = AssetID(guid, 0);
+                record.asset.type = ToResourceType(record.type);
                 if (record.type == EditorAssetType::ObjSource)
                 {
-                    const ErrorCode importResult = ImportObjAsMesh(record.path, record.guid, force);
+                    const ErrorCode importResult = ImportObjAsMesh(record.path, guid, force);
                     if (importResult != ErrorCode::None)
                     {
                         return importResult;
                     }
 
                     record.imported = true;
-                    record.importedPath = GetImportedMeshPath(record.guid, record.path);
+                    record.importedPath = GetImportedMeshPath(guid, record.path);
                 }
+                record.asset.runtimePath = record.imported ? record.importedPath : record.path;
 
                 AddAssetRecord(std::move(record));
             }
@@ -582,7 +619,7 @@ namespace ve::editor
         }
 
         EditorAssetRecord metaRecord = record;
-        metaRecord.guid = Guid::Create();
+        metaRecord.asset.id = AssetID(Guid::Create(), 0);
 
         const boost::json::value metaJson(BuildMetaJson(metaRecord));
         const ErrorCode result = FileSystem::WriteTextFile(metaPhysicalPath, JsonUtils::SerializePretty(metaJson));
@@ -591,7 +628,7 @@ namespace ve::editor
             return Result<Guid>::Failure(Error(result, "Failed to write asset meta file."));
         }
 
-        return Result<Guid>::Success(std::move(metaRecord.guid));
+        return Result<Guid>::Success(metaRecord.asset.id.GetGuid());
     }
 
     Result<Guid> EditorAssetDatabase::ReadMetaGuid(const Path& metaPhysicalPath) const
@@ -660,20 +697,20 @@ namespace ve::editor
     void EditorAssetDatabase::AddAssetRecord(EditorAssetRecord record)
     {
         const std::string pathKey = record.path.GetString();
-        const Guid guidKey = record.guid;
+        const AssetID idKey = record.asset.id;
 
-        if (const auto existingGuid = guidsByAssetPath_.find(pathKey);
-            existingGuid != guidsByAssetPath_.end() && existingGuid->second != guidKey)
+        if (const auto existingID = assetIDsByAssetPath_.find(pathKey);
+            existingID != assetIDsByAssetPath_.end() && existingID->second != idKey)
         {
-            assetsByGuid_.erase(existingGuid->second);
+            assetsByID_.erase(existingID->second);
         }
 
-        if (const auto existingAsset = assetsByGuid_.find(guidKey); existingAsset != assetsByGuid_.end())
+        if (const auto existingAsset = assetsByID_.find(idKey); existingAsset != assetsByID_.end())
         {
-            guidsByAssetPath_.erase(existingAsset->second.path.GetString());
+            assetIDsByAssetPath_.erase(existingAsset->second.path.GetString());
         }
 
-        assetsByGuid_.insert_or_assign(guidKey, std::move(record));
-        guidsByAssetPath_.insert_or_assign(pathKey, guidKey);
+        assetsByID_.insert_or_assign(idKey, std::move(record));
+        assetIDsByAssetPath_.insert_or_assign(pathKey, idKey);
     }
 } // namespace ve::editor

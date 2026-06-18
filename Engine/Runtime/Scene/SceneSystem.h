@@ -5,6 +5,8 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Input/InputSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
+#include "Engine/Runtime/Resource/AssetRecord.h"
+#include "Engine/Runtime/Resource/ResourceSystem.h"
 #include "Engine/Runtime/Scene/OSEventQueue.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Threading/FrameEndSync.h"
@@ -36,6 +38,18 @@ namespace ve
     {
         /// Diagnostic name copied into the owned Scene Thread.
         std::string threadName = "VEngineSceneThread";
+    };
+
+    enum class SceneLoadMode
+    {
+        Single,
+        Additive,
+    };
+
+    struct SceneLoadDesc
+    {
+        AssetID scene;
+        SceneLoadMode mode = SceneLoadMode::Single;
     };
 
     /// Owns the active Scene and its update thread.
@@ -75,6 +89,10 @@ namespace ve
 
         /// Returns the active Scene. The returned pointer remains owned by SceneSystem.
         [[nodiscard]] const Scene* GetScene() const noexcept;
+        [[nodiscard]] Result<Scene*> LoadScene(const SceneLoadDesc& desc,
+                                               const IAssetRecordProvider& provider,
+                                               ResourceSystem& resourceSystem);
+        void UnloadActiveScene(ResourceSystem& resourceSystem) noexcept;
 
         /// Queues one OS event for Scene Thread processing.
         [[nodiscard]] ErrorCode EnqueueOSEvent(const OSEvent& event);

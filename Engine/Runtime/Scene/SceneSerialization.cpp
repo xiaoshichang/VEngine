@@ -1,7 +1,6 @@
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 
 #include "Engine/Runtime/Core/JsonUtils.h"
-#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
@@ -135,6 +134,80 @@ namespace ve
             return guid.GetValue();
         }
 
+        [[nodiscard]] UInt64 ReadUInt64(const boost::json::object& object,
+                                        boost::json::string_view key,
+                                        UInt64 fallback = 0)
+        {
+            const boost::json::value* value = object.if_contains(key);
+            if (value == nullptr)
+            {
+                return fallback;
+            }
+
+            if (value->is_uint64())
+            {
+                return static_cast<UInt64>(value->as_uint64());
+            }
+
+            if (value->is_int64() && value->as_int64() >= 0)
+            {
+                return static_cast<UInt64>(value->as_int64());
+            }
+
+            return fallback;
+        }
+
+        [[nodiscard]] boost::json::object WriteAssetID(const AssetID& id)
+        {
+            boost::json::object object;
+            object["guid"] = id.GetGuid().ToString();
+            object["subID"] = id.GetSubID();
+            return object;
+        }
+
+        [[nodiscard]] boost::json::object WriteAssetRef(const AssetRefBase& assetRef)
+        {
+            boost::json::object object;
+            object["assetID"] = WriteAssetID(assetRef.GetAssetID());
+            return object;
+        }
+
+        [[nodiscard]] AssetID ReadAssetID(const boost::json::object& object, const AssetID& fallback)
+        {
+            const std::string guidText = ReadString(object, "guid");
+            if (guidText.empty())
+            {
+                return fallback;
+            }
+
+            Result<Guid> guid = Guid::Parse(guidText);
+            if (!guid)
+            {
+                return fallback;
+            }
+
+            return AssetID(guid.GetValue(), ReadUInt64(object, "subID", 0));
+        }
+
+        [[nodiscard]] AssetID ReadAssetRef(const boost::json::object& object,
+                                           boost::json::string_view objectKey,
+                                           boost::json::string_view legacyGuidKey,
+                                           const AssetID& fallback)
+        {
+            if (const boost::json::value* value = object.if_contains(objectKey); value != nullptr && value->is_object())
+            {
+                const boost::json::object& assetRefObject = value->as_object();
+                if (const boost::json::value* assetIDValue = assetRefObject.if_contains("assetID");
+                    assetIDValue != nullptr && assetIDValue->is_object())
+                {
+                    return ReadAssetID(assetIDValue->as_object(), fallback);
+                }
+            }
+
+            const Guid legacyGuid = ReadGuid(object, legacyGuidKey, fallback.GetGuid());
+            return legacyGuid.IsEmpty() ? fallback : AssetID(legacyGuid, 0);
+        }
+
         [[nodiscard]] bool ReadBool(const boost::json::object& object, boost::json::string_view key, bool fallback)
         {
             if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_bool())
@@ -238,8 +311,8 @@ namespace ve
             boost::json::object object;
             object["type"] = "MeshRenderComponent";
             object["enabled"] = mesh.IsEnabled();
-            object["meshAssetGuid"] = mesh.GetMeshAssetGuid().ToString();
-            object["materialAssetGuid"] = mesh.GetMaterialAssetGuid().ToString();
+            object["mesh"] = WriteAssetRef(mesh.GetMesh());
+            object["material"] = WriteAssetRef(mesh.GetMaterial());
             object["boundsCenter"] = WriteVector3(mesh.GetBoundsCenter());
             object["boundsExtents"] = WriteVector3(mesh.GetBoundsExtents());
             return object;
@@ -392,8 +465,9 @@ namespace ve
                 mesh = result.GetValue();
             }
 
-            mesh->SetMeshAssetGuid(ReadGuid(object, "meshAssetGuid", mesh->GetMeshAssetGuid()));
-            mesh->SetMaterialAssetGuid(ReadGuid(object, "materialAssetGuid", mesh->GetMaterialAssetGuid()));
+            mesh->SetMeshAssetID(ReadAssetRef(object, "mesh", "meshAssetGuid", mesh->GetMeshAssetID()));
+            mesh->SetMaterialAssetID(
+                ReadAssetRef(object, "material", "materialAssetGuid", mesh->GetMaterialAssetID()));
 
             if (const boost::json::value* value = object.if_contains("boundsCenter"); value != nullptr)
             {
@@ -629,28 +703,6 @@ namespace ve
             return ErrorCode::None;
         }
     } // namespace
-
-    ErrorCode SceneSerialization::SaveToFile(const Scene& scene, const Path& path)
-    {
-        Result<std::string> textResult = SaveToString(scene);
-        if (!textResult)
-        {
-            return textResult.GetError().GetCode();
-        }
-
-        return FileSystem::WriteTextFile(FileSystem::ResolveProjectPath(path), textResult.GetValue());
-    }
-
-    ErrorCode SceneSerialization::LoadFromFile(Scene& scene, const Path& path)
-    {
-        Result<std::string> textResult = FileSystem::ReadTextFile(FileSystem::ResolveProjectPath(path));
-        if (!textResult)
-        {
-            return textResult.GetError().GetCode();
-        }
-
-        return LoadFromString(scene, textResult.GetValue());
-    }
 
     Result<std::string> SceneSerialization::SaveToString(const Scene& scene)
     {
