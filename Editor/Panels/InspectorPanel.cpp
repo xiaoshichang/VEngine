@@ -21,6 +21,12 @@ namespace ve::editor
     namespace
     {
         constexpr SizeT TextBufferSize = 512;
+        constexpr float TransformDragSpeed = 0.05f;
+        constexpr float RotationDragSpeed = 0.01f;
+        constexpr float BoundsDragSpeed = 0.05f;
+        constexpr float FineDragSpeed = 0.01f;
+        constexpr float MediumDragSpeed = 0.1f;
+        constexpr float LargeDragSpeed = 1.0f;
 
         [[nodiscard]] std::array<char, TextBufferSize> ToTextBuffer(const std::string& value)
         {
@@ -186,19 +192,19 @@ namespace ve::editor
             RenderEnabledCheckbox(transform);
 
             std::array<float, 3> position = ToFloat3(transform.GetLocalPosition());
-            if (ImGui::InputFloat3("Position", position.data(), "%.3f"))
+            if (ImGui::DragFloat3("Position", position.data(), TransformDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 transform.SetLocalPosition(FromFloat3(position));
             }
 
             std::array<float, 4> rotation = ToFloat4(transform.GetLocalRotation());
-            if (ImGui::InputFloat4("Rotation XYZW", rotation.data(), "%.3f"))
+            if (ImGui::DragFloat4("Rotation XYZW", rotation.data(), RotationDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 transform.SetLocalRotation(FromFloat4(rotation));
             }
 
             std::array<float, 3> scale = ToFloat3(transform.GetLocalScale());
-            if (ImGui::InputFloat3("Scale", scale.data(), "%.3f"))
+            if (ImGui::DragFloat3("Scale", scale.data(), TransformDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 transform.SetLocalScale(FromFloat3(scale));
             }
@@ -221,13 +227,13 @@ namespace ve::editor
             RenderAssetReferenceField("Material", "##MaterialReferencePath", "##MaterialReference", materialAssetPath);
 
             std::array<float, 3> boundsCenter = ToFloat3(mesh.GetBoundsCenter());
-            if (ImGui::InputFloat3("Bounds Center", boundsCenter.data(), "%.3f"))
+            if (ImGui::DragFloat3("Bounds Center", boundsCenter.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 mesh.SetBoundsCenter(FromFloat3(boundsCenter));
             }
 
             std::array<float, 3> boundsExtents = ToFloat3(mesh.GetBoundsExtents());
-            if (ImGui::InputFloat3("Bounds Extents", boundsExtents.data(), "%.3f"))
+            if (ImGui::DragFloat3("Bounds Extents", boundsExtents.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 mesh.SetBoundsExtents(FromFloat3(boundsExtents));
             }
@@ -256,31 +262,31 @@ namespace ve::editor
             }
 
             float verticalFieldOfView = camera.GetVerticalFieldOfViewRadians();
-            if (ImGui::InputFloat("FOV Radians", &verticalFieldOfView, 0.01f, 0.1f, "%.3f"))
+            if (ImGui::DragFloat("FOV Radians", &verticalFieldOfView, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 camera.SetVerticalFieldOfViewRadians(verticalFieldOfView);
             }
 
             float orthographicSize = camera.GetOrthographicSize();
-            if (ImGui::InputFloat("Ortho Size", &orthographicSize, 0.1f, 1.0f, "%.3f"))
+            if (ImGui::DragFloat("Ortho Size", &orthographicSize, MediumDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 camera.SetOrthographicSize(orthographicSize);
             }
 
             float aspectRatio = camera.GetAspectRatio();
-            if (ImGui::InputFloat("Aspect", &aspectRatio, 0.01f, 0.1f, "%.3f"))
+            if (ImGui::DragFloat("Aspect", &aspectRatio, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 camera.SetAspectRatio(aspectRatio);
             }
 
             float nearClipPlane = camera.GetNearClipPlane();
-            if (ImGui::InputFloat("Near", &nearClipPlane, 0.01f, 0.1f, "%.3f"))
+            if (ImGui::DragFloat("Near", &nearClipPlane, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 camera.SetNearClipPlane(nearClipPlane);
             }
 
             float farClipPlane = camera.GetFarClipPlane();
-            if (ImGui::InputFloat("Far", &farClipPlane, 1.0f, 10.0f, "%.3f"))
+            if (ImGui::DragFloat("Far", &farClipPlane, LargeDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 camera.SetFarClipPlane(farClipPlane);
             }
@@ -309,25 +315,25 @@ namespace ve::editor
             }
 
             float intensity = light.GetIntensity();
-            if (ImGui::InputFloat("Intensity", &intensity, 0.1f, 1.0f, "%.3f"))
+            if (ImGui::DragFloat("Intensity", &intensity, MediumDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 light.SetIntensity(intensity);
             }
 
             float range = light.GetRange();
-            if (ImGui::InputFloat("Range", &range, 0.1f, 1.0f, "%.3f"))
+            if (ImGui::DragFloat("Range", &range, MediumDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 light.SetRange(range);
             }
 
             float innerConeAngle = light.GetInnerConeAngleRadians();
-            if (ImGui::InputFloat("Inner Cone", &innerConeAngle, 0.01f, 0.1f, "%.3f"))
+            if (ImGui::DragFloat("Inner Cone", &innerConeAngle, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 light.SetInnerConeAngleRadians(innerConeAngle);
             }
 
             float outerConeAngle = light.GetOuterConeAngleRadians();
-            if (ImGui::InputFloat("Outer Cone", &outerConeAngle, 0.01f, 0.1f, "%.3f"))
+            if (ImGui::DragFloat("Outer Cone", &outerConeAngle, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 light.SetOuterConeAngleRadians(outerConeAngle);
             }
