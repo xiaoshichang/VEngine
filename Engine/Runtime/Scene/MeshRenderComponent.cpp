@@ -107,10 +107,12 @@ namespace ve
     {
         const GameObject* owner = GetOwner();
         const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
+        const MeshResource* meshResource = mesh_.Get();
+        const MaterialResource* materialResource = material_.Get();
 
         return RTRenderItemDesc{
-            mesh_.GetAssetID(),
-            material_.GetAssetID(),
+            meshResource != nullptr ? meshResource->GetRTMeshResource() : nullptr,
+            materialResource != nullptr ? materialResource->GetRTMaterialResource() : nullptr,
             boundsCenter_,
             boundsExtents_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),

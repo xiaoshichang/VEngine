@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Resource/AssetRecord.h"
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,8 @@ namespace ve
 {
     class RenderSystem;
     class ResourceLoadContext;
+    class RTMaterialResource;
+    class RTMeshResource;
 
     class ResourceObject : public NonMovable
     {
@@ -50,9 +53,14 @@ namespace ve
         MeshResource(AssetRecord record, std::string text);
 
         [[nodiscard]] const std::string& GetText() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTMeshResource> GetRTMeshResource() const noexcept;
+
+        void InitRenderResource(RenderSystem& renderSystem) override;
+        void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
 
     private:
         std::string text_;
+        std::shared_ptr<RTMeshResource> rtMeshResource_;
     };
 
     class MaterialResource final : public ResourceObject
@@ -61,9 +69,14 @@ namespace ve
         MaterialResource(AssetRecord record, std::string text);
 
         [[nodiscard]] const std::string& GetText() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTMaterialResource> GetRTMaterialResource() const noexcept;
+
+        void InitRenderResource(RenderSystem& renderSystem) override;
+        void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
 
     private:
         std::string text_;
+        std::shared_ptr<RTMaterialResource> rtMaterialResource_;
     };
 
     class SceneResource final : public ResourceObject

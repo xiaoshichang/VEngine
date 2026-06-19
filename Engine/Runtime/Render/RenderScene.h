@@ -4,7 +4,7 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Vector3.h"
-#include "Engine/Runtime/Resource/AssetID.h"
+#include "Engine/Runtime/Render/RenderResource.h"
 
 #include <memory>
 #include <string>
@@ -12,22 +12,10 @@
 
 namespace ve
 {
-    /// Base render-thread resource placeholder used by RT scene objects.
-    ///
-    /// Concrete mesh, material, texture, and buffer resources will derive from or replace this shape once the Resource
-    /// and upload systems exist. Scene-thread objects should hold RT objects through shared_ptr and update them through
-    /// RenderCommand, not by touching RHI objects directly.
-    class RHIResource : public NonCopyable
-    {
-    public:
-        RHIResource() = default;
-        virtual ~RHIResource() = default;
-    };
-
     struct RTRenderItemDesc
     {
-        AssetID meshAssetID;
-        AssetID materialAssetID;
+        std::shared_ptr<RHIResource> meshResource;
+        std::shared_ptr<RHIResource> materialResource;
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
         Matrix44 localToWorld = Matrix44::Identity();
@@ -87,8 +75,6 @@ namespace ve
 
     private:
         RTRenderItemDesc desc_;
-        std::shared_ptr<RHIResource> meshResource_;
-        std::shared_ptr<RHIResource> materialResource_;
     };
 
     /// Render-thread representation of one CameraComponent.

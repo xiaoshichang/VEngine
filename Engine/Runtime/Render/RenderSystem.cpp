@@ -668,6 +668,33 @@ float4 PSMain(VSOutput input) : SV_TARGET
                        });
     }
 
+    void RenderSystem::InitRenderResource(std::shared_ptr<RTMeshResource> meshResource, RTMeshResourceDesc desc)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(meshResource != nullptr, "RenderSystem::InitRenderResource requires a mesh resource.");
+
+        EnqueueCommand("RenderSystemInitMeshResource",
+                       [this, meshResource = std::move(meshResource), desc = std::move(desc)]() mutable
+                       {
+                           VE_ASSERT(impl_->device != nullptr);
+                           meshResource->InitRenderResource(*impl_->device, std::move(desc));
+                       });
+    }
+
+    void RenderSystem::InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource,
+                                          RTMaterialResourceDesc desc)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(materialResource != nullptr, "RenderSystem::InitRenderResource requires a material resource.");
+
+        EnqueueCommand("RenderSystemInitMaterialResource",
+                       [this, materialResource = std::move(materialResource), desc = std::move(desc)]() mutable
+                       {
+                           VE_ASSERT(impl_->device != nullptr);
+                           materialResource->InitRenderResource(*impl_->device, std::move(desc));
+                       });
+    }
+
     void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderer> renderer)
     {
         VE_ASSERT_SCENE_THREAD();

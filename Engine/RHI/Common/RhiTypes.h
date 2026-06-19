@@ -63,6 +63,8 @@ namespace ve::rhi
     enum class RhiBufferUsage : uint32_t
     {
         Vertex = 1 << 0,
+        Index = 1 << 1,
+        Uniform = 1 << 2,
     };
 
     /// Describes intended usage for a texture.

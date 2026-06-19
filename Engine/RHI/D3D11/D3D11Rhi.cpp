@@ -69,6 +69,21 @@ namespace ve::rhi
             return flags;
         }
 
+        UINT ToD3D11BufferBindFlags(RhiBufferUsage usage)
+        {
+            switch (usage)
+            {
+            case RhiBufferUsage::Vertex:
+                return D3D11_BIND_VERTEX_BUFFER;
+            case RhiBufferUsage::Index:
+                return D3D11_BIND_INDEX_BUFFER;
+            case RhiBufferUsage::Uniform:
+                return D3D11_BIND_CONSTANT_BUFFER;
+            }
+
+            return D3D11_BIND_VERTEX_BUFFER;
+        }
+
         std::string MakeHResultError(const char* operation, HRESULT result)
         {
             char buffer[128] = {};
@@ -654,7 +669,7 @@ namespace ve::rhi
                 D3D11_BUFFER_DESC bufferDesc = {};
                 bufferDesc.ByteWidth = static_cast<UINT>(desc.size);
                 bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-                bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                bufferDesc.BindFlags = ToD3D11BufferBindFlags(desc.usage);
 
                 D3D11_SUBRESOURCE_DATA initialData = {};
                 initialData.pSysMem = desc.initialData;

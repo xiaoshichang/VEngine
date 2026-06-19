@@ -22,22 +22,22 @@ namespace ve
 
     const std::shared_ptr<RHIResource>& RTRenderItem::GetMeshResource() const noexcept
     {
-        return meshResource_;
+        return desc_.meshResource;
     }
 
     void RTRenderItem::SetMeshResource(std::shared_ptr<RHIResource> resource) noexcept
     {
-        meshResource_ = std::move(resource);
+        desc_.meshResource = std::move(resource);
     }
 
     const std::shared_ptr<RHIResource>& RTRenderItem::GetMaterialResource() const noexcept
     {
-        return materialResource_;
+        return desc_.materialResource;
     }
 
     void RTRenderItem::SetMaterialResource(std::shared_ptr<RHIResource> resource) noexcept
     {
-        materialResource_ = std::move(resource);
+        desc_.materialResource = std::move(resource);
     }
 
     RTCamera::RTCamera(RTCameraDesc desc)
