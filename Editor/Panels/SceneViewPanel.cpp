@@ -20,6 +20,7 @@ namespace ve::editor
         constexpr float PopupWidth = 320.0f;
         constexpr float MaxPitchRadians = Math::HalfPi - 0.01f;
         constexpr float MaxMouseLookDelta = 128.0f;
+        constexpr float CameraLookSmoothingSpeed = 48.0f;
 
         [[nodiscard]] std::array<float, 3> ToFloat3(const Vector3& value) noexcept
         {
@@ -181,12 +182,14 @@ namespace ve::editor
         if (ImGui::DragFloat("Yaw", &yawDegrees, 0.2f, 0.0f, 0.0f, "%.2f deg"))
         {
             cameraYawRadians_ = ToRadians(yawDegrees);
+            targetCameraYawRadians_ = cameraYawRadians_;
         }
 
         float pitchDegrees = ToDegrees(cameraPitchRadians_);
         if (ImGui::DragFloat("Pitch", &pitchDegrees, 0.2f, -89.0f, 89.0f, "%.2f deg"))
         {
             cameraPitchRadians_ = Clamp(ToRadians(pitchDegrees), -MaxPitchRadians, MaxPitchRadians);
+            targetCameraPitchRadians_ = cameraPitchRadians_;
         }
 
         ImGui::DragFloat("Move Speed", &cameraMoveSpeed_, 0.05f, 0.1f, 100.0f, "%.2f");
@@ -272,6 +275,8 @@ namespace ve::editor
             if (skipNextMouseLookDelta_)
             {
                 skipNextMouseLookDelta_ = false;
+                targetCameraYawRadians_ = cameraYawRadians_;
+                targetCameraPitchRadians_ = cameraPitchRadians_;
             }
             else
             {
@@ -279,12 +284,13 @@ namespace ve::editor
                 const float mouseDeltaY = Clamp(io.MouseDelta.y, -MaxMouseLookDelta, MaxMouseLookDelta);
                 if (mouseDeltaX != 0.0f || mouseDeltaY != 0.0f)
                 {
-                    cameraYawRadians_ += mouseDeltaX * cameraLookSensitivity_;
-                    cameraPitchRadians_ = Clamp(cameraPitchRadians_ - (mouseDeltaY * cameraLookSensitivity_), -MaxPitchRadians, MaxPitchRadians);
-                    cameraChanged = true;
+                    targetCameraYawRadians_ += mouseDeltaX * cameraLookSensitivity_;
+                    targetCameraPitchRadians_ = Clamp(targetCameraPitchRadians_ - (mouseDeltaY * cameraLookSensitivity_), -MaxPitchRadians, MaxPitchRadians);
                 }
             }
         }
+
+        cameraChanged = ApplyCameraLookSmoothing(io.DeltaTime) || cameraChanged;
 
         Vector3 moveDirection = Vector3::Zero();
         moveDirection += GetForwardDirection() * GetInputAxis(ImGuiKey_W, ImGuiKey_S);
@@ -302,6 +308,19 @@ namespace ve::editor
         {
             UpdateSceneViewCamera();
         }
+    }
+
+    bool SceneViewPanel::ApplyCameraLookSmoothing(Float32 deltaSeconds) noexcept
+    {
+        const Float32 clampedDeltaSeconds = Clamp(deltaSeconds, 0.0f, 1.0f / 15.0f);
+        const Float32 smoothingFactor = Clamp(clampedDeltaSeconds * CameraLookSmoothingSpeed, 0.0f, 1.0f);
+        const Float32 previousYaw = cameraYawRadians_;
+        const Float32 previousPitch = cameraPitchRadians_;
+
+        cameraYawRadians_ = Lerp(cameraYawRadians_, targetCameraYawRadians_, smoothingFactor);
+        cameraPitchRadians_ = Lerp(cameraPitchRadians_, targetCameraPitchRadians_, smoothingFactor);
+
+        return !NearlyEqual(cameraYawRadians_, previousYaw) || !NearlyEqual(cameraPitchRadians_, previousPitch);
     }
 
     void SceneViewPanel::UpdateSceneViewCamera()

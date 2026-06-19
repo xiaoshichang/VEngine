@@ -33,6 +33,7 @@ namespace ve::editor
         void RenderCameraPopup();
         void RenderRenderPopup();
         void UpdateCameraFromInput(bool viewportHovered, bool viewportClicked, bool viewportRightClicked);
+        [[nodiscard]] bool ApplyCameraLookSmoothing(Float32 deltaSeconds) noexcept;
         void UpdateSceneViewCamera();
         void RebuildSceneViewTexture(Editor& editor, WindowExtent extent);
         [[nodiscard]] RTCameraDesc BuildCameraDesc() const noexcept;
@@ -48,6 +49,8 @@ namespace ve::editor
         Vector3 cameraPosition_{0.0f, 4.0f, -10.0f};
         Float32 cameraYawRadians_ = 0.0f;
         Float32 cameraPitchRadians_ = 0.0f;
+        Float32 targetCameraYawRadians_ = 0.0f;
+        Float32 targetCameraPitchRadians_ = 0.0f;
         Float32 cameraMoveSpeed_ = 6.0f;
         Float32 cameraLookSensitivity_ = 0.0025f;
         RTCameraProjectionMode cameraProjectionMode_ = RTCameraProjectionMode::Perspective;
