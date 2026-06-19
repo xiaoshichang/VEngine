@@ -1,5 +1,7 @@
 #include "Engine/RHI/Metal/MetalRhi.h"
 
+#include "Engine/Runtime/Core/Assert.h"
+
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -364,6 +366,8 @@ namespace ve::rhi
             {
                 const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
+                [renderCommandEncoder_ setFrontFacingWinding:MTLWindingClockwise];
+                [renderCommandEncoder_ setCullMode:MTLCullModeBack];
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -395,11 +399,44 @@ namespace ve::rhi
                 [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
             }
 
+            void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) override
+            {
+                const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
+                indexBuffer_ = metalBuffer.GetNativeBuffer();
+                indexBufferOffset_ = offset;
+                indexType_ = format == RhiIndexFormat::UInt16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32;
+            }
+
+            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) override
+            {
+                const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+                    break;
+                case RhiShaderStage::Fragment:
+                    [renderCommandEncoder_ setFragmentBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+                    break;
+                }
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 [renderCommandEncoder_ drawPrimitives:MTLPrimitiveTypeTriangle
                                           vertexStart:firstVertex
                                           vertexCount:vertexCount];
+            }
+
+            void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
+            {
+                (void)vertexOffset;
+                const NSUInteger indexSize = indexType_ == MTLIndexTypeUInt16 ? sizeof(uint16_t) : sizeof(uint32_t);
+                [renderCommandEncoder_ drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                                                  indexCount:indexCount
+                                                   indexType:indexType_
+                                                 indexBuffer:indexBuffer_
+                                           indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
             }
 
             [[nodiscard]] bool CommitAndWait()
@@ -428,6 +465,9 @@ namespace ve::rhi
             id<MTLCommandBuffer> commandBuffer_ = nil;
             id<MTLRenderCommandEncoder> renderCommandEncoder_ = nil;
             id<CAMetalDrawable> drawable_ = nil;
+            id<MTLBuffer> indexBuffer_ = nil;
+            uint64_t indexBufferOffset_ = 0;
+            MTLIndexType indexType_ = MTLIndexTypeUInt32;
         };
 
         class MetalDevice final : public RhiDevice

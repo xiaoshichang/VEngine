@@ -36,6 +36,11 @@ namespace
                 [1.0, 0.0, 0.0],
                 [0.0, 1.0, 0.0]
             ],
+            "normals": [
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0]
+            ],
             "indices": [0, 1, 2]
         })";
 
@@ -51,6 +56,7 @@ namespace
         passed &=
             Expect(rtMesh->GetVertexStride() == sizeof(ve::RTMeshVertex), "MeshResource should expose vertex stride");
         passed &= Expect(rtMesh->GetDesc().vertices[1].position[0] == 1.0f, "MeshResource should preserve vertex data");
+        passed &= Expect(rtMesh->GetDesc().vertices[2].normal[2] == 1.0f, "MeshResource should preserve normal data");
         passed &= Expect(rtMesh->GetDesc().indices[2] == 2, "MeshResource should preserve index data");
         return passed;
     }

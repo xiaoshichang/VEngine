@@ -4,7 +4,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Render/FrameRenderer.h"
+#include "Engine/Runtime/Render/BaseRenderer.h"
 #include "Engine/Runtime/Render/RenderPass.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderTarget.h"
@@ -156,19 +156,11 @@ namespace ve
         /// Creates the main swapchain on the Render Thread.
         ///
         /// The RHI device must already be initialized. The surface descriptor must carry the native handle required by
-        /// the selected backend. The first implementation also creates the minimal triangle resources used by
-        /// RenderFrame().
+        /// the selected backend.
         [[nodiscard]] ErrorCode CreateMainSwapchain(const RenderSurfaceDesc& desc);
 
         /// Destroys the main swapchain on the Render Thread if one exists.
         void DestroyMainSwapchain() noexcept;
-
-        /// Creates the first-stage triangle pass object for a Scene Thread-owned renderer.
-        ///
-        /// The returned pass references RenderSystem-owned RHI resources, but pass ownership belongs to the caller's
-        /// FrameRenderer. This keeps frame orchestration on the Scene Thread while RenderSystem keeps low-level RHI
-        /// resource ownership on the Render Thread.
-        [[nodiscard]] std::unique_ptr<RenderPass> CreateTriangleForwardPass(std::shared_ptr<RTRenderTexture> colorTarget = nullptr);
 
         /// Initializes a Scene Thread-owned render resource proxy on the Render Thread.
         ///
@@ -183,7 +175,7 @@ namespace ve
         /// The renderer is prepared and owned by Scene Thread code, then captured by shared_ptr so already queued frame
         /// work remains valid even if Scene Thread replaces its current renderer before the Render Thread consumes the
         /// command.
-        void RenderFrame(std::shared_ptr<FrameRenderer> renderer);
+        void RenderFrame(std::shared_ptr<BaseRenderer> renderer);
 
         /// Submits a command to execute on the Render Thread.
         ///

@@ -25,7 +25,7 @@ function(ve_add_engine)
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Platform/Window.cpp
-            Engine/Runtime/Render/FrameRenderer.cpp
+            Engine/Runtime/Render/BaseRenderer.cpp
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
@@ -87,7 +87,7 @@ function(ve_add_engine)
             Engine/Runtime/Math/Vector4.h
             Engine/Runtime/Memory/PoolAllocator.h
             Engine/Runtime/Platform/Window.h
-            Engine/Runtime/Render/FrameRenderer.h
+            Engine/Runtime/Render/BaseRenderer.h
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
             Engine/Runtime/Render/RenderCommandQueue.h

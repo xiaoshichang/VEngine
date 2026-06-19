@@ -1,0 +1,13 @@
+{
+    "schemaVersion": 1,
+    "name": "Cube Yellow",
+    "shader": "Engine/Shaders/BasicMesh",
+    "parameters": {
+        "baseColor": [
+            1,
+            0.82,
+            0.12,
+            1
+        ]
+    }
+}

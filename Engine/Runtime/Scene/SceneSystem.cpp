@@ -103,14 +103,14 @@ namespace ve
         }
 
 
-        [[nodiscard]] std::shared_ptr<FrameRenderer> CreatePlayerRenderer(SceneSystemImpl& impl)
+        [[nodiscard]] std::shared_ptr<BaseRenderer> CreatePlayerRenderer(SceneSystemImpl& impl)
         {
             VE_ASSERT_SCENE_THREAD();
             VE_ASSERT(impl.renderSystem != nullptr);
 
-            auto renderer = std::make_shared<FrameRenderer>();
-            renderer->AddPass(impl.renderSystem->CreateTriangleForwardPass());
-            return renderer;
+            PlayerRendererDesc desc = {};
+            desc.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
+            return std::make_shared<PlayerRenderer>(std::move(desc));
         }
 
         void SceneThreadLoop_Render_Editor(SceneSystemImpl& impl)
@@ -119,7 +119,7 @@ namespace ve
             VE_ASSERT(impl.renderSystem != nullptr);
             VE_ASSERT(impl.editorCallback.onRender != nullptr);
 
-            std::shared_ptr<FrameRenderer> renderer = impl.editorCallback.onRender();
+            std::shared_ptr<BaseRenderer> renderer = impl.editorCallback.onRender();
             VE_ASSERT_MESSAGE(renderer != nullptr, "SceneThreadLoop_Render_Editor requires a renderer.");
 
             impl.renderSystem->RenderFrame(std::move(renderer));

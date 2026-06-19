@@ -23,6 +23,7 @@ namespace ve
     struct RTMeshVertex
     {
         Float32 position[3] = {};
+        Float32 normal[3] = {0.0f, 1.0f, 0.0f};
     };
 
     struct RTMeshResourceDesc
@@ -70,6 +71,7 @@ namespace ve
     struct RTMaterialUniformData
     {
         Float32 baseColor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        Float32 padding[60] = {};
     };
 
     /// Render Thread proxy for a material resource.

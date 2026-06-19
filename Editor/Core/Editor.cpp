@@ -41,63 +41,6 @@ namespace ve::editor
         std::vector<std::unique_ptr<ImDrawList>> ownedCmdLists;
     };
 
-    class EditorImGuiRenderPass final : public RenderPass
-    {
-    public:
-        EditorImGuiRenderPass(RenderBackend backend,
-                              const std::atomic_bool& editorInitialized,
-                              rhi::RhiLoadAction colorLoadAction,
-                              std::shared_ptr<EditorFrameDrawData> frameDrawData)
-            : backend_(backend)
-            , editorInitialized_(&editorInitialized)
-            , colorLoadAction_(colorLoadAction)
-            , frameDrawData_(std::move(frameDrawData))
-        {
-        }
-
-        [[nodiscard]] const char* GetName() const noexcept override
-        {
-            return "EditorImGuiPass";
-        }
-
-        void Setup(RenderPassBuilder& builder) override
-        {
-            builder.AddSwapchainColorAttachment(colorLoadAction_,
-                                                rhi::RhiStoreAction::Store,
-                                                rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
-        }
-
-        void Execute(RenderPassContext& context) override
-        {
-            (void)context;
-            VE_ASSERT_RENDER_THREAD();
-
-            if (editorInitialized_ == nullptr || !editorInitialized_->load(std::memory_order_acquire) ||
-                frameDrawData_ == nullptr)
-            {
-                return;
-            }
-
-            switch (backend_)
-            {
-            case RenderBackend::D3D11:
-#if VE_PLATFORM_WINDOWS
-                ImGui_ImplDX11_RenderDrawData(&frameDrawData_->drawData);
-#endif
-                break;
-            case RenderBackend::D3D12:
-            case RenderBackend::Metal:
-                break;
-            }
-        }
-
-    private:
-        RenderBackend backend_ = RenderBackend::D3D12;
-        const std::atomic_bool* editorInitialized_ = nullptr;
-        rhi::RhiLoadAction colorLoadAction_ = rhi::RhiLoadAction::Clear;
-        std::shared_ptr<EditorFrameDrawData> frameDrawData_;
-    };
-
     namespace
     {
         void AddAssetIDIfValid(std::vector<AssetID>& ids, const AssetID& id)
@@ -262,7 +205,7 @@ namespace ve::editor
         ImGui::NewFrame();
     }
 
-    std::shared_ptr<FrameRenderer> Editor::Render()
+    std::shared_ptr<BaseRenderer> Editor::Render()
     {
         VE_ASSERT_SCENE_THREAD();
         if (!initialized_.load(std::memory_order_acquire))
@@ -285,18 +228,44 @@ namespace ve::editor
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
         VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
 
-        auto renderer = std::make_shared<FrameRenderer>();
-
-        const bool hasGameViewScenePass = mainView_ == MainView::ProjectEditing;
-        if (hasGameViewScenePass)
+        std::shared_ptr<RTRenderTexture> gameViewTexture;
+        if (mainView_ == MainView::ProjectEditing)
         {
-            std::shared_ptr<RTRenderTexture> gameViewTexture = projectEditingView_->GetGameViewTexture();
-            renderer->AddPass(renderSystem_->CreateTriangleForwardPass(std::move(gameViewTexture)));
+            gameViewTexture = projectEditingView_->GetGameViewTexture();
         }
 
-        renderer->AddPass(std::make_unique<EditorImGuiRenderPass>(
-            renderBackend_, initialized_, rhi::RhiLoadAction::Clear, std::move(frameDrawData)));
-        return renderer;
+        EditorOverlayRenderCallback overlayCallback =
+            [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)]()
+        {
+            VE_ASSERT_RENDER_THREAD();
+
+            if (editorInitialized == nullptr || !editorInitialized->load(std::memory_order_acquire) ||
+                frameDrawData == nullptr)
+            {
+                return;
+            }
+
+            switch (backend)
+            {
+            case RenderBackend::D3D11:
+#if VE_PLATFORM_WINDOWS
+                ImGui_ImplDX11_RenderDrawData(&frameDrawData->drawData);
+#endif
+                break;
+            case RenderBackend::D3D12:
+            case RenderBackend::Metal:
+                break;
+            }
+        };
+
+        EditorRendererDesc rendererDesc = {};
+        rendererDesc.scene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr
+                                 ? sceneSystem_->GetScene()->GetRTScene()
+                                 : nullptr;
+        rendererDesc.gameViewTexture = std::move(gameViewTexture);
+        rendererDesc.mainColorLoadAction = rhi::RhiLoadAction::Clear;
+        rendererDesc.overlayRenderCallback = std::move(overlayCallback);
+        return std::make_shared<EditorRenderer>(std::move(rendererDesc));
     }
 
     void Editor::UnInit() noexcept

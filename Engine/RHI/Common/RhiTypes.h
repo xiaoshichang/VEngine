@@ -38,6 +38,12 @@ namespace ve::rhi
         Rgb32Float,
     };
 
+    enum class RhiIndexFormat
+    {
+        UInt16,
+        UInt32,
+    };
+
     /// Describes the dimensionality of an RHI texture resource.
     enum class RhiTextureDimension
     {

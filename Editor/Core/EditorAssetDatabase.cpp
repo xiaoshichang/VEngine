@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -24,6 +25,7 @@ namespace ve::editor
         {
             std::string name;
             std::vector<std::array<double, 3>> vertices;
+            std::vector<std::array<double, 3>> normals;
             std::vector<UInt32> indices;
             std::array<double, 3> boundsCenter = {0.0, 0.0, 0.0};
             std::array<double, 3> boundsExtents = {0.0, 0.0, 0.0};
@@ -149,6 +151,49 @@ namespace ve::editor
             return array;
         }
 
+        [[nodiscard]] std::array<double, 3> Subtract(const std::array<double, 3>& left,
+                                                     const std::array<double, 3>& right) noexcept
+        {
+            return {
+                left[0] - right[0],
+                left[1] - right[1],
+                left[2] - right[2],
+            };
+        }
+
+        [[nodiscard]] std::array<double, 3> Cross(const std::array<double, 3>& left,
+                                                  const std::array<double, 3>& right) noexcept
+        {
+            return {
+                (left[1] * right[2]) - (left[2] * right[1]),
+                (left[2] * right[0]) - (left[0] * right[2]),
+                (left[0] * right[1]) - (left[1] * right[0]),
+            };
+        }
+
+        [[nodiscard]] std::array<double, 3> Normalize(const std::array<double, 3>& value) noexcept
+        {
+            const double lengthSquared = (value[0] * value[0]) + (value[1] * value[1]) + (value[2] * value[2]);
+            if (lengthSquared <= 1.0e-12)
+            {
+                return {0.0, 1.0, 0.0};
+            }
+
+            const double inverseLength = 1.0 / std::sqrt(lengthSquared);
+            return {
+                value[0] * inverseLength,
+                value[1] * inverseLength,
+                value[2] * inverseLength,
+            };
+        }
+
+        [[nodiscard]] std::array<double, 3> CalculateFaceNormal(const std::array<double, 3>& a,
+                                                                const std::array<double, 3>& b,
+                                                                const std::array<double, 3>& c) noexcept
+        {
+            return Normalize(Cross(Subtract(b, a), Subtract(c, a)));
+        }
+
         [[nodiscard]] boost::json::array WriteVertices(const std::vector<std::array<double, 3>>& vertices)
         {
             boost::json::array array;
@@ -241,6 +286,7 @@ namespace ve::editor
 
             ObjMeshData mesh;
             mesh.name = GetStem(objProjectPath);
+            std::vector<std::array<double, 3>> sourceVertices;
 
             std::istringstream input(text.GetValue());
             std::string line;
@@ -267,8 +313,7 @@ namespace ve::editor
                         return Result<ObjMeshData>::Failure(
                             Error(ErrorCode::InvalidArgument, "OBJ vertex line must contain three numeric values."));
                     }
-
-                    mesh.vertices.push_back(vertex);
+                    sourceVertices.push_back(vertex);
                 }
                 else if (command == "f")
                 {
@@ -276,7 +321,7 @@ namespace ve::editor
                     std::string token;
                     while (lineInput >> token)
                     {
-                        Result<UInt32> indexResult = ParseObjVertexIndex(token, mesh.vertices.size());
+                        Result<UInt32> indexResult = ParseObjVertexIndex(token, sourceVertices.size());
                         if (!indexResult)
                         {
                             return Result<ObjMeshData>::Failure(indexResult.GetError());
@@ -293,9 +338,21 @@ namespace ve::editor
 
                     for (SizeT index = 1; index + 1 < faceIndices.size(); ++index)
                     {
-                        mesh.indices.push_back(faceIndices[0]);
-                        mesh.indices.push_back(faceIndices[index]);
-                        mesh.indices.push_back(faceIndices[index + 1]);
+                        const std::array<double, 3>& a = sourceVertices[faceIndices[0]];
+                        const std::array<double, 3>& b = sourceVertices[faceIndices[index]];
+                        const std::array<double, 3>& c = sourceVertices[faceIndices[index + 1]];
+                        const std::array<double, 3> normal = CalculateFaceNormal(a, b, c);
+                        const UInt32 firstVertex = static_cast<UInt32>(mesh.vertices.size());
+
+                        mesh.vertices.push_back(a);
+                        mesh.vertices.push_back(b);
+                        mesh.vertices.push_back(c);
+                        mesh.normals.push_back(normal);
+                        mesh.normals.push_back(normal);
+                        mesh.normals.push_back(normal);
+                        mesh.indices.push_back(firstVertex);
+                        mesh.indices.push_back(firstVertex + 1);
+                        mesh.indices.push_back(firstVertex + 2);
                     }
                 }
             }
@@ -329,8 +386,9 @@ namespace ve::editor
             object["type"] = "Mesh";
             object["guid"] = guid.ToString();
             object["name"] = mesh.name;
-            object["vertexFormat"] = "Position";
+            object["vertexFormat"] = "PositionNormal";
             object["vertices"] = WriteVertices(mesh.vertices);
+            object["normals"] = WriteVertices(mesh.normals);
             object["indices"] = WriteIndices(mesh.indices);
             object["boundsCenter"] = WriteVector3(mesh.boundsCenter);
             object["boundsExtents"] = WriteVector3(mesh.boundsExtents);

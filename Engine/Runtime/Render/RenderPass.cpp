@@ -94,17 +94,25 @@ namespace ve
         return scissorRect_;
     }
 
-    RenderPassContext::RenderPassContext(rhi::RhiCommandList& commandList,
+    RenderPassContext::RenderPassContext(rhi::RhiDevice& device,
+                                         rhi::RhiCommandList& commandList,
                                          const RenderFrameContext& frameContext,
                                          const rhi::RhiRenderPassDesc& renderPassDesc,
                                          const rhi::RhiViewport& viewport,
                                          const rhi::RhiScissorRect& scissorRect) noexcept
-        : commandList_(&commandList)
+        : device_(&device)
+        , commandList_(&commandList)
         , frameContext_(&frameContext)
         , renderPassDesc_(&renderPassDesc)
         , viewport_(viewport)
         , scissorRect_(scissorRect)
     {
+    }
+
+    rhi::RhiDevice& RenderPassContext::GetDevice() noexcept
+    {
+        VE_ASSERT(device_ != nullptr);
+        return *device_;
     }
 
     rhi::RhiCommandList& RenderPassContext::GetCommandList() noexcept

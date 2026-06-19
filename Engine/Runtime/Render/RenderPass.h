@@ -5,13 +5,19 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 
+#include <memory>
+
 namespace ve
 {
+    class RTScene;
+
     /// Per-frame state visible to renderer passes while building and recording commands.
     struct RenderFrameContext
     {
         UInt64 frameIndex = 0;
         rhi::RhiExtent2D mainSurfaceExtent = {};
+        rhi::RhiFormat mainColorFormat = rhi::RhiFormat::Bgra8Unorm;
+        std::shared_ptr<RTScene> scene;
     };
 
     /// Collects the RHI pass shape declared by one renderer pass for the current frame.
@@ -49,12 +55,14 @@ namespace ve
     class RenderPassContext : public NonCopyable
     {
     public:
-        RenderPassContext(rhi::RhiCommandList& commandList,
+        RenderPassContext(rhi::RhiDevice& device,
+                          rhi::RhiCommandList& commandList,
                           const RenderFrameContext& frameContext,
                           const rhi::RhiRenderPassDesc& renderPassDesc,
                           const rhi::RhiViewport& viewport,
                           const rhi::RhiScissorRect& scissorRect) noexcept;
 
+        [[nodiscard]] rhi::RhiDevice& GetDevice() noexcept;
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() noexcept;
         [[nodiscard]] const RenderFrameContext& GetFrameContext() const noexcept;
         [[nodiscard]] const rhi::RhiRenderPassDesc& GetRenderPassDesc() const noexcept;
@@ -62,6 +70,7 @@ namespace ve
         [[nodiscard]] const rhi::RhiScissorRect& GetScissor() const noexcept;
 
     private:
+        rhi::RhiDevice* device_ = nullptr;
         rhi::RhiCommandList* commandList_ = nullptr;
         const RenderFrameContext* frameContext_ = nullptr;
         const rhi::RhiRenderPassDesc* renderPassDesc_ = nullptr;

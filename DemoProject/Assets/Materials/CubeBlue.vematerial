@@ -1,0 +1,13 @@
+{
+    "schemaVersion": 1,
+    "name": "Cube Blue",
+    "shader": "Engine/Shaders/BasicMesh",
+    "parameters": {
+        "baseColor": [
+            0.1,
+            0.36,
+            1,
+            1
+        ]
+    }
+}

@@ -34,6 +34,23 @@ namespace ve
             return fallback;
         }
 
+        [[nodiscard]] bool ReadFloat3(const boost::json::value& value, Float32 out[3], const Float32 fallback[3]) noexcept
+        {
+            if (!value.is_array() || value.as_array().size() < 3)
+            {
+                out[0] = fallback[0];
+                out[1] = fallback[1];
+                out[2] = fallback[2];
+                return false;
+            }
+
+            const boost::json::array& array = value.as_array();
+            out[0] = ReadFloat(array[0], fallback[0]);
+            out[1] = ReadFloat(array[1], fallback[1]);
+            out[2] = ReadFloat(array[2], fallback[2]);
+            return true;
+        }
+
         [[nodiscard]] RTMeshResourceDesc ParseMeshRenderDesc(const std::string& text, const AssetRecord& record)
         {
             RTMeshResourceDesc desc;
@@ -46,22 +63,40 @@ namespace ve
             }
 
             const boost::json::object& object = json.GetValue().as_object();
+            const boost::json::array* normals = nullptr;
+            if (const boost::json::value* normalsValue = object.if_contains("normals");
+                normalsValue != nullptr && normalsValue->is_array())
+            {
+                normals = &normalsValue->as_array();
+            }
+
             if (const boost::json::value* verticesValue = object.if_contains("vertices");
                 verticesValue != nullptr && verticesValue->is_array())
             {
+                constexpr Float32 DefaultPosition[3] = {0.0f, 0.0f, 0.0f};
+                constexpr Float32 DefaultNormal[3] = {0.0f, 1.0f, 0.0f};
+                SizeT vertexIndex = 0;
                 for (const boost::json::value& vertexValue : verticesValue->as_array())
                 {
-                    if (!vertexValue.is_array() || vertexValue.as_array().size() < 3)
+                    RTMeshVertex vertex = {};
+                    if (ReadFloat3(vertexValue, vertex.position, DefaultPosition))
                     {
-                        continue;
+                        if (normals != nullptr && vertexIndex < normals->size())
+                        {
+                            const bool normalRead = ReadFloat3((*normals)[vertexIndex], vertex.normal, DefaultNormal);
+                            (void)normalRead;
+                        }
+                        else
+                        {
+                            vertex.normal[0] = DefaultNormal[0];
+                            vertex.normal[1] = DefaultNormal[1];
+                            vertex.normal[2] = DefaultNormal[2];
+                        }
+
+                        desc.vertices.push_back(vertex);
                     }
 
-                    const boost::json::array& vertexArray = vertexValue.as_array();
-                    RTMeshVertex vertex = {};
-                    vertex.position[0] = ReadFloat(vertexArray[0], 0.0f);
-                    vertex.position[1] = ReadFloat(vertexArray[1], 0.0f);
-                    vertex.position[2] = ReadFloat(vertexArray[2], 0.0f);
-                    desc.vertices.push_back(vertex);
+                    ++vertexIndex;
                 }
             }
 

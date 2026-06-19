@@ -1,5 +1,7 @@
 #include "Engine/RHI/D3D12/D3D12Rhi.h"
 
+#include "Engine/Runtime/Core/Assert.h"
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -494,9 +496,34 @@ namespace ve::rhi
                 commandList_->IASetVertexBuffers(slot, 1, &bufferView);
             }
 
+            void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) override
+            {
+                const auto& d3dBuffer = static_cast<const D3D12Buffer&>(buffer);
+
+                D3D12_INDEX_BUFFER_VIEW bufferView = {};
+                bufferView.BufferLocation = d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset;
+                bufferView.SizeInBytes = static_cast<UINT>(d3dBuffer.GetSize() - offset);
+                bufferView.Format = format == RhiIndexFormat::UInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+
+                commandList_->IASetIndexBuffer(&bufferView);
+            }
+
+            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) override
+            {
+                const auto& d3dBuffer = static_cast<const D3D12Buffer&>(buffer);
+                const UINT rootParameterIndex = ResolveUniformRootParameter(stage, slot);
+                commandList_->SetGraphicsRootConstantBufferView(
+                    rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 commandList_->DrawInstanced(vertexCount, 1, firstVertex, 0);
+            }
+
+            void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
+            {
+                commandList_->DrawIndexedInstanced(indexCount, 1, firstIndex, vertexOffset, 0);
             }
 
             [[nodiscard]] ID3D12GraphicsCommandList* GetNativeCommandList() const noexcept
@@ -505,6 +532,18 @@ namespace ve::rhi
             }
 
         private:
+            [[nodiscard]] static UINT ResolveUniformRootParameter(RhiShaderStage stage, uint32_t slot) noexcept
+            {
+                VE_ASSERT((stage == RhiShaderStage::Vertex && slot == 0) ||
+                          (stage == RhiShaderStage::Fragment && (slot == 1 || slot == 2)));
+                if (stage == RhiShaderStage::Vertex)
+                {
+                    return 0u;
+                }
+
+                return slot == 1 ? 1u : 2u;
+            }
+
             ComPtr<ID3D12Device> device_;
             ComPtr<ID3D12CommandAllocator> commandAllocator_;
             ComPtr<ID3D12GraphicsCommandList> commandList_;
@@ -833,7 +872,23 @@ namespace ve::rhi
                     return nullptr;
                 }
 
+                D3D12_ROOT_PARAMETER rootParameters[3] = {};
+                rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                rootParameters[0].Descriptor.ShaderRegister = 0;
+                rootParameters[0].Descriptor.RegisterSpace = 0;
+                rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+                rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                rootParameters[1].Descriptor.ShaderRegister = 1;
+                rootParameters[1].Descriptor.RegisterSpace = 0;
+                rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+                rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                rootParameters[2].Descriptor.ShaderRegister = 2;
+                rootParameters[2].Descriptor.RegisterSpace = 0;
+                rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
                 D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+                rootSignatureDesc.NumParameters = 3;
+                rootSignatureDesc.pParameters = rootParameters;
                 rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
                 ComPtr<ID3DBlob> signature;

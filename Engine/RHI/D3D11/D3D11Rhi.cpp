@@ -1,5 +1,7 @@
 #include "Engine/RHI/D3D11/D3D11Rhi.h"
 
+#include "Engine/Runtime/Core/Assert.h"
+
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -82,6 +84,19 @@ namespace ve::rhi
             }
 
             return D3D11_BIND_VERTEX_BUFFER;
+        }
+
+        DXGI_FORMAT ToDxgiIndexFormat(RhiIndexFormat format)
+        {
+            switch (format)
+            {
+            case RhiIndexFormat::UInt16:
+                return DXGI_FORMAT_R16_UINT;
+            case RhiIndexFormat::UInt32:
+                return DXGI_FORMAT_R32_UINT;
+            }
+
+            return DXGI_FORMAT_R32_UINT;
         }
 
         std::string MakeHResultError(const char* operation, HRESULT result)
@@ -283,11 +298,13 @@ namespace ve::rhi
             D3D11PipelineState(RhiPrimitiveTopology topology,
                                ComPtr<ID3D11VertexShader> vertexShader,
                                ComPtr<ID3D11PixelShader> pixelShader,
-                               ComPtr<ID3D11InputLayout> inputLayout)
+                               ComPtr<ID3D11InputLayout> inputLayout,
+                               ComPtr<ID3D11RasterizerState> rasterizerState)
                 : topology_(topology)
                 , vertexShader_(std::move(vertexShader))
                 , pixelShader_(std::move(pixelShader))
                 , inputLayout_(std::move(inputLayout))
+                , rasterizerState_(std::move(rasterizerState))
             {
             }
 
@@ -300,6 +317,7 @@ namespace ve::rhi
             {
                 context->IASetPrimitiveTopology(ToD3D11Topology(topology_));
                 context->IASetInputLayout(inputLayout_.Get());
+                context->RSSetState(rasterizerState_.Get());
                 context->VSSetShader(vertexShader_.Get(), nullptr, 0);
                 context->PSSetShader(pixelShader_.Get(), nullptr, 0);
             }
@@ -309,6 +327,7 @@ namespace ve::rhi
             ComPtr<ID3D11VertexShader> vertexShader_;
             ComPtr<ID3D11PixelShader> pixelShader_;
             ComPtr<ID3D11InputLayout> inputLayout_;
+            ComPtr<ID3D11RasterizerState> rasterizerState_;
         };
 
         class D3D11Swapchain final : public RhiSwapchain
@@ -506,9 +525,38 @@ namespace ve::rhi
                 context_->IASetVertexBuffers(slot, 1, &nativeBuffer, &d3dStride, &d3dOffset);
             }
 
+            void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) override
+            {
+                const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
+                context_->IASetIndexBuffer(d3dBuffer.GetNativeBuffer(),
+                                           ToDxgiIndexFormat(format),
+                                           static_cast<UINT>(offset));
+            }
+
+            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) override
+            {
+                VE_ASSERT(offset == 0);
+                const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
+                ID3D11Buffer* nativeBuffer = d3dBuffer.GetNativeBuffer();
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    context_->VSSetConstantBuffers(slot, 1, &nativeBuffer);
+                    break;
+                case RhiShaderStage::Fragment:
+                    context_->PSSetConstantBuffers(slot, 1, &nativeBuffer);
+                    break;
+                }
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 context_->Draw(vertexCount, firstVertex);
+            }
+
+            void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
+            {
+                context_->DrawIndexed(indexCount, firstIndex, vertexOffset);
             }
 
         private:
@@ -859,7 +907,26 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11PipelineState>(desc.topology, vertexShader, pixelShader, inputLayout);
+                D3D11_RASTERIZER_DESC rasterizerDesc = {};
+                rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+                rasterizerDesc.CullMode = D3D11_CULL_BACK;
+                rasterizerDesc.FrontCounterClockwise = FALSE;
+                rasterizerDesc.DepthClipEnable = TRUE;
+
+                ComPtr<ID3D11RasterizerState> rasterizerState;
+                result = device_->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
+
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateRasterizerState", result));
+                    return nullptr;
+                }
+
+                return std::make_unique<D3D11PipelineState>(desc.topology,
+                                                            vertexShader,
+                                                            pixelShader,
+                                                            inputLayout,
+                                                            rasterizerState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override
