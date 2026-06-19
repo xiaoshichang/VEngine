@@ -42,7 +42,7 @@ namespace ve::editor
 
         [[nodiscard]] ErrorCode Init(EngineRuntime& runtime, ApplicationCommandQueue& mainThreadCommandQueue, void* nativeWindowHandle);
         void StartFrame();
-        [[nodiscard]] std::shared_ptr<RenderFramePipeline> Render();
+        [[nodiscard]] std::shared_ptr<FrameRenderPipeline> Render();
         void UnInit() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] SceneSystem& GetSceneSystem() noexcept;

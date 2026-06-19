@@ -176,7 +176,7 @@ namespace ve
         /// The frame pipeline is prepared and owned by Scene Thread code, then captured by shared_ptr so already queued
         /// frame work remains valid even if Scene Thread replaces its current pipeline before the Render Thread
         /// consumes the command.
-        void RenderFrame(std::shared_ptr<RenderFramePipeline> framePipeline);
+        void RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline);
 
         /// Submits a command to execute on the Render Thread.
         ///

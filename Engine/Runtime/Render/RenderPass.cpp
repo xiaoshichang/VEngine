@@ -4,16 +4,16 @@
 
 namespace ve
 {
-    void RenderPassBuilder::Reset(const char* passName, const RenderFrameContext& frameContext) noexcept
+    void RenderPassBuilder::Reset(const char* passName, const RendererData& rendererData) noexcept
     {
-        frameContext_ = &frameContext;
+        rendererData_ = &rendererData;
         renderPassDesc_ = {};
         renderPassDesc_.debugName = passName;
-        renderPassDesc_.renderArea = rhi::RhiRenderArea{0, 0, frameContext.mainSurfaceExtent.width, frameContext.mainSurfaceExtent.height};
+        renderPassDesc_.renderArea = rhi::RhiRenderArea{0, 0, rendererData.mainSurfaceExtent.width, rendererData.mainSurfaceExtent.height};
 
         viewport_ = rhi::RhiViewport{
-            0.0f, 0.0f, static_cast<Float32>(frameContext.mainSurfaceExtent.width), static_cast<Float32>(frameContext.mainSurfaceExtent.height), 0.0f, 1.0f};
-        scissorRect_ = rhi::RhiScissorRect{0, 0, frameContext.mainSurfaceExtent.width, frameContext.mainSurfaceExtent.height};
+            0.0f, 0.0f, static_cast<Float32>(rendererData.mainSurfaceExtent.width), static_cast<Float32>(rendererData.mainSurfaceExtent.height), 0.0f, 1.0f};
+        scissorRect_ = rhi::RhiScissorRect{0, 0, rendererData.mainSurfaceExtent.width, rendererData.mainSurfaceExtent.height};
     }
 
     void RenderPassBuilder::SetRenderArea(const rhi::RhiRenderArea& renderArea) noexcept
@@ -84,10 +84,10 @@ namespace ve
         return renderPassDesc_;
     }
 
-    const RenderFrameContext& RenderPassBuilder::GetFrameContext() const noexcept
+    const RendererData& RenderPassBuilder::GetRendererData() const noexcept
     {
-        VE_ASSERT(frameContext_ != nullptr);
-        return *frameContext_;
+        VE_ASSERT(rendererData_ != nullptr);
+        return *rendererData_;
     }
 
     const rhi::RhiViewport& RenderPassBuilder::GetViewport() const noexcept
@@ -102,13 +102,13 @@ namespace ve
 
     RenderPassContext::RenderPassContext(rhi::RhiDevice& device,
                                          rhi::RhiCommandList& commandList,
-                                         const RenderFrameContext& frameContext,
+                                         const RendererData& rendererData,
                                          const rhi::RhiRenderPassDesc& renderPassDesc,
                                          const rhi::RhiViewport& viewport,
                                          const rhi::RhiScissorRect& scissorRect) noexcept
         : device_(&device)
         , commandList_(&commandList)
-        , frameContext_(&frameContext)
+        , rendererData_(&rendererData)
         , renderPassDesc_(&renderPassDesc)
         , viewport_(viewport)
         , scissorRect_(scissorRect)
@@ -127,10 +127,10 @@ namespace ve
         return *commandList_;
     }
 
-    const RenderFrameContext& RenderPassContext::GetFrameContext() const noexcept
+    const RendererData& RenderPassContext::GetRendererData() const noexcept
     {
-        VE_ASSERT(frameContext_ != nullptr);
-        return *frameContext_;
+        VE_ASSERT(rendererData_ != nullptr);
+        return *rendererData_;
     }
 
     const rhi::RhiRenderPassDesc& RenderPassContext::GetRenderPassDesc() const noexcept

@@ -54,14 +54,12 @@ namespace ve
     {
     }
 
-    ErrorCode EditorRenderFramePipeline::RenderFrame(rhi::RhiDevice& device,
-                                                     rhi::RhiCommandList& commandList,
-                                                     rhi::RhiSwapchain& mainSwapchain,
-                                                     ShaderManager& shaderManager)
+    ErrorCode EditorRenderFramePipeline::RenderFrame(const FrameRenderPipelineData& frameData)
     {
         VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(frameData.commandList != nullptr);
 
-        if (!commandList.Begin())
+        if (!frameData.commandList->Begin())
         {
             return ErrorCode::PlatformError;
         }
@@ -73,24 +71,18 @@ namespace ve
                 continue;
             }
 
-            const ErrorCode rendererResult = renderer->RenderScene(device, commandList, mainSwapchain, shaderManager);
-            if (rendererResult != ErrorCode::None)
-            {
-                const bool ended = commandList.End();
-                VE_ASSERT_MESSAGE(ended, "EditorRenderFramePipeline failed to end command list after renderer failure.");
-                return rendererResult;
-            }
+            renderer->RenderScene(frameData);
         }
 
-        const ErrorCode overlayResult = RecordOverlayPass(commandList, mainSwapchain);
+        const ErrorCode overlayResult = RecordOverlayPass(frameData);
         if (overlayResult != ErrorCode::None)
         {
-            const bool ended = commandList.End();
+            const bool ended = frameData.commandList->End();
             VE_ASSERT_MESSAGE(ended, "EditorRenderFramePipeline failed to end command list after overlay failure.");
             return overlayResult;
         }
 
-        if (!commandList.End())
+        if (!frameData.commandList->End())
         {
             return ErrorCode::PlatformError;
         }
@@ -98,23 +90,26 @@ namespace ve
         return ErrorCode::None;
     }
 
-    ErrorCode EditorRenderFramePipeline::RecordOverlayPass(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode EditorRenderFramePipeline::RecordOverlayPass(const FrameRenderPipelineData& frameData)
     {
-        const rhi::RhiRenderPassDesc passDesc = BuildOverlayRenderPassDesc(mainSwapchain, overlayColorLoadAction_);
-        if (!commandList.BeginRenderPass(mainSwapchain, passDesc))
+        VE_ASSERT(frameData.commandList != nullptr);
+        VE_ASSERT(frameData.mainSwapchain != nullptr);
+
+        const rhi::RhiRenderPassDesc passDesc = BuildOverlayRenderPassDesc(*frameData.mainSwapchain, overlayColorLoadAction_);
+        if (!frameData.commandList->BeginRenderPass(*frameData.mainSwapchain, passDesc))
         {
             return ErrorCode::PlatformError;
         }
 
-        commandList.SetViewport(BuildMainViewport(mainSwapchain));
-        commandList.SetScissor(BuildMainScissor(mainSwapchain));
+        frameData.commandList->SetViewport(BuildMainViewport(*frameData.mainSwapchain));
+        frameData.commandList->SetScissor(BuildMainScissor(*frameData.mainSwapchain));
 
         if (overlayRenderCallback_)
         {
             overlayRenderCallback_();
         }
 
-        commandList.EndRenderPass();
+        frameData.commandList->EndRenderPass();
         return ErrorCode::None;
     }
 
@@ -124,42 +119,36 @@ namespace ve
     {
     }
 
-    ErrorCode PlayerRenderFramePipeline::RenderFrame(rhi::RhiDevice& device,
-                                                     rhi::RhiCommandList& commandList,
-                                                     rhi::RhiSwapchain& mainSwapchain,
-                                                     ShaderManager& shaderManager)
+    ErrorCode PlayerRenderFramePipeline::RenderFrame(const FrameRenderPipelineData& frameData)
     {
         VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(frameData.device != nullptr);
+        VE_ASSERT(frameData.commandList != nullptr);
+        VE_ASSERT(frameData.mainSwapchain != nullptr);
 
         if (sceneRenderer_ == nullptr)
         {
             return ErrorCode::InvalidState;
         }
 
-        EnsureSceneColorTexture(device, mainSwapchain);
+        EnsureSceneColorTexture(*frameData.device, *frameData.mainSwapchain);
 
-        if (!commandList.Begin())
+        if (!frameData.commandList->Begin())
         {
             return ErrorCode::PlatformError;
         }
 
-        const ErrorCode rendererResult = sceneRenderer_->RenderScene(device, commandList, mainSwapchain, shaderManager);
-        if (rendererResult != ErrorCode::None)
-        {
-            const bool ended = commandList.End();
-            VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after renderer failure.");
-            return rendererResult;
-        }
+        sceneRenderer_->RenderScene(frameData);
 
-        const ErrorCode copyResult = CopySceneColorToSwapchain(commandList, mainSwapchain);
+        const ErrorCode copyResult = CopySceneColorToSwapchain(*frameData.commandList, *frameData.mainSwapchain);
         if (copyResult != ErrorCode::None)
         {
-            const bool ended = commandList.End();
+            const bool ended = frameData.commandList->End();
             VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after copy failure.");
             return copyResult;
         }
 
-        if (!commandList.End())
+        if (!frameData.commandList->End())
         {
             return ErrorCode::PlatformError;
         }

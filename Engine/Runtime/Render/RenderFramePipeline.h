@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Render/BaseRenderer.h"
+#include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 
 #include <functional>
@@ -37,39 +38,36 @@ namespace ve
     /// Renderers decide how to render an RTScene. Frame pipelines decide how editor/player surfaces combine those
     /// renderers with presentation work such as ImGui overlay rendering or copying the player scene color to the
     /// swapchain.
-    class RenderFramePipeline : public NonCopyable
+    class FrameRenderPipeline : public NonCopyable
     {
     public:
-        RenderFramePipeline() = default;
-        virtual ~RenderFramePipeline() = default;
+        FrameRenderPipeline() = default;
+        virtual ~FrameRenderPipeline() = default;
 
-        [[nodiscard]] virtual ErrorCode
-        RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) = 0;
+        [[nodiscard]] virtual ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) = 0;
     };
 
-    class EditorRenderFramePipeline final : public RenderFramePipeline
+    class EditorRenderFramePipeline final : public FrameRenderPipeline
     {
     public:
         explicit EditorRenderFramePipeline(EditorRenderFramePipelineDesc desc);
 
-        [[nodiscard]] ErrorCode
-        RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) override;
+        [[nodiscard]] ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) override;
 
     private:
-        [[nodiscard]] ErrorCode RecordOverlayPass(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
+        [[nodiscard]] ErrorCode RecordOverlayPass(const FrameRenderPipelineData& frameData);
 
         std::vector<std::shared_ptr<BaseRenderer>> sceneRenderers_;
         rhi::RhiLoadAction overlayColorLoadAction_ = rhi::RhiLoadAction::Clear;
         EditorOverlayRenderCallback overlayRenderCallback_;
     };
 
-    class PlayerRenderFramePipeline final : public RenderFramePipeline
+    class PlayerRenderFramePipeline final : public FrameRenderPipeline
     {
     public:
         explicit PlayerRenderFramePipeline(PlayerRenderFramePipelineDesc desc);
 
-        [[nodiscard]] ErrorCode
-        RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) override;
+        [[nodiscard]] ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) override;
 
     private:
         void EnsureSceneColorTexture(rhi::RhiDevice& device, const rhi::RhiSwapchain& mainSwapchain);

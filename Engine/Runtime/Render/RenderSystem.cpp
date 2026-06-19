@@ -44,6 +44,7 @@ namespace ve
         std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
         std::unique_ptr<rhi::RhiCommandList> frameCommandList;
         ShaderManager shaderManager;
+        UInt64 nextFrameIndex = 1;
     };
 
     namespace
@@ -143,14 +144,21 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode RenderMainSwapchainFrame(RenderSystemImpl& impl, RenderFramePipeline& framePipeline)
+        [[nodiscard]] ErrorCode RenderMainSwapchainFrame(RenderSystemImpl& impl, FrameRenderPipeline& framePipeline)
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
             VE_ASSERT(impl.mainSwapchain != nullptr);
             VE_ASSERT(impl.frameCommandList != nullptr);
 
-            ErrorCode renderResult = framePipeline.RenderFrame(*impl.device, *impl.frameCommandList, *impl.mainSwapchain, impl.shaderManager);
+            FrameRenderPipelineData frameData = {};
+            frameData.frameIndex = impl.nextFrameIndex++;
+            frameData.device = impl.device.get();
+            frameData.commandList = impl.frameCommandList.get();
+            frameData.mainSwapchain = impl.mainSwapchain.get();
+            frameData.shaderManager = &impl.shaderManager;
+
+            ErrorCode renderResult = framePipeline.RenderFrame(frameData);
             if (renderResult != ErrorCode::None)
             {
                 return renderResult;
@@ -514,7 +522,7 @@ namespace ve
                        });
     }
 
-    void RenderSystem::RenderFrame(std::shared_ptr<RenderFramePipeline> framePipeline)
+    void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline)
     {
         VE_ASSERT_SCENE_THREAD();
         VE_ASSERT_MESSAGE(framePipeline != nullptr, "RenderSystem::RenderFrame requires a frame pipeline.");

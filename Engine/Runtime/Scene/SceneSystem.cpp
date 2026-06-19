@@ -104,7 +104,7 @@ namespace ve
             ProcessOSEvents(impl);
         }
 
-        [[nodiscard]] std::shared_ptr<RenderFramePipeline> CreatePlayerFramePipeline(SceneSystemImpl& impl)
+        [[nodiscard]] std::shared_ptr<FrameRenderPipeline> CreatePlayerFramePipeline(SceneSystemImpl& impl)
         {
             VE_ASSERT_SCENE_THREAD();
             VE_ASSERT(impl.renderSystem != nullptr);
@@ -132,7 +132,7 @@ namespace ve
             VE_ASSERT(impl.renderSystem != nullptr);
             VE_ASSERT(impl.editorCallback.onRender != nullptr);
 
-            std::shared_ptr<RenderFramePipeline> framePipeline = impl.editorCallback.onRender();
+            std::shared_ptr<FrameRenderPipeline> framePipeline = impl.editorCallback.onRender();
             VE_ASSERT_MESSAGE(framePipeline != nullptr, "SceneThreadLoop_Render_Editor requires a frame pipeline.");
 
             impl.renderSystem->RenderFrame(std::move(framePipeline));

@@ -202,7 +202,7 @@ namespace ve::editor
         ImGui::NewFrame();
     }
 
-    std::shared_ptr<RenderFramePipeline> Editor::Render()
+    std::shared_ptr<FrameRenderPipeline> Editor::Render()
     {
         VE_ASSERT_SCENE_THREAD();
         if (!initialized_.load(std::memory_order_acquire))
