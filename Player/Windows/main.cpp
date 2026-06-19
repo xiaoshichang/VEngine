@@ -37,6 +37,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.jobSystem.workerThreadNamePrefix = "VEnginePlayerJobWorker";
     initParam.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
     initParam.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
+    initParam.runtime.renderSystem.device.backend = ve::RenderBackend::D3D11;
 
     ve::WindowsPlayer application(std::move(initParam));
     int exitCode = application.Init();

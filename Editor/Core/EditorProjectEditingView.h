@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/Core/EditorBuildPackageDialog.h"
 #include "Editor/Core/EditorProjectDirectoryDialog.h"
 #include "Editor/Panels/AssetsPanel.h"
 #include "Editor/Panels/GameViewPanel.h"
@@ -33,6 +34,7 @@ namespace ve::editor
         InspectorPanel inspectorPanel_;
         AssetsPanel assetsPanel_;
         ProjectDirectoryDialog projectDirectoryDialog_;
+        EditorBuildPackageDialog buildPackageDialog_;
         bool initialized_ = false;
     };
 } // namespace ve::editor

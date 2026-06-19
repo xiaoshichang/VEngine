@@ -31,6 +31,7 @@ namespace ve::editor
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         RenderMainMenu();
         projectDirectoryDialog_.Render(editor);
+        buildPackageDialog_.Render(editor);
 
         const float menuBarHeight = ImGui::GetFrameHeight();
         const ImVec2 origin(viewport->WorkPos.x, viewport->WorkPos.y + menuBarHeight + PanelGap);
@@ -66,6 +67,16 @@ namespace ve::editor
             if (ImGui::MenuItem("Open Project..."))
             {
                 projectDirectoryDialog_.RequestOpen();
+            }
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Build"))
+        {
+            if (ImGui::MenuItem("Package Windows..."))
+            {
+                buildPackageDialog_.RequestOpen();
             }
 
             ImGui::EndMenu();

@@ -2,6 +2,9 @@
 
 #include "Engine/Runtime/Application/Application.h"
 #include "Engine/Runtime/Render/ViewportClient.h"
+#include "Engine/Runtime/Resource/RuntimeAssetLoader.h"
+
+#include <string>
 
 namespace ve
 {
@@ -20,7 +23,12 @@ namespace ve
     private:
         void RegisterSceneThreadViewportCallback();
         void HandleSceneThreadOSEvent(const OSEvent& event);
+        void InitializePackagedProject();
+        void LoadPendingPackagedStartupScene();
 
         ViewportClient viewportClient_;
+        RuntimeAssetLoader runtimeAssetLoader_;
+        std::string packagedStartScene_;
+        bool pendingPackagedStartupSceneLoad_ = false;
     };
 } // namespace ve

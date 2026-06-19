@@ -32,6 +32,8 @@ function(ve_add_windows_editor)
         add_executable(VEngineEditor WIN32
             Editor/Core/EditorAssetDatabase.cpp
             Editor/Core/EditorAssetDatabase.h
+            Editor/Core/EditorBuildPackageDialog.cpp
+            Editor/Core/EditorBuildPackageDialog.h
             Editor/Core/Editor.cpp
             Editor/Core/Editor.h
             Editor/Core/EditorInput.cpp
@@ -42,6 +44,8 @@ function(ve_add_windows_editor)
             Editor/Core/EditorProjectDirectoryDialog.h
             Editor/Core/EditorProjectEditingView.cpp
             Editor/Core/EditorProjectEditingView.h
+            Editor/Core/EditorProjectPackager.cpp
+            Editor/Core/EditorProjectPackager.h
             Editor/Core/EditorProjectRegistry.cpp
             Editor/Core/EditorProjectRegistry.h
             Editor/Core/EditorProjectSelectionView.cpp
