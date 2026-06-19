@@ -994,7 +994,7 @@ namespace ve::rhi
                 }
 
                 D3D12_RASTERIZER_DESC rasterizerDesc = {};
-                rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
+                rasterizerDesc.FillMode = desc.fillMode == RhiFillMode::Wireframe ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
                 rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
                 rasterizerDesc.FrontCounterClockwise = FALSE;
                 rasterizerDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;

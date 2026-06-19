@@ -22,6 +22,7 @@ namespace ve::editor
             return;
         }
 
+        sceneViewPanel_.Init(editor);
         gameViewPanel_.Init(editor);
         initialized_ = true;
     }
@@ -43,11 +44,26 @@ namespace ve::editor
         hierarchyPanel_.Render(editor, origin, ImVec2(HierarchyWidth, available.y));
 
         const float centerX = origin.x + HierarchyWidth + PanelGap;
-        sceneViewPanel_.Render(ImVec2(centerX, origin.y), ImVec2(splitCenterWidth, centerHeight));
+        sceneViewPanel_.Render(editor, ImVec2(centerX, origin.y), ImVec2(splitCenterWidth, centerHeight));
         gameViewPanel_.Render(editor, ImVec2(centerX + splitCenterWidth + PanelGap, origin.y), ImVec2(splitCenterWidth, centerHeight));
         assetsPanel_.Render(editor, ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
 
         inspectorPanel_.Render(editor, ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
+    }
+
+    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewTexture() const noexcept
+    {
+        return sceneViewPanel_.GetSceneViewTexture().GetRTRenderTexture();
+    }
+
+    RTCameraDesc ProjectEditingView::GetSceneViewCameraDesc() const noexcept
+    {
+        return sceneViewPanel_.GetSceneViewCameraDesc();
+    }
+
+    rhi::RhiFillMode ProjectEditingView::GetSceneViewFillMode() const noexcept
+    {
+        return sceneViewPanel_.GetFillMode();
     }
 
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept

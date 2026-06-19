@@ -14,6 +14,8 @@
 
 namespace ve
 {
+    class ShaderManager;
+
     struct RendererRenderTarget
     {
         std::shared_ptr<RTRenderTexture> colorTexture;
@@ -25,7 +27,9 @@ namespace ve
     struct ForwardRendererDesc
     {
         std::shared_ptr<RTScene> scene;
+        std::shared_ptr<RTCamera> camera;
         RendererRenderTarget target;
+        rhi::RhiFillMode fillMode = rhi::RhiFillMode::Solid;
         bool addOpaquePass = true;
         std::vector<std::unique_ptr<RenderPass>> additionalPasses;
     };
@@ -37,13 +41,16 @@ namespace ve
         BaseRenderer() = default;
         virtual ~BaseRenderer() = default;
 
-        [[nodiscard]] ErrorCode RenderScene(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
+        [[nodiscard]] ErrorCode
+        RenderScene(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager);
 
         [[nodiscard]] bool IsFrameActive() const noexcept;
         [[nodiscard]] const RenderFrameContext& GetFrameContext() const noexcept;
 
     protected:
         void SetScene(std::shared_ptr<RTScene> scene) noexcept;
+        void SetCamera(std::shared_ptr<RTCamera> camera) noexcept;
+        void SetFillMode(rhi::RhiFillMode fillMode) noexcept;
         [[nodiscard]] std::shared_ptr<RTScene> GetScene() const noexcept;
         void AddRenderPass(std::unique_ptr<RenderPass> pass);
         void ClearRenderPasses() noexcept;
@@ -57,19 +64,22 @@ namespace ve
             rhi::RhiScissorRect scissorRect = {};
         };
 
-        [[nodiscard]] ErrorCode BuildFrameContext(rhi::RhiSwapchain& mainSwapchain) noexcept;
+        [[nodiscard]] ErrorCode BuildFrameContext(rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) noexcept;
         void UpdateRenderWorld();
         void BuildVisibleDrawLists();
-        [[nodiscard]] ErrorCode BeginSceneRender(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
+        [[nodiscard]] ErrorCode
+        BeginSceneRender(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager);
         [[nodiscard]] ErrorCode ExecutePassesInOrder();
         void EndSceneRender();
         [[nodiscard]] ErrorCode BuildPassData();
         [[nodiscard]] ErrorCode BeginCurrentPass(rhi::RhiSwapchain& mainSwapchain);
 
         std::shared_ptr<RTScene> scene_;
+        std::shared_ptr<RTCamera> camera_;
         std::vector<std::unique_ptr<RenderPass>> passes_;
         std::vector<FramePassData> framePasses_;
         RenderFrameContext frameContext_ = {};
+        rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
         rhi::RhiDevice* activeDevice_ = nullptr;
         rhi::RhiCommandList* activeCommandList_ = nullptr;
         rhi::RhiSwapchain* activeMainSwapchain_ = nullptr;

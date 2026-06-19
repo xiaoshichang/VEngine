@@ -13,6 +13,8 @@
 
 namespace ve
 {
+    class ShaderManager;
+
     using EditorOverlayRenderCallback = std::function<void()>;
 
     /// Describes the editor frame flow after editor UI has produced draw data on the Scene Thread.
@@ -41,7 +43,8 @@ namespace ve
         RenderFramePipeline() = default;
         virtual ~RenderFramePipeline() = default;
 
-        [[nodiscard]] virtual ErrorCode RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain) = 0;
+        [[nodiscard]] virtual ErrorCode
+        RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) = 0;
     };
 
     class EditorRenderFramePipeline final : public RenderFramePipeline
@@ -49,7 +52,8 @@ namespace ve
     public:
         explicit EditorRenderFramePipeline(EditorRenderFramePipelineDesc desc);
 
-        [[nodiscard]] ErrorCode RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain) override;
+        [[nodiscard]] ErrorCode
+        RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) override;
 
     private:
         [[nodiscard]] ErrorCode RecordOverlayPass(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
@@ -64,7 +68,8 @@ namespace ve
     public:
         explicit PlayerRenderFramePipeline(PlayerRenderFramePipelineDesc desc);
 
-        [[nodiscard]] ErrorCode RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain) override;
+        [[nodiscard]] ErrorCode
+        RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) override;
 
     private:
         void EnsureSceneColorTexture(rhi::RhiDevice& device, const rhi::RhiSwapchain& mainSwapchain);

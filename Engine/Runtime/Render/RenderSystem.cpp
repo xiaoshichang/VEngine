@@ -16,6 +16,7 @@
 #include "Engine/Runtime/Render/BaseRenderer.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
+#include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -42,6 +43,7 @@ namespace ve
         std::unique_ptr<rhi::RhiDevice> device;
         std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
         std::unique_ptr<rhi::RhiCommandList> frameCommandList;
+        ShaderManager shaderManager;
     };
 
     namespace
@@ -148,7 +150,7 @@ namespace ve
             VE_ASSERT(impl.mainSwapchain != nullptr);
             VE_ASSERT(impl.frameCommandList != nullptr);
 
-            ErrorCode renderResult = framePipeline.RenderFrame(*impl.device, *impl.frameCommandList, *impl.mainSwapchain);
+            ErrorCode renderResult = framePipeline.RenderFrame(*impl.device, *impl.frameCommandList, *impl.mainSwapchain, impl.shaderManager);
             if (renderResult != ErrorCode::None)
             {
                 return renderResult;
@@ -219,6 +221,7 @@ namespace ve
                 impl.device->WaitIdle();
             }
 
+            impl.shaderManager.Clear();
             DestroyFrameResources(impl);
             impl.mainSwapchain.reset();
 

@@ -54,7 +54,10 @@ namespace ve
     {
     }
 
-    ErrorCode EditorRenderFramePipeline::RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode EditorRenderFramePipeline::RenderFrame(rhi::RhiDevice& device,
+                                                     rhi::RhiCommandList& commandList,
+                                                     rhi::RhiSwapchain& mainSwapchain,
+                                                     ShaderManager& shaderManager)
     {
         VE_ASSERT_RENDER_THREAD();
 
@@ -70,7 +73,7 @@ namespace ve
                 continue;
             }
 
-            const ErrorCode rendererResult = renderer->RenderScene(device, commandList, mainSwapchain);
+            const ErrorCode rendererResult = renderer->RenderScene(device, commandList, mainSwapchain, shaderManager);
             if (rendererResult != ErrorCode::None)
             {
                 const bool ended = commandList.End();
@@ -121,7 +124,10 @@ namespace ve
     {
     }
 
-    ErrorCode PlayerRenderFramePipeline::RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode PlayerRenderFramePipeline::RenderFrame(rhi::RhiDevice& device,
+                                                     rhi::RhiCommandList& commandList,
+                                                     rhi::RhiSwapchain& mainSwapchain,
+                                                     ShaderManager& shaderManager)
     {
         VE_ASSERT_RENDER_THREAD();
 
@@ -137,7 +143,7 @@ namespace ve
             return ErrorCode::PlatformError;
         }
 
-        const ErrorCode rendererResult = sceneRenderer_->RenderScene(device, commandList, mainSwapchain);
+        const ErrorCode rendererResult = sceneRenderer_->RenderScene(device, commandList, mainSwapchain, shaderManager);
         if (rendererResult != ErrorCode::None)
         {
             const bool ended = commandList.End();

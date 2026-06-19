@@ -42,6 +42,11 @@ namespace ve::editor
 
     void WindowsEditorApplication::UnInit()
     {
+        if (GetRuntime().IsInitialized())
+        {
+            GetRuntime().GetSceneSystem().Shutdown();
+        }
+
         editor_.UnInit();
         ve::Application::UnInit();
     }

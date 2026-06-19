@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/RenderResource.h"
+#include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -81,6 +82,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
         static_assert(sizeof(OpaqueSceneObjectUniformData) == 256);
         static_assert(sizeof(OpaqueSceneLightUniformData) == 256);
         static_assert(sizeof(RTMaterialUniformData) == 256);
+
+        constexpr ShaderID OpaqueSceneVertexShaderID = 1;
+        constexpr ShaderID OpaqueSceneFragmentShaderID = 2;
 
         [[nodiscard]] rhi::RhiBufferDesc MakeUniformBufferDesc(UInt64 size, const void* initialData, const char* debugName) noexcept
         {
@@ -202,6 +206,17 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return BuildProjectionMatrix(cameraDesc) * BuildRigidInverse(cameraDesc.localToWorld);
         }
 
+        [[nodiscard]] Matrix44 BuildViewProjectionMatrix(const std::shared_ptr<RTCamera>& camera) noexcept
+        {
+            if (camera == nullptr)
+            {
+                return Matrix44::Identity();
+            }
+
+            const RTCameraDesc& cameraDesc = camera->GetDesc();
+            return BuildProjectionMatrix(cameraDesc) * BuildRigidInverse(cameraDesc.localToWorld);
+        }
+
         [[nodiscard]] OpaqueSceneObjectUniformData BuildObjectUniformData(const Matrix44& worldViewProjection, const Matrix44& localToWorld) noexcept
         {
             OpaqueSceneObjectUniformData data = {};
@@ -253,8 +268,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
         class OpaqueSceneRenderPass final : public RenderPass
         {
         public:
-            explicit OpaqueSceneRenderPass(RendererRenderTarget target)
+            OpaqueSceneRenderPass(RendererRenderTarget target, rhi::RhiFillMode fillMode)
                 : target_(std::move(target))
+                , fillMode_(fillMode)
             {
             }
 
@@ -291,7 +307,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
                 frameUniformBuffers_.clear();
                 BindLightUniform(context, *scene);
-                const Matrix44 viewProjection = BuildViewProjectionMatrix(*scene);
+                const Matrix44 viewProjection = BuildViewProjectionMatrix(context.GetFrameContext().camera);
                 for (SizeT itemIndex = 0; itemIndex < scene->GetRenderItemCount(); ++itemIndex)
                 {
                     const std::shared_ptr<RTRenderItem> item = scene->GetRenderItem(itemIndex);
@@ -334,12 +350,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
             void EnsurePipeline(RenderPassContext& context)
             {
                 const rhi::RhiFormat targetFormat = ResolveTargetFormat(context);
-                if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat)
+                if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode_)
                 {
                     return;
                 }
 
                 rhi::RhiDevice& device = context.GetDevice();
+
+                ShaderManager* shaderManager = context.GetFrameContext().shaderManager;
+                VE_ASSERT_MESSAGE(shaderManager != nullptr, "OpaqueScenePass requires a ShaderManager.");
 
                 rhi::RhiShaderModuleDesc vertexShaderDesc = {};
                 vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
@@ -347,8 +366,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 vertexShaderDesc.entryPoint = "VSMain";
                 vertexShaderDesc.debugName = "OpaqueSceneVertexShader";
 
-                vertexShader_ = device.CreateShaderModule(vertexShaderDesc);
-                VE_ASSERT_MESSAGE(vertexShader_ != nullptr, "OpaqueScenePass failed to create vertex shader.");
+                rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(device, OpaqueSceneVertexShaderID, vertexShaderDesc);
+                VE_ASSERT_MESSAGE(vertexShader != nullptr, "OpaqueScenePass failed to get vertex shader.");
 
                 rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
                 fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
@@ -356,8 +375,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 fragmentShaderDesc.entryPoint = "PSMain";
                 fragmentShaderDesc.debugName = "OpaqueSceneFragmentShader";
 
-                fragmentShader_ = device.CreateShaderModule(fragmentShaderDesc);
-                VE_ASSERT_MESSAGE(fragmentShader_ != nullptr, "OpaqueScenePass failed to create fragment shader.");
+                rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(device, OpaqueSceneFragmentShaderID, fragmentShaderDesc);
+                VE_ASSERT_MESSAGE(fragmentShader != nullptr, "OpaqueScenePass failed to get fragment shader.");
 
                 rhi::RhiVertexAttributeDesc positionAttribute = {};
                 positionAttribute.semanticName = "POSITION";
@@ -374,18 +393,20 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 const rhi::RhiVertexAttributeDesc vertexAttributes[] = {positionAttribute, normalAttribute};
 
                 rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
-                pipelineDesc.vertexShader = vertexShader_.get();
-                pipelineDesc.fragmentShader = fragmentShader_.get();
+                pipelineDesc.vertexShader = vertexShader;
+                pipelineDesc.fragmentShader = fragmentShader;
                 pipelineDesc.vertexLayout.attributes = vertexAttributes;
                 pipelineDesc.vertexLayout.attributeCount = 2;
                 pipelineDesc.vertexLayout.stride = sizeof(RTMeshVertex);
                 pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
+                pipelineDesc.fillMode = fillMode_;
                 pipelineDesc.colorFormat = targetFormat;
                 pipelineDesc.debugName = "OpaqueScenePipeline";
 
                 pipelineState_ = device.CreateGraphicsPipeline(pipelineDesc);
                 VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "OpaqueScenePass failed to create pipeline state.");
                 pipelineColorFormat_ = targetFormat;
+                pipelineFillMode_ = fillMode_;
             }
 
             void BindLightUniform(RenderPassContext& context, const RTScene& scene)
@@ -435,21 +456,24 @@ float4 PSMain(VSOutput input) : SV_TARGET
             }
 
             RendererRenderTarget target_;
-            std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
-            std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
+            rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
             std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
             std::unique_ptr<rhi::RhiBuffer> defaultMaterialUniformBuffer_;
             std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
             rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
+            rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
         };
 
     } // namespace
 
-    ErrorCode BaseRenderer::RenderScene(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode BaseRenderer::RenderScene(rhi::RhiDevice& device,
+                                        rhi::RhiCommandList& commandList,
+                                        rhi::RhiSwapchain& mainSwapchain,
+                                        ShaderManager& shaderManager)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ErrorCode beginResult = BeginSceneRender(device, commandList, mainSwapchain);
+        ErrorCode beginResult = BeginSceneRender(device, commandList, mainSwapchain, shaderManager);
         if (beginResult != ErrorCode::None)
         {
             return beginResult;
@@ -481,6 +505,16 @@ float4 PSMain(VSOutput input) : SV_TARGET
         scene_ = std::move(scene);
     }
 
+    void BaseRenderer::SetCamera(std::shared_ptr<RTCamera> camera) noexcept
+    {
+        camera_ = std::move(camera);
+    }
+
+    void BaseRenderer::SetFillMode(rhi::RhiFillMode fillMode) noexcept
+    {
+        fillMode_ = fillMode;
+    }
+
     std::shared_ptr<RTScene> BaseRenderer::GetScene() const noexcept
     {
         return scene_;
@@ -500,12 +534,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
         framePasses_.clear();
     }
 
-    ErrorCode BaseRenderer::BuildFrameContext(rhi::RhiSwapchain& mainSwapchain) noexcept
+    ErrorCode BaseRenderer::BuildFrameContext(rhi::RhiSwapchain& mainSwapchain, ShaderManager& shaderManager) noexcept
     {
         frameContext_.mainSurfaceExtent = mainSwapchain.GetExtent();
         frameContext_.mainColorFormat = mainSwapchain.GetColorFormat();
         frameContext_.scene = scene_;
-        frameContext_.clearColor = ResolveFrameClearColor(scene_);
+        frameContext_.camera = camera_ != nullptr || scene_ == nullptr ? camera_ : FindFrameCamera(*scene_);
+        frameContext_.clearColor = frameContext_.camera != nullptr ? frameContext_.camera->GetDesc().clearColor : ResolveFrameClearColor(scene_);
+        frameContext_.shaderManager = &shaderManager;
         ++frameContext_.frameIndex;
         return ErrorCode::None;
     }
@@ -520,14 +556,17 @@ float4 PSMain(VSOutput input) : SV_TARGET
         // Visibility and batching stay here so concrete renderers only choose their pass topology.
     }
 
-    ErrorCode BaseRenderer::BeginSceneRender(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode BaseRenderer::BeginSceneRender(rhi::RhiDevice& device,
+                                             rhi::RhiCommandList& commandList,
+                                             rhi::RhiSwapchain& mainSwapchain,
+                                             ShaderManager& shaderManager)
     {
         if (frameActive_)
         {
             return ErrorCode::InvalidState;
         }
 
-        ErrorCode buildContextResult = BuildFrameContext(mainSwapchain);
+        ErrorCode buildContextResult = BuildFrameContext(mainSwapchain, shaderManager);
         if (buildContextResult != ErrorCode::None)
         {
             return buildContextResult;
@@ -662,9 +701,11 @@ float4 PSMain(VSOutput input) : SV_TARGET
     ForwardRenderer::ForwardRenderer(ForwardRendererDesc desc)
     {
         SetScene(std::move(desc.scene));
+        SetCamera(std::move(desc.camera));
+        SetFillMode(desc.fillMode);
         if (desc.addOpaquePass)
         {
-            AddRenderPass(std::make_unique<OpaqueSceneRenderPass>(std::move(desc.target)));
+            AddRenderPass(std::make_unique<OpaqueSceneRenderPass>(std::move(desc.target), desc.fillMode));
         }
 
         for (std::unique_ptr<RenderPass>& pass : desc.additionalPasses)

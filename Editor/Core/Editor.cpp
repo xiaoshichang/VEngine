@@ -225,9 +225,15 @@ namespace ve::editor
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
         VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
 
+        std::shared_ptr<RTRenderTexture> sceneViewTexture;
+        std::shared_ptr<RTCamera> sceneViewCameraSnapshot;
+        rhi::RhiFillMode sceneViewFillMode = rhi::RhiFillMode::Solid;
         std::shared_ptr<RTRenderTexture> gameViewTexture;
         if (mainView_ == MainView::ProjectEditing)
         {
+            sceneViewTexture = projectEditingView_->GetSceneViewTexture();
+            sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraDesc());
+            sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
             gameViewTexture = projectEditingView_->GetGameViewTexture();
         }
 
@@ -254,10 +260,21 @@ namespace ve::editor
         };
 
         EditorRenderFramePipelineDesc pipelineDesc = {};
+        std::shared_ptr<RTScene> renderScene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
+        if (sceneViewTexture != nullptr)
+        {
+            ForwardRendererDesc rendererDesc = {};
+            rendererDesc.scene = renderScene;
+            rendererDesc.camera = std::move(sceneViewCameraSnapshot);
+            rendererDesc.target.colorTexture = std::move(sceneViewTexture);
+            rendererDesc.fillMode = sceneViewFillMode;
+            pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+        }
+
         if (gameViewTexture != nullptr)
         {
             ForwardRendererDesc rendererDesc = {};
-            rendererDesc.scene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
+            rendererDesc.scene = std::move(renderScene);
             rendererDesc.target.colorTexture = std::move(gameViewTexture);
             pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
         }

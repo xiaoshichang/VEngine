@@ -233,8 +233,9 @@ namespace ve::rhi
         class MetalPipelineState final : public RhiPipelineState
         {
         public:
-            MetalPipelineState(RhiPrimitiveTopology topology, id<MTLRenderPipelineState> pipelineState)
+            MetalPipelineState(RhiPrimitiveTopology topology, RhiFillMode fillMode, id<MTLRenderPipelineState> pipelineState)
                 : topology_(topology)
+                , fillMode_(fillMode)
                 , pipelineState_(pipelineState)
             {
             }
@@ -249,8 +250,14 @@ namespace ve::rhi
                 return pipelineState_;
             }
 
+            [[nodiscard]] RhiFillMode GetFillMode() const noexcept
+            {
+                return fillMode_;
+            }
+
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
+            RhiFillMode fillMode_ = RhiFillMode::Solid;
             id<MTLRenderPipelineState> pipelineState_ = nil;
         };
 
@@ -372,6 +379,8 @@ namespace ve::rhi
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
                 [renderCommandEncoder_ setFrontFacingWinding:MTLWindingClockwise];
                 [renderCommandEncoder_ setCullMode:MTLCullModeBack];
+                [renderCommandEncoder_ setTriangleFillMode:metalPipelineState.GetFillMode() == RhiFillMode::Wireframe ? MTLTriangleFillModeLines
+                                                                                                                        : MTLTriangleFillModeFill];
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -665,7 +674,7 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<MetalPipelineState>(desc.topology, pipelineState);
+                return std::make_unique<MetalPipelineState>(desc.topology, desc.fillMode, pipelineState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

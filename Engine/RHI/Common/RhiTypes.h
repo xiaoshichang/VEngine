@@ -29,6 +29,12 @@ namespace ve::rhi
         TriangleList,
     };
 
+    enum class RhiFillMode
+    {
+        Solid,
+        Wireframe,
+    };
+
     /// Describes a small set of cross-backend texture and vertex formats.
     enum class RhiFormat
     {
@@ -249,6 +255,7 @@ namespace ve::rhi
         const RhiShaderModule* fragmentShader = nullptr;
         RhiVertexLayoutDesc vertexLayout = {};
         RhiPrimitiveTopology topology = RhiPrimitiveTopology::TriangleList;
+        RhiFillMode fillMode = RhiFillMode::Solid;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
         const char* debugName = nullptr;
     };

@@ -9,7 +9,9 @@
 
 namespace ve
 {
+    class RTCamera;
     class RTScene;
+    class ShaderManager;
 
     /// Per-frame state visible to renderer passes while building and recording commands.
     struct RenderFrameContext
@@ -19,6 +21,8 @@ namespace ve
         rhi::RhiFormat mainColorFormat = rhi::RhiFormat::Bgra8Unorm;
         rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
         std::shared_ptr<RTScene> scene;
+        std::shared_ptr<RTCamera> camera;
+        ShaderManager* shaderManager = nullptr;
     };
 
     /// Collects the RHI pass shape declared by one renderer pass for the current frame.
