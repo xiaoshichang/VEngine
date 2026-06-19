@@ -114,6 +114,17 @@ namespace ve
         SubmitCameraUpdateToRenderThread();
     }
 
+    const rhi::RhiColor& CameraComponent::GetClearColor() const noexcept
+    {
+        return clearColor_;
+    }
+
+    void CameraComponent::SetClearColor(const rhi::RhiColor& clearColor) noexcept
+    {
+        clearColor_ = clearColor;
+        SubmitCameraUpdateToRenderThread();
+    }
+
     std::shared_ptr<RTCamera> CameraComponent::GetRTCamera() noexcept
     {
         return rtCamera_;
@@ -137,6 +148,7 @@ namespace ve
             aspectRatio_,
             nearClipPlane_,
             farClipPlane_,
+            clearColor_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
         };
     }

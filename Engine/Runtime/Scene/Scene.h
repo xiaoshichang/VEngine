@@ -16,6 +16,7 @@
 namespace ve
 {
     class SceneSystem;
+    class CameraComponent;
 
     /// Owns a tree of root GameObjects and updates that hierarchy.
     class Scene final : public NonMovable
@@ -31,6 +32,8 @@ namespace ve
         [[nodiscard]] SizeT GetRootGameObjectCount() const noexcept;
         [[nodiscard]] GameObject* GetRootGameObject(SizeT index) noexcept;
         [[nodiscard]] const GameObject* GetRootGameObject(SizeT index) const noexcept;
+        [[nodiscard]] CameraComponent* GetMainCamera() noexcept;
+        [[nodiscard]] const CameraComponent* GetMainCamera() const noexcept;
 
         [[nodiscard]] Result<GameObject*> CreateRootGameObject(std::string name = {});
         [[nodiscard]] bool DestroyRootGameObject(GameObject& gameObject) noexcept;
@@ -60,6 +63,8 @@ namespace ve
         void RegisterRenderItemsRecursive(GameObject& gameObject);
         void SyncRenderItemsBeforeRenderRecursive(GameObject& gameObject);
         void SubmitRTSceneCommand(std::string debugName, std::function<void()> function) const;
+        [[nodiscard]] static CameraComponent* FindMainCameraRecursive(GameObject& gameObject) noexcept;
+        [[nodiscard]] static const CameraComponent* FindMainCameraRecursive(const GameObject& gameObject) noexcept;
 
         std::string name_;
         SceneSystem* sceneSystem_ = nullptr;

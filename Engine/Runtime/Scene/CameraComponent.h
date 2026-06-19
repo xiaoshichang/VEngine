@@ -42,6 +42,9 @@ namespace ve
         [[nodiscard]] Float32 GetFarClipPlane() const noexcept;
         void SetFarClipPlane(Float32 farClipPlane) noexcept;
 
+        [[nodiscard]] const rhi::RhiColor& GetClearColor() const noexcept;
+        void SetClearColor(const rhi::RhiColor& clearColor) noexcept;
+
         [[nodiscard]] std::shared_ptr<RTCamera> GetRTCamera() noexcept;
         [[nodiscard]] std::shared_ptr<const RTCamera> GetRTCamera() const noexcept;
 
@@ -68,6 +71,7 @@ namespace ve
         Float32 aspectRatio_ = 1.7777778f;
         Float32 nearClipPlane_ = 0.1f;
         Float32 farClipPlane_ = 1000.0f;
+        rhi::RhiColor clearColor_{0.05f, 0.07f, 0.10f, 1.0f};
         bool cameraTransformDirty_ = true;
         bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;

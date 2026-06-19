@@ -28,7 +28,8 @@ namespace ve::editor
         void RenderContent() override;
 
         void RebuildGameViewTexture(Editor& editor, WindowExtent extent);
-        [[nodiscard]] static WindowExtent ToRenderTargetExtent(const ImVec2& size) noexcept;
+        [[nodiscard]] static WindowExtent ToRenderTargetExtent(const ImVec2& imageSize) noexcept;
+        [[nodiscard]] static ImVec2 CalculateFittedImageSize(const ImVec2& canvasSize, float aspectRatio) noexcept;
 
         std::shared_ptr<RenderTexture> gameViewTexture_;
         WindowExtent renderTargetExtent_ = {};

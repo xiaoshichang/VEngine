@@ -36,6 +36,7 @@ namespace ve
         Float32 aspectRatio = 1.7777778f;
         Float32 nearClipPlane = 0.1f;
         Float32 farClipPlane = 1000.0f;
+        rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
         Matrix44 localToWorld = Matrix44::Identity();
     };
 

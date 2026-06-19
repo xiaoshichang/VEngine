@@ -70,6 +70,7 @@ namespace
         camera->SetPrimary(true);
         camera->SetProjectionMode(ve::CameraComponent::ProjectionMode::Orthographic);
         camera->SetOrthographicSize(8.0f);
+        camera->SetClearColor(ve::rhi::RhiColor{0.2f, 0.3f, 0.4f, 1.0f});
 
         ve::Result<ve::GameObject*> lightObjectResult = sourceScene.CreateRootGameObject("Key Light");
         passed &= Expect(lightObjectResult.IsOk(), "Light GameObject should be created");
@@ -105,6 +106,10 @@ namespace
         ve::CameraComponent* loadedCamera = loadedCameraObject->GetComponent<ve::CameraComponent>();
         passed &= Expect(loadedCamera != nullptr && loadedCamera->IsPrimary(), "Camera primary flag should round-trip");
         passed &= Expect(loadedCamera->GetProjectionMode() == ve::CameraComponent::ProjectionMode::Orthographic, "Camera projection mode should round-trip");
+        passed &= Expect(ve::NearlyEqual(loadedCamera->GetClearColor().r, 0.2f), "Camera clear color red should round-trip");
+        passed &= Expect(ve::NearlyEqual(loadedCamera->GetClearColor().g, 0.3f), "Camera clear color green should round-trip");
+        passed &= Expect(ve::NearlyEqual(loadedCamera->GetClearColor().b, 0.4f), "Camera clear color blue should round-trip");
+        passed &= Expect(ve::NearlyEqual(loadedCamera->GetClearColor().a, 1.0f), "Camera clear color alpha should round-trip");
 
         ve::GameObject* loadedLightObject = loadedScene.GetRootGameObject(1);
         ve::LightComponent* loadedLight = loadedLightObject->GetComponent<ve::LightComponent>();
@@ -115,6 +120,31 @@ namespace
         return passed;
     }
 
+    bool TestSceneMainCameraLookup()
+    {
+        bool passed = true;
+
+        ve::Scene scene("Main Camera Lookup");
+        ve::Result<ve::GameObject*> fallbackObjectResult = scene.CreateRootGameObject("Fallback Camera");
+        passed &= Expect(fallbackObjectResult.IsOk(), "Fallback camera object should be created");
+        ve::Result<ve::CameraComponent*> fallbackCameraResult = fallbackObjectResult.GetValue()->AddComponentWithoutRenderRegistration<ve::CameraComponent>();
+        passed &= Expect(fallbackCameraResult.IsOk(), "Fallback CameraComponent should be added");
+
+        passed &= Expect(scene.GetMainCamera() == fallbackCameraResult.GetValue(), "Scene should return first camera when no primary camera exists");
+
+        ve::Result<ve::GameObject*> primaryObjectResult = scene.CreateRootGameObject("Primary Camera");
+        passed &= Expect(primaryObjectResult.IsOk(), "Primary camera object should be created");
+        ve::Result<ve::CameraComponent*> primaryCameraResult = primaryObjectResult.GetValue()->AddComponentWithoutRenderRegistration<ve::CameraComponent>();
+        passed &= Expect(primaryCameraResult.IsOk(), "Primary CameraComponent should be added");
+        primaryCameraResult.GetValue()->SetPrimary(true);
+
+        passed &= Expect(scene.GetMainCamera() == primaryCameraResult.GetValue(), "Scene should prefer the primary camera");
+
+        const ve::Scene& constScene = scene;
+        passed &= Expect(constScene.GetMainCamera() == primaryCameraResult.GetValue(), "Const Scene should return the primary camera");
+        return passed;
+    }
+
 } // namespace
 
 int main()
@@ -122,6 +152,7 @@ int main()
     bool passed = true;
 
     passed &= TestSceneRoundTrip();
+    passed &= TestSceneMainCameraLookup();
 
     if (passed)
     {

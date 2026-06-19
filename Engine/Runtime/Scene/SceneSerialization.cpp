@@ -65,6 +65,17 @@ namespace ve
             return array;
         }
 
+        [[nodiscard]] boost::json::array WriteColor(const rhi::RhiColor& value)
+        {
+            boost::json::array array;
+            array.reserve(4);
+            array.push_back(value.r);
+            array.push_back(value.g);
+            array.push_back(value.b);
+            array.push_back(value.a);
+            return array;
+        }
+
         [[nodiscard]] Result<Vector3> ReadVector3(const boost::json::value& value, std::string_view fieldName)
         {
             if (!value.is_array() || value.as_array().size() != 3)
@@ -96,6 +107,23 @@ namespace ve
 
             return Result<Quaternion>::Success(
                 Quaternion(ReadNumberAsFloat(array[0]), ReadNumberAsFloat(array[1]), ReadNumberAsFloat(array[2]), ReadNumberAsFloat(array[3])));
+        }
+
+        [[nodiscard]] Result<rhi::RhiColor> ReadColor(const boost::json::value& value, std::string_view fieldName)
+        {
+            if (!value.is_array() || value.as_array().size() != 4)
+            {
+                return Result<rhi::RhiColor>::Failure(MakeSceneJsonError(std::string(fieldName) + " must be a 4-item array."));
+            }
+
+            const boost::json::array& array = value.as_array();
+            if (!array[0].is_number() || !array[1].is_number() || !array[2].is_number() || !array[3].is_number())
+            {
+                return Result<rhi::RhiColor>::Failure(MakeSceneJsonError(std::string(fieldName) + " must contain numeric values."));
+            }
+
+            return Result<rhi::RhiColor>::Success(
+                rhi::RhiColor{ReadNumberAsFloat(array[0]), ReadNumberAsFloat(array[1]), ReadNumberAsFloat(array[2]), ReadNumberAsFloat(array[3])});
         }
 
         [[nodiscard]] std::string ReadString(const boost::json::object& object, boost::json::string_view key, std::string fallback = {})
@@ -315,6 +343,7 @@ namespace ve
             object["aspectRatio"] = camera.GetAspectRatio();
             object["nearClipPlane"] = camera.GetNearClipPlane();
             object["farClipPlane"] = camera.GetFarClipPlane();
+            object["clearColor"] = WriteColor(camera.GetClearColor());
             return object;
         }
 
@@ -497,6 +526,15 @@ namespace ve
             camera->SetAspectRatio(ReadFloat(object, "aspectRatio", camera->GetAspectRatio()));
             camera->SetNearClipPlane(ReadFloat(object, "nearClipPlane", camera->GetNearClipPlane()));
             camera->SetFarClipPlane(ReadFloat(object, "farClipPlane", camera->GetFarClipPlane()));
+            if (const boost::json::value* value = object.if_contains("clearColor"); value != nullptr)
+            {
+                Result<rhi::RhiColor> result = ReadColor(*value, "CameraComponent.clearColor");
+                if (!result)
+                {
+                    return result.GetError().GetCode();
+                }
+                camera->SetClearColor(result.GetValue());
+            }
             camera->SetEnabled(ReadBool(object, "enabled", camera->IsEnabled()));
             return ErrorCode::None;
         }

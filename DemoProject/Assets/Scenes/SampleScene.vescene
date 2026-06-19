@@ -176,7 +176,8 @@
                     "orthographicSize": 5,
                     "aspectRatio": 1.7777778,
                     "nearClipPlane": 0.1,
-                    "farClipPlane": 1000
+                    "farClipPlane": 1000,
+                    "clearColor": [0.3, 0.3, 0.3, 1]
                 }
             ],
             "children": []

@@ -52,9 +52,19 @@ namespace ve::editor
             return {value.GetX(), value.GetY(), value.GetZ(), value.GetW()};
         }
 
+        [[nodiscard]] std::array<float, 4> ToFloat4(const rhi::RhiColor& value) noexcept
+        {
+            return {value.r, value.g, value.b, value.a};
+        }
+
         [[nodiscard]] Quaternion FromFloat4(const std::array<float, 4>& value) noexcept
         {
             return Quaternion(value[0], value[1], value[2], value[3]).Normalized();
+        }
+
+        [[nodiscard]] rhi::RhiColor ToRhiColor(const std::array<float, 4>& value) noexcept
+        {
+            return rhi::RhiColor{value[0], value[1], value[2], value[3]};
         }
 
         bool RenderEnabledCheckbox(Component& component)
@@ -289,6 +299,12 @@ namespace ve::editor
             if (ImGui::DragFloat("Far", &farClipPlane, LargeDragSpeed, 0.0f, 0.0f, "%.3f"))
             {
                 camera.SetFarClipPlane(farClipPlane);
+            }
+
+            std::array<float, 4> clearColor = ToFloat4(camera.GetClearColor());
+            if (ImGui::ColorEdit4("Clear Color", clearColor.data()))
+            {
+                camera.SetClearColor(ToRhiColor(clearColor));
             }
         }
         ImGui::PopID();

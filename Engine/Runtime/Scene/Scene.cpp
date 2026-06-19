@@ -59,6 +59,56 @@ namespace ve
         return rootGameObjects_[index].get();
     }
 
+    CameraComponent* Scene::GetMainCamera() noexcept
+    {
+        CameraComponent* fallbackCamera = nullptr;
+        for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
+        {
+            if (gameObject == nullptr)
+            {
+                continue;
+            }
+
+            CameraComponent* camera = FindMainCameraRecursive(*gameObject);
+            if (camera != nullptr && camera->IsPrimary())
+            {
+                return camera;
+            }
+
+            if (fallbackCamera == nullptr)
+            {
+                fallbackCamera = camera;
+            }
+        }
+
+        return fallbackCamera;
+    }
+
+    const CameraComponent* Scene::GetMainCamera() const noexcept
+    {
+        const CameraComponent* fallbackCamera = nullptr;
+        for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
+        {
+            if (gameObject == nullptr)
+            {
+                continue;
+            }
+
+            const CameraComponent* camera = FindMainCameraRecursive(*gameObject);
+            if (camera != nullptr && camera->IsPrimary())
+            {
+                return camera;
+            }
+
+            if (fallbackCamera == nullptr)
+            {
+                fallbackCamera = camera;
+            }
+        }
+
+        return fallbackCamera;
+    }
+
     Result<GameObject*> Scene::CreateRootGameObject(std::string name)
     {
         try
@@ -365,5 +415,79 @@ namespace ve
         }
 
         sceneSystem_->EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
+    }
+
+    CameraComponent* Scene::FindMainCameraRecursive(GameObject& gameObject) noexcept
+    {
+        CameraComponent* fallbackCamera = gameObject.GetComponent<CameraComponent>();
+        if (fallbackCamera != nullptr && fallbackCamera->IsPrimary())
+        {
+            return fallbackCamera;
+        }
+
+        TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+        if (transform == nullptr)
+        {
+            return fallbackCamera;
+        }
+
+        for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
+        {
+            GameObject* child = transform->GetChildGameObject(childIndex);
+            if (child == nullptr)
+            {
+                continue;
+            }
+
+            CameraComponent* childCamera = FindMainCameraRecursive(*child);
+            if (childCamera != nullptr && childCamera->IsPrimary())
+            {
+                return childCamera;
+            }
+
+            if (fallbackCamera == nullptr)
+            {
+                fallbackCamera = childCamera;
+            }
+        }
+
+        return fallbackCamera;
+    }
+
+    const CameraComponent* Scene::FindMainCameraRecursive(const GameObject& gameObject) noexcept
+    {
+        const CameraComponent* fallbackCamera = gameObject.GetComponent<CameraComponent>();
+        if (fallbackCamera != nullptr && fallbackCamera->IsPrimary())
+        {
+            return fallbackCamera;
+        }
+
+        const TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+        if (transform == nullptr)
+        {
+            return fallbackCamera;
+        }
+
+        for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
+        {
+            const GameObject* child = transform->GetChildGameObject(childIndex);
+            if (child == nullptr)
+            {
+                continue;
+            }
+
+            const CameraComponent* childCamera = FindMainCameraRecursive(*child);
+            if (childCamera != nullptr && childCamera->IsPrimary())
+            {
+                return childCamera;
+            }
+
+            if (fallbackCamera == nullptr)
+            {
+                fallbackCamera = childCamera;
+            }
+        }
+
+        return fallbackCamera;
     }
 } // namespace ve

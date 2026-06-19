@@ -6,6 +6,7 @@ namespace ve
 {
     void RenderPassBuilder::Reset(const char* passName, const RenderFrameContext& frameContext) noexcept
     {
+        frameContext_ = &frameContext;
         renderPassDesc_ = {};
         renderPassDesc_.debugName = passName;
         renderPassDesc_.renderArea = rhi::RhiRenderArea{0, 0, frameContext.mainSurfaceExtent.width, frameContext.mainSurfaceExtent.height};
@@ -68,6 +69,12 @@ namespace ve
     const rhi::RhiRenderPassDesc& RenderPassBuilder::GetRenderPassDesc() const noexcept
     {
         return renderPassDesc_;
+    }
+
+    const RenderFrameContext& RenderPassBuilder::GetFrameContext() const noexcept
+    {
+        VE_ASSERT(frameContext_ != nullptr);
+        return *frameContext_;
     }
 
     const rhi::RhiViewport& RenderPassBuilder::GetViewport() const noexcept

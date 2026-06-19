@@ -179,6 +179,17 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return fallback;
         }
 
+        [[nodiscard]] rhi::RhiColor ResolveFrameClearColor(const std::shared_ptr<RTScene>& scene) noexcept
+        {
+            if (scene == nullptr)
+            {
+                return rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
+            }
+
+            const std::shared_ptr<RTCamera> camera = FindFrameCamera(*scene);
+            return camera != nullptr ? camera->GetDesc().clearColor : rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
+        }
+
         [[nodiscard]] Matrix44 BuildViewProjectionMatrix(const RTScene& scene) noexcept
         {
             const std::shared_ptr<RTCamera> camera = FindFrameCamera(scene);
@@ -254,14 +265,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
             void Setup(RenderPassBuilder& builder) override
             {
+                const rhi::RhiColor clearColor = builder.GetFrameContext().clearColor;
                 if (target_.colorTexture != nullptr && target_.colorTexture->GetTexture() != nullptr)
                 {
-                    builder.AddTextureColorAttachment(
-                        *target_.colorTexture->GetTexture(), target_.colorLoadAction, target_.colorStoreAction, target_.clearColor);
+                    builder.AddTextureColorAttachment(*target_.colorTexture->GetTexture(), rhi::RhiLoadAction::Clear, target_.colorStoreAction, clearColor);
                     return;
                 }
 
-                builder.AddSwapchainColorAttachment(target_.colorLoadAction, target_.colorStoreAction, target_.clearColor);
+                builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear, target_.colorStoreAction, clearColor);
             }
 
             void Execute(RenderPassContext& context) override
@@ -494,6 +505,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         frameContext_.mainSurfaceExtent = mainSwapchain.GetExtent();
         frameContext_.mainColorFormat = mainSwapchain.GetColorFormat();
         frameContext_.scene = scene_;
+        frameContext_.clearColor = ResolveFrameClearColor(scene_);
         ++frameContext_.frameIndex;
         return ErrorCode::None;
     }

@@ -17,6 +17,7 @@ namespace ve
         UInt64 frameIndex = 0;
         rhi::RhiExtent2D mainSurfaceExtent = {};
         rhi::RhiFormat mainColorFormat = rhi::RhiFormat::Bgra8Unorm;
+        rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
         std::shared_ptr<RTScene> scene;
     };
 
@@ -38,10 +39,12 @@ namespace ve
         AddTextureColorAttachment(rhi::RhiTexture& texture, rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor) noexcept;
 
         [[nodiscard]] const rhi::RhiRenderPassDesc& GetRenderPassDesc() const noexcept;
+        [[nodiscard]] const RenderFrameContext& GetFrameContext() const noexcept;
         [[nodiscard]] const rhi::RhiViewport& GetViewport() const noexcept;
         [[nodiscard]] const rhi::RhiScissorRect& GetScissor() const noexcept;
 
     private:
+        const RenderFrameContext* frameContext_ = nullptr;
         rhi::RhiRenderPassDesc renderPassDesc_ = {};
         rhi::RhiViewport viewport_ = {};
         rhi::RhiScissorRect scissorRect_ = {};
