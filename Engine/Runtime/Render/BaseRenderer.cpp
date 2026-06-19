@@ -285,6 +285,11 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 if (target_.colorTexture != nullptr && target_.colorTexture->GetTexture() != nullptr)
                 {
                     builder.AddTextureColorAttachment(*target_.colorTexture->GetTexture(), rhi::RhiLoadAction::Clear, target_.colorStoreAction, clearColor);
+                    if (target_.colorTexture->GetDepthTexture() != nullptr)
+                    {
+                        builder.SetDepthStencilAttachment(
+                            *target_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
+                    }
                     return;
                 }
 
@@ -350,7 +355,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
             void EnsurePipeline(RenderPassContext& context)
             {
                 const rhi::RhiFormat targetFormat = ResolveTargetFormat(context);
-                if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode_)
+                const bool depthEnabled = context.GetRenderPassDesc().hasDepthStencilAttachment;
+                if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode_ &&
+                    pipelineDepthEnabled_ == depthEnabled)
                 {
                     return;
                 }
@@ -401,12 +408,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
                 pipelineDesc.fillMode = fillMode_;
                 pipelineDesc.colorFormat = targetFormat;
+                pipelineDesc.depthTestEnabled = depthEnabled;
+                pipelineDesc.depthWriteEnabled = depthEnabled;
                 pipelineDesc.debugName = "OpaqueScenePipeline";
 
                 pipelineState_ = device.CreateGraphicsPipeline(pipelineDesc);
                 VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "OpaqueScenePass failed to create pipeline state.");
                 pipelineColorFormat_ = targetFormat;
                 pipelineFillMode_ = fillMode_;
+                pipelineDepthEnabled_ = depthEnabled;
             }
 
             void BindLightUniform(RenderPassContext& context, const RTScene& scene)
@@ -462,6 +472,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
             rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
             rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
+            bool pipelineDepthEnabled_ = false;
         };
 
     } // namespace

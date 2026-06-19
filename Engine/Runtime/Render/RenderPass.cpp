@@ -66,6 +66,19 @@ namespace ve
         scissorRect_ = rhi::RhiScissorRect{0, 0, width, height};
     }
 
+    void RenderPassBuilder::SetDepthStencilAttachment(rhi::RhiTexture& texture,
+                                                      rhi::RhiLoadAction depthLoadAction,
+                                                      rhi::RhiStoreAction depthStoreAction,
+                                                      rhi::RhiDepthStencilClearValue clearValue) noexcept
+    {
+        rhi::RhiRenderPassDepthStencilAttachmentDesc& attachment = renderPassDesc_.depthStencilAttachment;
+        attachment.texture = &texture;
+        attachment.depthLoadAction = depthLoadAction;
+        attachment.depthStoreAction = depthStoreAction;
+        attachment.clearValue = clearValue;
+        renderPassDesc_.hasDepthStencilAttachment = true;
+    }
+
     const rhi::RhiRenderPassDesc& RenderPassBuilder::GetRenderPassDesc() const noexcept
     {
         return renderPassDesc_;

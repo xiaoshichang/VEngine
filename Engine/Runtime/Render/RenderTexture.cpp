@@ -16,6 +16,34 @@ namespace ve
             return static_cast<rhi::RhiTextureUsage>(sampled | renderTarget);
         }
 
+        [[nodiscard]] rhi::RhiTextureDesc MakeTextureDesc(const RenderTextureDesc& desc)
+        {
+            rhi::RhiTextureDesc textureDesc = {};
+            textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
+            textureDesc.width = desc.extent.width;
+            textureDesc.height = desc.extent.height;
+            textureDesc.depth = 1;
+            textureDesc.mipLevelCount = 1;
+            textureDesc.format = desc.colorFormat;
+            textureDesc.usage = MakeRenderTextureUsage();
+            textureDesc.debugName = desc.name.c_str();
+            return textureDesc;
+        }
+
+        [[nodiscard]] rhi::RhiTextureDesc MakeDepthTextureDesc(const RenderTextureDesc& desc)
+        {
+            rhi::RhiTextureDesc textureDesc = {};
+            textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
+            textureDesc.width = desc.extent.width;
+            textureDesc.height = desc.extent.height;
+            textureDesc.depth = 1;
+            textureDesc.mipLevelCount = 1;
+            textureDesc.format = rhi::RhiFormat::Depth32Float;
+            textureDesc.usage = rhi::RhiTextureUsage::DepthStencil;
+            textureDesc.debugName = desc.name.c_str();
+            return textureDesc;
+        }
+
         [[nodiscard]] RenderTargetDesc ToRenderTargetDesc(const RenderTextureDesc& desc)
         {
             RenderTargetDesc renderTargetDesc = {};
@@ -126,6 +154,16 @@ namespace ve
         return texture_.get();
     }
 
+    rhi::RhiTexture* RTRenderTexture::GetDepthTexture() noexcept
+    {
+        return depthTexture_.get();
+    }
+
+    const rhi::RhiTexture* RTRenderTexture::GetDepthTexture() const noexcept
+    {
+        return depthTexture_.get();
+    }
+
     void* RTRenderTexture::GetRenderResourceViewHandle() const noexcept
     {
         return nativeSampledViewHandle_.load(std::memory_order_acquire);
@@ -142,36 +180,36 @@ namespace ve
         if (!textureMatchesDesc)
         {
             texture_.reset();
+            depthTexture_.reset();
             nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
         }
 
         VE_ASSERT_MESSAGE(desc_.extent.width != 0 && desc_.extent.height != 0, "RTRenderTexture::InitRenderResource requires a valid extent.");
 
-        if (IsInitialized())
+        if (IsInitialized() && depthTexture_ != nullptr)
         {
             return;
         }
 
-        rhi::RhiTextureDesc textureDesc = {};
-        textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
-        textureDesc.width = desc_.extent.width;
-        textureDesc.height = desc_.extent.height;
-        textureDesc.depth = 1;
-        textureDesc.mipLevelCount = 1;
-        textureDesc.format = desc_.colorFormat;
-        textureDesc.usage = MakeRenderTextureUsage();
-        textureDesc.debugName = desc_.name.c_str();
+        if (texture_ == nullptr)
+        {
+            texture_ = device.CreateTexture(MakeTextureDesc(desc_));
+            VE_ASSERT_MESSAGE(texture_ != nullptr, "RTRenderTexture failed to create RHI texture.");
+            nativeSampledViewHandle_.store(texture_->GetNativeSampledViewHandle(), std::memory_order_release);
+        }
 
-        texture_ = device.CreateTexture(textureDesc);
-        VE_ASSERT_MESSAGE(texture_ != nullptr, "RTRenderTexture failed to create RHI texture.");
-
-        nativeSampledViewHandle_.store(texture_->GetNativeSampledViewHandle(), std::memory_order_release);
+        if (depthTexture_ == nullptr)
+        {
+            depthTexture_ = device.CreateTexture(MakeDepthTextureDesc(desc_));
+            VE_ASSERT_MESSAGE(depthTexture_ != nullptr, "RTRenderTexture failed to create depth texture.");
+        }
     }
 
     void RTRenderTexture::ResetRenderResource() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
         texture_.reset();
+        depthTexture_.reset();
         nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
     }
 } // namespace ve

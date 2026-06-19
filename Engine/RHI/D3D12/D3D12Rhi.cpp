@@ -39,6 +39,8 @@ namespace ve::rhi
                 return DXGI_FORMAT_B8G8R8A8_UNORM;
             case RhiFormat::Rgb32Float:
                 return DXGI_FORMAT_R32G32B32_FLOAT;
+            case RhiFormat::Depth32Float:
+                return DXGI_FORMAT_D32_FLOAT;
             case RhiFormat::Unknown:
             default:
                 return DXGI_FORMAT_UNKNOWN;
@@ -73,6 +75,11 @@ namespace ve::rhi
             if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
             {
                 flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+            }
+
+            if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
+            {
+                flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
             }
 
             return flags;
@@ -112,9 +119,13 @@ namespace ve::rhi
         class D3D12Texture final : public RhiTexture
         {
         public:
-            D3D12Texture(ComPtr<ID3D12Resource> resource, ComPtr<ID3D12DescriptorHeap> rtvHeap, RhiTextureDesc desc)
+            D3D12Texture(ComPtr<ID3D12Resource> resource,
+                         ComPtr<ID3D12DescriptorHeap> rtvHeap,
+                         ComPtr<ID3D12DescriptorHeap> dsvHeap,
+                         RhiTextureDesc desc)
                 : resource_(std::move(resource))
                 , rtvHeap_(std::move(rtvHeap))
+                , dsvHeap_(std::move(dsvHeap))
                 , desc_(desc)
             {
             }
@@ -155,6 +166,17 @@ namespace ve::rhi
                 return rtvHeap_->GetCPUDescriptorHandleForHeapStart();
             }
 
+            [[nodiscard]] bool HasDepthStencilView() const noexcept
+            {
+                return dsvHeap_ != nullptr;
+            }
+
+            [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetDepthStencilView() const noexcept
+            {
+                VE_ASSERT(dsvHeap_ != nullptr);
+                return dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+            }
+
             [[nodiscard]] D3D12_RESOURCE_STATES GetResourceState() const noexcept
             {
                 return resourceState_;
@@ -168,6 +190,7 @@ namespace ve::rhi
         private:
             ComPtr<ID3D12Resource> resource_;
             ComPtr<ID3D12DescriptorHeap> rtvHeap_;
+            ComPtr<ID3D12DescriptorHeap> dsvHeap_;
             RhiTextureDesc desc_ = {};
             D3D12_RESOURCE_STATES resourceState_ = D3D12_RESOURCE_STATE_COMMON;
         };
@@ -429,8 +452,10 @@ namespace ve::rhi
                 const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
                 activeSwapchain_ = nullptr;
                 activeTexture_ = nullptr;
+                activeDepthTexture_ = nullptr;
                 ID3D12Resource* renderTarget = nullptr;
                 D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = {};
+                D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
 
                 if (colorAttachment.texture != nullptr)
                 {
@@ -454,13 +479,32 @@ namespace ve::rhi
                     TransitionResource(renderTarget, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
                 }
 
-                commandList_->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+                if (desc.hasDepthStencilAttachment)
+                {
+                    auto* d3dDepthTexture = dynamic_cast<D3D12Texture*>(desc.depthStencilAttachment.texture);
+                    if (d3dDepthTexture == nullptr || !d3dDepthTexture->HasDepthStencilView())
+                    {
+                        return false;
+                    }
+
+                    activeDepthTexture_ = d3dDepthTexture;
+                    dsvHandle = d3dDepthTexture->GetDepthStencilView();
+                    TransitionResource(d3dDepthTexture->GetNativeResource(), d3dDepthTexture->GetResourceState(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+                    d3dDepthTexture->SetResourceState(D3D12_RESOURCE_STATE_DEPTH_WRITE);
+                }
+
+                commandList_->OMSetRenderTargets(1, &rtvHandle, FALSE, desc.hasDepthStencilAttachment ? &dsvHandle : nullptr);
 
                 if (colorAttachment.loadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
                         colorAttachment.clearColor.r, colorAttachment.clearColor.g, colorAttachment.clearColor.b, colorAttachment.clearColor.a};
                     commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+                }
+
+                if (desc.hasDepthStencilAttachment && desc.depthStencilAttachment.depthLoadAction == RhiLoadAction::Clear)
+                {
+                    commandList_->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, desc.depthStencilAttachment.clearValue.depth, 0, 0, nullptr);
                 }
 
                 return true;
@@ -475,6 +519,7 @@ namespace ve::rhi
                 }
 
                 activeTexture_ = nullptr;
+                activeDepthTexture_ = nullptr;
             }
 
             [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
@@ -611,6 +656,7 @@ namespace ve::rhi
             ComPtr<ID3D12GraphicsCommandList> commandList_;
             D3D12Swapchain* activeSwapchain_ = nullptr;
             D3D12Texture* activeTexture_ = nullptr;
+            D3D12Texture* activeDepthTexture_ = nullptr;
         };
 
         class D3D12Device final : public RhiDevice
@@ -844,9 +890,20 @@ namespace ve::rhi
                 resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
                 resourceDesc.Flags = ToD3D12TextureFlags(desc.usage);
 
+                D3D12_CLEAR_VALUE clearValue = {};
+                D3D12_CLEAR_VALUE* clearValuePtr = nullptr;
+                const auto usageValue = static_cast<uint32_t>(desc.usage);
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
+                {
+                    clearValue.Format = ToDxgiFormat(desc.format);
+                    clearValue.DepthStencil.Depth = 1.0f;
+                    clearValue.DepthStencil.Stencil = 0;
+                    clearValuePtr = &clearValue;
+                }
+
                 ComPtr<ID3D12Resource> resource;
                 HRESULT result = device_->CreateCommittedResource(
-                    &heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resource));
+                    &heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_COMMON, clearValuePtr, IID_PPV_ARGS(&resource));
 
                 if (FAILED(result))
                 {
@@ -861,7 +918,6 @@ namespace ve::rhi
                 }
 
                 ComPtr<ID3D12DescriptorHeap> rtvHeap;
-                const auto usageValue = static_cast<uint32_t>(desc.usage);
                 if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
                 {
                     D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
@@ -879,7 +935,25 @@ namespace ve::rhi
                     device_->CreateRenderTargetView(resource.Get(), nullptr, rtvHeap->GetCPUDescriptorHandleForHeapStart());
                 }
 
-                return std::make_unique<D3D12Texture>(resource, rtvHeap, desc);
+                ComPtr<ID3D12DescriptorHeap> dsvHeap;
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
+                {
+                    D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+                    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+                    heapDesc.NumDescriptors = 1;
+                    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+                    result = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&dsvHeap));
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Device::CreateDescriptorHeap texture DSV", result));
+                        return nullptr;
+                    }
+
+                    device_->CreateDepthStencilView(resource.Get(), nullptr, dsvHeap->GetCPUDescriptorHandleForHeapStart());
+                }
+
+                return std::make_unique<D3D12Texture>(resource, rtvHeap, dsvHeap, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
@@ -1010,7 +1084,9 @@ namespace ve::rhi
                 blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
                 D3D12_DEPTH_STENCIL_DESC depthStencilDesc = {};
-                depthStencilDesc.DepthEnable = FALSE;
+                depthStencilDesc.DepthEnable = desc.depthTestEnabled ? TRUE : FALSE;
+                depthStencilDesc.DepthWriteMask = desc.depthWriteEnabled ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+                depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
                 depthStencilDesc.StencilEnable = FALSE;
 
                 D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = {};
@@ -1025,6 +1101,7 @@ namespace ve::rhi
                 pipelineDesc.PrimitiveTopologyType = ToD3D12TopologyType(desc.topology);
                 pipelineDesc.NumRenderTargets = 1;
                 pipelineDesc.RTVFormats[0] = ToDxgiFormat(desc.colorFormat);
+                pipelineDesc.DSVFormat = desc.depthTestEnabled ? ToDxgiFormat(desc.depthFormat) : DXGI_FORMAT_UNKNOWN;
                 pipelineDesc.SampleDesc.Count = 1;
 
                 ComPtr<ID3D12PipelineState> pipelineState;

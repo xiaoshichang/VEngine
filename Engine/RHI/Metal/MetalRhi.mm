@@ -21,6 +21,8 @@ namespace ve::rhi
                 return MTLPixelFormatRGBA8Unorm;
             case RhiFormat::Bgra8Unorm:
                 return MTLPixelFormatBGRA8Unorm;
+            case RhiFormat::Depth32Float:
+                return MTLPixelFormatDepth32Float;
             case RhiFormat::Rgb32Float:
             case RhiFormat::Unknown:
             default:
@@ -43,6 +45,11 @@ namespace ve::rhi
                 metalUsage |= MTLTextureUsageRenderTarget;
             }
 
+            if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
+            {
+                metalUsage |= MTLTextureUsageRenderTarget;
+            }
+
             return metalUsage;
         }
 
@@ -54,6 +61,7 @@ namespace ve::rhi
                 return MTLVertexFormatFloat3;
             case RhiFormat::Rgba8Unorm:
             case RhiFormat::Bgra8Unorm:
+            case RhiFormat::Depth32Float:
             case RhiFormat::Unknown:
             default:
                 return MTLVertexFormatInvalid;
@@ -661,6 +669,7 @@ namespace ve::rhi
                 pipelineDescriptor.fragmentFunction = fragmentShaderModule->GetFunction();
                 pipelineDescriptor.vertexDescriptor = vertexDescriptor;
                 pipelineDescriptor.colorAttachments[0].pixelFormat = ToMetalPixelFormat(desc.colorFormat);
+                pipelineDescriptor.depthAttachmentPixelFormat = desc.depthTestEnabled ? ToMetalPixelFormat(desc.depthFormat) : MTLPixelFormatInvalid;
 
                 NSError* error = nil;
                 id<MTLRenderPipelineState> pipelineState = [device_ newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];

@@ -132,7 +132,7 @@ namespace ve::editor
             textureRebuilt = true;
         }
 
-        cameraAspectRatio_ = static_cast<Float32>(desiredExtent.width) / static_cast<Float32>((std::max)(desiredExtent.height, MinSceneViewExtent));
+        camera_.aspectRatio = static_cast<Float32>(desiredExtent.width) / static_cast<Float32>((std::max)(desiredExtent.height, MinSceneViewExtent));
         UpdateSceneViewCamera();
 
         const ImVec2 imageSize(static_cast<float>(desiredExtent.width), static_cast<float>(desiredExtent.height));
@@ -172,46 +172,46 @@ namespace ve::editor
             return;
         }
 
-        std::array<float, 3> position = ToFloat3(cameraPosition_);
+        std::array<float, 3> position = ToFloat3(camera_.position);
         if (ImGui::DragFloat3("Position", position.data(), 0.05f, 0.0f, 0.0f, "%.3f"))
         {
-            cameraPosition_ = ToVector3(position);
+            camera_.position = ToVector3(position);
         }
 
-        float yawDegrees = ToDegrees(cameraYawRadians_);
+        float yawDegrees = ToDegrees(camera_.yawRadians);
         if (ImGui::DragFloat("Yaw", &yawDegrees, 0.2f, 0.0f, 0.0f, "%.2f deg"))
         {
-            cameraYawRadians_ = ToRadians(yawDegrees);
-            targetCameraYawRadians_ = cameraYawRadians_;
+            camera_.yawRadians = ToRadians(yawDegrees);
+            camera_.targetYawRadians = camera_.yawRadians;
         }
 
-        float pitchDegrees = ToDegrees(cameraPitchRadians_);
+        float pitchDegrees = ToDegrees(camera_.pitchRadians);
         if (ImGui::DragFloat("Pitch", &pitchDegrees, 0.2f, -89.0f, 89.0f, "%.2f deg"))
         {
-            cameraPitchRadians_ = Clamp(ToRadians(pitchDegrees), -MaxPitchRadians, MaxPitchRadians);
-            targetCameraPitchRadians_ = cameraPitchRadians_;
+            camera_.pitchRadians = Clamp(ToRadians(pitchDegrees), -MaxPitchRadians, MaxPitchRadians);
+            camera_.targetPitchRadians = camera_.pitchRadians;
         }
 
-        ImGui::DragFloat("Move Speed", &cameraMoveSpeed_, 0.05f, 0.1f, 100.0f, "%.2f");
-        ImGui::DragFloat("Look Sensitivity", &cameraLookSensitivity_, 0.0001f, 0.0001f, 0.1f, "%.4f");
+        ImGui::DragFloat("Move Speed", &camera_.moveSpeed, 0.05f, 0.1f, 100.0f, "%.2f");
+        ImGui::DragFloat("Look Sensitivity", &camera_.lookSensitivity, 0.0001f, 0.0001f, 0.1f, "%.4f");
 
-        int projectionMode = cameraProjectionMode_ == RTCameraProjectionMode::Perspective ? 0 : 1;
+        int projectionMode = camera_.projectionMode == RTCameraProjectionMode::Perspective ? 0 : 1;
         const char* projectionModes[] = {"Perspective", "Orthographic"};
         if (ImGui::Combo("Projection", &projectionMode, projectionModes, IM_ARRAYSIZE(projectionModes)))
         {
-            cameraProjectionMode_ = projectionMode == 0 ? RTCameraProjectionMode::Perspective : RTCameraProjectionMode::Orthographic;
+            camera_.projectionMode = projectionMode == 0 ? RTCameraProjectionMode::Perspective : RTCameraProjectionMode::Orthographic;
         }
 
-        ImGui::DragFloat("FOV Radians", &cameraVerticalFieldOfViewRadians_, 0.01f, 0.001f, Math::Pi, "%.3f");
-        ImGui::DragFloat("Ortho Size", &cameraOrthographicSize_, 0.1f, 0.001f, 1000.0f, "%.3f");
-        ImGui::DragFloat("Aspect", &cameraAspectRatio_, 0.01f, 0.001f, 100.0f, "%.3f");
-        ImGui::DragFloat("Near", &cameraNearClipPlane_, 0.01f, 0.001f, 1000.0f, "%.3f");
-        ImGui::DragFloat("Far", &cameraFarClipPlane_, 1.0f, 0.001f, 100000.0f, "%.3f");
+        ImGui::DragFloat("FOV Radians", &camera_.verticalFieldOfViewRadians, 0.01f, 0.001f, Math::Pi, "%.3f");
+        ImGui::DragFloat("Ortho Size", &camera_.orthographicSize, 0.1f, 0.001f, 1000.0f, "%.3f");
+        ImGui::DragFloat("Aspect", &camera_.aspectRatio, 0.01f, 0.001f, 100.0f, "%.3f");
+        ImGui::DragFloat("Near", &camera_.nearClipPlane, 0.01f, 0.001f, 1000.0f, "%.3f");
+        ImGui::DragFloat("Far", &camera_.farClipPlane, 1.0f, 0.001f, 100000.0f, "%.3f");
 
-        std::array<float, 4> clearColor = ToFloat4(cameraClearColor_);
+        std::array<float, 4> clearColor = ToFloat4(camera_.clearColor);
         if (ImGui::ColorEdit4("Clear Color", clearColor.data()))
         {
-            cameraClearColor_ = ToRhiColor(clearColor);
+            camera_.clearColor = ToRhiColor(clearColor);
         }
 
         UpdateSceneViewCamera();
@@ -275,8 +275,8 @@ namespace ve::editor
             if (skipNextMouseLookDelta_)
             {
                 skipNextMouseLookDelta_ = false;
-                targetCameraYawRadians_ = cameraYawRadians_;
-                targetCameraPitchRadians_ = cameraPitchRadians_;
+                camera_.targetYawRadians = camera_.yawRadians;
+                camera_.targetPitchRadians = camera_.pitchRadians;
             }
             else
             {
@@ -284,8 +284,8 @@ namespace ve::editor
                 const float mouseDeltaY = Clamp(io.MouseDelta.y, -MaxMouseLookDelta, MaxMouseLookDelta);
                 if (mouseDeltaX != 0.0f || mouseDeltaY != 0.0f)
                 {
-                    targetCameraYawRadians_ += mouseDeltaX * cameraLookSensitivity_;
-                    targetCameraPitchRadians_ = Clamp(targetCameraPitchRadians_ - (mouseDeltaY * cameraLookSensitivity_), -MaxPitchRadians, MaxPitchRadians);
+                    camera_.targetYawRadians += mouseDeltaX * camera_.lookSensitivity;
+                    camera_.targetPitchRadians = Clamp(camera_.targetPitchRadians - (mouseDeltaY * camera_.lookSensitivity), -MaxPitchRadians, MaxPitchRadians);
                 }
             }
         }
@@ -300,7 +300,7 @@ namespace ve::editor
         if (moveDirection.LengthSquared() > Math::DefaultEpsilon)
         {
             const float speedMultiplier = ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift) ? 3.0f : 1.0f;
-            cameraPosition_ += moveDirection.Normalized() * (cameraMoveSpeed_ * speedMultiplier * io.DeltaTime);
+            camera_.position += moveDirection.Normalized() * (camera_.moveSpeed * speedMultiplier * io.DeltaTime);
             cameraChanged = true;
         }
 
@@ -314,13 +314,13 @@ namespace ve::editor
     {
         const Float32 clampedDeltaSeconds = Clamp(deltaSeconds, 0.0f, 1.0f / 15.0f);
         const Float32 smoothingFactor = Clamp(clampedDeltaSeconds * CameraLookSmoothingSpeed, 0.0f, 1.0f);
-        const Float32 previousYaw = cameraYawRadians_;
-        const Float32 previousPitch = cameraPitchRadians_;
+        const Float32 previousYaw = camera_.yawRadians;
+        const Float32 previousPitch = camera_.pitchRadians;
 
-        cameraYawRadians_ = Lerp(cameraYawRadians_, targetCameraYawRadians_, smoothingFactor);
-        cameraPitchRadians_ = Lerp(cameraPitchRadians_, targetCameraPitchRadians_, smoothingFactor);
+        camera_.yawRadians = Lerp(camera_.yawRadians, camera_.targetYawRadians, smoothingFactor);
+        camera_.pitchRadians = Lerp(camera_.pitchRadians, camera_.targetPitchRadians, smoothingFactor);
 
-        return !NearlyEqual(cameraYawRadians_, previousYaw) || !NearlyEqual(cameraPitchRadians_, previousPitch);
+        return !NearlyEqual(camera_.yawRadians, previousYaw) || !NearlyEqual(camera_.pitchRadians, previousPitch);
     }
 
     void SceneViewPanel::UpdateSceneViewCamera()
@@ -344,20 +344,20 @@ namespace ve::editor
     {
         RTCameraDesc desc = {};
         desc.primary = false;
-        desc.projectionMode = cameraProjectionMode_;
-        desc.verticalFieldOfViewRadians = cameraVerticalFieldOfViewRadians_;
-        desc.orthographicSize = cameraOrthographicSize_;
-        desc.aspectRatio = (std::max)(cameraAspectRatio_, 0.001f);
-        desc.nearClipPlane = cameraNearClipPlane_;
-        desc.farClipPlane = (std::max)(cameraFarClipPlane_, cameraNearClipPlane_ + 0.001f);
-        desc.clearColor = cameraClearColor_;
+        desc.projectionMode = camera_.projectionMode;
+        desc.verticalFieldOfViewRadians = camera_.verticalFieldOfViewRadians;
+        desc.orthographicSize = camera_.orthographicSize;
+        desc.aspectRatio = (std::max)(camera_.aspectRatio, 0.001f);
+        desc.nearClipPlane = camera_.nearClipPlane;
+        desc.farClipPlane = (std::max)(camera_.farClipPlane, camera_.nearClipPlane + 0.001f);
+        desc.clearColor = camera_.clearColor;
         desc.localToWorld = BuildCameraLocalToWorld();
         return desc;
     }
 
     Matrix44 SceneViewPanel::BuildCameraLocalToWorld() const noexcept
     {
-        return Matrix44::Translation(cameraPosition_) * Matrix44::RotationY(cameraYawRadians_) * Matrix44::RotationX(cameraPitchRadians_);
+        return Matrix44::Translation(camera_.position) * Matrix44::RotationY(camera_.yawRadians) * Matrix44::RotationX(camera_.pitchRadians);
     }
 
     Vector3 SceneViewPanel::GetForwardDirection() const noexcept

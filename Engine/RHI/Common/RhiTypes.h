@@ -42,6 +42,7 @@ namespace ve::rhi
         Rgba8Unorm,
         Bgra8Unorm,
         Rgb32Float,
+        Depth32Float,
     };
 
     enum class RhiIndexFormat
@@ -84,6 +85,7 @@ namespace ve::rhi
     {
         Sampled = 1 << 0,
         RenderTarget = 1 << 1,
+        DepthStencil = 1 << 2,
     };
 
     /// Stores a two-dimensional unsigned extent.
@@ -257,6 +259,9 @@ namespace ve::rhi
         RhiPrimitiveTopology topology = RhiPrimitiveTopology::TriangleList;
         RhiFillMode fillMode = RhiFillMode::Solid;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
+        RhiFormat depthFormat = RhiFormat::Depth32Float;
+        bool depthTestEnabled = false;
+        bool depthWriteEnabled = false;
         const char* debugName = nullptr;
     };
 } // namespace ve::rhi

@@ -26,6 +26,24 @@ namespace ve::editor
         [[nodiscard]] rhi::RhiFillMode GetFillMode() const noexcept;
 
     private:
+        struct SceneViewCameraState
+        {
+            Vector3 position{0.0f, 4.0f, -10.0f};
+            Float32 yawRadians = 0.0f;
+            Float32 pitchRadians = 0.0f;
+            Float32 targetYawRadians = 0.0f;
+            Float32 targetPitchRadians = 0.0f;
+            Float32 moveSpeed = 6.0f;
+            Float32 lookSensitivity = 0.0025f;
+            RTCameraProjectionMode projectionMode = RTCameraProjectionMode::Perspective;
+            Float32 verticalFieldOfViewRadians = 1.0471975512f;
+            Float32 orthographicSize = 5.0f;
+            Float32 aspectRatio = 1.7777778f;
+            Float32 nearClipPlane = 0.1f;
+            Float32 farClipPlane = 1000.0f;
+            rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
+        };
+
         [[nodiscard]] const char* GetName() const noexcept override;
         void RenderContent() override;
 
@@ -46,20 +64,7 @@ namespace ve::editor
         std::shared_ptr<RTCamera> sceneViewCamera_;
         WindowExtent renderTargetExtent_ = {};
         Editor* activeEditor_ = nullptr;
-        Vector3 cameraPosition_{0.0f, 4.0f, -10.0f};
-        Float32 cameraYawRadians_ = 0.0f;
-        Float32 cameraPitchRadians_ = 0.0f;
-        Float32 targetCameraYawRadians_ = 0.0f;
-        Float32 targetCameraPitchRadians_ = 0.0f;
-        Float32 cameraMoveSpeed_ = 6.0f;
-        Float32 cameraLookSensitivity_ = 0.0025f;
-        RTCameraProjectionMode cameraProjectionMode_ = RTCameraProjectionMode::Perspective;
-        Float32 cameraVerticalFieldOfViewRadians_ = 1.0471975512f;
-        Float32 cameraOrthographicSize_ = 5.0f;
-        Float32 cameraAspectRatio_ = 1.7777778f;
-        Float32 cameraNearClipPlane_ = 0.1f;
-        Float32 cameraFarClipPlane_ = 1000.0f;
-        rhi::RhiColor cameraClearColor_{0.05f, 0.07f, 0.10f, 1.0f};
+        SceneViewCameraState camera_;
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
         bool sceneViewFocused_ = false;
         bool cameraLookActive_ = false;
