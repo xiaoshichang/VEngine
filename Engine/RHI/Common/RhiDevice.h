@@ -114,6 +114,12 @@ namespace ve::rhi
         /// Ends the active render pass.
         virtual void EndRenderPass() = 0;
 
+        /// Copies a texture into the current swapchain back buffer.
+        ///
+        /// The source texture must match the swapchain color format and extent in the first implementation. Backends
+        /// may later replace this with a scaling/color-conversion blit path while keeping the frame-pipeline contract.
+        [[nodiscard]] virtual bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) = 0;
+
         /// Sets the active graphics pipeline.
         virtual void SetPipeline(const RhiPipelineState& pipelineState) = 0;
 

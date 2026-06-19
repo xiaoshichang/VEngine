@@ -242,8 +242,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
         class OpaqueSceneRenderPass final : public RenderPass
         {
         public:
-            explicit OpaqueSceneRenderPass(std::shared_ptr<RTRenderTexture> colorTexture)
-                : colorTexture_(std::move(colorTexture))
+            explicit OpaqueSceneRenderPass(RendererRenderTarget target)
+                : target_(std::move(target))
             {
             }
 
@@ -254,14 +254,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
             void Setup(RenderPassBuilder& builder) override
             {
-                if (colorTexture_ != nullptr && colorTexture_->GetTexture() != nullptr)
+                if (target_.colorTexture != nullptr && target_.colorTexture->GetTexture() != nullptr)
                 {
                     builder.AddTextureColorAttachment(
-                        *colorTexture_->GetTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::Store, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+                        *target_.colorTexture->GetTexture(), target_.colorLoadAction, target_.colorStoreAction, target_.clearColor);
                     return;
                 }
 
-                builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::Store, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+                builder.AddSwapchainColorAttachment(target_.colorLoadAction, target_.colorStoreAction, target_.clearColor);
             }
 
             void Execute(RenderPassContext& context) override
@@ -415,15 +415,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
             [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept
             {
-                if (colorTexture_ != nullptr)
+                if (target_.colorTexture != nullptr)
                 {
-                    return colorTexture_->GetDesc().colorFormat;
+                    return target_.colorTexture->GetDesc().colorFormat;
                 }
 
                 return context.GetFrameContext().mainColorFormat;
             }
 
-            std::shared_ptr<RTRenderTexture> colorTexture_;
+            RendererRenderTarget target_;
             std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
             std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
             std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
@@ -432,46 +432,13 @@ float4 PSMain(VSOutput input) : SV_TARGET
             rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         };
 
-        class EditorOverlayRenderPass final : public RenderPass
-        {
-        public:
-            EditorOverlayRenderPass(rhi::RhiLoadAction colorLoadAction, EditorOverlayRenderCallback callback)
-                : colorLoadAction_(colorLoadAction)
-                , callback_(std::move(callback))
-            {
-            }
-
-            [[nodiscard]] const char* GetName() const noexcept override
-            {
-                return "EditorOverlayPass";
-            }
-
-            void Setup(RenderPassBuilder& builder) override
-            {
-                builder.AddSwapchainColorAttachment(colorLoadAction_, rhi::RhiStoreAction::Store, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
-            }
-
-            void Execute(RenderPassContext& context) override
-            {
-                (void)context;
-                VE_ASSERT_RENDER_THREAD();
-                if (callback_)
-                {
-                    callback_();
-                }
-            }
-
-        private:
-            rhi::RhiLoadAction colorLoadAction_ = rhi::RhiLoadAction::Clear;
-            EditorOverlayRenderCallback callback_;
-        };
     } // namespace
 
-    ErrorCode BaseRenderer::RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode BaseRenderer::RenderScene(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ErrorCode beginResult = BeginFrame(device, commandList, mainSwapchain);
+        ErrorCode beginResult = BeginSceneRender(device, commandList, mainSwapchain);
         if (beginResult != ErrorCode::None)
         {
             return beginResult;
@@ -480,11 +447,11 @@ float4 PSMain(VSOutput input) : SV_TARGET
         ErrorCode executeResult = ExecutePassesInOrder();
         if (executeResult != ErrorCode::None)
         {
-            EndFrame();
+            EndSceneRender();
             return executeResult;
         }
 
-        EndFrame();
+        EndSceneRender();
         return ErrorCode::None;
     }
 
@@ -508,16 +475,16 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return scene_;
     }
 
-    void BaseRenderer::AddInternalPass(std::unique_ptr<RenderPass> pass)
+    void BaseRenderer::AddRenderPass(std::unique_ptr<RenderPass> pass)
     {
-        VE_ASSERT_MESSAGE(!frameActive_, "BaseRenderer::AddInternalPass requires no active frame.");
-        VE_ASSERT_MESSAGE(pass != nullptr, "BaseRenderer::AddInternalPass requires a valid pass.");
+        VE_ASSERT_MESSAGE(!frameActive_, "BaseRenderer::AddRenderPass requires no active frame.");
+        VE_ASSERT_MESSAGE(pass != nullptr, "BaseRenderer::AddRenderPass requires a valid pass.");
         passes_.push_back(std::move(pass));
     }
 
-    void BaseRenderer::ClearInternalPasses() noexcept
+    void BaseRenderer::ClearRenderPasses() noexcept
     {
-        VE_ASSERT_MESSAGE(!frameActive_, "BaseRenderer::ClearInternalPasses requires no active frame.");
+        VE_ASSERT_MESSAGE(!frameActive_, "BaseRenderer::ClearRenderPasses requires no active frame.");
         passes_.clear();
         framePasses_.clear();
     }
@@ -541,7 +508,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         // Visibility and batching stay here so concrete renderers only choose their pass topology.
     }
 
-    ErrorCode BaseRenderer::BeginFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode BaseRenderer::BeginSceneRender(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
     {
         if (frameActive_)
         {
@@ -563,11 +530,6 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return buildPassResult;
         }
 
-        if (!commandList.Begin())
-        {
-            return ErrorCode::PlatformError;
-        }
-
         activeDevice_ = &device;
         activeCommandList_ = &commandList;
         activeMainSwapchain_ = &mainSwapchain;
@@ -580,8 +542,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             ErrorCode beginPassResult = BeginCurrentPass(mainSwapchain);
             if (beginPassResult != ErrorCode::None)
             {
-                activeCommandList_ = nullptr;
                 activeDevice_ = nullptr;
+                activeCommandList_ = nullptr;
                 activeMainSwapchain_ = nullptr;
                 frameActive_ = false;
                 return beginPassResult;
@@ -625,9 +587,9 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return ErrorCode::None;
     }
 
-    void BaseRenderer::EndFrame()
+    void BaseRenderer::EndSceneRender()
     {
-        VE_ASSERT_MESSAGE(frameActive_, "BaseRenderer::EndFrame requires an active frame.");
+        VE_ASSERT_MESSAGE(frameActive_, "BaseRenderer::EndSceneRender requires an active scene render.");
         VE_ASSERT(activeCommandList_ != nullptr);
 
         if (renderPassOpen_)
@@ -635,9 +597,6 @@ float4 PSMain(VSOutput input) : SV_TARGET
             activeCommandList_->EndRenderPass();
             renderPassOpen_ = false;
         }
-
-        const bool ended = activeCommandList_->End();
-        VE_ASSERT_MESSAGE(ended, "BaseRenderer failed to end the active RHI command list.");
 
         activeCommandList_ = nullptr;
         activeDevice_ = nullptr;
@@ -688,20 +647,17 @@ float4 PSMain(VSOutput input) : SV_TARGET
         return ErrorCode::None;
     }
 
-    PlayerRenderer::PlayerRenderer(PlayerRendererDesc desc)
+    ForwardRenderer::ForwardRenderer(ForwardRendererDesc desc)
     {
         SetScene(std::move(desc.scene));
-        AddInternalPass(std::make_unique<OpaqueSceneRenderPass>(nullptr));
-    }
-
-    EditorRenderer::EditorRenderer(EditorRendererDesc desc)
-    {
-        SetScene(std::move(desc.scene));
-        if (desc.gameViewTexture != nullptr)
+        if (desc.addOpaquePass)
         {
-            AddInternalPass(std::make_unique<OpaqueSceneRenderPass>(std::move(desc.gameViewTexture)));
+            AddRenderPass(std::make_unique<OpaqueSceneRenderPass>(std::move(desc.target)));
         }
 
-        AddInternalPass(std::make_unique<EditorOverlayRenderPass>(desc.mainColorLoadAction, std::move(desc.overlayRenderCallback)));
+        for (std::unique_ptr<RenderPass>& pass : desc.additionalPasses)
+        {
+            AddRenderPass(std::move(pass));
+        }
     }
 } // namespace ve

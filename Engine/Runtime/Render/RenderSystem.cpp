@@ -15,6 +15,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/BaseRenderer.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
+#include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -140,14 +141,14 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode RenderMainSwapchainFrame(RenderSystemImpl& impl, BaseRenderer& renderer)
+        [[nodiscard]] ErrorCode RenderMainSwapchainFrame(RenderSystemImpl& impl, RenderFramePipeline& framePipeline)
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
             VE_ASSERT(impl.mainSwapchain != nullptr);
             VE_ASSERT(impl.frameCommandList != nullptr);
 
-            ErrorCode renderResult = renderer.RenderFrame(*impl.device, *impl.frameCommandList, *impl.mainSwapchain);
+            ErrorCode renderResult = framePipeline.RenderFrame(*impl.device, *impl.frameCommandList, *impl.mainSwapchain);
             if (renderResult != ErrorCode::None)
             {
                 return renderResult;
@@ -510,15 +511,15 @@ namespace ve
                        });
     }
 
-    void RenderSystem::RenderFrame(std::shared_ptr<BaseRenderer> renderer)
+    void RenderSystem::RenderFrame(std::shared_ptr<RenderFramePipeline> framePipeline)
     {
         VE_ASSERT_SCENE_THREAD();
-        VE_ASSERT_MESSAGE(renderer != nullptr, "RenderSystem::RenderFrame requires a renderer.");
+        VE_ASSERT_MESSAGE(framePipeline != nullptr, "RenderSystem::RenderFrame requires a frame pipeline.");
 
         EnqueueCommand("RenderSystemRenderFrame",
-                       [this, renderer = std::move(renderer)]()
+                       [this, framePipeline = std::move(framePipeline)]()
                        {
-                           const ErrorCode result = RenderMainSwapchainFrame(*impl_, *renderer);
+                           const ErrorCode result = RenderMainSwapchainFrame(*impl_, *framePipeline);
                            VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem::RenderFrame failed.");
                        });
     }

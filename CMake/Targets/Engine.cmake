@@ -29,6 +29,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
+            Engine/Runtime/Render/RenderFramePipeline.cpp
             Engine/Runtime/Render/RenderPass.cpp
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
@@ -91,6 +92,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
             Engine/Runtime/Render/RenderCommandQueue.h
+            Engine/Runtime/Render/RenderFramePipeline.h
             Engine/Runtime/Render/RenderPass.h
             Engine/Runtime/Render/RenderResource.h
             Engine/Runtime/Render/RenderScene.h

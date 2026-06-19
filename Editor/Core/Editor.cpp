@@ -202,7 +202,7 @@ namespace ve::editor
         ImGui::NewFrame();
     }
 
-    std::shared_ptr<BaseRenderer> Editor::Render()
+    std::shared_ptr<RenderFramePipeline> Editor::Render()
     {
         VE_ASSERT_SCENE_THREAD();
         if (!initialized_.load(std::memory_order_acquire))
@@ -253,12 +253,18 @@ namespace ve::editor
             }
         };
 
-        EditorRendererDesc rendererDesc = {};
-        rendererDesc.scene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
-        rendererDesc.gameViewTexture = std::move(gameViewTexture);
-        rendererDesc.mainColorLoadAction = rhi::RhiLoadAction::Clear;
-        rendererDesc.overlayRenderCallback = std::move(overlayCallback);
-        return std::make_shared<EditorRenderer>(std::move(rendererDesc));
+        EditorRenderFramePipelineDesc pipelineDesc = {};
+        if (gameViewTexture != nullptr)
+        {
+            ForwardRendererDesc rendererDesc = {};
+            rendererDesc.scene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
+            rendererDesc.target.colorTexture = std::move(gameViewTexture);
+            pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+        }
+
+        pipelineDesc.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
+        pipelineDesc.overlayRenderCallback = std::move(overlayCallback);
+        return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineDesc));
     }
 
     void Editor::UnInit() noexcept

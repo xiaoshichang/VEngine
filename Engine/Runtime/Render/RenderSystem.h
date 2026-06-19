@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/BaseRenderer.h"
+#include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderPass.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderTarget.h"
@@ -172,10 +173,10 @@ namespace ve
 
         /// Enqueues one complete main-swapchain frame on the Render Thread.
         ///
-        /// The renderer is prepared and owned by Scene Thread code, then captured by shared_ptr so already queued frame
-        /// work remains valid even if Scene Thread replaces its current renderer before the Render Thread consumes the
-        /// command.
-        void RenderFrame(std::shared_ptr<BaseRenderer> renderer);
+        /// The frame pipeline is prepared and owned by Scene Thread code, then captured by shared_ptr so already queued
+        /// frame work remains valid even if Scene Thread replaces its current pipeline before the Render Thread
+        /// consumes the command.
+        void RenderFrame(std::shared_ptr<RenderFramePipeline> framePipeline);
 
         /// Submits a command to execute on the Render Thread.
         ///

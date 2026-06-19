@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Input/InputSystem.h"
+#include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/AssetRecord.h"
 #include "Engine/Runtime/Resource/ResourceSystem.h"
@@ -30,7 +31,7 @@ namespace ve
         /// Return true when the event should continue to InputSystem. This lets Editor-owned views decide when
         /// keyboard and mouse input belongs to game runtime input instead of editor UI.
         std::function<bool(const OSEvent& event)> onOSEvent = nullptr;
-        std::function<std::shared_ptr<BaseRenderer>()> onRender = nullptr;
+        std::function<std::shared_ptr<RenderFramePipeline>()> onRender = nullptr;
     };
 
     /// Describes the Scene Thread created by SceneSystem::Initialize().

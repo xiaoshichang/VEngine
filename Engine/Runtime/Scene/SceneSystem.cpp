@@ -2,6 +2,8 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Render/RenderFramePipeline.h"
+#include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
@@ -30,6 +32,7 @@ namespace ve
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
         SceneSystemEditorCallback editorCallback;
         std::function<void(const OSEvent& event)> runtimeOSEventCallback;
+        std::shared_ptr<RTRenderTexture> playerSceneColorTexture;
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
@@ -101,14 +104,26 @@ namespace ve
             ProcessOSEvents(impl);
         }
 
-        [[nodiscard]] std::shared_ptr<BaseRenderer> CreatePlayerRenderer(SceneSystemImpl& impl)
+        [[nodiscard]] std::shared_ptr<RenderFramePipeline> CreatePlayerFramePipeline(SceneSystemImpl& impl)
         {
             VE_ASSERT_SCENE_THREAD();
             VE_ASSERT(impl.renderSystem != nullptr);
 
-            PlayerRendererDesc desc = {};
-            desc.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
-            return std::make_shared<PlayerRenderer>(std::move(desc));
+            if (impl.playerSceneColorTexture == nullptr)
+            {
+                RenderTextureDesc textureDesc = {};
+                textureDesc.name = "PlayerSceneColor";
+                impl.playerSceneColorTexture = std::make_shared<RTRenderTexture>(std::move(textureDesc));
+            }
+
+            ForwardRendererDesc rendererDesc = {};
+            rendererDesc.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
+            rendererDesc.target.colorTexture = impl.playerSceneColorTexture;
+
+            PlayerRenderFramePipelineDesc pipelineDesc = {};
+            pipelineDesc.sceneRenderer = std::make_shared<ForwardRenderer>(std::move(rendererDesc));
+            pipelineDesc.sceneColorTexture = impl.playerSceneColorTexture;
+            return std::make_shared<PlayerRenderFramePipeline>(std::move(pipelineDesc));
         }
 
         void SceneThreadLoop_Render_Editor(SceneSystemImpl& impl)
@@ -117,10 +132,10 @@ namespace ve
             VE_ASSERT(impl.renderSystem != nullptr);
             VE_ASSERT(impl.editorCallback.onRender != nullptr);
 
-            std::shared_ptr<BaseRenderer> renderer = impl.editorCallback.onRender();
-            VE_ASSERT_MESSAGE(renderer != nullptr, "SceneThreadLoop_Render_Editor requires a renderer.");
+            std::shared_ptr<RenderFramePipeline> framePipeline = impl.editorCallback.onRender();
+            VE_ASSERT_MESSAGE(framePipeline != nullptr, "SceneThreadLoop_Render_Editor requires a frame pipeline.");
 
-            impl.renderSystem->RenderFrame(std::move(renderer));
+            impl.renderSystem->RenderFrame(std::move(framePipeline));
         }
 
         void SceneThreadLoop_Render_Player(SceneSystemImpl& impl)
@@ -128,7 +143,7 @@ namespace ve
             VE_ASSERT_SCENE_THREAD();
             VE_ASSERT(impl.renderSystem != nullptr);
 
-            impl.renderSystem->RenderFrame(CreatePlayerRenderer(impl));
+            impl.renderSystem->RenderFrame(CreatePlayerFramePipeline(impl));
         }
 
         void SceneThreadLoop_Render(SceneSystemImpl& impl)
@@ -218,6 +233,7 @@ namespace ve
             }
             impl.renderSystem = nullptr;
             impl.runtimeOSEventCallback = nullptr;
+            impl.playerSceneColorTexture.reset();
             impl.osEventQueue.ClearForConsumer();
         }
 

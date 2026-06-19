@@ -343,8 +343,7 @@ namespace ve::rhi
 
             [[nodiscard]] bool Initialize()
             {
-                ComPtr<ID3D11Texture2D> backBuffer;
-                HRESULT result = swapchain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+                HRESULT result = swapchain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer_));
 
                 if (FAILED(result))
                 {
@@ -352,7 +351,7 @@ namespace ve::rhi
                     return false;
                 }
 
-                result = device_->CreateRenderTargetView(backBuffer.Get(), nullptr, &renderTargetView_);
+                result = device_->CreateRenderTargetView(backBuffer_.Get(), nullptr, &renderTargetView_);
 
                 if (FAILED(result))
                 {
@@ -391,6 +390,11 @@ namespace ve::rhi
                 return renderTargetView_.Get();
             }
 
+            [[nodiscard]] ID3D11Texture2D* GetCurrentBackBuffer() const noexcept
+            {
+                return backBuffer_.Get();
+            }
+
         private:
             void SetLastError(std::string error)
             {
@@ -403,6 +407,7 @@ namespace ve::rhi
         private:
             ComPtr<ID3D11Device> device_;
             ComPtr<IDXGISwapChain> swapchain_;
+            ComPtr<ID3D11Texture2D> backBuffer_;
             ComPtr<ID3D11RenderTargetView> renderTargetView_;
             RhiExtent2D extent_ = {};
             RhiFormat colorFormat_ = RhiFormat::Bgra8Unorm;
@@ -478,6 +483,28 @@ namespace ve::rhi
             {
                 ID3D11RenderTargetView* nullRenderTarget = nullptr;
                 context_->OMSetRenderTargets(1, &nullRenderTarget, nullptr);
+            }
+
+            [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
+            {
+                auto* d3dTexture = dynamic_cast<D3D11Texture*>(&sourceTexture);
+                auto* d3dSwapchain = dynamic_cast<D3D11Swapchain*>(&swapchain);
+                if (d3dTexture == nullptr || d3dSwapchain == nullptr)
+                {
+                    return false;
+                }
+
+                const RhiExtent2D swapchainExtent = d3dSwapchain->GetExtent();
+                if (sourceTexture.GetWidth() != swapchainExtent.width || sourceTexture.GetHeight() != swapchainExtent.height ||
+                    sourceTexture.GetFormat() != d3dSwapchain->GetColorFormat())
+                {
+                    return false;
+                }
+
+                ID3D11RenderTargetView* nullRenderTarget = nullptr;
+                context_->OMSetRenderTargets(1, &nullRenderTarget, nullptr);
+                context_->CopyResource(d3dSwapchain->GetCurrentBackBuffer(), d3dTexture->GetNativeTexture());
+                return true;
             }
 
             void SetPipeline(const RhiPipelineState& pipelineState) override

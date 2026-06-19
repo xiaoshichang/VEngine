@@ -9,35 +9,35 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 
-#include <functional>
 #include <memory>
 #include <vector>
 
 namespace ve
 {
-    using EditorOverlayRenderCallback = std::function<void()>;
-
-    struct EditorRendererDesc
+    struct RendererRenderTarget
     {
-        std::shared_ptr<RTScene> scene;
-        std::shared_ptr<RTRenderTexture> gameViewTexture;
-        rhi::RhiLoadAction mainColorLoadAction = rhi::RhiLoadAction::Clear;
-        EditorOverlayRenderCallback overlayRenderCallback;
+        std::shared_ptr<RTRenderTexture> colorTexture;
+        rhi::RhiLoadAction colorLoadAction = rhi::RhiLoadAction::Clear;
+        rhi::RhiStoreAction colorStoreAction = rhi::RhiStoreAction::Store;
+        rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
     };
 
-    struct PlayerRendererDesc
+    struct ForwardRendererDesc
     {
         std::shared_ptr<RTScene> scene;
+        RendererRenderTarget target;
+        bool addOpaquePass = true;
+        std::vector<std::unique_ptr<RenderPass>> additionalPasses;
     };
 
-    /// Owns per-frame renderer orchestration and long-lived pass instances.
+    /// Renders one RTScene through a configurable list of long-lived render passes.
     class BaseRenderer : public NonCopyable
     {
     public:
         BaseRenderer() = default;
         virtual ~BaseRenderer() = default;
 
-        [[nodiscard]] ErrorCode RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
+        [[nodiscard]] ErrorCode RenderScene(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
 
         [[nodiscard]] bool IsFrameActive() const noexcept;
         [[nodiscard]] const RenderFrameContext& GetFrameContext() const noexcept;
@@ -45,8 +45,8 @@ namespace ve
     protected:
         void SetScene(std::shared_ptr<RTScene> scene) noexcept;
         [[nodiscard]] std::shared_ptr<RTScene> GetScene() const noexcept;
-        void AddInternalPass(std::unique_ptr<RenderPass> pass);
-        void ClearInternalPasses() noexcept;
+        void AddRenderPass(std::unique_ptr<RenderPass> pass);
+        void ClearRenderPasses() noexcept;
 
     private:
         struct FramePassData
@@ -60,9 +60,9 @@ namespace ve
         [[nodiscard]] ErrorCode BuildFrameContext(rhi::RhiSwapchain& mainSwapchain) noexcept;
         void UpdateRenderWorld();
         void BuildVisibleDrawLists();
-        [[nodiscard]] ErrorCode BeginFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
+        [[nodiscard]] ErrorCode BeginSceneRender(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
         [[nodiscard]] ErrorCode ExecutePassesInOrder();
-        void EndFrame();
+        void EndSceneRender();
         [[nodiscard]] ErrorCode BuildPassData();
         [[nodiscard]] ErrorCode BeginCurrentPass(rhi::RhiSwapchain& mainSwapchain);
 
@@ -78,15 +78,9 @@ namespace ve
         bool renderPassOpen_ = false;
     };
 
-    class PlayerRenderer final : public BaseRenderer
+    class ForwardRenderer final : public BaseRenderer
     {
     public:
-        explicit PlayerRenderer(PlayerRendererDesc desc);
-    };
-
-    class EditorRenderer final : public BaseRenderer
-    {
-    public:
-        explicit EditorRenderer(EditorRendererDesc desc);
+        explicit ForwardRenderer(ForwardRendererDesc desc);
     };
 } // namespace ve

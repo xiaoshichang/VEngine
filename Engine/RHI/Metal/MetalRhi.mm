@@ -359,6 +359,13 @@ namespace ve::rhi
                 renderCommandEncoder_ = nil;
             }
 
+            [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
+            {
+                (void)sourceTexture;
+                (void)swapchain;
+                return false;
+            }
+
             void SetPipeline(const RhiPipelineState& pipelineState) override
             {
                 const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);

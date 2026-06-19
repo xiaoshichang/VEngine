@@ -13,8 +13,9 @@ The first version intentionally keeps the renderer narrow while making the runti
 - Provide CPU-side flushing for submitted render commands.
 - Initialize and shut down the selected RHI device on the Render Thread.
 - Create and destroy the main swapchain from the platform window surface.
-- Render a minimal triangle frame as the first Player/Editor rendering smoke path.
-- Provide a lightweight pass orchestration shape through `FrameRenderer` and `RenderPass`.
+- Render one or more RTScene views through renderer objects, then let a frame pipeline handle product-specific
+  presentation.
+- Provide a lightweight pass orchestration shape through `BaseRenderer`, `ForwardRenderer`, and `RenderPass`.
 - Leave RenderWorld, render-resource registries, upload scheduling, full frame graph dependency analysis, and viewport
   registration for later renderer work.
 
@@ -148,24 +149,44 @@ The first version does not create or own:
 - Frame graph.
 - Mesh, material, texture, or UI rendering.
 
-## 5. Frame Renderer And Render Pass Model
+## 5. Frame Pipeline, Renderer, And Render Pass Model
 
-`FrameRenderer` is the first renderer-level frame orchestrator. It owns long-lived `RenderPass` objects, then builds
-per-frame pass data from the current main-swapchain frame context.
+The render layer keeps three concepts separate:
 
-First-stage frame flow:
+- `RenderFramePipeline` describes how a product surface records one whole frame. The Editor pipeline can render editor
+  views and then draw ImGui. The Player pipeline renders the scene into an intermediate color texture and copies that
+  texture to the main swapchain.
+- `BaseRenderer` describes how to render one `RTScene` into one render target. It owns long-lived `RenderPass` objects,
+  builds per-frame pass data, updates render-world extension points, and executes the pass list.
+- `RenderPass` is a reusable pass that declares attachments in `Setup()` and records draw commands in `Execute()`.
+
+First-stage player frame flow:
 
 ```text
-FrameRenderer
-  Build frame context
-  Update render world
-  Build visible draw lists
-  Execute passes in order
+PlayerRenderFramePipeline
+  Ensure player scene color texture matches swapchain
+  ForwardRenderer.RenderScene(RTScene -> scene color texture)
+  Copy scene color texture -> swapchain
+  Submit and present
+```
+
+First-stage editor frame flow:
+
+```text
+EditorRenderFramePipeline
+  ForwardRenderer.RenderScene(RTScene -> Game View texture)
+  Future renderer(s) may render Scene View or previews with different settings
+  Draw ImGui overlay into swapchain
+  Submit and present
 ```
 
 The current implementation keeps `UpdateRenderWorld()` and `BuildVisibleDrawLists()` as explicit no-op extension points
 until render proxies and mesh draw lists exist. This keeps the threading boundary visible without introducing a partial
 RenderWorld.
+
+`ForwardRenderer` is the first concrete `BaseRenderer`. Future renderers can derive from `BaseRenderer` as
+`DeferredRenderer`, `RenderGraphRenderer`, or more specialized editor preview renderers. Editor Game View and Scene View
+are intentionally free to use different renderer instances and different pass lists.
 
 Renderer-level passes use this interface:
 
@@ -183,24 +204,26 @@ public:
 commands through `RenderPassContext` after the RHI render pass has begun. The pass object itself is long-lived; the pass
 descriptor, viewport, scissor, and frame context are rebuilt per frame.
 
-The first concrete pass is the triangle smoke pass. It replaces the earlier direct `RenderSystem::RenderFrame()` draw
-logic with this shape:
+Passes are intended to be assembled differently by different renderers. For example, a later `PreDepthPass` can be added
+to Forward, Deferred, or RenderGraph-style renderers without changing the frame pipeline that presents the result.
+
+The first concrete scene pass is the opaque forward pass:
 
 ```text
-TriangleForwardPass
+OpaqueScenePass
   Setup:
-    write swapchain color attachment
+    write configured color attachment
     clear -> store
 
   Execute:
-    bind triangle pipeline
-    bind triangle vertex buffer
-    draw 3 vertices
+    choose the active RTScene camera
+    bind lighting/material/object constants
+    draw visible mesh items
 ```
 
 This is intentionally not a full render graph. There is no automatic pass culling, transient resource aliasing, resource
-state inference, or graph-level scheduling yet. The current goal is to make the frame/pass ownership boundary real while
-keeping the first rendering vertical slice small.
+state inference, or graph-level scheduling yet. The current goal is to make the frame-pipeline, renderer, and pass
+ownership boundaries real while keeping the first rendering vertical slice small.
 
 ## 6. Command Queue Model
 

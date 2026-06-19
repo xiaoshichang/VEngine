@@ -112,8 +112,9 @@ namespace ve::rhi
         class D3D12Texture final : public RhiTexture
         {
         public:
-            D3D12Texture(ComPtr<ID3D12Resource> resource, RhiTextureDesc desc)
+            D3D12Texture(ComPtr<ID3D12Resource> resource, ComPtr<ID3D12DescriptorHeap> rtvHeap, RhiTextureDesc desc)
                 : resource_(std::move(resource))
+                , rtvHeap_(std::move(rtvHeap))
                 , desc_(desc)
             {
             }
@@ -143,9 +144,32 @@ namespace ve::rhi
                 return resource_.Get();
             }
 
+            [[nodiscard]] bool HasRenderTargetView() const noexcept
+            {
+                return rtvHeap_ != nullptr;
+            }
+
+            [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetRenderTargetView() const noexcept
+            {
+                VE_ASSERT(rtvHeap_ != nullptr);
+                return rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+            }
+
+            [[nodiscard]] D3D12_RESOURCE_STATES GetResourceState() const noexcept
+            {
+                return resourceState_;
+            }
+
+            void SetResourceState(D3D12_RESOURCE_STATES state) noexcept
+            {
+                resourceState_ = state;
+            }
+
         private:
             ComPtr<ID3D12Resource> resource_;
+            ComPtr<ID3D12DescriptorHeap> rtvHeap_;
             RhiTextureDesc desc_ = {};
+            D3D12_RESOURCE_STATES resourceState_ = D3D12_RESOURCE_STATE_COMMON;
         };
 
         class D3D12FenceObject final : public RhiFence
@@ -403,18 +427,33 @@ namespace ve::rhi
                 }
 
                 const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
-                activeSwapchain_ = d3dSwapchain;
+                activeSwapchain_ = nullptr;
+                activeTexture_ = nullptr;
+                ID3D12Resource* renderTarget = nullptr;
+                D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = {};
 
-                D3D12_RESOURCE_BARRIER barrier = {};
-                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-                barrier.Transition.pResource = d3dSwapchain->GetCurrentRenderTarget();
-                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-                commandList_->ResourceBarrier(1, &barrier);
+                if (colorAttachment.texture != nullptr)
+                {
+                    auto* d3dTexture = dynamic_cast<D3D12Texture*>(colorAttachment.texture);
+                    if (d3dTexture == nullptr || !d3dTexture->HasRenderTargetView())
+                    {
+                        return false;
+                    }
 
-                D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = d3dSwapchain->GetCurrentRtv();
+                    activeTexture_ = d3dTexture;
+                    renderTarget = d3dTexture->GetNativeResource();
+                    rtvHandle = d3dTexture->GetRenderTargetView();
+                    TransitionResource(renderTarget, d3dTexture->GetResourceState(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+                    d3dTexture->SetResourceState(D3D12_RESOURCE_STATE_RENDER_TARGET);
+                }
+                else
+                {
+                    activeSwapchain_ = d3dSwapchain;
+                    renderTarget = d3dSwapchain->GetCurrentRenderTarget();
+                    rtvHandle = d3dSwapchain->GetCurrentRtv();
+                    TransitionResource(renderTarget, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                }
+
                 commandList_->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
                 if (colorAttachment.loadAction == RhiLoadAction::Clear)
@@ -429,21 +468,37 @@ namespace ve::rhi
 
             void EndRenderPass() override
             {
-                if (activeSwapchain_ == nullptr)
+                if (activeSwapchain_ != nullptr)
                 {
-                    return;
+                    TransitionResource(activeSwapchain_->GetCurrentRenderTarget(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+                    activeSwapchain_ = nullptr;
                 }
 
-                D3D12_RESOURCE_BARRIER barrier = {};
-                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-                barrier.Transition.pResource = activeSwapchain_->GetCurrentRenderTarget();
-                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-                commandList_->ResourceBarrier(1, &barrier);
+                activeTexture_ = nullptr;
+            }
 
-                activeSwapchain_ = nullptr;
+            [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
+            {
+                auto* d3dTexture = dynamic_cast<D3D12Texture*>(&sourceTexture);
+                auto* d3dSwapchain = dynamic_cast<D3D12Swapchain*>(&swapchain);
+                if (d3dTexture == nullptr || d3dSwapchain == nullptr)
+                {
+                    return false;
+                }
+
+                const RhiExtent2D swapchainExtent = d3dSwapchain->GetExtent();
+                if (sourceTexture.GetWidth() != swapchainExtent.width || sourceTexture.GetHeight() != swapchainExtent.height ||
+                    sourceTexture.GetFormat() != d3dSwapchain->GetColorFormat())
+                {
+                    return false;
+                }
+
+                TransitionResource(d3dTexture->GetNativeResource(), d3dTexture->GetResourceState(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                d3dTexture->SetResourceState(D3D12_RESOURCE_STATE_COPY_SOURCE);
+                TransitionResource(d3dSwapchain->GetCurrentRenderTarget(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+                commandList_->CopyResource(d3dSwapchain->GetCurrentRenderTarget(), d3dTexture->GetNativeResource());
+                TransitionResource(d3dSwapchain->GetCurrentRenderTarget(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+                return true;
             }
 
             void SetPipeline(const RhiPipelineState& pipelineState) override
@@ -523,6 +578,23 @@ namespace ve::rhi
             }
 
         private:
+            void TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
+            {
+                if (resource == nullptr || before == after)
+                {
+                    return;
+                }
+
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+                barrier.Transition.pResource = resource;
+                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                barrier.Transition.StateBefore = before;
+                barrier.Transition.StateAfter = after;
+                commandList_->ResourceBarrier(1, &barrier);
+            }
+
             [[nodiscard]] static UINT ResolveUniformRootParameter(RhiShaderStage stage, uint32_t slot) noexcept
             {
                 VE_ASSERT((stage == RhiShaderStage::Vertex && slot == 0) || (stage == RhiShaderStage::Fragment && (slot == 1 || slot == 2)));
@@ -538,6 +610,7 @@ namespace ve::rhi
             ComPtr<ID3D12CommandAllocator> commandAllocator_;
             ComPtr<ID3D12GraphicsCommandList> commandList_;
             D3D12Swapchain* activeSwapchain_ = nullptr;
+            D3D12Texture* activeTexture_ = nullptr;
         };
 
         class D3D12Device final : public RhiDevice
@@ -787,7 +860,26 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D12Texture>(resource, desc);
+                ComPtr<ID3D12DescriptorHeap> rtvHeap;
+                const auto usageValue = static_cast<uint32_t>(desc.usage);
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0)
+                {
+                    D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+                    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+                    heapDesc.NumDescriptors = 1;
+                    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+                    result = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&rtvHeap));
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Device::CreateDescriptorHeap texture RTV", result));
+                        return nullptr;
+                    }
+
+                    device_->CreateRenderTargetView(resource.Get(), nullptr, rtvHeap->GetCPUDescriptorHandleForHeapStart());
+                }
+
+                return std::make_unique<D3D12Texture>(resource, rtvHeap, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
