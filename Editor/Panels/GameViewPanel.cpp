@@ -4,9 +4,8 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 
-#include <imgui.h>
-
 #include <algorithm>
+#include <imgui.h>
 
 namespace ve::editor
 {
@@ -60,9 +59,7 @@ namespace ve::editor
         const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
         const WindowExtent desiredExtent = ToRenderTargetExtent(canvasSize);
         bool textureRebuilt = false;
-        if (desiredExtent.width != renderTargetExtent_.width ||
-            desiredExtent.height != renderTargetExtent_.height ||
-            !gameViewTexture_->IsValid())
+        if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !gameViewTexture_->IsValid())
         {
             RebuildGameViewTexture(*activeEditor_, desiredExtent);
             textureRebuilt = true;

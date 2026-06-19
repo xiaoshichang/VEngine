@@ -24,20 +24,14 @@ namespace ve::editor
                 return {};
             }
 
-            const int requiredLength = MultiByteToWideChar(
-                CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
+            const int requiredLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
             if (requiredLength <= 0)
             {
                 return {};
             }
 
             std::wstring result(static_cast<size_t>(requiredLength), L'\0');
-            MultiByteToWideChar(CP_UTF8,
-                                MB_ERR_INVALID_CHARS,
-                                text.data(),
-                                static_cast<int>(text.size()),
-                                result.data(),
-                                requiredLength);
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(), requiredLength);
             return result;
         }
 
@@ -48,22 +42,14 @@ namespace ve::editor
                 return {};
             }
 
-            const int requiredLength = WideCharToMultiByte(
-                CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+            const int requiredLength = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
             if (requiredLength <= 0)
             {
                 return {};
             }
 
             std::string result(static_cast<size_t>(requiredLength), '\0');
-            WideCharToMultiByte(CP_UTF8,
-                                0,
-                                text.data(),
-                                static_cast<int>(text.size()),
-                                result.data(),
-                                requiredLength,
-                                nullptr,
-                                nullptr);
+            WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), result.data(), requiredLength, nullptr, nullptr);
             return result;
         }
 
@@ -85,8 +71,7 @@ namespace ve::editor
 
 #if VE_PLATFORM_WINDOWS
         HKEY registryKey = nullptr;
-        const LSTATUS openStatus =
-            RegOpenKeyExW(HKEY_CURRENT_USER, RecentProjectsRegistryPath, 0, KEY_READ, &registryKey);
+        const LSTATUS openStatus = RegOpenKeyExW(HKEY_CURRENT_USER, RecentProjectsRegistryPath, 0, KEY_READ, &registryKey);
         if (openStatus == ERROR_FILE_NOT_FOUND)
         {
             return recentProjects;
@@ -103,8 +88,7 @@ namespace ve::editor
             const std::wstring valueName = ProjectValueName(index);
             DWORD valueType = 0;
             DWORD byteCount = 0;
-            LSTATUS queryStatus =
-                RegQueryValueExW(registryKey, valueName.c_str(), nullptr, &valueType, nullptr, &byteCount);
+            LSTATUS queryStatus = RegQueryValueExW(registryKey, valueName.c_str(), nullptr, &valueType, nullptr, &byteCount);
             if (queryStatus == ERROR_FILE_NOT_FOUND)
             {
                 continue;
@@ -116,12 +100,7 @@ namespace ve::editor
             }
 
             std::wstring widePath(byteCount / sizeof(wchar_t), L'\0');
-            queryStatus = RegQueryValueExW(registryKey,
-                                           valueName.c_str(),
-                                           nullptr,
-                                           nullptr,
-                                           reinterpret_cast<BYTE*>(widePath.data()),
-                                           &byteCount);
+            queryStatus = RegQueryValueExW(registryKey, valueName.c_str(), nullptr, nullptr, reinterpret_cast<BYTE*>(widePath.data()), &byteCount);
             if (queryStatus != ERROR_SUCCESS)
             {
                 continue;
@@ -151,15 +130,8 @@ namespace ve::editor
         RegDeleteTreeW(HKEY_CURRENT_USER, RecentProjectsRegistryPath);
 
         HKEY registryKey = nullptr;
-        const LSTATUS createStatus = RegCreateKeyExW(HKEY_CURRENT_USER,
-                                                     RecentProjectsRegistryPath,
-                                                     0,
-                                                     nullptr,
-                                                     REG_OPTION_NON_VOLATILE,
-                                                     KEY_WRITE,
-                                                     nullptr,
-                                                     &registryKey,
-                                                     nullptr);
+        const LSTATUS createStatus =
+            RegCreateKeyExW(HKEY_CURRENT_USER, RecentProjectsRegistryPath, 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &registryKey, nullptr);
         if (createStatus != ERROR_SUCCESS)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to create recent projects registry key: {}", createStatus);
@@ -182,12 +154,7 @@ namespace ve::editor
 
             const std::wstring valueName = ProjectValueName(savedCount);
             const DWORD byteCount = static_cast<DWORD>((widePath.size() + 1) * sizeof(wchar_t));
-            const LSTATUS setStatus = RegSetValueExW(registryKey,
-                                                     valueName.c_str(),
-                                                     0,
-                                                     REG_SZ,
-                                                     reinterpret_cast<const BYTE*>(widePath.c_str()),
-                                                     byteCount);
+            const LSTATUS setStatus = RegSetValueExW(registryKey, valueName.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(widePath.c_str()), byteCount);
             if (setStatus != ERROR_SUCCESS)
             {
                 VE_LOG_WARN_CATEGORY("Editor", "Failed to save recent project value: {}", setStatus);

@@ -57,31 +57,29 @@ namespace ve
 } // namespace ve
 
 #if VE_BUILD_DEBUG
-#define VE_ASSERT_SCENE_THREAD()                                                                                      \
-    do                                                                                                                \
-    {                                                                                                                 \
-        const ::ve::ThreadId veExpectedSceneThreadId = ::ve::GetExpectedSceneThreadId();                            \
-        VE_ASSERT_MESSAGE(veExpectedSceneThreadId.IsValid(), "Expected Scene Thread id is not registered.");         \
-        VE_ASSERT_MESSAGE(::ve::GetCurrentThreadId() == veExpectedSceneThreadId,                                     \
-                          "This logic must run on the Scene Thread.");                                                \
+#define VE_ASSERT_SCENE_THREAD()                                                                                                                               \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        const ::ve::ThreadId veExpectedSceneThreadId = ::ve::GetExpectedSceneThreadId();                                                                       \
+        VE_ASSERT_MESSAGE(veExpectedSceneThreadId.IsValid(), "Expected Scene Thread id is not registered.");                                                   \
+        VE_ASSERT_MESSAGE(::ve::GetCurrentThreadId() == veExpectedSceneThreadId, "This logic must run on the Scene Thread.");                                  \
     } while (false)
 
-#define VE_ASSERT_RENDER_THREAD()                                                                                     \
-    do                                                                                                                \
-    {                                                                                                                 \
-        const ::ve::ThreadId veExpectedRenderThreadId = ::ve::GetExpectedRenderThreadId();                          \
-        VE_ASSERT_MESSAGE(veExpectedRenderThreadId.IsValid(), "Expected Render Thread id is not registered.");       \
-        VE_ASSERT_MESSAGE(::ve::GetCurrentThreadId() == veExpectedRenderThreadId,                                    \
-                          "This logic must run on the Render Thread.");                                               \
+#define VE_ASSERT_RENDER_THREAD()                                                                                                                              \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        const ::ve::ThreadId veExpectedRenderThreadId = ::ve::GetExpectedRenderThreadId();                                                                     \
+        VE_ASSERT_MESSAGE(veExpectedRenderThreadId.IsValid(), "Expected Render Thread id is not registered.");                                                 \
+        VE_ASSERT_MESSAGE(::ve::GetCurrentThreadId() == veExpectedRenderThreadId, "This logic must run on the Render Thread.");                                \
     } while (false)
 #else
-#define VE_ASSERT_SCENE_THREAD()                                                                                      \
-    do                                                                                                                \
-    {                                                                                                                 \
+#define VE_ASSERT_SCENE_THREAD()                                                                                                                               \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
     } while (false)
 
-#define VE_ASSERT_RENDER_THREAD()                                                                                     \
-    do                                                                                                                \
-    {                                                                                                                 \
+#define VE_ASSERT_RENDER_THREAD()                                                                                                                              \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
     } while (false)
 #endif

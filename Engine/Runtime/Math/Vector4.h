@@ -102,8 +102,8 @@ namespace ve
         /// Returns true when every component is within `epsilon` of `other`.
         [[nodiscard]] bool IsNearlyEqual(const Vector4& other, Float32 epsilon = Math::DefaultEpsilon) const noexcept
         {
-            return NearlyEqual(x_, other.x_, epsilon) && NearlyEqual(y_, other.y_, epsilon) &&
-                   NearlyEqual(z_, other.z_, epsilon) && NearlyEqual(w_, other.w_, epsilon);
+            return NearlyEqual(x_, other.x_, epsilon) && NearlyEqual(y_, other.y_, epsilon) && NearlyEqual(z_, other.z_, epsilon) &&
+                   NearlyEqual(w_, other.w_, epsilon);
         }
 
         /// Returns the dot product of two vectors.

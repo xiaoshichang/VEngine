@@ -2,9 +2,9 @@
 
 #include "Engine/Runtime/Logging/Log.h"
 
+#include <array>
 #include <chrono>
 #include <cstdio>
-#include <array>
 #include <thread>
 #include <utility>
 
@@ -52,8 +52,7 @@ namespace ve
 
             if (previousState.minimized != currentState.minimized)
             {
-                const OSEventType minimizedEventType =
-                    currentState.minimized ? OSEventType::WindowMinimized : OSEventType::WindowRestored;
+                const OSEventType minimizedEventType = currentState.minimized ? OSEventType::WindowMinimized : OSEventType::WindowRestored;
                 events[eventCount++] = OSEvent{
                     minimizedEventType,
                 };
@@ -61,12 +60,10 @@ namespace ve
 
             if (previousState.visible != currentState.visible)
             {
-                events[eventCount++] = OSEvent{currentState.visible ? OSEventType::WindowShown
-                                                                    : OSEventType::WindowHidden};
+                events[eventCount++] = OSEvent{currentState.visible ? OSEventType::WindowShown : OSEventType::WindowHidden};
             }
 
-            if (previousState.extent.width != currentState.extent.width ||
-                previousState.extent.height != currentState.extent.height)
+            if (previousState.extent.width != currentState.extent.width || previousState.extent.height != currentState.extent.height)
             {
                 events[eventCount++] = OSEvent{
                     OSEventType::WindowResized,
@@ -79,10 +76,9 @@ namespace ve
             return eventCount;
         }
 
-        void EnqueueWindowStateDeltaEventsToSceneThread(
-            SceneSystem& sceneSystem,
-            const std::array<OSEvent, MaxWindowOSEventChangesPerFrame>& events,
-            SizeT eventCount)
+        void EnqueueWindowStateDeltaEventsToSceneThread(SceneSystem& sceneSystem,
+                                                        const std::array<OSEvent, MaxWindowOSEventChangesPerFrame>& events,
+                                                        SizeT eventCount)
         {
             for (SizeT eventIndex = 0; eventIndex < eventCount; ++eventIndex)
             {
@@ -147,13 +143,12 @@ namespace ve
         VE_LOG_INFO("{} starting", initParam_.name);
         ErrorCode runtimeResult = InitializeEngineRuntime();
         VE_ASSERT_MESSAGE(runtimeResult == ErrorCode::None, "InitializeEngineRuntime fail.");
-                          
+
         Result<std::unique_ptr<Window>> windowResult = CreateMainWindow();
         VE_ASSERT_MESSAGE(windowResult.IsOk(), "CreateMainWindow fail");
 
         mainWindow_ = windowResult.MoveValue();
-        mainWindow_->SetCommandHandler([](std::string_view command)
-                                       { VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command); });
+        mainWindow_->SetCommandHandler([](std::string_view command) { VE_LOG_INFO_CATEGORY("GM", "Unhandled GM command: {}", command); });
 
         ErrorCode renderResult = InitializeRendering(*mainWindow_);
         VE_ASSERT_MESSAGE(renderResult == ErrorCode::None, "InitializeRendering fail");
@@ -255,8 +250,7 @@ namespace ve
 
             // Step 2: detect the window state changes that should be forwarded to the Scene Thread.
             std::array<OSEvent, MaxWindowOSEventChangesPerFrame> windowStateDeltaEvents = {};
-            const SizeT windowStateDeltaEventCount =
-                CollectWindowStateDeltaEvents(windowStateDeltaEvents, previousState, currentState);
+            const SizeT windowStateDeltaEventCount = CollectWindowStateDeltaEvents(windowStateDeltaEvents, previousState, currentState);
 
             // Step 3: publish window delta events to the Scene Thread. Viewport, input, and future render-facing
             // state updates are handled there so rendering-related state is not mutated from the Main Thread.

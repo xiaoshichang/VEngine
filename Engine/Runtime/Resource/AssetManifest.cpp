@@ -9,9 +9,7 @@ namespace ve
 {
     namespace
     {
-        [[nodiscard]] std::string ReadString(const boost::json::object& object,
-                                             boost::json::string_view key,
-                                             std::string fallback = {})
+        [[nodiscard]] std::string ReadString(const boost::json::object& object, boost::json::string_view key, std::string fallback = {})
         {
             if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_string())
             {
@@ -21,9 +19,7 @@ namespace ve
             return fallback;
         }
 
-        [[nodiscard]] UInt64 ReadUInt64(const boost::json::object& object,
-                                        boost::json::string_view key,
-                                        UInt64 fallback = 0)
+        [[nodiscard]] UInt64 ReadUInt64(const boost::json::object& object, boost::json::string_view key, UInt64 fallback = 0)
         {
             const boost::json::value* value = object.if_contains(key);
             if (value == nullptr)
@@ -110,8 +106,7 @@ namespace ve
         const std::string runtimePathKey = record.asset.runtimePath.GetString();
         if (!runtimePathKey.empty())
         {
-            if (const auto existingID = assetIDsByRuntimePath_.find(runtimePathKey);
-                existingID != assetIDsByRuntimePath_.end() && existingID->second != id)
+            if (const auto existingID = assetIDsByRuntimePath_.find(runtimePathKey); existingID != assetIDsByRuntimePath_.end() && existingID->second != id)
             {
                 assets_.erase(existingID->second);
             }
@@ -270,9 +265,7 @@ namespace ve
         return Result<AssetID>::Success(AssetID(guid.GetValue(), ReadUInt64(object, "subID", 0)));
     }
 
-    std::vector<AssetID> AssetManifest::ReadAssetIDArray(const boost::json::object& object,
-                                                         boost::json::string_view key,
-                                                         UInt64 version)
+    std::vector<AssetID> AssetManifest::ReadAssetIDArray(const boost::json::object& object, boost::json::string_view key, UInt64 version)
     {
         std::vector<AssetID> ids;
         const boost::json::value* value = object.if_contains(key);
@@ -342,8 +335,7 @@ namespace ve
             const boost::json::value* assetIDValue = object.if_contains("assetID");
             if (assetIDValue == nullptr || !assetIDValue->is_object())
             {
-                return Result<ManifestAssetRecord>::Failure(
-                    Error(ErrorCode::InvalidArgument, "Asset manifest record missing assetID."));
+                return Result<ManifestAssetRecord>::Failure(Error(ErrorCode::InvalidArgument, "Asset manifest record missing assetID."));
             }
 
             Result<AssetID> id = ReadAssetID(assetIDValue->as_object());

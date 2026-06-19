@@ -98,9 +98,7 @@ namespace ve
             state->status = IORequestStatus::Running;
         }
 
-        void StoreReadResult(IOSystemImpl& impl,
-                             const std::shared_ptr<IORequestState>& state,
-                             Result<std::vector<std::byte>> readResult)
+        void StoreReadResult(IOSystemImpl& impl, const std::shared_ptr<IORequestState>& state, Result<std::vector<std::byte>> readResult)
         {
             {
                 std::lock_guard<std::mutex> completionLock(state->completionMutex);
@@ -232,8 +230,7 @@ namespace ve
             impl_->incompleteRequestCount = 0;
         }
 
-        ErrorCode startResult =
-            impl_->thread.Start(ThreadDesc{desc.threadName}, [impl = impl_.get()]() { IOThreadLoop(*impl); });
+        ErrorCode startResult = impl_->thread.Start(ThreadDesc{desc.threadName}, [impl = impl_.get()]() { IOThreadLoop(*impl); });
 
         if (startResult != ErrorCode::None)
         {
@@ -276,8 +273,7 @@ namespace ve
     {
         if (desc.path.IsEmpty())
         {
-            return Result<IORequestHandle>::Failure(
-                Error(ErrorCode::InvalidArgument, "IOSystem read request requires a non-empty path."));
+            return Result<IORequestHandle>::Failure(Error(ErrorCode::InvalidArgument, "IOSystem read request requires a non-empty path."));
         }
 
         std::shared_ptr<IORequestState> state;
@@ -294,8 +290,7 @@ namespace ve
             std::lock_guard<std::mutex> lock(impl_->mutex);
             if (!impl_->initialized || !impl_->acceptingRequests)
             {
-                return Result<IORequestHandle>::Failure(
-                    Error(ErrorCode::InvalidState, "IOSystem is not accepting requests."));
+                return Result<IORequestHandle>::Failure(Error(ErrorCode::InvalidState, "IOSystem is not accepting requests."));
             }
 
             ++impl_->incompleteRequestCount;

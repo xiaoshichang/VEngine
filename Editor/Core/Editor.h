@@ -40,9 +40,7 @@ namespace ve::editor
         Editor() = default;
         ~Editor();
 
-        [[nodiscard]] ErrorCode Init(EngineRuntime& runtime,
-                                     ApplicationCommandQueue& mainThreadCommandQueue,
-                                     void* nativeWindowHandle);
+        [[nodiscard]] ErrorCode Init(EngineRuntime& runtime, ApplicationCommandQueue& mainThreadCommandQueue, void* nativeWindowHandle);
         void StartFrame();
         [[nodiscard]] std::shared_ptr<BaseRenderer> Render();
         void UnInit() noexcept;
@@ -82,13 +80,9 @@ namespace ve::editor
         [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
         void ShutdownRenderBackend() noexcept;
         void ShutdownOpenProjectState() noexcept;
-        [[nodiscard]] Result<EditorProjectDescriptor> PrepareOpenProjectDescriptor(const Path& projectRoot,
-                                                                                   const std::string& projectPath);
-        [[nodiscard]] ErrorCode InitializeOpenProjectAssetServices(const Path& projectRoot,
-                                                                   const std::string& projectPath);
-        void ActivateOpenProjectContext(std::string projectPath,
-                                        const Path& projectRoot,
-                                        const EditorProjectDescriptor& descriptor);
+        [[nodiscard]] Result<EditorProjectDescriptor> PrepareOpenProjectDescriptor(const Path& projectRoot, const std::string& projectPath);
+        [[nodiscard]] ErrorCode InitializeOpenProjectAssetServices(const Path& projectRoot, const std::string& projectPath);
+        void ActivateOpenProjectContext(std::string projectPath, const Path& projectRoot, const EditorProjectDescriptor& descriptor);
         void LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor);
         void EnterProjectEditingView();
         void AddRecentProject(const std::string& projectPath);

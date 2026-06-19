@@ -7,7 +7,6 @@
 #include "Engine/Runtime/Resource/AssetRecord.h"
 
 #include <boost/json.hpp>
-
 #include <string>
 #include <unordered_map>
 
@@ -39,9 +38,7 @@ namespace ve
         [[nodiscard]] static boost::json::object WriteAssetID(const AssetID& id);
         [[nodiscard]] static boost::json::array WriteAssetIDArray(const std::vector<AssetID>& ids);
         [[nodiscard]] static Result<AssetID> ReadAssetID(const boost::json::object& object);
-        [[nodiscard]] static std::vector<AssetID> ReadAssetIDArray(const boost::json::object& object,
-                                                                   boost::json::string_view key,
-                                                                   UInt64 version);
+        [[nodiscard]] static std::vector<AssetID> ReadAssetIDArray(const boost::json::object& object, boost::json::string_view key, UInt64 version);
         [[nodiscard]] static boost::json::object WriteRecord(const ManifestAssetRecord& record);
         [[nodiscard]] static Result<ManifestAssetRecord> ReadRecord(const boost::json::object& object, UInt64 version);
 

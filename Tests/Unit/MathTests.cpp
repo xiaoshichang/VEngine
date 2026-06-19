@@ -58,8 +58,7 @@ namespace
         passed &= Expect((a - b) == ve::Vector2(2.0f, 2.0f), "Vector2 subtraction should be component-wise");
         passed &= Expect((a * 2.0f) == ve::Vector2(6.0f, 8.0f), "Vector2 scalar multiply should scale components");
         passed &= Expect(ve::Vector2::Dot(a, b) == 11.0f, "Vector2 dot product should multiply matching components");
-        passed &= Expect(a.Normalized().IsNearlyEqual(ve::Vector2(0.6f, 0.8f)),
-                         "Vector2 normalization should produce unit length");
+        passed &= Expect(a.Normalized().IsNearlyEqual(ve::Vector2(0.6f, 0.8f)), "Vector2 normalization should produce unit length");
 
         return passed;
     }
@@ -75,8 +74,7 @@ namespace
         passed &= Expect(ve::Vector3::Dot(x, y) == 0.0f, "Orthogonal Vector3 axes should have zero dot product");
         passed &= Expect(ve::Vector3::Cross(x, y) == z, "Vector3 cross product should build perpendicular axes");
         passed &= Expect(ve::Vector3(0.0f, 3.0f, 4.0f).Length() == 5.0f, "Vector3 length should include Z");
-        passed &= Expect(ve::Vector3(0.0f, 0.0f, 0.0f).Normalized() == ve::Vector3::Zero(),
-                         "Normalizing a zero Vector3 should return zero");
+        passed &= Expect(ve::Vector3(0.0f, 0.0f, 0.0f).Normalized() == ve::Vector3::Zero(), "Normalizing a zero Vector3 should return zero");
 
         return passed;
     }
@@ -90,8 +88,7 @@ namespace
         passed &= Expect(value.GetXYZ() == ve::Vector3(1.0f, 2.0f, 3.0f), "Vector4 should expose XYZ as Vector3");
         passed &= Expect(value.GetW() == 4.0f, "Vector4 should preserve W");
         passed &= Expect(ve::Vector4::Dot(value, ve::Vector4::One()) == 10.0f, "Vector4 dot should include W");
-        passed &= Expect((value / 2.0f).IsNearlyEqual(ve::Vector4(0.5f, 1.0f, 1.5f, 2.0f)),
-                         "Vector4 division should scale all components");
+        passed &= Expect((value / 2.0f).IsNearlyEqual(ve::Vector4(0.5f, 1.0f, 1.5f, 2.0f)), "Vector4 division should scale all components");
 
         return passed;
     }
@@ -104,20 +101,16 @@ namespace
         const ve::Matrix44 scale = ve::Matrix44::Scale(ve::Vector3(2.0f, 3.0f, 4.0f));
         const ve::Matrix44 combined = translation * scale;
 
-        passed &=
-            Expect(translation.TransformPoint(ve::Vector3::Zero()).IsNearlyEqual(ve::Vector3(10.0f, 20.0f, 30.0f)),
-                   "Matrix44 translation should affect points");
+        passed &= Expect(translation.TransformPoint(ve::Vector3::Zero()).IsNearlyEqual(ve::Vector3(10.0f, 20.0f, 30.0f)),
+                         "Matrix44 translation should affect points");
         passed &= Expect(translation.TransformDirection(ve::Vector3::UnitX()).IsNearlyEqual(ve::Vector3::UnitX()),
                          "Matrix44 translation should not affect directions");
-        passed &= Expect(
-            combined.TransformPoint(ve::Vector3(1.0f, 1.0f, 1.0f)).IsNearlyEqual(ve::Vector3(12.0f, 23.0f, 34.0f)),
-            "Matrix44 multiplication should apply scale before translation");
-        passed &= Expect(ve::Matrix44::RotationZ(ve::ToRadians(90.0f))
-                             .TransformDirection(ve::Vector3::UnitX())
-                             .IsNearlyEqual(ve::Vector3::UnitY()),
+        passed &= Expect(combined.TransformPoint(ve::Vector3(1.0f, 1.0f, 1.0f)).IsNearlyEqual(ve::Vector3(12.0f, 23.0f, 34.0f)),
+                         "Matrix44 multiplication should apply scale before translation");
+        passed &= Expect(ve::Matrix44::RotationZ(ve::ToRadians(90.0f)).TransformDirection(ve::Vector3::UnitX()).IsNearlyEqual(ve::Vector3::UnitY()),
                          "Matrix44 Z rotation should rotate X into Y");
-        passed &= Expect(ve::Matrix44::Identity().Transposed().IsNearlyEqual(ve::Matrix44::Identity()),
-                         "Matrix44 transpose of identity should remain identity");
+        passed &=
+            Expect(ve::Matrix44::Identity().Transposed().IsNearlyEqual(ve::Matrix44::Identity()), "Matrix44 transpose of identity should remain identity");
 
         return passed;
     }
@@ -130,13 +123,10 @@ namespace
         const ve::Vector3 rotated = zQuarterTurn.RotateVector(ve::Vector3::UnitX());
 
         passed &= Expect(rotated.IsNearlyEqual(ve::Vector3::UnitY()), "Quaternion axis-angle should rotate around Z");
-        passed &= Expect(ve::NearlyEqual(zQuarterTurn.Length(), 1.0f),
-                         "Quaternion axis-angle should produce unit quaternions");
+        passed &= Expect(ve::NearlyEqual(zQuarterTurn.Length(), 1.0f), "Quaternion axis-angle should produce unit quaternions");
         passed &= Expect(ve::Quaternion(0.0f, 0.0f, 0.0f, 0.0f).Normalized().IsNearlyEqual(ve::Quaternion::Identity()),
                          "Normalizing a zero quaternion should return identity");
-        passed &= Expect(ve::Quaternion::FromEulerXYZ(0.0f, 0.0f, ve::ToRadians(90.0f))
-                             .RotateVector(ve::Vector3::UnitX())
-                             .IsNearlyEqual(ve::Vector3::UnitY()),
+        passed &= Expect(ve::Quaternion::FromEulerXYZ(0.0f, 0.0f, ve::ToRadians(90.0f)).RotateVector(ve::Vector3::UnitX()).IsNearlyEqual(ve::Vector3::UnitY()),
                          "Quaternion Euler construction should apply Z rotation");
 
         return passed;
@@ -174,8 +164,7 @@ namespace
                          "Pool-allocated objects should be able to store and use Matrix44 values");
         passed &= Expect(record->rotation.RotateVector(ve::Vector3::UnitX()).IsNearlyEqual(ve::Vector3::UnitX()),
                          "Pool-allocated objects should be able to store and use Quaternion values");
-        passed &=
-            Expect(record->velocity == ve::Vector3::UnitY(), "Pool-allocated objects should store Vector3 values");
+        passed &= Expect(record->velocity == ve::Vector3::UnitY(), "Pool-allocated objects should store Vector3 values");
 
         record->~MathRecord();
         passed &= Expect(allocator.Free(memory), "PoolAllocator should free the math record storage");

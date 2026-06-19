@@ -88,7 +88,6 @@ namespace ve
             }
         }
 
-
         void SceneThreadLoop_StartFrame(SceneSystemImpl& impl)
         {
             if (impl.editorCallback.onStartFrame != nullptr)
@@ -101,7 +100,6 @@ namespace ve
             }
             ProcessOSEvents(impl);
         }
-
 
         [[nodiscard]] std::shared_ptr<BaseRenderer> CreatePlayerRenderer(SceneSystemImpl& impl)
         {
@@ -148,8 +146,7 @@ namespace ve
         void SceneThreadLoop_EndFrame(SceneSystemImpl& impl)
         {
             impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
-                impl.stopRequested,
-                [&impl](UInt32 fenceIndex) { impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex); });
+                impl.stopRequested, [&impl](UInt32 fenceIndex) { impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex); });
         }
 
         void SceneThreadLoop(SceneSystemImpl& impl)
@@ -175,7 +172,6 @@ namespace ve
                     BeforeRenderScene(impl);
                     SceneThreadLoop_Render(impl);
                     SceneThreadLoop_EndFrame(impl);
-                    
                 }
                 catch (...)
                 {
@@ -225,18 +221,15 @@ namespace ve
             impl.osEventQueue.ClearForConsumer();
         }
 
-        [[nodiscard]] ErrorCode BindGameObjectAssetRefs(GameObject& gameObject,
-                                                        const IAssetRecordProvider& provider,
-                                                        ResourceSystem& resourceSystem,
-                                                        RenderSystem* renderSystem)
+        [[nodiscard]] ErrorCode
+        BindGameObjectAssetRefs(GameObject& gameObject, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, RenderSystem* renderSystem)
         {
             if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
             {
                 const AssetID meshID = mesh->GetMeshAssetID();
                 if (!meshID.IsEmpty())
                 {
-                    Result<AssetRef<MeshResource>> meshResource =
-                        resourceSystem.Request<MeshResource>(meshID, provider);
+                    Result<AssetRef<MeshResource>> meshResource = resourceSystem.Request<MeshResource>(meshID, provider);
                     if (!meshResource)
                     {
                         return meshResource.GetError().GetCode();
@@ -253,8 +246,7 @@ namespace ve
                 const AssetID materialID = mesh->GetMaterialAssetID();
                 if (!materialID.IsEmpty())
                 {
-                    Result<AssetRef<MaterialResource>> materialResource =
-                        resourceSystem.Request<MaterialResource>(materialID, provider);
+                    Result<AssetRef<MaterialResource>> materialResource = resourceSystem.Request<MaterialResource>(materialID, provider);
                     if (!materialResource)
                     {
                         return materialResource.GetError().GetCode();
@@ -293,10 +285,8 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode BindSceneAssetRefs(Scene& scene,
-                                                   const IAssetRecordProvider& provider,
-                                                   ResourceSystem& resourceSystem,
-                                                   RenderSystem* renderSystem)
+        [[nodiscard]] ErrorCode
+        BindSceneAssetRefs(Scene& scene, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, RenderSystem* renderSystem)
         {
             for (SizeT rootIndex = 0; rootIndex < scene.GetRootGameObjectCount(); ++rootIndex)
             {
@@ -326,9 +316,8 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] Result<AssetRef<SceneResource>> RequestSceneResource(const SceneLoadDesc& desc,
-                                                                           const IAssetRecordProvider& provider,
-                                                                           ResourceSystem& resourceSystem)
+        [[nodiscard]] Result<AssetRef<SceneResource>>
+        RequestSceneResource(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem)
         {
             return resourceSystem.Request<SceneResource>(desc.scene, provider);
         }
@@ -339,8 +328,7 @@ namespace ve
             const ErrorCode deserializeResult = SceneSerialization::LoadFromString(*scene, sceneResource.GetText());
             if (deserializeResult != ErrorCode::None)
             {
-                return Result<std::unique_ptr<Scene>>::Failure(
-                    Error(deserializeResult, "Failed to deserialize scene resource."));
+                return Result<std::unique_ptr<Scene>>::Failure(Error(deserializeResult, "Failed to deserialize scene resource."));
             }
 
             return Result<std::unique_ptr<Scene>>::Success(std::move(scene));
@@ -360,17 +348,13 @@ namespace ve
             const ErrorCode bindResult = BindSceneAssetRefs(*scene.GetValue(), provider, resourceSystem, renderSystem);
             if (bindResult != ErrorCode::None)
             {
-                return Result<std::unique_ptr<Scene>>::Failure(
-                    Error(bindResult, "Failed to bind scene asset references."));
+                return Result<std::unique_ptr<Scene>>::Failure(Error(bindResult, "Failed to bind scene asset references."));
             }
 
             return scene;
         }
 
-        [[nodiscard]] Scene* CommitLoadedScene(SceneSystemImpl& impl,
-                                               SceneSystem& owner,
-                                               SceneLoadMode mode,
-                                               std::unique_ptr<Scene> scene)
+        [[nodiscard]] Scene* CommitLoadedScene(SceneSystemImpl& impl, SceneSystem& owner, SceneLoadMode mode, std::unique_ptr<Scene> scene)
         {
             if (mode == SceneLoadMode::Single && impl.scene != nullptr)
             {
@@ -395,10 +379,7 @@ namespace ve
         Shutdown();
     }
 
-    ErrorCode SceneSystem::Initialize(const SceneSystemInitParam& initParam,
-                                      TimeSystem& timeSystem,
-                                      InputSystem& inputSystem,
-                                      RenderSystem& renderSystem)
+    ErrorCode SceneSystem::Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, InputSystem& inputSystem, RenderSystem& renderSystem)
     {
         if (impl_->initialized.load(std::memory_order_acquire))
         {
@@ -441,8 +422,7 @@ namespace ve
             impl_->sceneThreadRenderThreadFrameEndSync->Reset();
         }
 
-        ErrorCode startResult = impl_->thread.Start(ThreadDesc{initParam.threadName},
-                                                    [this]() { SceneThreadLoop(*impl_); });
+        ErrorCode startResult = impl_->thread.Start(ThreadDesc{initParam.threadName}, [this]() { SceneThreadLoop(*impl_); });
         if (startResult != ErrorCode::None)
         {
             throw;
@@ -482,9 +462,7 @@ namespace ve
         return impl_->scene.get();
     }
 
-    Result<Scene*> SceneSystem::LoadScene(const SceneLoadDesc& desc,
-                                          const IAssetRecordProvider& provider,
-                                          ResourceSystem& resourceSystem)
+    Result<Scene*> SceneSystem::LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem)
     {
         // 1. Validate the requested mode before touching resource state. SceneSystem currently owns a single active
         // Scene, so additive loading is rejected until multiple live Scene ownership is introduced.
@@ -504,8 +482,7 @@ namespace ve
         // 3. Build a detached Scene and bind all component AssetRefs before committing it as the active scene. Render
         // resources are submitted here too, while the new scene is still detached, so scene deserialization or asset
         // binding failures leave the old scene untouched.
-        Result<std::unique_ptr<Scene>> scene =
-            BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem, impl_->renderSystem);
+        Result<std::unique_ptr<Scene>> scene = BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem, impl_->renderSystem);
         if (!scene)
         {
             return Result<Scene*>::Failure(scene.GetError());
@@ -550,29 +527,25 @@ namespace ve
         impl_->mainThreadSceneThreadFrameEndSync->NotifyMainThreadFrameEnd(
             [this](UInt32 fenceIndex)
             {
-                const ErrorCode pushResult = impl_->osEventQueue.Push(
-                    OSEvent{
-                        OSEventType::FrameEndFenceSignal,
-                        0,
-                        0,
-                        fenceIndex,
-                    });
-                VE_ASSERT_MESSAGE(pushResult == ErrorCode::None,
-                                  "SceneSystem failed to enqueue frame-end fence event.");
+                const ErrorCode pushResult = impl_->osEventQueue.Push(OSEvent{
+                    OSEventType::FrameEndFenceSignal,
+                    0,
+                    0,
+                    fenceIndex,
+                });
+                VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "SceneSystem failed to enqueue frame-end fence event.");
             });
     }
 
     void SceneSystem::SetMainThreadSceneThreadFrameEndSync(MainThreadSceneThreadFrameEndSync* sync) noexcept
     {
-        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire),
-                          "SetMainThreadSceneThreadFrameEndSync requires SceneSystem to be stopped.");
+        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire), "SetMainThreadSceneThreadFrameEndSync requires SceneSystem to be stopped.");
         impl_->mainThreadSceneThreadFrameEndSync = sync;
     }
 
     void SceneSystem::SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept
     {
-        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire),
-                          "SetSceneThreadRenderThreadFrameEndSync requires SceneSystem to be stopped.");
+        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire), "SetSceneThreadRenderThreadFrameEndSync requires SceneSystem to be stopped.");
         impl_->sceneThreadRenderThreadFrameEndSync = sync;
     }
 

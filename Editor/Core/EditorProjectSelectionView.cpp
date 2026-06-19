@@ -2,9 +2,8 @@
 
 #include "Editor/Core/Editor.h"
 
-#include <imgui.h>
-
 #include <algorithm>
+#include <imgui.h>
 
 namespace ve::editor
 {
@@ -28,8 +27,7 @@ namespace ve::editor
     void ProjectSelectionView::Render(Editor& editor)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
-        const ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
-                                             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+        const ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
         ImGui::SetNextWindowPos(viewport->WorkPos, ImGuiCond_Always);

@@ -2,9 +2,8 @@
 
 #include "Editor/Core/Editor.h"
 
-#include <imgui.h>
-
 #include <algorithm>
+#include <imgui.h>
 
 namespace ve::editor
 {
@@ -36,8 +35,7 @@ namespace ve::editor
         const float menuBarHeight = ImGui::GetFrameHeight();
         const ImVec2 origin(viewport->WorkPos.x, viewport->WorkPos.y + menuBarHeight + PanelGap);
         const ImVec2 available(viewport->WorkSize.x, viewport->WorkSize.y - menuBarHeight - PanelGap);
-        const float centerWidth =
-            (std::max)(320.0F, available.x - HierarchyWidth - InspectorWidth - PanelGap * 2.0F);
+        const float centerWidth = (std::max)(320.0F, available.x - HierarchyWidth - InspectorWidth - PanelGap * 2.0F);
         const float centerHeight = (std::max)(240.0F, available.y - AssetsHeight - PanelGap);
         const float splitCenterWidth = (std::max)(160.0F, (centerWidth - PanelGap) * 0.5F);
 
@@ -45,14 +43,10 @@ namespace ve::editor
 
         const float centerX = origin.x + HierarchyWidth + PanelGap;
         sceneViewPanel_.Render(ImVec2(centerX, origin.y), ImVec2(splitCenterWidth, centerHeight));
-        gameViewPanel_.Render(editor,
-                              ImVec2(centerX + splitCenterWidth + PanelGap, origin.y),
-                              ImVec2(splitCenterWidth, centerHeight));
-        assetsPanel_.Render(
-            editor, ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
+        gameViewPanel_.Render(editor, ImVec2(centerX + splitCenterWidth + PanelGap, origin.y), ImVec2(splitCenterWidth, centerHeight));
+        assetsPanel_.Render(editor, ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
 
-        inspectorPanel_.Render(
-            editor, ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
+        inspectorPanel_.Render(editor, ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
     }
 
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept

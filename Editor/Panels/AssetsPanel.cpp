@@ -45,9 +45,7 @@ namespace ve::editor
 
         [[nodiscard]] bool HasChildDirectory(const std::vector<Path>& directories, const Path& directory)
         {
-            return std::any_of(directories.begin(),
-                               directories.end(),
-                               [&directory](const Path& candidate) { return IsChildDirectory(candidate, directory); });
+            return std::any_of(directories.begin(), directories.end(), [&directory](const Path& candidate) { return IsChildDirectory(candidate, directory); });
         }
 
         [[nodiscard]] bool DirectoryContainsAsset(const EditorAssetDatabase& assetDatabase, const Path& directory)
@@ -90,9 +88,7 @@ namespace ve::editor
         }
 
         std::vector<Path> directories = BuildDirectoryList(assetDatabase);
-        if (std::none_of(directories.begin(),
-                         directories.end(),
-                         [this](const Path& directory) { return IsSameDirectory(directory, currentDirectory_); }))
+        if (std::none_of(directories.begin(), directories.end(), [this](const Path& directory) { return IsSameDirectory(directory, currentDirectory_); }))
         {
             currentDirectory_ = Path("Assets");
         }
@@ -100,9 +96,7 @@ namespace ve::editor
         if (ImGui::BeginChild("AssetDirectories", ImVec2(DirectoryTreeWidth, 0.0F), ImGuiChildFlags_ResizeX))
         {
             RenderDirectoryTree(directories, Path("Assets"));
-            if (ImGui::BeginPopupContextWindow("AssetDirectoryContext",
-                                               ImGuiPopupFlags_MouseButtonRight |
-                                                   ImGuiPopupFlags_NoOpenOverItems))
+            if (ImGui::BeginPopupContextWindow("AssetDirectoryContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
             {
                 if (ImGui::MenuItem("Reimport All"))
                 {
@@ -118,9 +112,7 @@ namespace ve::editor
         if (ImGui::BeginChild("AssetFiles", ImVec2(0.0F, 0.0F)))
         {
             RenderAssetFiles(assetDatabase);
-            if (ImGui::BeginPopupContextWindow("AssetFilesContext",
-                                               ImGuiPopupFlags_MouseButtonRight |
-                                                   ImGuiPopupFlags_NoOpenOverItems))
+            if (ImGui::BeginPopupContextWindow("AssetFilesContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
             {
                 if (ImGui::MenuItem("Reimport All"))
                 {
@@ -135,8 +127,7 @@ namespace ve::editor
     void AssetsPanel::RenderDirectoryTree(const std::vector<Path>& directories, const Path& directory)
     {
         const bool hasChildren = HasChildDirectory(directories, directory);
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
-                                   ImGuiTreeNodeFlags_SpanAvailWidth;
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
         if (directory == Path("Assets"))
         {
             flags |= ImGuiTreeNodeFlags_DefaultOpen;
@@ -210,19 +201,16 @@ namespace ve::editor
 
             std::sort(assetsInDirectory.begin(),
                       assetsInDirectory.end(),
-                      [](const EditorAssetRecord* left, const EditorAssetRecord* right)
-                      { return left->path.GetString() < right->path.GetString(); });
+                      [](const EditorAssetRecord* left, const EditorAssetRecord* right) { return left->path.GetString() < right->path.GetString(); });
 
             for (const EditorAssetRecord* asset : assetsInDirectory)
             {
-                const bool selected = editor_->GetSelectionType() == EditorSelectionType::Asset &&
-                                      editor_->GetSelectedAssetPath() == asset->path;
+                const bool selected = editor_->GetSelectionType() == EditorSelectionType::Asset && editor_->GetSelectedAssetPath() == asset->path;
 
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 const std::string filename = asset->path.GetFilename();
-                const ImGuiSelectableFlags selectableFlags =
-                    ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+                const ImGuiSelectableFlags selectableFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
                 if (ImGui::Selectable(filename.c_str(), selected, selectableFlags))
                 {
                     editor_->SetSelectedAsset(asset->path);
@@ -259,8 +247,7 @@ namespace ve::editor
             const Path directory = pendingDirectories.back();
             pendingDirectories.pop_back();
 
-            Result<std::vector<FileSystem::DirectoryEntry>> entries =
-                FileSystem::ListDirectory(assetDatabase.GetProjectRoot() / directory);
+            Result<std::vector<FileSystem::DirectoryEntry>> entries = FileSystem::ListDirectory(assetDatabase.GetProjectRoot() / directory);
             if (!entries)
             {
                 continue;
@@ -287,9 +274,7 @@ namespace ve::editor
         {
             directories.emplace_back(directory);
         }
-        std::sort(directories.begin(),
-                  directories.end(),
-                  [](const Path& left, const Path& right) { return left.GetString() < right.GetString(); });
+        std::sort(directories.begin(), directories.end(), [](const Path& left, const Path& right) { return left.GetString() < right.GetString(); });
         return directories;
     }
 } // namespace ve::editor

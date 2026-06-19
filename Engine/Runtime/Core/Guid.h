@@ -4,9 +4,8 @@
 #include "Engine/Runtime/Core/Result.h"
 
 #include <boost/uuid/uuid.hpp>
-
-#include <string>
 #include <functional>
+#include <string>
 
 namespace ve
 {

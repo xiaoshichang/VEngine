@@ -37,9 +37,7 @@ namespace ve
         BaseRenderer() = default;
         virtual ~BaseRenderer() = default;
 
-        [[nodiscard]] ErrorCode RenderFrame(rhi::RhiDevice& device,
-                                            rhi::RhiCommandList& commandList,
-                                            rhi::RhiSwapchain& mainSwapchain);
+        [[nodiscard]] ErrorCode RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
 
         [[nodiscard]] bool IsFrameActive() const noexcept;
         [[nodiscard]] const RenderFrameContext& GetFrameContext() const noexcept;
@@ -62,9 +60,7 @@ namespace ve
         [[nodiscard]] ErrorCode BuildFrameContext(rhi::RhiSwapchain& mainSwapchain) noexcept;
         void UpdateRenderWorld();
         void BuildVisibleDrawLists();
-        [[nodiscard]] ErrorCode BeginFrame(rhi::RhiDevice& device,
-                                           rhi::RhiCommandList& commandList,
-                                           rhi::RhiSwapchain& mainSwapchain);
+        [[nodiscard]] ErrorCode BeginFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
         [[nodiscard]] ErrorCode ExecutePassesInOrder();
         void EndFrame();
         [[nodiscard]] ErrorCode BuildPassData();

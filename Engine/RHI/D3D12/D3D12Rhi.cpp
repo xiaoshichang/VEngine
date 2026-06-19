@@ -81,8 +81,7 @@ namespace ve::rhi
         std::string MakeHResultError(const char* operation, HRESULT result)
         {
             char buffer[128] = {};
-            std::snprintf(
-                buffer, sizeof(buffer), "%s failed with HRESULT 0x%08X", operation, static_cast<unsigned>(result));
+            std::snprintf(buffer, sizeof(buffer), "%s failed with HRESULT 0x%08X", operation, static_cast<unsigned>(result));
             return buffer;
         }
 
@@ -225,9 +224,7 @@ namespace ve::rhi
         class D3D12PipelineState final : public RhiPipelineState
         {
         public:
-            D3D12PipelineState(RhiPrimitiveTopology topology,
-                               ComPtr<ID3D12RootSignature> rootSignature,
-                               ComPtr<ID3D12PipelineState> pipelineState)
+            D3D12PipelineState(RhiPrimitiveTopology topology, ComPtr<ID3D12RootSignature> rootSignature, ComPtr<ID3D12PipelineState> pipelineState)
                 : topology_(topology)
                 , rootSignature_(std::move(rootSignature))
                 , pipelineState_(std::move(pipelineState))
@@ -371,9 +368,7 @@ namespace ve::rhi
         class D3D12CommandList final : public RhiCommandList
         {
         public:
-            D3D12CommandList(ComPtr<ID3D12Device> device,
-                             ComPtr<ID3D12CommandAllocator> commandAllocator,
-                             ComPtr<ID3D12GraphicsCommandList> commandList)
+            D3D12CommandList(ComPtr<ID3D12Device> device, ComPtr<ID3D12CommandAllocator> commandAllocator, ComPtr<ID3D12GraphicsCommandList> commandList)
                 : device_(std::move(device))
                 , commandAllocator_(std::move(commandAllocator))
                 , commandList_(std::move(commandList))
@@ -425,10 +420,7 @@ namespace ve::rhi
                 if (colorAttachment.loadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
-                        colorAttachment.clearColor.r,
-                        colorAttachment.clearColor.g,
-                        colorAttachment.clearColor.b,
-                        colorAttachment.clearColor.a};
+                        colorAttachment.clearColor.r, colorAttachment.clearColor.g, colorAttachment.clearColor.b, colorAttachment.clearColor.a};
                     commandList_->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
                 }
 
@@ -512,8 +504,7 @@ namespace ve::rhi
             {
                 const auto& d3dBuffer = static_cast<const D3D12Buffer&>(buffer);
                 const UINT rootParameterIndex = ResolveUniformRootParameter(stage, slot);
-                commandList_->SetGraphicsRootConstantBufferView(
-                    rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+                commandList_->SetGraphicsRootConstantBufferView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
             }
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
@@ -534,8 +525,7 @@ namespace ve::rhi
         private:
             [[nodiscard]] static UINT ResolveUniformRootParameter(RhiShaderStage stage, uint32_t slot) noexcept
             {
-                VE_ASSERT((stage == RhiShaderStage::Vertex && slot == 0) ||
-                          (stage == RhiShaderStage::Fragment && (slot == 1 || slot == 2)));
+                VE_ASSERT((stage == RhiShaderStage::Vertex && slot == 0) || (stage == RhiShaderStage::Fragment && (slot == 1 || slot == 2)));
                 if (stage == RhiShaderStage::Vertex)
                 {
                     return 0u;
@@ -678,8 +668,7 @@ namespace ve::rhi
                 swapchainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 
                 ComPtr<IDXGISwapChain1> swapchain;
-                HRESULT result = factory_->CreateSwapChainForHwnd(
-                    queue_.Get(), window, &swapchainDesc, nullptr, nullptr, &swapchain);
+                HRESULT result = factory_->CreateSwapChainForHwnd(queue_.Get(), window, &swapchainDesc, nullptr, nullptr, &swapchain);
 
                 if (FAILED(result))
                 {
@@ -698,12 +687,8 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                auto rhiSwapchain = std::make_unique<D3D12Swapchain>(device_,
-                                                                     swapchain3,
-                                                                     RhiExtent2D{desc.width, desc.height},
-                                                                     desc.colorFormat,
-                                                                     swapchainDesc.BufferCount,
-                                                                     &lastError_);
+                auto rhiSwapchain = std::make_unique<D3D12Swapchain>(
+                    device_, swapchain3, RhiExtent2D{desc.width, desc.height}, desc.colorFormat, swapchainDesc.BufferCount, &lastError_);
 
                 if (!rhiSwapchain->Initialize())
                 {
@@ -734,12 +719,8 @@ namespace ve::rhi
                 resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
                 ComPtr<ID3D12Resource> resource;
-                HRESULT result = device_->CreateCommittedResource(&heapProperties,
-                                                                  D3D12_HEAP_FLAG_NONE,
-                                                                  &resourceDesc,
-                                                                  D3D12_RESOURCE_STATE_GENERIC_READ,
-                                                                  nullptr,
-                                                                  IID_PPV_ARGS(&resource));
+                HRESULT result = device_->CreateCommittedResource(
+                    &heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&resource));
 
                 if (FAILED(result))
                 {
@@ -791,12 +772,8 @@ namespace ve::rhi
                 resourceDesc.Flags = ToD3D12TextureFlags(desc.usage);
 
                 ComPtr<ID3D12Resource> resource;
-                HRESULT result = device_->CreateCommittedResource(&heapProperties,
-                                                                  D3D12_HEAP_FLAG_NONE,
-                                                                  &resourceDesc,
-                                                                  D3D12_RESOURCE_STATE_COMMON,
-                                                                  nullptr,
-                                                                  IID_PPV_ARGS(&resource));
+                HRESULT result = device_->CreateCommittedResource(
+                    &heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&resource));
 
                 if (FAILED(result))
                 {
@@ -830,24 +807,14 @@ namespace ve::rhi
 
                 ComPtr<ID3DBlob> bytecode;
                 ComPtr<ID3DBlob> errors;
-                HRESULT result = D3DCompile(desc.source,
-                                            std::strlen(desc.source),
-                                            desc.debugName,
-                                            nullptr,
-                                            nullptr,
-                                            desc.entryPoint,
-                                            target,
-                                            flags,
-                                            0,
-                                            &bytecode,
-                                            &errors);
+                HRESULT result =
+                    D3DCompile(desc.source, std::strlen(desc.source), desc.debugName, nullptr, nullptr, desc.entryPoint, target, flags, 0, &bytecode, &errors);
 
                 if (FAILED(result))
                 {
                     if (errors != nullptr)
                     {
-                        lastError_.assign(static_cast<const char*>(errors->GetBufferPointer()),
-                                          errors->GetBufferSize());
+                        lastError_.assign(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
                     }
                     else
                     {
@@ -860,8 +827,7 @@ namespace ve::rhi
                 return std::make_unique<D3D12ShaderModule>(desc.stage, bytecode);
             }
 
-            [[nodiscard]] std::unique_ptr<RhiPipelineState>
-            CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
+            [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
                 const auto* vertexShaderModule = dynamic_cast<const D3D12ShaderModule*>(desc.vertexShader);
                 const auto* fragmentShaderModule = dynamic_cast<const D3D12ShaderModule*>(desc.fragmentShader);
@@ -893,15 +859,13 @@ namespace ve::rhi
 
                 ComPtr<ID3DBlob> signature;
                 ComPtr<ID3DBlob> errors;
-                HRESULT result =
-                    D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
+                HRESULT result = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
 
                 if (FAILED(result))
                 {
                     if (errors != nullptr)
                     {
-                        lastError_.assign(static_cast<const char*>(errors->GetBufferPointer()),
-                                          errors->GetBufferSize());
+                        lastError_.assign(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
                     }
                     else
                     {
@@ -912,8 +876,7 @@ namespace ve::rhi
                 }
 
                 ComPtr<ID3D12RootSignature> rootSignature;
-                result = device_->CreateRootSignature(
-                    0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
+                result = device_->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 
                 if (FAILED(result))
                 {
@@ -987,8 +950,7 @@ namespace ve::rhi
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override
             {
                 ComPtr<ID3D12CommandAllocator> commandAllocator;
-                HRESULT result =
-                    device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
+                HRESULT result = device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
 
                 if (FAILED(result))
                 {
@@ -997,8 +959,7 @@ namespace ve::rhi
                 }
 
                 ComPtr<ID3D12GraphicsCommandList> commandList;
-                result = device_->CreateCommandList(
-                    0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList));
+                result = device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList));
 
                 if (FAILED(result))
                 {

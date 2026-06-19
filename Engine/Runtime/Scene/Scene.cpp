@@ -78,8 +78,7 @@ namespace ve
     {
         auto it = std::find_if(rootGameObjects_.begin(),
                                rootGameObjects_.end(),
-                               [&gameObject](const std::unique_ptr<GameObject>& candidate)
-                               { return candidate.get() == &gameObject; });
+                               [&gameObject](const std::unique_ptr<GameObject>& candidate) { return candidate.get() == &gameObject; });
 
         if (it == rootGameObjects_.end())
         {
@@ -136,8 +135,7 @@ namespace ve
         }
 
         std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneAddRenderItem",
-                             [rtScene, item = std::move(item)]() { rtScene->AddRenderItem(item); });
+        SubmitRTSceneCommand("RTSceneAddRenderItem", [rtScene, item = std::move(item)]() { rtScene->AddRenderItem(item); });
     }
 
     void Scene::UnregisterRenderItem(std::shared_ptr<RTRenderItem> item) noexcept
@@ -148,8 +146,7 @@ namespace ve
         }
 
         std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneRemoveRenderItem",
-                             [rtScene, item = std::move(item)]() { rtScene->RemoveRenderItem(item); });
+        SubmitRTSceneCommand("RTSceneRemoveRenderItem", [rtScene, item = std::move(item)]() { rtScene->RemoveRenderItem(item); });
     }
 
     void Scene::UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemDesc desc)
@@ -159,9 +156,7 @@ namespace ve
             return;
         }
 
-        SubmitRTSceneCommand("RTSceneUpdateRenderItem",
-                             [item = std::move(item), desc = std::move(desc)]() mutable
-                             { item->SetDesc(std::move(desc)); });
+        SubmitRTSceneCommand("RTSceneUpdateRenderItem", [item = std::move(item), desc = std::move(desc)]() mutable { item->SetDesc(std::move(desc)); });
     }
 
     void Scene::RegisterCamera(std::shared_ptr<RTCamera> camera)
@@ -172,8 +167,7 @@ namespace ve
         }
 
         std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneAddCamera",
-                             [rtScene, camera = std::move(camera)]() { rtScene->AddCamera(camera); });
+        SubmitRTSceneCommand("RTSceneAddCamera", [rtScene, camera = std::move(camera)]() { rtScene->AddCamera(camera); });
     }
 
     void Scene::UnregisterCamera(std::shared_ptr<RTCamera> camera) noexcept
@@ -184,8 +178,7 @@ namespace ve
         }
 
         std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneRemoveCamera",
-                             [rtScene, camera = std::move(camera)]() { rtScene->RemoveCamera(camera); });
+        SubmitRTSceneCommand("RTSceneRemoveCamera", [rtScene, camera = std::move(camera)]() { rtScene->RemoveCamera(camera); });
     }
 
     void Scene::UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraDesc desc)
@@ -195,9 +188,7 @@ namespace ve
             return;
         }
 
-        SubmitRTSceneCommand("RTSceneUpdateCamera",
-                             [camera = std::move(camera), desc = std::move(desc)]() mutable
-                             { camera->SetDesc(std::move(desc)); });
+        SubmitRTSceneCommand("RTSceneUpdateCamera", [camera = std::move(camera), desc = std::move(desc)]() mutable { camera->SetDesc(std::move(desc)); });
     }
 
     void Scene::RegisterLight(std::shared_ptr<RTLight> light)
@@ -208,8 +199,7 @@ namespace ve
         }
 
         std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneAddLight",
-                             [rtScene, light = std::move(light)]() { rtScene->AddLight(light); });
+        SubmitRTSceneCommand("RTSceneAddLight", [rtScene, light = std::move(light)]() { rtScene->AddLight(light); });
     }
 
     void Scene::UnregisterLight(std::shared_ptr<RTLight> light) noexcept
@@ -220,8 +210,7 @@ namespace ve
         }
 
         std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneRemoveLight",
-                             [rtScene, light = std::move(light)]() { rtScene->RemoveLight(light); });
+        SubmitRTSceneCommand("RTSceneRemoveLight", [rtScene, light = std::move(light)]() { rtScene->RemoveLight(light); });
     }
 
     void Scene::UpdateLight(std::shared_ptr<RTLight> light, RTLightDesc desc)
@@ -231,9 +220,7 @@ namespace ve
             return;
         }
 
-        SubmitRTSceneCommand("RTSceneUpdateLight",
-                             [light = std::move(light), desc = std::move(desc)]() mutable
-                             { light->SetDesc(std::move(desc)); });
+        SubmitRTSceneCommand("RTSceneUpdateLight", [light = std::move(light), desc = std::move(desc)]() mutable { light->SetDesc(std::move(desc)); });
     }
 
     void Scene::Update(Float32 deltaSeconds)
@@ -373,8 +360,7 @@ namespace ve
 
         if (sceneSystem_ == nullptr || !sceneSystem_->HasRenderSystem())
         {
-            VE_ASSERT_ALWAYS_MESSAGE(false,
-                                     "Scene RTScene commands require a SceneSystem with an initialized RenderSystem.");
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Scene RTScene commands require a SceneSystem with an initialized RenderSystem.");
             return;
         }
 

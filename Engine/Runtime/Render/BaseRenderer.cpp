@@ -82,9 +82,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         static_assert(sizeof(OpaqueSceneLightUniformData) == 256);
         static_assert(sizeof(RTMaterialUniformData) == 256);
 
-        [[nodiscard]] rhi::RhiBufferDesc MakeUniformBufferDesc(UInt64 size,
-                                                               const void* initialData,
-                                                               const char* debugName) noexcept
+        [[nodiscard]] rhi::RhiBufferDesc MakeUniformBufferDesc(UInt64 size, const void* initialData, const char* debugName) noexcept
         {
             rhi::RhiBufferDesc desc = {};
             desc.size = size;
@@ -108,9 +106,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             const Vector3 translation(localToWorld.Get(0, 3), localToWorld.Get(1, 3), localToWorld.Get(2, 3));
             for (SizeT row = 0; row < 3; ++row)
             {
-                const Float32 value = -((inverse.Get(row, 0) * translation.GetX()) +
-                                        (inverse.Get(row, 1) * translation.GetY()) +
-                                        (inverse.Get(row, 2) * translation.GetZ()));
+                const Float32 value =
+                    -((inverse.Get(row, 0) * translation.GetX()) + (inverse.Get(row, 1) * translation.GetY()) + (inverse.Get(row, 2) * translation.GetZ()));
                 inverse.Set(row, 3, value);
             }
 
@@ -153,9 +150,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCameraDesc& cameraDesc) noexcept
         {
-            return cameraDesc.projectionMode == RTCameraProjectionMode::Orthographic
-                       ? BuildOrthographicProjection(cameraDesc)
-                       : BuildPerspectiveProjection(cameraDesc);
+            return cameraDesc.projectionMode == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(cameraDesc)
+                                                                                     : BuildPerspectiveProjection(cameraDesc);
         }
 
         [[nodiscard]] std::shared_ptr<RTCamera> FindFrameCamera(const RTScene& scene) noexcept
@@ -195,17 +191,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return BuildProjectionMatrix(cameraDesc) * BuildRigidInverse(cameraDesc.localToWorld);
         }
 
-        [[nodiscard]] OpaqueSceneObjectUniformData BuildObjectUniformData(const Matrix44& worldViewProjection,
-                                                                          const Matrix44& localToWorld) noexcept
+        [[nodiscard]] OpaqueSceneObjectUniformData BuildObjectUniformData(const Matrix44& worldViewProjection, const Matrix44& localToWorld) noexcept
         {
             OpaqueSceneObjectUniformData data = {};
             const Matrix44 shaderWorldViewProjection = worldViewProjection.Transposed();
             const Matrix44 shaderLocalToWorld = localToWorld.Transposed();
             const std::array<Float32, 16>& worldViewProjectionValues = shaderWorldViewProjection.GetValues();
             const std::array<Float32, 16>& localToWorldValues = shaderLocalToWorld.GetValues();
-            std::memcpy(data.worldViewProjection,
-                        worldViewProjectionValues.data(),
-                        sizeof(data.worldViewProjection));
+            std::memcpy(data.worldViewProjection, worldViewProjectionValues.data(), sizeof(data.worldViewProjection));
             std::memcpy(data.localToWorld, localToWorldValues.data(), sizeof(data.localToWorld));
             return data;
         }
@@ -263,16 +256,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
             {
                 if (colorTexture_ != nullptr && colorTexture_->GetTexture() != nullptr)
                 {
-                    builder.AddTextureColorAttachment(*colorTexture_->GetTexture(),
-                                                      rhi::RhiLoadAction::Clear,
-                                                      rhi::RhiStoreAction::Store,
-                                                      rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+                    builder.AddTextureColorAttachment(
+                        *colorTexture_->GetTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::Store, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
                     return;
                 }
 
-                builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear,
-                                                    rhi::RhiStoreAction::Store,
-                                                    rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+                builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::Store, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
             }
 
             void Execute(RenderPassContext& context) override
@@ -308,23 +297,16 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
                     const RTRenderItemDesc& itemDesc = item->GetDesc();
                     const Matrix44 worldViewProjection = viewProjection * itemDesc.localToWorld;
-                    const OpaqueSceneObjectUniformData objectUniformData =
-                        BuildObjectUniformData(worldViewProjection, itemDesc.localToWorld);
-                    std::unique_ptr<rhi::RhiBuffer> objectUniformBuffer =
-                        context.GetDevice().CreateBuffer(MakeUniformBufferDesc(sizeof(OpaqueSceneObjectUniformData),
-                                                                                &objectUniformData,
-                                                                                "OpaqueSceneObjectUniformBuffer"));
-                    VE_ASSERT_MESSAGE(objectUniformBuffer != nullptr,
-                                      "OpaqueScenePass failed to create object uniform buffer.");
+                    const OpaqueSceneObjectUniformData objectUniformData = BuildObjectUniformData(worldViewProjection, itemDesc.localToWorld);
+                    std::unique_ptr<rhi::RhiBuffer> objectUniformBuffer = context.GetDevice().CreateBuffer(
+                        MakeUniformBufferDesc(sizeof(OpaqueSceneObjectUniformData), &objectUniformData, "OpaqueSceneObjectUniformBuffer"));
+                    VE_ASSERT_MESSAGE(objectUniformBuffer != nullptr, "OpaqueScenePass failed to create object uniform buffer.");
                     commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *objectUniformBuffer, 0);
                     frameUniformBuffers_.push_back(std::move(objectUniformBuffer));
 
                     BindMaterialUniform(context, itemDesc);
 
-                    commandList.SetVertexBuffer(0,
-                                                *meshResource->GetVertexBuffer(),
-                                                meshResource->GetVertexStride(),
-                                                0);
+                    commandList.SetVertexBuffer(0, *meshResource->GetVertexBuffer(), meshResource->GetVertexStride(), 0);
                     if (meshResource->GetIndexBuffer() != nullptr && meshResource->GetIndexCount() > 0)
                     {
                         commandList.SetIndexBuffer(*meshResource->GetIndexBuffer(), rhi::RhiIndexFormat::UInt32, 0);
@@ -398,10 +380,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             void BindLightUniform(RenderPassContext& context, const RTScene& scene)
             {
                 const OpaqueSceneLightUniformData lightUniformData = BuildLightUniformData(scene);
-                std::unique_ptr<rhi::RhiBuffer> lightUniformBuffer =
-                    context.GetDevice().CreateBuffer(MakeUniformBufferDesc(sizeof(OpaqueSceneLightUniformData),
-                                                                            &lightUniformData,
-                                                                            "OpaqueSceneLightUniformBuffer"));
+                std::unique_ptr<rhi::RhiBuffer> lightUniformBuffer = context.GetDevice().CreateBuffer(
+                    MakeUniformBufferDesc(sizeof(OpaqueSceneLightUniformData), &lightUniformData, "OpaqueSceneLightUniformBuffer"));
                 VE_ASSERT_MESSAGE(lightUniformBuffer != nullptr, "OpaqueScenePass failed to create light uniform buffer.");
                 context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment, 2, *lightUniformBuffer, 0);
                 frameUniformBuffers_.push_back(std::move(lightUniformBuffer));
@@ -412,18 +392,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(itemDesc.materialResource);
                 if (materialResource != nullptr && materialResource->GetUniformBuffer() != nullptr)
                 {
-                    context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment,
-                                                              1,
-                                                              *materialResource->GetUniformBuffer(),
-                                                              0);
+                    context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *materialResource->GetUniformBuffer(), 0);
                     return;
                 }
 
                 EnsureDefaultMaterialBuffer(context.GetDevice());
-                context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment,
-                                                          1,
-                                                          *defaultMaterialUniformBuffer_,
-                                                          0);
+                context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *defaultMaterialUniformBuffer_, 0);
             }
 
             void EnsureDefaultMaterialBuffer(rhi::RhiDevice& device)
@@ -435,11 +409,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
                 RTMaterialUniformData uniformData = {};
                 defaultMaterialUniformBuffer_ =
-                    device.CreateBuffer(MakeUniformBufferDesc(sizeof(RTMaterialUniformData),
-                                                              &uniformData,
-                                                              "OpaqueSceneDefaultMaterialUniformBuffer"));
-                VE_ASSERT_MESSAGE(defaultMaterialUniformBuffer_ != nullptr,
-                                  "OpaqueScenePass failed to create default material uniform buffer.");
+                    device.CreateBuffer(MakeUniformBufferDesc(sizeof(RTMaterialUniformData), &uniformData, "OpaqueSceneDefaultMaterialUniformBuffer"));
+                VE_ASSERT_MESSAGE(defaultMaterialUniformBuffer_ != nullptr, "OpaqueScenePass failed to create default material uniform buffer.");
             }
 
             [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept
@@ -477,9 +448,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
             void Setup(RenderPassBuilder& builder) override
             {
-                builder.AddSwapchainColorAttachment(colorLoadAction_,
-                                                    rhi::RhiStoreAction::Store,
-                                                    rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
+                builder.AddSwapchainColorAttachment(colorLoadAction_, rhi::RhiStoreAction::Store, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f});
             }
 
             void Execute(RenderPassContext& context) override
@@ -498,9 +467,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         };
     } // namespace
 
-    ErrorCode BaseRenderer::RenderFrame(rhi::RhiDevice& device,
-                                        rhi::RhiCommandList& commandList,
-                                        rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode BaseRenderer::RenderFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
     {
         VE_ASSERT_RENDER_THREAD();
 
@@ -574,9 +541,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         // Visibility and batching stay here so concrete renderers only choose their pass topology.
     }
 
-    ErrorCode BaseRenderer::BeginFrame(rhi::RhiDevice& device,
-                                       rhi::RhiCommandList& commandList,
-                                       rhi::RhiSwapchain& mainSwapchain)
+    ErrorCode BaseRenderer::BeginFrame(rhi::RhiDevice& device, rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)
     {
         if (frameActive_)
         {
@@ -649,12 +614,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             VE_ASSERT(passData.pass != nullptr);
 
             VE_ASSERT(activeDevice_ != nullptr);
-            RenderPassContext passContext(*activeDevice_,
-                                          *activeCommandList_,
-                                          frameContext_,
-                                          passData.renderPassDesc,
-                                          passData.viewport,
-                                          passData.scissorRect);
+            RenderPassContext passContext(*activeDevice_, *activeCommandList_, frameContext_, passData.renderPassDesc, passData.viewport, passData.scissorRect);
             passData.pass->Execute(passContext);
 
             activeCommandList_->EndRenderPass();
@@ -742,7 +702,6 @@ float4 PSMain(VSOutput input) : SV_TARGET
             AddInternalPass(std::make_unique<OpaqueSceneRenderPass>(std::move(desc.gameViewTexture)));
         }
 
-        AddInternalPass(std::make_unique<EditorOverlayRenderPass>(desc.mainColorLoadAction,
-                                                                  std::move(desc.overlayRenderCallback)));
+        AddInternalPass(std::make_unique<EditorOverlayRenderPass>(desc.mainColorLoadAction, std::move(desc.overlayRenderCallback)));
     }
 } // namespace ve

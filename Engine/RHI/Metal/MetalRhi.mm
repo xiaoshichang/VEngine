@@ -347,10 +347,7 @@ namespace ve::rhi
                 renderPassDescriptor.colorAttachments[0].loadAction = ToMetalLoadAction(colorAttachment.loadAction);
                 renderPassDescriptor.colorAttachments[0].storeAction = ToMetalStoreAction(colorAttachment.storeAction);
                 renderPassDescriptor.colorAttachments[0].clearColor =
-                    MTLClearColorMake(colorAttachment.clearColor.r,
-                                      colorAttachment.clearColor.g,
-                                      colorAttachment.clearColor.b,
-                                      colorAttachment.clearColor.a);
+                    MTLClearColorMake(colorAttachment.clearColor.r, colorAttachment.clearColor.g, colorAttachment.clearColor.b, colorAttachment.clearColor.a);
 
                 renderCommandEncoder_ = [commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor];
                 return renderCommandEncoder_ != nil;
@@ -423,9 +420,7 @@ namespace ve::rhi
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
-                [renderCommandEncoder_ drawPrimitives:MTLPrimitiveTypeTriangle
-                                          vertexStart:firstVertex
-                                          vertexCount:vertexCount];
+                [renderCommandEncoder_ drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:firstVertex vertexCount:vertexCount];
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
@@ -521,8 +516,7 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                auto swapchain = std::make_unique<MetalSwapchain>(
-                    layer, device_, RhiExtent2D{desc.width, desc.height}, desc.colorFormat);
+                auto swapchain = std::make_unique<MetalSwapchain>(layer, device_, RhiExtent2D{desc.width, desc.height}, desc.colorFormat);
 
                 if (!swapchain->Initialize())
                 {
@@ -539,9 +533,7 @@ namespace ve::rhi
 
                 if (desc.initialData != nullptr)
                 {
-                    buffer = [device_ newBufferWithBytes:desc.initialData
-                                                  length:desc.size
-                                                 options:MTLResourceStorageModeShared];
+                    buffer = [device_ newBufferWithBytes:desc.initialData length:desc.size options:MTLResourceStorageModeShared];
                 }
                 else
                 {
@@ -623,8 +615,7 @@ namespace ve::rhi
                 return std::make_unique<MetalShaderModule>(desc.stage, library, function);
             }
 
-            [[nodiscard]] std::unique_ptr<RhiPipelineState>
-            CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
+            [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
                 const auto* vertexShaderModule = dynamic_cast<const MetalShaderModule*>(desc.vertexShader);
                 const auto* fragmentShaderModule = dynamic_cast<const MetalShaderModule*>(desc.fragmentShader);
@@ -656,8 +647,7 @@ namespace ve::rhi
                 pipelineDescriptor.colorAttachments[0].pixelFormat = ToMetalPixelFormat(desc.colorFormat);
 
                 NSError* error = nil;
-                id<MTLRenderPipelineState> pipelineState =
-                    [device_ newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+                id<MTLRenderPipelineState> pipelineState = [device_ newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
 
                 [pipelineDescriptor release];
                 [vertexDescriptor release];

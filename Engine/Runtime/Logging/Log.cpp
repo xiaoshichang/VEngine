@@ -104,17 +104,12 @@ namespace
     {
         const char* category = record.category != nullptr ? record.category : "General";
 
-        std::string line = std::format("[{}][{}][{}][Thread {}] {}",
-                                       MakeTimestamp(),
-                                       ve::ToString(record.severity),
-                                       category,
-                                       MakeThreadIdString(),
-                                       record.message);
+        std::string line =
+            std::format("[{}][{}][{}][Thread {}] {}", MakeTimestamp(), ve::ToString(record.severity), category, MakeThreadIdString(), record.message);
 
         if (IsAtLeastSeverity(record.severity, ve::LogSeverity::Error))
         {
-            const char* functionName =
-                record.location.function_name() != nullptr ? record.location.function_name() : "<unknown>";
+            const char* functionName = record.location.function_name() != nullptr ? record.location.function_name() : "<unknown>";
             line += std::format(" ({}:{} {})", MakeFileName(record.location), record.location.line(), functionName);
         }
 
@@ -183,8 +178,7 @@ namespace ve
 
             if (config.enableConsole && VE_PLATFORM_WINDOWS == 0)
             {
-                boost::log::add_console_log(
-                    std::clog, boost::log::keywords::format = "%Message%", boost::log::keywords::auto_flush = true);
+                boost::log::add_console_log(std::clog, boost::log::keywords::format = "%Message%", boost::log::keywords::auto_flush = true);
             }
 
             if (config.enableFile)
@@ -346,8 +340,7 @@ namespace ve
 
     namespace detail
     {
-        void
-        LogFormattedMessage(LogSeverity severity, const char* category, std::string message, SourceLocation location)
+        void LogFormattedMessage(LogSeverity severity, const char* category, std::string message, SourceLocation location)
         {
             LogMessage(severity, category, message, location);
         }

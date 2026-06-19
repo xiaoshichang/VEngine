@@ -98,9 +98,7 @@ namespace ve
         }
 
         const auto existing =
-            std::find_if(renderItems_.begin(),
-                         renderItems_.end(),
-                         [&item](const std::shared_ptr<RTRenderItem>& candidate) { return candidate == item; });
+            std::find_if(renderItems_.begin(), renderItems_.end(), [&item](const std::shared_ptr<RTRenderItem>& candidate) { return candidate == item; });
 
         if (existing == renderItems_.end())
         {
@@ -121,9 +119,7 @@ namespace ve
         }
 
         const auto existing =
-            std::find_if(cameras_.begin(),
-                         cameras_.end(),
-                         [&camera](const std::shared_ptr<RTCamera>& candidate) { return candidate == camera; });
+            std::find_if(cameras_.begin(), cameras_.end(), [&camera](const std::shared_ptr<RTCamera>& candidate) { return candidate == camera; });
 
         if (existing == cameras_.end())
         {
@@ -143,10 +139,7 @@ namespace ve
             return;
         }
 
-        const auto existing =
-            std::find_if(lights_.begin(),
-                         lights_.end(),
-                         [&light](const std::shared_ptr<RTLight>& candidate) { return candidate == light; });
+        const auto existing = std::find_if(lights_.begin(), lights_.end(), [&light](const std::shared_ptr<RTLight>& candidate) { return candidate == light; });
 
         if (existing == lights_.end())
         {

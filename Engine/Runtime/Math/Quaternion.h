@@ -47,9 +47,7 @@ namespace ve
 
             const Float32 halfAngle = radians * 0.5f;
             const Float32 s = Sin(halfAngle);
-            return Quaternion(
-                       normalizedAxis.GetX() * s, normalizedAxis.GetY() * s, normalizedAxis.GetZ() * s, Cos(halfAngle))
-                .Normalized();
+            return Quaternion(normalizedAxis.GetX() * s, normalizedAxis.GetY() * s, normalizedAxis.GetZ() * s, Cos(halfAngle)).Normalized();
         }
 
         /// Builds a quaternion from Euler angles applied as X, then Y, then Z rotations.
@@ -103,8 +101,7 @@ namespace ve
         [[nodiscard]] Quaternion Normalized(Float32 epsilon = Math::DefaultEpsilon) const noexcept
         {
             const Float32 length = Length();
-            return length > epsilon ? Quaternion(x_ / length, y_ / length, z_ / length, w_ / length)
-                                    : Quaternion::Identity();
+            return length > epsilon ? Quaternion(x_ / length, y_ / length, z_ / length, w_ / length) : Quaternion::Identity();
         }
 
         /// Returns the conjugate rotation.
@@ -162,8 +159,8 @@ namespace ve
         /// Returns true when every component is within `epsilon` of `other`.
         [[nodiscard]] bool IsNearlyEqual(const Quaternion& other, Float32 epsilon = Math::DefaultEpsilon) const noexcept
         {
-            return NearlyEqual(x_, other.x_, epsilon) && NearlyEqual(y_, other.y_, epsilon) &&
-                   NearlyEqual(z_, other.z_, epsilon) && NearlyEqual(w_, other.w_, epsilon);
+            return NearlyEqual(x_, other.x_, epsilon) && NearlyEqual(y_, other.y_, epsilon) && NearlyEqual(z_, other.z_, epsilon) &&
+                   NearlyEqual(w_, other.w_, epsilon);
         }
 
         /// Returns the composed rotation.

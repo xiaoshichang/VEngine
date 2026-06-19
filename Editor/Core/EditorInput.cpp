@@ -6,8 +6,8 @@
 #include <imgui.h>
 
 #if VE_PLATFORM_WINDOWS
-#include <backends/imgui_impl_win32.h>
 #include <Windows.h>
+#include <backends/imgui_impl_win32.h>
 #endif
 
 namespace ve::editor
@@ -287,8 +287,7 @@ namespace ve::editor
         case OSEventType::MouseButtonDown:
         case OSEventType::MouseButtonUp:
             io.AddMousePosEvent(static_cast<float>(event.mouseX), static_cast<float>(event.mouseY));
-            io.AddMouseButtonEvent(MouseButtonToImGuiButton(event.mouseButton),
-                                   event.type == OSEventType::MouseButtonDown);
+            io.AddMouseButtonEvent(MouseButtonToImGuiButton(event.mouseButton), event.type == OSEventType::MouseButtonDown);
             return false;
         case OSEventType::MouseWheel:
             io.AddMousePosEvent(static_cast<float>(event.mouseX), static_cast<float>(event.mouseY));

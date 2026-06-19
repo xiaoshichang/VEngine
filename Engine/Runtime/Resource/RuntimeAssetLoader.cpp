@@ -62,8 +62,7 @@ namespace ve
     {
         if (!initialized_)
         {
-            return Result<ManifestAssetRecord>::Failure(
-                Error(ErrorCode::InvalidState, "RuntimeAssetLoader is not initialized."));
+            return Result<ManifestAssetRecord>::Failure(Error(ErrorCode::InvalidState, "RuntimeAssetLoader is not initialized."));
         }
 
         if (id.IsEmpty())
@@ -74,8 +73,7 @@ namespace ve
         const ManifestAssetRecord* record = assetManifest_.Find(id);
         if (record == nullptr)
         {
-            return Result<ManifestAssetRecord>::Failure(
-                Error(ErrorCode::NotFound, "Asset not found in runtime asset manifest."));
+            return Result<ManifestAssetRecord>::Failure(Error(ErrorCode::NotFound, "Asset not found in runtime asset manifest."));
         }
 
         return Result<ManifestAssetRecord>::Success(*record);

@@ -79,10 +79,7 @@ namespace ve::editor
             return "Missing asset: " + id.ToString();
         }
 
-        void RenderAssetReferenceField(const char* label,
-                                       const char* pathInputId,
-                                       const char* buttonId,
-                                       const std::string& assetPath)
+        void RenderAssetReferenceField(const char* label, const char* pathInputId, const char* buttonId, const std::string& assetPath)
         {
             std::array<char, TextBufferSize> pathBuffer = ToTextBuffer(assetPath);
             const ImGuiStyle& style = ImGui::GetStyle();
@@ -131,8 +128,7 @@ namespace ve::editor
         }
         case EditorSelectionType::Asset:
         {
-            const EditorAssetRecord* asset =
-                editor_->GetAssetDatabase().FindAsset(editor_->GetSelectedAssetPath());
+            const EditorAssetRecord* asset = editor_->GetAssetDatabase().FindAsset(editor_->GetSelectedAssetPath());
             if (asset != nullptr)
             {
                 RenderAsset(*asset);
@@ -218,19 +214,11 @@ namespace ve::editor
             RenderEnabledCheckbox(mesh);
 
             const EditorAssetDatabase* assetDatabase = editor_ != nullptr ? &editor_->GetAssetDatabase() : nullptr;
-            const std::string meshAssetPath = assetDatabase != nullptr
-                                                  ? ResolveAssetPathFromID(*assetDatabase, mesh.GetMeshAssetID())
-                                                  : "";
+            const std::string meshAssetPath = assetDatabase != nullptr ? ResolveAssetPathFromID(*assetDatabase, mesh.GetMeshAssetID()) : "";
             RenderAssetReferenceField("Mesh", "##MeshReferencePath", "##MeshReference", meshAssetPath);
 
-            const std::string materialAssetPath = assetDatabase != nullptr
-                                                      ? ResolveAssetPathFromID(*assetDatabase,
-                                                                               mesh.GetMaterialAssetID())
-                                                      : "";
-            RenderAssetReferenceField("Material",
-                                      "##MaterialReferencePath",
-                                      "##MaterialReference",
-                                      materialAssetPath);
+            const std::string materialAssetPath = assetDatabase != nullptr ? ResolveAssetPathFromID(*assetDatabase, mesh.GetMaterialAssetID()) : "";
+            RenderAssetReferenceField("Material", "##MaterialReferencePath", "##MaterialReference", materialAssetPath);
 
             std::array<float, 3> boundsCenter = ToFloat3(mesh.GetBoundsCenter());
             if (ImGui::InputFloat3("Bounds Center", boundsCenter.data(), "%.3f"))
@@ -264,8 +252,7 @@ namespace ve::editor
             const char* projectionModes[] = {"Perspective", "Orthographic"};
             if (ImGui::Combo("Projection", &projectionMode, projectionModes, IM_ARRAYSIZE(projectionModes)))
             {
-                camera.SetProjectionMode(projectionMode == 0 ? CameraComponent::ProjectionMode::Perspective
-                                                             : CameraComponent::ProjectionMode::Orthographic);
+                camera.SetProjectionMode(projectionMode == 0 ? CameraComponent::ProjectionMode::Perspective : CameraComponent::ProjectionMode::Orthographic);
             }
 
             float verticalFieldOfView = camera.GetVerticalFieldOfViewRadians();
@@ -365,8 +352,7 @@ namespace ve::editor
             ImGui::TextWrapped("AssetID: %s", asset.asset.id.ToString().c_str());
             ImGui::TextWrapped("Path: %s", asset.path.GetString().c_str());
             ImGui::TextWrapped("Meta: %s", asset.metaPath.GetString().c_str());
-            ImGui::TextWrapped("Physical Path: %s",
-                               (editor_->GetAssetDatabase().GetProjectRoot() / asset.path).GetString().c_str());
+            ImGui::TextWrapped("Physical Path: %s", (editor_->GetAssetDatabase().GetProjectRoot() / asset.path).GetString().c_str());
             ImGui::Text("Imported: %s", asset.imported ? "Yes" : "No");
 
             if (!asset.importedPath.IsEmpty())

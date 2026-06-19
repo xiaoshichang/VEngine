@@ -1,9 +1,9 @@
 #include "Engine/Runtime/Core/Guid.h"
 
+#include <boost/functional/hash.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/string_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <boost/functional/hash.hpp>
 
 namespace ve
 {

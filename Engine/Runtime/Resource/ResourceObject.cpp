@@ -7,7 +7,6 @@
 #include "Engine/Runtime/Resource/ResourceSystem.h"
 
 #include <boost/json.hpp>
-
 #include <utility>
 
 namespace ve
@@ -64,14 +63,12 @@ namespace ve
 
             const boost::json::object& object = json.GetValue().as_object();
             const boost::json::array* normals = nullptr;
-            if (const boost::json::value* normalsValue = object.if_contains("normals");
-                normalsValue != nullptr && normalsValue->is_array())
+            if (const boost::json::value* normalsValue = object.if_contains("normals"); normalsValue != nullptr && normalsValue->is_array())
             {
                 normals = &normalsValue->as_array();
             }
 
-            if (const boost::json::value* verticesValue = object.if_contains("vertices");
-                verticesValue != nullptr && verticesValue->is_array())
+            if (const boost::json::value* verticesValue = object.if_contains("vertices"); verticesValue != nullptr && verticesValue->is_array())
             {
                 constexpr Float32 DefaultPosition[3] = {0.0f, 0.0f, 0.0f};
                 constexpr Float32 DefaultNormal[3] = {0.0f, 1.0f, 0.0f};
@@ -100,8 +97,7 @@ namespace ve
                 }
             }
 
-            if (const boost::json::value* indicesValue = object.if_contains("indices");
-                indicesValue != nullptr && indicesValue->is_array())
+            if (const boost::json::value* indicesValue = object.if_contains("indices"); indicesValue != nullptr && indicesValue->is_array())
             {
                 for (const boost::json::value& indexValue : indicesValue->as_array())
                 {
@@ -144,10 +140,8 @@ namespace ve
             }
 
             const boost::json::array& baseColor = baseColorValue->as_array();
-            desc.baseColor = Vector4(ReadFloat(baseColor[0], 1.0f),
-                                     ReadFloat(baseColor[1], 1.0f),
-                                     ReadFloat(baseColor[2], 1.0f),
-                                     ReadFloat(baseColor[3], 1.0f));
+            desc.baseColor =
+                Vector4(ReadFloat(baseColor[0], 1.0f), ReadFloat(baseColor[1], 1.0f), ReadFloat(baseColor[2], 1.0f), ReadFloat(baseColor[3], 1.0f));
             return desc;
         }
     } // namespace
@@ -234,9 +228,8 @@ namespace ve
     {
         try
         {
-            renderSystem.EnqueueCommand(RenderCommand{
-                "ReleaseRTMeshResource",
-                [rtMeshResource = rtMeshResource_]() { rtMeshResource->ResetRenderResource(); }});
+            renderSystem.EnqueueCommand(
+                RenderCommand{"ReleaseRTMeshResource", [rtMeshResource = rtMeshResource_]() { rtMeshResource->ResetRenderResource(); }});
         }
         catch (...)
         {
@@ -270,9 +263,8 @@ namespace ve
     {
         try
         {
-            renderSystem.EnqueueCommand(RenderCommand{
-                "ReleaseRTMaterialResource",
-                [rtMaterialResource = rtMaterialResource_]() { rtMaterialResource->ResetRenderResource(); }});
+            renderSystem.EnqueueCommand(
+                RenderCommand{"ReleaseRTMaterialResource", [rtMaterialResource = rtMaterialResource_]() { rtMaterialResource->ResetRenderResource(); }});
         }
         catch (...)
         {

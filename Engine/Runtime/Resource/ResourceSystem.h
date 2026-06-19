@@ -3,8 +3,8 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/Path.h"
-#include "Engine/Runtime/Resource/AssetRef.h"
 #include "Engine/Runtime/Resource/AssetRecord.h"
+#include "Engine/Runtime/Resource/AssetRef.h"
 #include "Engine/Runtime/Resource/ResourceObject.h"
 
 #include <memory>
@@ -113,16 +113,14 @@ namespace ve
         if (resource.GetValue()->GetType() != ResourceObjectTraits<TResource>::Type)
         {
             ReleaseResourceInternal(id);
-            return Result<AssetRef<TResource>>::Failure(
-                Error(ErrorCode::InvalidArgument, "Requested resource type does not match the asset record."));
+            return Result<AssetRef<TResource>>::Failure(Error(ErrorCode::InvalidArgument, "Requested resource type does not match the asset record."));
         }
 
         TResource* typedResource = dynamic_cast<TResource*>(resource.GetValue());
         if (typedResource == nullptr)
         {
             ReleaseResourceInternal(id);
-            return Result<AssetRef<TResource>>::Failure(
-                Error(ErrorCode::InvalidState, "Loaded resource object has an unexpected concrete type."));
+            return Result<AssetRef<TResource>>::Failure(Error(ErrorCode::InvalidState, "Loaded resource object has an unexpected concrete type."));
         }
 
         AssetRef<TResource> assetRef;

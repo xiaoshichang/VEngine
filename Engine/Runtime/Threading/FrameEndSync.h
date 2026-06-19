@@ -95,8 +95,7 @@ namespace ve
     {
     public:
         template<typename EnqueueFenceSignalFunction>
-        void NotifySceneThreadFrameEndAndWait(const AtomicBool& stopRequested,
-                                              EnqueueFenceSignalFunction&& enqueueFenceSignal)
+        void NotifySceneThreadFrameEndAndWait(const AtomicBool& stopRequested, EnqueueFenceSignalFunction&& enqueueFenceSignal)
         {
             if (stopRequested.load(std::memory_order_acquire))
             {

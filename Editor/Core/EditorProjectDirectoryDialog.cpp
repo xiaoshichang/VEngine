@@ -2,10 +2,9 @@
 
 #include "Editor/Core/Editor.h"
 
-#include <imgui.h>
-
 #include <algorithm>
 #include <cstdio>
+#include <imgui.h>
 
 namespace ve::editor
 {
@@ -66,10 +65,7 @@ namespace ve::editor
         }
 
         ImGui::SetNextItemWidth(ProjectBrowserPathWidth);
-        if (ImGui::InputText("##ProjectBrowserPath",
-                             pathBuffer_.data(),
-                             pathBuffer_.size(),
-                             ImGuiInputTextFlags_EnterReturnsTrue))
+        if (ImGui::InputText("##ProjectBrowserPath", pathBuffer_.data(), pathBuffer_.size(), ImGuiInputTextFlags_EnterReturnsTrue))
         {
             const std::filesystem::path inputPath = std::filesystem::path(TrimCopy(pathBuffer_.data()));
             if (!NavigateToDirectory(inputPath))
@@ -137,8 +133,7 @@ namespace ve::editor
     bool ProjectDirectoryDialog::NavigateToDirectory(const std::filesystem::path& directoryPath)
     {
         std::error_code errorCode;
-        if (!std::filesystem::exists(directoryPath, errorCode) || errorCode ||
-            !std::filesystem::is_directory(directoryPath, errorCode) || errorCode)
+        if (!std::filesystem::exists(directoryPath, errorCode) || errorCode || !std::filesystem::is_directory(directoryPath, errorCode) || errorCode)
         {
             return false;
         }
@@ -147,8 +142,7 @@ namespace ve::editor
         entries_.clear();
         RefreshPathBuffer();
 
-        for (const std::filesystem::directory_entry& entry :
-             std::filesystem::directory_iterator(currentDirectory_, errorCode))
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(currentDirectory_, errorCode))
         {
             if (errorCode)
             {

@@ -8,8 +8,7 @@ namespace ve::editor
     {
         [[nodiscard]] ImGuiWindowFlags FixedPanelFlags() noexcept
         {
-            return ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
-                   ImGuiWindowFlags_NoSavedSettings;
+            return ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
         }
     } // namespace
 

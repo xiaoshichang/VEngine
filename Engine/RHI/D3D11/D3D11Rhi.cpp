@@ -102,8 +102,7 @@ namespace ve::rhi
         std::string MakeHResultError(const char* operation, HRESULT result)
         {
             char buffer[128] = {};
-            std::snprintf(
-                buffer, sizeof(buffer), "%s failed with HRESULT 0x%08X", operation, static_cast<unsigned>(result));
+            std::snprintf(buffer, sizeof(buffer), "%s failed with HRESULT 0x%08X", operation, static_cast<unsigned>(result));
             return buffer;
         }
 
@@ -333,11 +332,7 @@ namespace ve::rhi
         class D3D11Swapchain final : public RhiSwapchain
         {
         public:
-            D3D11Swapchain(ComPtr<ID3D11Device> device,
-                           ComPtr<IDXGISwapChain> swapchain,
-                           RhiExtent2D extent,
-                           RhiFormat colorFormat,
-                           std::string* lastError)
+            D3D11Swapchain(ComPtr<ID3D11Device> device, ComPtr<IDXGISwapChain> swapchain, RhiExtent2D extent, RhiFormat colorFormat, std::string* lastError)
                 : device_(std::move(device))
                 , swapchain_(std::move(swapchain))
                 , extent_(extent)
@@ -472,10 +467,7 @@ namespace ve::rhi
                 if (colorAttachment.loadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
-                        colorAttachment.clearColor.r,
-                        colorAttachment.clearColor.g,
-                        colorAttachment.clearColor.b,
-                        colorAttachment.clearColor.a};
+                        colorAttachment.clearColor.r, colorAttachment.clearColor.g, colorAttachment.clearColor.b, colorAttachment.clearColor.a};
                     context_->ClearRenderTargetView(renderTargetView, clearColor);
                 }
 
@@ -528,9 +520,7 @@ namespace ve::rhi
             void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) override
             {
                 const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
-                context_->IASetIndexBuffer(d3dBuffer.GetNativeBuffer(),
-                                           ToDxgiIndexFormat(format),
-                                           static_cast<UINT>(offset));
+                context_->IASetIndexBuffer(d3dBuffer.GetNativeBuffer(), ToDxgiIndexFormat(format), static_cast<UINT>(offset));
             }
 
             void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) override
@@ -701,8 +691,7 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                auto rhiSwapchain = std::make_unique<D3D11Swapchain>(
-                    device_, swapchain, RhiExtent2D{desc.width, desc.height}, desc.colorFormat, &lastError_);
+                auto rhiSwapchain = std::make_unique<D3D11Swapchain>(device_, swapchain, RhiExtent2D{desc.width, desc.height}, desc.colorFormat, &lastError_);
 
                 if (!rhiSwapchain->Initialize())
                 {
@@ -723,8 +712,7 @@ namespace ve::rhi
                 initialData.pSysMem = desc.initialData;
 
                 ComPtr<ID3D11Buffer> buffer;
-                HRESULT result =
-                    device_->CreateBuffer(&bufferDesc, desc.initialData != nullptr ? &initialData : nullptr, &buffer);
+                HRESULT result = device_->CreateBuffer(&bufferDesc, desc.initialData != nullptr ? &initialData : nullptr, &buffer);
 
                 if (FAILED(result))
                 {
@@ -758,8 +746,7 @@ namespace ve::rhi
                 initialData.SysMemPitch = desc.initialDataRowPitch;
 
                 ComPtr<ID3D11Texture2D> texture;
-                HRESULT result = device_->CreateTexture2D(
-                    &textureDesc, desc.initialData != nullptr ? &initialData : nullptr, &texture);
+                HRESULT result = device_->CreateTexture2D(&textureDesc, desc.initialData != nullptr ? &initialData : nullptr, &texture);
 
                 if (FAILED(result))
                 {
@@ -790,8 +777,7 @@ namespace ve::rhi
                     }
                 }
 
-                return std::make_unique<D3D11Texture>(
-                    texture, std::move(renderTargetView), std::move(shaderResourceView), desc);
+                return std::make_unique<D3D11Texture>(texture, std::move(renderTargetView), std::move(shaderResourceView), desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
@@ -811,24 +797,14 @@ namespace ve::rhi
 
                 ComPtr<ID3DBlob> bytecode;
                 ComPtr<ID3DBlob> errors;
-                HRESULT result = D3DCompile(desc.source,
-                                            std::strlen(desc.source),
-                                            desc.debugName,
-                                            nullptr,
-                                            nullptr,
-                                            desc.entryPoint,
-                                            target,
-                                            flags,
-                                            0,
-                                            &bytecode,
-                                            &errors);
+                HRESULT result =
+                    D3DCompile(desc.source, std::strlen(desc.source), desc.debugName, nullptr, nullptr, desc.entryPoint, target, flags, 0, &bytecode, &errors);
 
                 if (FAILED(result))
                 {
                     if (errors != nullptr)
                     {
-                        lastError_.assign(static_cast<const char*>(errors->GetBufferPointer()),
-                                          errors->GetBufferSize());
+                        lastError_.assign(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
                     }
                     else
                     {
@@ -841,8 +817,7 @@ namespace ve::rhi
                 return std::make_unique<D3D11ShaderModule>(desc.stage, bytecode);
             }
 
-            [[nodiscard]] std::unique_ptr<RhiPipelineState>
-            CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
+            [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
                 const auto* vertexShaderModule = dynamic_cast<const D3D11ShaderModule*>(desc.vertexShader);
                 const auto* fragmentShaderModule = dynamic_cast<const D3D11ShaderModule*>(desc.fragmentShader);
@@ -854,10 +829,8 @@ namespace ve::rhi
                 }
 
                 ComPtr<ID3D11VertexShader> vertexShader;
-                HRESULT result = device_->CreateVertexShader(vertexShaderModule->GetBytecode()->GetBufferPointer(),
-                                                             vertexShaderModule->GetBytecode()->GetBufferSize(),
-                                                             nullptr,
-                                                             &vertexShader);
+                HRESULT result = device_->CreateVertexShader(
+                    vertexShaderModule->GetBytecode()->GetBufferPointer(), vertexShaderModule->GetBytecode()->GetBufferSize(), nullptr, &vertexShader);
 
                 if (FAILED(result))
                 {
@@ -866,10 +839,8 @@ namespace ve::rhi
                 }
 
                 ComPtr<ID3D11PixelShader> pixelShader;
-                result = device_->CreatePixelShader(fragmentShaderModule->GetBytecode()->GetBufferPointer(),
-                                                    fragmentShaderModule->GetBytecode()->GetBufferSize(),
-                                                    nullptr,
-                                                    &pixelShader);
+                result = device_->CreatePixelShader(
+                    fragmentShaderModule->GetBytecode()->GetBufferPointer(), fragmentShaderModule->GetBytecode()->GetBufferSize(), nullptr, &pixelShader);
 
                 if (FAILED(result))
                 {
@@ -922,11 +893,7 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11PipelineState>(desc.topology,
-                                                            vertexShader,
-                                                            pixelShader,
-                                                            inputLayout,
-                                                            rasterizerState);
+                return std::make_unique<D3D11PipelineState>(desc.topology, vertexShader, pixelShader, inputLayout, rasterizerState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

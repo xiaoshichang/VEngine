@@ -189,8 +189,7 @@ namespace
             ++lineNumber;
             const std::string strippedLine = StripLineComment(line);
 
-            const bool hasBindableDeclaration = std::regex_search(strippedLine, cbufferDeclaration) ||
-                                                std::regex_search(strippedLine, textureDeclaration) ||
+            const bool hasBindableDeclaration = std::regex_search(strippedLine, cbufferDeclaration) || std::regex_search(strippedLine, textureDeclaration) ||
                                                 std::regex_search(strippedLine, samplerDeclaration);
 
             if (!hasBindableDeclaration)
@@ -200,14 +199,12 @@ namespace
 
             if (strippedLine.find("register(") == std::string::npos)
             {
-                return "Bindable shader resource on line " + std::to_string(lineNumber) +
-                       " must declare an explicit register.";
+                return "Bindable shader resource on line " + std::to_string(lineNumber) + " must declare an explicit register.";
             }
 
             if (strippedLine.find("space") == std::string::npos)
             {
-                return "Bindable shader resource on line " + std::to_string(lineNumber) +
-                       " must declare an explicit register space.";
+                return "Bindable shader resource on line " + std::to_string(lineNumber) + " must declare an explicit register space.";
             }
         }
 
@@ -220,10 +217,7 @@ namespace
         return std::regex_replace(source, registerSpacePattern, "register($1)");
     }
 
-    void AppendBinding(std::vector<BindingInfo>& bindings,
-                       const std::smatch& match,
-                       std::string kind,
-                       std::string registerPrefix)
+    void AppendBinding(std::vector<BindingInfo>& bindings, const std::smatch& match, std::string kind, std::string registerPrefix)
     {
         BindingInfo binding;
         binding.kind = std::move(kind);
@@ -239,12 +233,9 @@ namespace
         std::vector<BindingInfo> bindings;
         const std::string sourceText(source);
 
-        const std::regex cbufferRegex(
-            R"(\bcbuffer\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*b([0-9]+)\s*,\s*space([0-9]+)\s*\))");
-        const std::regex textureRegex(
-            R"(\bTexture[A-Za-z0-9_<>]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*t([0-9]+)\s*,\s*space([0-9]+)\s*\))");
-        const std::regex samplerRegex(
-            R"(\bSamplerState\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*s([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+        const std::regex cbufferRegex(R"(\bcbuffer\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*b([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+        const std::regex textureRegex(R"(\bTexture[A-Za-z0-9_<>]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*t([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+        const std::regex samplerRegex(R"(\bSamplerState\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*s([0-9]+)\s*,\s*space([0-9]+)\s*\))");
 
         for (std::sregex_iterator it(sourceText.begin(), sourceText.end(), cbufferRegex), end; it != end; ++it)
         {
@@ -282,15 +273,12 @@ namespace
         return bindings;
     }
 
-    std::filesystem::path
-    BuildArtifactPath(const CompileOptions& options, const ShaderStage& stage, std::string_view extension)
+    std::filesystem::path BuildArtifactPath(const CompileOptions& options, const ShaderStage& stage, std::string_view extension)
     {
-        return options.outputDirectory /
-               (options.shaderName + "." + std::string(stage.shortName) + "." + std::string(extension));
+        return options.outputDirectory / (options.shaderName + "." + std::string(stage.shortName) + "." + std::string(extension));
     }
 
-    bool
-    CompileStage(const CompileOptions& options, const ShaderStage& stage, const std::filesystem::path& d3d11SourcePath)
+    bool CompileStage(const CompileOptions& options, const ShaderStage& stage, const std::filesystem::path& d3d11SourcePath)
     {
         const std::filesystem::path dxbcPath = BuildArtifactPath(options, stage, "dxbc");
         const std::filesystem::path dxilPath = BuildArtifactPath(options, stage, "dxil");
@@ -396,16 +384,11 @@ namespace
             output << "      \"stage\": \"" << stage.displayName << "\",\n";
             output << "      \"entry\": \"" << stage.entryPoint << "\",\n";
             output << "      \"artifacts\": {\n";
-            output << "        \"d3d11\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxbc").generic_string())
-                   << "\",\n";
-            output << "        \"d3d12\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxil").generic_string())
-                   << "\",\n";
-            output << "        \"spirv\": \"" << EscapeJson(BuildArtifactPath(options, stage, "spv").generic_string())
-                   << "\",\n";
-            output << "        \"metal\": \"" << EscapeJson(BuildArtifactPath(options, stage, "metal").generic_string())
-                   << "\",\n";
-            output << "        \"reflection\": \""
-                   << EscapeJson(BuildArtifactPath(options, stage, "reflect.json").generic_string()) << "\"\n";
+            output << "        \"d3d11\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxbc").generic_string()) << "\",\n";
+            output << "        \"d3d12\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxil").generic_string()) << "\",\n";
+            output << "        \"spirv\": \"" << EscapeJson(BuildArtifactPath(options, stage, "spv").generic_string()) << "\",\n";
+            output << "        \"metal\": \"" << EscapeJson(BuildArtifactPath(options, stage, "metal").generic_string()) << "\",\n";
+            output << "        \"reflection\": \"" << EscapeJson(BuildArtifactPath(options, stage, "reflect.json").generic_string()) << "\"\n";
             output << "      }\n";
             output << "    }";
 
@@ -578,8 +561,7 @@ namespace
         {
             if (!CompileStage(options, stage, d3d11SourcePath))
             {
-                std::cerr << "Failed to compile " << options.shaderName << " " << stage.displayName << " shader"
-                          << '\n';
+                std::cerr << "Failed to compile " << options.shaderName << " " << stage.displayName << " shader" << '\n';
                 return 1;
             }
         }

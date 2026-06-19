@@ -53,8 +53,7 @@ namespace ve
 
     void ViewportClient::BindWindowSurface(void* nativeWindow, void* nativeLayer, WindowExtent extent)
     {
-        VE_ASSERT_MESSAGE(nativeWindow != nullptr || nativeLayer != nullptr,
-                          "BindWindowSurface requires a native window or native layer handle.");
+        VE_ASSERT_MESSAGE(nativeWindow != nullptr || nativeLayer != nullptr, "BindWindowSurface requires a native window or native layer handle.");
         VE_ASSERT_MESSAGE(extent.width != 0 && extent.height != 0, "BindWindowSurface requires a valid extent.");
 
         /// A window-backed viewport should not retain texture-specific binding state.
@@ -69,10 +68,8 @@ namespace ve
 
     void ViewportClient::BindRenderTarget(RenderTarget renderTarget)
     {
-        VE_ASSERT_MESSAGE(renderTarget.GetKind() == RenderTargetKind::Texture,
-                          "BindRenderTarget requires a texture-backed render target.");
-        VE_ASSERT_MESSAGE(renderTarget.GetExtent().width != 0 && renderTarget.GetExtent().height != 0,
-                          "BindRenderTarget requires a valid extent.");
+        VE_ASSERT_MESSAGE(renderTarget.GetKind() == RenderTargetKind::Texture, "BindRenderTarget requires a texture-backed render target.");
+        VE_ASSERT_MESSAGE(renderTarget.GetExtent().width != 0 && renderTarget.GetExtent().height != 0, "BindRenderTarget requires a valid extent.");
 
         /// An off-screen viewport should not retain a native window handle.
         /// The caller is expected to pass a texture-backed render target here.
@@ -112,8 +109,7 @@ namespace ve
 
     void ViewportClient::ResizeWindowSurface(WindowExtent extent)
     {
-        VE_ASSERT_MESSAGE(bindingKind_ == ViewportBindingKind::WindowSurface,
-                          "ResizeWindowSurface requires a window-backed viewport.");
+        VE_ASSERT_MESSAGE(bindingKind_ == ViewportBindingKind::WindowSurface, "ResizeWindowSurface requires a window-backed viewport.");
         VE_ASSERT_MESSAGE(extent.width != 0 && extent.height != 0, "ResizeWindowSurface requires a valid extent.");
 
         renderTarget_.SetExtent(extent);

@@ -1,8 +1,8 @@
 #include "Editor/Core/Editor.h"
 
+#include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectEditingView.h"
 #include "Editor/Core/EditorProjectSelectionView.h"
-#include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
@@ -53,8 +53,7 @@ namespace ve::editor
 
         void CollectGameObjectResourceRoots(const GameObject& gameObject, std::vector<AssetID>& ids)
         {
-            if (const MeshRenderComponent* meshRender = gameObject.GetComponent<MeshRenderComponent>();
-                meshRender != nullptr)
+            if (const MeshRenderComponent* meshRender = gameObject.GetComponent<MeshRenderComponent>(); meshRender != nullptr)
             {
                 AddAssetIDIfValid(ids, meshRender->GetMeshAssetID());
                 AddAssetIDIfValid(ids, meshRender->GetMaterialAssetID());
@@ -135,9 +134,7 @@ namespace ve::editor
         UnInit();
     }
 
-    ErrorCode Editor::Init(EngineRuntime& runtime,
-                           ApplicationCommandQueue& mainThreadCommandQueue,
-                           void* nativeWindowHandle)
+    ErrorCode Editor::Init(EngineRuntime& runtime, ApplicationCommandQueue& mainThreadCommandQueue, void* nativeWindowHandle)
     {
         if (initialized_.load(std::memory_order_acquire))
         {
@@ -234,13 +231,11 @@ namespace ve::editor
             gameViewTexture = projectEditingView_->GetGameViewTexture();
         }
 
-        EditorOverlayRenderCallback overlayCallback =
-            [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)]()
+        EditorOverlayRenderCallback overlayCallback = [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)]()
         {
             VE_ASSERT_RENDER_THREAD();
 
-            if (editorInitialized == nullptr || !editorInitialized->load(std::memory_order_acquire) ||
-                frameDrawData == nullptr)
+            if (editorInitialized == nullptr || !editorInitialized->load(std::memory_order_acquire) || frameDrawData == nullptr)
             {
                 return;
             }
@@ -259,9 +254,7 @@ namespace ve::editor
         };
 
         EditorRendererDesc rendererDesc = {};
-        rendererDesc.scene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr
-                                 ? sceneSystem_->GetScene()->GetRTScene()
-                                 : nullptr;
+        rendererDesc.scene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
         rendererDesc.gameViewTexture = std::move(gameViewTexture);
         rendererDesc.mainColorLoadAction = rhi::RhiLoadAction::Clear;
         rendererDesc.overlayRenderCallback = std::move(overlayCallback);
@@ -402,9 +395,7 @@ namespace ve::editor
         VE_ASSERT_SCENE_THREAD();
         if (renderTexture != nullptr)
         {
-            const auto existing = std::find(retainedImGuiRenderTextures_.begin(),
-                                            retainedImGuiRenderTextures_.end(),
-                                            renderTexture);
+            const auto existing = std::find(retainedImGuiRenderTextures_.begin(), retainedImGuiRenderTextures_.end(), renderTexture);
             if (existing == retainedImGuiRenderTextures_.end())
             {
                 retainedImGuiRenderTextures_.push_back(std::move(renderTexture));
@@ -442,8 +433,7 @@ namespace ve::editor
 
         ResourceCollectUnusedParams params;
         params.rootAssets = CollectActiveResourceRoots();
-        const SizeT unloadedCount =
-            runtime_ != nullptr ? runtime_->GetResourceSystem().CollectUnusedResources(params) : 0;
+        const SizeT unloadedCount = runtime_ != nullptr ? runtime_->GetResourceSystem().CollectUnusedResources(params) : 0;
         if (unloadedCount > 0)
         {
             VE_LOG_DEBUG_CATEGORY("Editor", "Collected {} unused resource(s).", unloadedCount);
@@ -467,16 +457,13 @@ namespace ve::editor
         EnqueueMainWindowTitleUpdate();
     }
 
-    Result<EditorProjectDescriptor> Editor::PrepareOpenProjectDescriptor(const Path& projectRoot,
-                                                                         const std::string& projectPath)
+    Result<EditorProjectDescriptor> Editor::PrepareOpenProjectDescriptor(const Path& projectRoot, const std::string& projectPath)
     {
         const ErrorCode layoutResult = EditorProject::EnsureLayout(projectRoot);
         if (layoutResult != ErrorCode::None)
         {
-            VE_LOG_ERROR_CATEGORY(
-                "Editor", "Failed to prepare project layout '{}': {}", projectPath, ToString(layoutResult));
-            return Result<EditorProjectDescriptor>::Failure(
-                Error(layoutResult, "Failed to prepare editor project layout."));
+            VE_LOG_ERROR_CATEGORY("Editor", "Failed to prepare project layout '{}': {}", projectPath, ToString(layoutResult));
+            return Result<EditorProjectDescriptor>::Failure(Error(layoutResult, "Failed to prepare editor project layout."));
         }
 
         Result<EditorProjectDescriptor> descriptorResult = EditorProject::LoadDescriptor(projectRoot);
@@ -497,16 +484,14 @@ namespace ve::editor
         const ErrorCode assetDatabaseResult = assetDatabase_.Initialize(projectRoot);
         if (assetDatabaseResult != ErrorCode::None)
         {
-            VE_LOG_ERROR_CATEGORY(
-                "Editor", "Failed to initialize asset database '{}': {}", projectPath, ToString(assetDatabaseResult));
+            VE_LOG_ERROR_CATEGORY("Editor", "Failed to initialize asset database '{}': {}", projectPath, ToString(assetDatabaseResult));
             return assetDatabaseResult;
         }
 
         const ErrorCode resourceLoaderResult = resourceLoader_.Initialize(projectRoot);
         if (resourceLoaderResult != ErrorCode::None)
         {
-            VE_LOG_ERROR_CATEGORY(
-                "Editor", "Failed to initialize resource loader '{}': {}", projectPath, ToString(resourceLoaderResult));
+            VE_LOG_ERROR_CATEGORY("Editor", "Failed to initialize resource loader '{}': {}", projectPath, ToString(resourceLoaderResult));
             assetDatabase_.Shutdown();
             return resourceLoaderResult;
         }
@@ -514,9 +499,7 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    void Editor::ActivateOpenProjectContext(std::string projectPath,
-                                            const Path& projectRoot,
-                                            const EditorProjectDescriptor& descriptor)
+    void Editor::ActivateOpenProjectContext(std::string projectPath, const Path& projectRoot, const EditorProjectDescriptor& descriptor)
     {
         FileSystem::SetProjectRoot(projectRoot);
         if (runtime_ != nullptr)
@@ -537,18 +520,14 @@ namespace ve::editor
 
         if (sceneSystem_ == nullptr || runtime_ == nullptr)
         {
-            VE_LOG_WARN_CATEGORY("Editor",
-                                 "Skipped project start scene '{}' because runtime scene services are not ready.",
-                                 descriptor.startScene);
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped project start scene '{}' because runtime scene services are not ready.", descriptor.startScene);
             return;
         }
 
         const EditorAssetRecord* sceneAsset = assetDatabase_.FindAsset(Path(descriptor.startScene));
         if (sceneAsset == nullptr)
         {
-            VE_LOG_WARN_CATEGORY("Editor",
-                                 "Project start scene '{}' was not found in the asset database.",
-                                 descriptor.startScene);
+            VE_LOG_WARN_CATEGORY("Editor", "Project start scene '{}' was not found in the asset database.", descriptor.startScene);
             return;
         }
 
@@ -558,14 +537,11 @@ namespace ve::editor
             return;
         }
 
-        Result<Scene*> sceneResult = sceneSystem_->LoadScene(
-            SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem());
+        Result<Scene*> sceneResult =
+            sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem());
         if (!sceneResult)
         {
-            VE_LOG_WARN_CATEGORY("Editor",
-                                 "Failed to construct project start scene '{}': {}",
-                                 descriptor.startScene,
-                                 sceneResult.GetError().GetMessage());
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to construct project start scene '{}': {}", descriptor.startScene, sceneResult.GetError().GetMessage());
         }
     }
 
@@ -657,8 +633,7 @@ namespace ve::editor
 
     void Editor::AddRecentProject(const std::string& projectPath)
     {
-        recentProjects_.erase(std::remove(recentProjects_.begin(), recentProjects_.end(), projectPath),
-                              recentProjects_.end());
+        recentProjects_.erase(std::remove(recentProjects_.begin(), recentProjects_.end(), projectPath), recentProjects_.end());
         recentProjects_.insert(recentProjects_.begin(), projectPath);
         if (recentProjects_.size() > EditorProjectRegistry::MaxRecentProjectCount)
         {
@@ -683,8 +658,7 @@ namespace ve::editor
 
         void* nativeWindowHandle = nativeWindowHandle_;
         std::string title = BuildMainWindowTitle();
-        mainThreadCommandQueue_->Enqueue(
-            [nativeWindowHandle, title = std::move(title)]() { ApplyMainWindowTitle(nativeWindowHandle, title); });
+        mainThreadCommandQueue_->Enqueue([nativeWindowHandle, title = std::move(title)]() { ApplyMainWindowTitle(nativeWindowHandle, title); });
     }
 
     void Editor::ApplyMainWindowTitle(void* nativeWindowHandle, const std::string& title)
@@ -695,20 +669,14 @@ namespace ve::editor
             return;
         }
 
-        const int requiredLength = MultiByteToWideChar(
-            CP_UTF8, MB_ERR_INVALID_CHARS, title.data(), static_cast<int>(title.size()), nullptr, 0);
+        const int requiredLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title.data(), static_cast<int>(title.size()), nullptr, 0);
         if (requiredLength <= 0)
         {
             return;
         }
 
         std::wstring wideTitle(static_cast<size_t>(requiredLength), L'\0');
-        MultiByteToWideChar(CP_UTF8,
-                            MB_ERR_INVALID_CHARS,
-                            title.data(),
-                            static_cast<int>(title.size()),
-                            wideTitle.data(),
-                            requiredLength);
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title.data(), static_cast<int>(title.size()), wideTitle.data(), requiredLength);
         SetWindowTextW(static_cast<HWND>(nativeWindowHandle), wideTitle.c_str());
 #else
         (void)nativeWindowHandle;
@@ -798,15 +766,13 @@ namespace ve::editor
         {
         case RenderBackend::D3D11:
 #if VE_PLATFORM_WINDOWS
-            VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr,
-                              "Editor::ShutdownRenderBackend requires an active ImGui context.");
+            VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::ShutdownRenderBackend requires an active ImGui context.");
             ImGui_ImplDX11_Shutdown();
 #endif
             break;
         case RenderBackend::D3D12:
         case RenderBackend::Metal:
-            VE_ASSERT_ALWAYS_MESSAGE(false,
-                                     "Editor::ShutdownRenderBackend called for unsupported backend in current build.");
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Editor::ShutdownRenderBackend called for unsupported backend in current build.");
             break;
         }
     }

@@ -38,9 +38,8 @@ namespace ve::editor
 
         const std::string& sceneName = scene->GetName();
         const char* sceneLabel = sceneName.empty() ? "Scene" : sceneName.c_str();
-        const ImGuiTreeNodeFlags sceneFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow |
-                                              ImGuiTreeNodeFlags_OpenOnDoubleClick |
-                                              ImGuiTreeNodeFlags_SpanAvailWidth;
+        const ImGuiTreeNodeFlags sceneFlags =
+            ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
         const bool sceneOpen = ImGui::TreeNodeEx(static_cast<void*>(scene), sceneFlags, "%s", sceneLabel);
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
         {
@@ -76,8 +75,7 @@ namespace ve::editor
         TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
         const bool hasChildren = transform != nullptr && transform->GetChildCount() > 0;
 
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick |
-                                   ImGuiTreeNodeFlags_SpanAvailWidth;
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
         if (editor_->GetSelectedGameObject() == &gameObject)
         {
             flags |= ImGuiTreeNodeFlags_Selected;

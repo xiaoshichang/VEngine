@@ -2,7 +2,7 @@ BasedOnStyle: LLVM
 Language: Cpp
 Standard: c++20
 
-ColumnLimit: 120
+ColumnLimit: 160
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
@@ -57,7 +57,7 @@ BasedOnStyle: LLVM
 Language: ObjC
 Standard: c++20
 
-ColumnLimit: 120
+ColumnLimit: 160
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never

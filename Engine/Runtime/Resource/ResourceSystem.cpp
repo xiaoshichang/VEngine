@@ -47,8 +47,7 @@ namespace ve
     void ResourceSystem::EnsureRenderResource(const AssetRefBase& assetRef, RenderSystem& renderSystem)
     {
         VE_ASSERT_MESSAGE(initialized_, "ResourceSystem::EnsureRenderResource requires an initialized ResourceSystem.");
-        VE_ASSERT_MESSAGE(renderSystem.IsInitialized(),
-                          "ResourceSystem::EnsureRenderResource requires an initialized RenderSystem.");
+        VE_ASSERT_MESSAGE(renderSystem.IsInitialized(), "ResourceSystem::EnsureRenderResource requires an initialized RenderSystem.");
 
         const AssetID& id = assetRef.GetAssetID();
         VE_ASSERT_MESSAGE(!id.IsEmpty(), "ResourceSystem::EnsureRenderResource requires a non-empty AssetID.");
@@ -62,8 +61,7 @@ namespace ve
     {
         if (!initialized_)
         {
-            return Result<ResourceObject*>::Failure(
-                Error(ErrorCode::InvalidState, "ResourceSystem is not initialized."));
+            return Result<ResourceObject*>::Failure(Error(ErrorCode::InvalidState, "ResourceSystem is not initialized."));
         }
 
         if (id.IsEmpty())
@@ -73,8 +71,7 @@ namespace ve
 
         if (std::find(context.requestStack.begin(), context.requestStack.end(), id) != context.requestStack.end())
         {
-            return Result<ResourceObject*>::Failure(
-                Error(ErrorCode::InvalidState, "Resource dependency cycle detected."));
+            return Result<ResourceObject*>::Failure(Error(ErrorCode::InvalidState, "Resource dependency cycle detected."));
         }
 
         if (const auto cached = cache_.find(id); cached != cache_.end())
@@ -123,8 +120,7 @@ namespace ve
         const auto it = cache_.find(id);
         VE_ASSERT_MESSAGE(it != cache_.end(), "ResourceSystem::ReleaseResourceInternal requires a loaded resource.");
 
-        VE_ASSERT_MESSAGE(it->second.referenceCount > 0,
-                          "ResourceSystem::ReleaseResourceInternal encountered an invalid reference count.");
+        VE_ASSERT_MESSAGE(it->second.referenceCount > 0, "ResourceSystem::ReleaseResourceInternal encountered an invalid reference count.");
 
         --it->second.referenceCount;
         if (it->second.referenceCount > 0)
@@ -156,8 +152,7 @@ namespace ve
         SizeT unloadedCount = 0;
         for (auto it = cache_.begin(); it != cache_.end();)
         {
-            const bool reachable =
-                std::find(reachableResources.begin(), reachableResources.end(), it->first) != reachableResources.end();
+            const bool reachable = std::find(reachableResources.begin(), reachableResources.end(), it->first) != reachableResources.end();
             if (reachable || it->second.referenceCount > 0)
             {
                 ++it;
@@ -182,22 +177,17 @@ namespace ve
         cache_.clear();
     }
 
-    void ResourceSystem::EnsureRenderResourceInternal(const AssetID& id,
-                                                      RenderSystem& renderSystem,
-                                                      std::vector<AssetID>& renderStack)
+    void ResourceSystem::EnsureRenderResourceInternal(const AssetID& id, RenderSystem& renderSystem, std::vector<AssetID>& renderStack)
     {
-        VE_ASSERT_MESSAGE(std::find(renderStack.begin(), renderStack.end(), id) == renderStack.end(),
-                          "Resource render dependency cycle detected.");
+        VE_ASSERT_MESSAGE(std::find(renderStack.begin(), renderStack.end(), id) == renderStack.end(), "Resource render dependency cycle detected.");
 
         const auto it = cache_.find(id);
-        VE_ASSERT_MESSAGE(it != cache_.end(),
-                          "ResourceSystem::EnsureRenderResourceInternal requires dependencies to be CPU-loaded.");
+        VE_ASSERT_MESSAGE(it != cache_.end(), "ResourceSystem::EnsureRenderResourceInternal requires dependencies to be CPU-loaded.");
 
         LoadedResourceEntry& entry = it->second;
         if (entry.renderState == ResourceRenderState::Queued)
         {
-            VE_ASSERT_MESSAGE(entry.renderSystem == &renderSystem,
-                              "Resource render resource was initialized with a different RenderSystem.");
+            VE_ASSERT_MESSAGE(entry.renderSystem == &renderSystem, "Resource render resource was initialized with a different RenderSystem.");
             return;
         }
 
@@ -248,8 +238,7 @@ namespace ve
         const Path physicalPath = ResolveRuntimePath(record);
         if (physicalPath.IsEmpty())
         {
-            return Result<std::unique_ptr<ResourceObject>>::Failure(
-                Error(ErrorCode::InvalidArgument, "Resource runtime path is empty."));
+            return Result<std::unique_ptr<ResourceObject>>::Failure(Error(ErrorCode::InvalidArgument, "Resource runtime path is empty."));
         }
 
         switch (record.type)
@@ -262,8 +251,7 @@ namespace ve
                 return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
             }
 
-            return Result<std::unique_ptr<ResourceObject>>::Success(
-                std::make_unique<SceneResource>(record, text.MoveValue()));
+            return Result<std::unique_ptr<ResourceObject>>::Success(std::make_unique<SceneResource>(record, text.MoveValue()));
         }
         case ResourceType::Mesh:
         {
@@ -273,8 +261,7 @@ namespace ve
                 return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
             }
 
-            return Result<std::unique_ptr<ResourceObject>>::Success(
-                std::make_unique<MeshResource>(record, text.MoveValue()));
+            return Result<std::unique_ptr<ResourceObject>>::Success(std::make_unique<MeshResource>(record, text.MoveValue()));
         }
         case ResourceType::Material:
         {
@@ -284,8 +271,7 @@ namespace ve
                 return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
             }
 
-            return Result<std::unique_ptr<ResourceObject>>::Success(
-                std::make_unique<MaterialResource>(record, text.MoveValue()));
+            return Result<std::unique_ptr<ResourceObject>>::Success(std::make_unique<MaterialResource>(record, text.MoveValue()));
         }
         case ResourceType::Texture:
         {
@@ -295,15 +281,13 @@ namespace ve
                 return Result<std::unique_ptr<ResourceObject>>::Failure(bytes.GetError());
             }
 
-            return Result<std::unique_ptr<ResourceObject>>::Success(
-                std::make_unique<TextureResource>(record, bytes.MoveValue()));
+            return Result<std::unique_ptr<ResourceObject>>::Success(std::make_unique<TextureResource>(record, bytes.MoveValue()));
         }
         case ResourceType::Unknown:
             break;
         }
 
-        return Result<std::unique_ptr<ResourceObject>>::Failure(
-            Error(ErrorCode::Unsupported, "Unsupported resource type for runtime loading."));
+        return Result<std::unique_ptr<ResourceObject>>::Failure(Error(ErrorCode::Unsupported, "Unsupported resource type for runtime loading."));
     }
 
     void ResourceSystem::MarkReachableResource(const AssetID& id, std::vector<AssetID>& reachableResources) const

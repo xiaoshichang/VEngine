@@ -35,8 +35,7 @@ namespace ve::FileSystem
 
         [[nodiscard]] Error MakeIOError(const char* operation, const Path& path, const std::error_code& error)
         {
-            return Error(ErrorCode::IOError,
-                         std::string(operation) + " failed for '" + path.GetString() + "': " + error.message());
+            return Error(ErrorCode::IOError, std::string(operation) + " failed for '" + path.GetString() + "': " + error.message());
         }
 
         [[nodiscard]] Error MakeNotFoundError(const Path& path)
@@ -57,8 +56,7 @@ namespace ve::FileSystem
                 return {};
             }
 
-            const int requiredLength = MultiByteToWideChar(
-                CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
+            const int requiredLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
 
             if (requiredLength <= 0)
             {
@@ -66,12 +64,7 @@ namespace ve::FileSystem
             }
 
             std::wstring wideText(static_cast<size_t>(requiredLength), L'\0');
-            MultiByteToWideChar(CP_UTF8,
-                                MB_ERR_INVALID_CHARS,
-                                text.data(),
-                                static_cast<int>(text.size()),
-                                wideText.data(),
-                                requiredLength);
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), wideText.data(), requiredLength);
             return wideText;
         }
 
@@ -82,8 +75,7 @@ namespace ve::FileSystem
                 return {};
             }
 
-            const int requiredLength = WideCharToMultiByte(
-                CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+            const int requiredLength = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
 
             if (requiredLength <= 0)
             {
@@ -91,14 +83,7 @@ namespace ve::FileSystem
             }
 
             std::string utf8Text(static_cast<size_t>(requiredLength), '\0');
-            WideCharToMultiByte(CP_UTF8,
-                                0,
-                                text.data(),
-                                static_cast<int>(text.size()),
-                                utf8Text.data(),
-                                requiredLength,
-                                nullptr,
-                                nullptr);
+            WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), utf8Text.data(), requiredLength, nullptr, nullptr);
             return utf8Text;
         }
 
@@ -158,8 +143,7 @@ namespace ve::FileSystem
 
             if (!file)
             {
-                return Result<std::vector<std::byte>>::Failure(
-                    MakeIOError("Open", path, std::make_error_code(std::errc::io_error)));
+                return Result<std::vector<std::byte>>::Failure(MakeIOError("Open", path, std::make_error_code(std::errc::io_error)));
             }
 
             file.seekg(0, std::ios::end);
@@ -167,8 +151,7 @@ namespace ve::FileSystem
 
             if (size < 0)
             {
-                return Result<std::vector<std::byte>>::Failure(
-                    MakeIOError("Get file size", path, std::make_error_code(std::errc::io_error)));
+                return Result<std::vector<std::byte>>::Failure(MakeIOError("Get file size", path, std::make_error_code(std::errc::io_error)));
             }
 
             file.seekg(0, std::ios::beg);
@@ -182,8 +165,7 @@ namespace ve::FileSystem
 
             if (!file)
             {
-                return Result<std::vector<std::byte>>::Failure(
-                    MakeIOError("Read", path, std::make_error_code(std::errc::io_error)));
+                return Result<std::vector<std::byte>>::Failure(MakeIOError("Read", path, std::make_error_code(std::errc::io_error)));
             }
 
             return Result<std::vector<std::byte>>::Success(std::move(data));
@@ -191,8 +173,7 @@ namespace ve::FileSystem
 
         [[nodiscard]] bool HasUtf8Bom(const std::vector<std::byte>& data)
         {
-            return data.size() >= 3 && data[0] == std::byte{0xEF} && data[1] == std::byte{0xBB} &&
-                   data[2] == std::byte{0xBF};
+            return data.size() >= 3 && data[0] == std::byte{0xEF} && data[1] == std::byte{0xBB} && data[2] == std::byte{0xBF};
         }
     } // namespace
 
@@ -222,8 +203,7 @@ namespace ve::FileSystem
     {
         if (path.IsEmpty())
         {
-            return Result<std::vector<std::byte>>::Failure(
-                MakeInvalidArgumentError("ReadBinaryFile requires a non-empty path."));
+            return Result<std::vector<std::byte>>::Failure(MakeInvalidArgumentError("ReadBinaryFile requires a non-empty path."));
         }
 
         if (!Exists(path))
@@ -233,8 +213,7 @@ namespace ve::FileSystem
 
         if (!IsFile(path))
         {
-            return Result<std::vector<std::byte>>::Failure(
-                Error(ErrorCode::InvalidArgument, "Path is not a regular file: " + path.GetString()));
+            return Result<std::vector<std::byte>>::Failure(Error(ErrorCode::InvalidArgument, "Path is not a regular file: " + path.GetString()));
         }
 
         return ReadBinaryFileUnchecked(path);
@@ -357,15 +336,13 @@ namespace ve::FileSystem
 
         if (!IsDirectory(path))
         {
-            return Result<std::vector<DirectoryEntry>>::Failure(
-                Error(ErrorCode::InvalidArgument, "Path is not a directory: " + path.GetString()));
+            return Result<std::vector<DirectoryEntry>>::Failure(Error(ErrorCode::InvalidArgument, "Path is not a directory: " + path.GetString()));
         }
 
         std::vector<DirectoryEntry> entries;
         std::error_code error;
 
-        for (const std::filesystem::directory_entry& entry :
-             std::filesystem::directory_iterator(ToNativePath(path), error))
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(ToNativePath(path), error))
         {
             if (error)
             {
@@ -387,8 +364,7 @@ namespace ve::FileSystem
 
         std::sort(entries.begin(),
                   entries.end(),
-                  [](const DirectoryEntry& left, const DirectoryEntry& right)
-                  { return left.path.GetString() < right.path.GetString(); });
+                  [](const DirectoryEntry& left, const DirectoryEntry& right) { return left.path.GetString() < right.path.GetString(); });
 
         return Result<std::vector<DirectoryEntry>>::Success(std::move(entries));
     }

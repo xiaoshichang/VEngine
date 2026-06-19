@@ -101,8 +101,7 @@ namespace
             return {};
         }
 
-        const int requiredLength =
-            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
+        const int requiredLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
 
         if (requiredLength <= 0)
         {
@@ -110,8 +109,7 @@ namespace
         }
 
         std::wstring wideText(static_cast<size_t>(requiredLength), L'\0');
-        MultiByteToWideChar(
-            CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), wideText.data(), requiredLength);
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), wideText.data(), requiredLength);
         return wideText;
     }
 
@@ -122,8 +120,7 @@ namespace
             return {};
         }
 
-        const int requiredLength =
-            WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+        const int requiredLength = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
 
         if (requiredLength <= 0)
         {
@@ -131,8 +128,7 @@ namespace
         }
 
         std::string utf8Text(static_cast<size_t>(requiredLength), '\0');
-        WideCharToMultiByte(
-            CP_UTF8, 0, text.data(), static_cast<int>(text.size()), utf8Text.data(), requiredLength, nullptr, nullptr);
+        WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), utf8Text.data(), requiredLength, nullptr, nullptr);
         return utf8Text;
     }
 
@@ -269,8 +265,8 @@ namespace
         }
 
         const size_t cursorOffset = state.cursor >= visibleStart ? state.cursor - visibleStart : 0;
-        const SHORT cursorX = static_cast<SHORT>(std::min<size_t>(static_cast<size_t>(promptWidth) + cursorOffset,
-                                                                  static_cast<size_t>(std::max<SHORT>(width - 1, 0))));
+        const SHORT cursorX =
+            static_cast<SHORT>(std::min<size_t>(static_cast<size_t>(promptWidth) + cursorOffset, static_cast<size_t>(std::max<SHORT>(width - 1, 0))));
         SetConsoleCursorPosition(state.outputHandle, COORD{cursorX, promptRow});
     }
 
@@ -308,19 +304,14 @@ namespace
         }
 
         const size_t liveStart = retainedLineCount - visibleLineCount;
-        const size_t startIndex = liveStart >= static_cast<size_t>(state.logScrollOffset)
-                                      ? liveStart - static_cast<size_t>(state.logScrollOffset)
-                                      : 0;
+        const size_t startIndex = liveStart >= static_cast<size_t>(state.logScrollOffset) ? liveStart - static_cast<size_t>(state.logScrollOffset) : 0;
 
         for (size_t index = 0; index < visibleLineCount; ++index)
         {
             const DebugConsoleLogLine& line = state.retainedLogLines[startIndex + index];
             const SHORT row = static_cast<SHORT>(logTop + static_cast<SHORT>(index));
-            WriteAtWithAttributes(state.outputHandle,
-                                  0,
-                                  row,
-                                  std::wstring_view(line.text).substr(0, static_cast<size_t>(width)),
-                                  GetColorForSeverity(line.severity));
+            WriteAtWithAttributes(
+                state.outputHandle, 0, row, std::wstring_view(line.text).substr(0, static_cast<size_t>(width)), GetColorForSeverity(line.severity));
         }
     }
 

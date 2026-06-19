@@ -4,9 +4,9 @@
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 
-#include <boost/json.hpp>
 #include <algorithm>
 #include <array>
+#include <boost/json.hpp>
 #include <cctype>
 #include <cmath>
 #include <limits>
@@ -33,10 +33,7 @@ namespace ve::editor
 
         [[nodiscard]] std::string ToLowerCopy(std::string text)
         {
-            std::transform(text.begin(),
-                           text.end(),
-                           text.begin(),
-                           [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            std::transform(text.begin(), text.end(), text.begin(), [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
             return text;
         }
 
@@ -113,9 +110,7 @@ namespace ve::editor
             return ResourceType::Unknown;
         }
 
-        [[nodiscard]] std::string ReadString(const boost::json::object& object,
-                                             boost::json::string_view key,
-                                             std::string fallback = {})
+        [[nodiscard]] std::string ReadString(const boost::json::object& object, boost::json::string_view key, std::string fallback = {})
         {
             if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_string())
             {
@@ -151,8 +146,7 @@ namespace ve::editor
             return array;
         }
 
-        [[nodiscard]] std::array<double, 3> Subtract(const std::array<double, 3>& left,
-                                                     const std::array<double, 3>& right) noexcept
+        [[nodiscard]] std::array<double, 3> Subtract(const std::array<double, 3>& left, const std::array<double, 3>& right) noexcept
         {
             return {
                 left[0] - right[0],
@@ -161,8 +155,7 @@ namespace ve::editor
             };
         }
 
-        [[nodiscard]] std::array<double, 3> Cross(const std::array<double, 3>& left,
-                                                  const std::array<double, 3>& right) noexcept
+        [[nodiscard]] std::array<double, 3> Cross(const std::array<double, 3>& left, const std::array<double, 3>& right) noexcept
         {
             return {
                 (left[1] * right[2]) - (left[2] * right[1]),
@@ -187,9 +180,8 @@ namespace ve::editor
             };
         }
 
-        [[nodiscard]] std::array<double, 3> CalculateFaceNormal(const std::array<double, 3>& a,
-                                                                const std::array<double, 3>& b,
-                                                                const std::array<double, 3>& c) noexcept
+        [[nodiscard]] std::array<double, 3>
+        CalculateFaceNormal(const std::array<double, 3>& a, const std::array<double, 3>& b, const std::array<double, 3>& c) noexcept
         {
             return Normalize(Cross(Subtract(b, a), Subtract(c, a)));
         }
@@ -222,8 +214,7 @@ namespace ve::editor
             const std::string indexText(slash == std::string_view::npos ? token : token.substr(0, slash));
             if (indexText.empty())
             {
-                return Result<UInt32>::Failure(
-                    Error(ErrorCode::InvalidArgument, "OBJ face has an empty vertex index."));
+                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face has an empty vertex index."));
             }
 
             int objIndex = 0;
@@ -233,15 +224,13 @@ namespace ve::editor
             }
             catch (const std::exception&)
             {
-                return Result<UInt32>::Failure(
-                    Error(ErrorCode::InvalidArgument, "OBJ face has an invalid vertex index: " + indexText));
+                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face has an invalid vertex index: " + indexText));
             }
 
             const int zeroBasedIndex = objIndex > 0 ? objIndex - 1 : static_cast<int>(vertexCount) + objIndex;
             if (zeroBasedIndex < 0 || static_cast<SizeT>(zeroBasedIndex) >= vertexCount)
             {
-                return Result<UInt32>::Failure(
-                    Error(ErrorCode::InvalidArgument, "OBJ face vertex index is outside the vertex array."));
+                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face vertex index is outside the vertex array."));
             }
 
             return Result<UInt32>::Success(static_cast<UInt32>(zeroBasedIndex));
@@ -310,8 +299,7 @@ namespace ve::editor
                     std::array<double, 3> vertex = {0.0, 0.0, 0.0};
                     if (!(lineInput >> vertex[0] >> vertex[1] >> vertex[2]))
                     {
-                        return Result<ObjMeshData>::Failure(
-                            Error(ErrorCode::InvalidArgument, "OBJ vertex line must contain three numeric values."));
+                        return Result<ObjMeshData>::Failure(Error(ErrorCode::InvalidArgument, "OBJ vertex line must contain three numeric values."));
                     }
                     sourceVertices.push_back(vertex);
                 }
@@ -332,8 +320,7 @@ namespace ve::editor
 
                     if (faceIndices.size() < 3)
                     {
-                        return Result<ObjMeshData>::Failure(
-                            Error(ErrorCode::InvalidArgument, "OBJ face line must contain at least three vertices."));
+                        return Result<ObjMeshData>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face line must contain at least three vertices."));
                     }
 
                     for (SizeT index = 1; index + 1 < faceIndices.size(); ++index)
@@ -359,8 +346,7 @@ namespace ve::editor
 
             if (mesh.vertices.empty() || mesh.indices.empty())
             {
-                return Result<ObjMeshData>::Failure(
-                    Error(ErrorCode::InvalidArgument, "OBJ mesh must contain vertices and faces."));
+                return Result<ObjMeshData>::Failure(Error(ErrorCode::InvalidArgument, "OBJ mesh must contain vertices and faces."));
             }
 
             UpdateBounds(mesh);
@@ -705,8 +691,7 @@ namespace ve::editor
 
         if (!json.GetValue().is_object())
         {
-            return Result<Guid>::Failure(
-                Error(ErrorCode::InvalidArgument, "Asset meta descriptor root must be a JSON object."));
+            return Result<Guid>::Failure(Error(ErrorCode::InvalidArgument, "Asset meta descriptor root must be a JSON object."));
         }
 
         Result<Guid> guid = Guid::Parse(ReadString(json.GetValue().as_object(), "guid"));
@@ -720,8 +705,7 @@ namespace ve::editor
 
     Path EditorAssetDatabase::GetImportedMeshPath(const Guid& guid, const Path& objProjectPath) const
     {
-        return Path(EditorProject::LibraryDirectoryName) / ImportedDirectoryName / guid.ToString() /
-               GetImportedMeshFilename(objProjectPath);
+        return Path(EditorProject::LibraryDirectoryName) / ImportedDirectoryName / guid.ToString() / GetImportedMeshFilename(objProjectPath);
     }
 
     Path EditorAssetDatabase::GetMetaPath(const Path& assetProjectPath) const
@@ -757,8 +741,7 @@ namespace ve::editor
         const std::string pathKey = record.path.GetString();
         const AssetID idKey = record.asset.id;
 
-        if (const auto existingID = assetIDsByAssetPath_.find(pathKey);
-            existingID != assetIDsByAssetPath_.end() && existingID->second != idKey)
+        if (const auto existingID = assetIDsByAssetPath_.find(pathKey); existingID != assetIDsByAssetPath_.end() && existingID->second != idKey)
         {
             assetsByID_.erase(existingID->second);
         }

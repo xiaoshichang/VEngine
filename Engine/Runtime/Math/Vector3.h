@@ -115,8 +115,7 @@ namespace ve
         /// Returns true when every component is within `epsilon` of `other`.
         [[nodiscard]] bool IsNearlyEqual(const Vector3& other, Float32 epsilon = Math::DefaultEpsilon) const noexcept
         {
-            return NearlyEqual(x_, other.x_, epsilon) && NearlyEqual(y_, other.y_, epsilon) &&
-                   NearlyEqual(z_, other.z_, epsilon);
+            return NearlyEqual(x_, other.x_, epsilon) && NearlyEqual(y_, other.y_, epsilon) && NearlyEqual(z_, other.z_, epsilon);
         }
 
         /// Returns the dot product of two vectors.
@@ -130,9 +129,8 @@ namespace ve
         /// Use this to build perpendicular axes; input direction order determines the handedness of the result.
         [[nodiscard]] static constexpr Vector3 Cross(const Vector3& left, const Vector3& right) noexcept
         {
-            return Vector3((left.y_ * right.z_) - (left.z_ * right.y_),
-                           (left.z_ * right.x_) - (left.x_ * right.z_),
-                           (left.x_ * right.y_) - (left.y_ * right.x_));
+            return Vector3(
+                (left.y_ * right.z_) - (left.z_ * right.y_), (left.z_ * right.x_) - (left.x_ * right.z_), (left.x_ * right.y_) - (left.y_ * right.x_));
         }
 
         /// Returns the component-wise sum.

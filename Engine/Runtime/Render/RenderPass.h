@@ -32,14 +32,10 @@ namespace ve
         void SetViewport(const rhi::RhiViewport& viewport) noexcept;
         void SetScissor(const rhi::RhiScissorRect& scissorRect) noexcept;
 
-        void AddSwapchainColorAttachment(rhi::RhiLoadAction loadAction,
-                                         rhi::RhiStoreAction storeAction,
-                                         rhi::RhiColor clearColor) noexcept;
+        void AddSwapchainColorAttachment(rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor) noexcept;
 
-        void AddTextureColorAttachment(rhi::RhiTexture& texture,
-                                       rhi::RhiLoadAction loadAction,
-                                       rhi::RhiStoreAction storeAction,
-                                       rhi::RhiColor clearColor) noexcept;
+        void
+        AddTextureColorAttachment(rhi::RhiTexture& texture, rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor) noexcept;
 
         [[nodiscard]] const rhi::RhiRenderPassDesc& GetRenderPassDesc() const noexcept;
         [[nodiscard]] const rhi::RhiViewport& GetViewport() const noexcept;

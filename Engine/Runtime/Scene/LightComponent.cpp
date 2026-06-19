@@ -23,8 +23,7 @@ namespace ve
 
         [[nodiscard]] Vector3 GetDirectionFromTransform(const TransformComponent* transform) noexcept
         {
-            return transform != nullptr ? transform->GetWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized()
-                                        : Vector3::UnitZ();
+            return transform != nullptr ? transform->GetWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized() : Vector3::UnitZ();
         }
     } // namespace
 

@@ -135,8 +135,7 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
 
-        const bool textureMatchesDesc = texture_ != nullptr && texture_->GetWidth() == desc.extent.width &&
-                                        texture_->GetHeight() == desc.extent.height &&
+        const bool textureMatchesDesc = texture_ != nullptr && texture_->GetWidth() == desc.extent.width && texture_->GetHeight() == desc.extent.height &&
                                         texture_->GetFormat() == desc.colorFormat;
 
         desc_ = std::move(desc);
@@ -146,8 +145,7 @@ namespace ve
             nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
         }
 
-        VE_ASSERT_MESSAGE(desc_.extent.width != 0 && desc_.extent.height != 0,
-                          "RTRenderTexture::InitRenderResource requires a valid extent.");
+        VE_ASSERT_MESSAGE(desc_.extent.width != 0 && desc_.extent.height != 0, "RTRenderTexture::InitRenderResource requires a valid extent.");
 
         if (IsInitialized())
         {

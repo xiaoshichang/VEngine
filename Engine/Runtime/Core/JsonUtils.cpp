@@ -124,8 +124,7 @@ namespace ve::JsonUtils
         boost::json::value value = boost::json::parse(text, errorCode);
         if (errorCode)
         {
-            return Result<boost::json::value>::Failure(
-                Error(ErrorCode::InvalidArgument, "JSON parse failed: " + errorCode.message()));
+            return Result<boost::json::value>::Failure(Error(ErrorCode::InvalidArgument, "JSON parse failed: " + errorCode.message()));
         }
 
         return Result<boost::json::value>::Success(std::move(value));

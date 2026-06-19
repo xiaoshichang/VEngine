@@ -184,14 +184,10 @@ namespace ve
         /// Use `Vector4(point, 1)` for points and `Vector4(direction, 0)` for directions.
         [[nodiscard]] constexpr Vector4 TransformVector(const Vector4& vector) const noexcept
         {
-            return Vector4((Get(0, 0) * vector.GetX()) + (Get(0, 1) * vector.GetY()) + (Get(0, 2) * vector.GetZ()) +
-                               (Get(0, 3) * vector.GetW()),
-                           (Get(1, 0) * vector.GetX()) + (Get(1, 1) * vector.GetY()) + (Get(1, 2) * vector.GetZ()) +
-                               (Get(1, 3) * vector.GetW()),
-                           (Get(2, 0) * vector.GetX()) + (Get(2, 1) * vector.GetY()) + (Get(2, 2) * vector.GetZ()) +
-                               (Get(2, 3) * vector.GetW()),
-                           (Get(3, 0) * vector.GetX()) + (Get(3, 1) * vector.GetY()) + (Get(3, 2) * vector.GetZ()) +
-                               (Get(3, 3) * vector.GetW()));
+            return Vector4((Get(0, 0) * vector.GetX()) + (Get(0, 1) * vector.GetY()) + (Get(0, 2) * vector.GetZ()) + (Get(0, 3) * vector.GetW()),
+                           (Get(1, 0) * vector.GetX()) + (Get(1, 1) * vector.GetY()) + (Get(1, 2) * vector.GetZ()) + (Get(1, 3) * vector.GetW()),
+                           (Get(2, 0) * vector.GetX()) + (Get(2, 1) * vector.GetY()) + (Get(2, 2) * vector.GetZ()) + (Get(2, 3) * vector.GetW()),
+                           (Get(3, 0) * vector.GetX()) + (Get(3, 1) * vector.GetY()) + (Get(3, 2) * vector.GetZ()) + (Get(3, 3) * vector.GetW()));
         }
 
         /// Transforms a 3D point by this matrix using homogeneous `w = 1`.

@@ -114,8 +114,7 @@ namespace ve
         /// Invalid or already-complete dependencies do not delay the job. The dependency only controls ordering; it
         /// does not transfer ownership of captured data or make unsafe shared state access safe.
         template<typename Callable>
-        [[nodiscard]] Result<JobHandle>
-        ScheduleAfter(const JobDesc& desc, const JobHandle& dependency, Callable&& callable)
+        [[nodiscard]] Result<JobHandle> ScheduleAfter(const JobDesc& desc, const JobHandle& dependency, Callable&& callable)
         {
             std::span<const JobHandle> dependencies(&dependency, 1);
             return ScheduleFunction(desc, MakeJobFunction(std::forward<Callable>(callable)), dependencies);
@@ -126,8 +125,7 @@ namespace ve
         /// The span is consumed during the call and does not need to remain valid afterward. Invalid handles are
         /// ignored.
         template<typename Callable>
-        [[nodiscard]] Result<JobHandle>
-        ScheduleAfter(const JobDesc& desc, std::span<const JobHandle> dependencies, Callable&& callable)
+        [[nodiscard]] Result<JobHandle> ScheduleAfter(const JobDesc& desc, std::span<const JobHandle> dependencies, Callable&& callable)
         {
             return ScheduleFunction(desc, MakeJobFunction(std::forward<Callable>(callable)), dependencies);
         }
@@ -138,28 +136,21 @@ namespace ve
         /// child job. The returned handle completes after every batch job completes. Each index must be independent
         /// unless the caller provides its own synchronization for shared state.
         template<typename Callable>
-        [[nodiscard]] Result<JobHandle>
-        ParallelFor(const JobDesc& desc, SizeT itemCount, SizeT batchSize, Callable&& callable)
+        [[nodiscard]] Result<JobHandle> ParallelFor(const JobDesc& desc, SizeT itemCount, SizeT batchSize, Callable&& callable)
         {
             if (batchSize == 0)
             {
-                return Result<JobHandle>::Failure(
-                    Error(ErrorCode::InvalidArgument, "ParallelFor batchSize must be greater than zero."));
+                return Result<JobHandle>::Failure(Error(ErrorCode::InvalidArgument, "ParallelFor batchSize must be greater than zero."));
             }
 
             try
             {
                 auto sharedCallable = std::make_shared<std::decay_t<Callable>>(std::forward<Callable>(callable));
-                return ParallelForFunction(desc,
-                                           itemCount,
-                                           batchSize,
-                                           [sharedCallable = std::move(sharedCallable)](SizeT index)
-                                           { (*sharedCallable)(index); });
+                return ParallelForFunction(desc, itemCount, batchSize, [sharedCallable = std::move(sharedCallable)](SizeT index) { (*sharedCallable)(index); });
             }
             catch (const std::bad_alloc&)
             {
-                return Result<JobHandle>::Failure(
-                    Error(ErrorCode::OutOfMemory, "ParallelFor callable allocation failed."));
+                return Result<JobHandle>::Failure(Error(ErrorCode::OutOfMemory, "ParallelFor callable allocation failed."));
             }
         }
 
@@ -197,12 +188,9 @@ namespace ve
             }
         }
 
-        [[nodiscard]] Result<JobHandle> ScheduleFunction(const JobDesc& desc,
-                                                         Result<JobFunction> functionResult,
-                                                         std::span<const JobHandle> dependencies);
+        [[nodiscard]] Result<JobHandle> ScheduleFunction(const JobDesc& desc, Result<JobFunction> functionResult, std::span<const JobHandle> dependencies);
 
-        [[nodiscard]] Result<JobHandle>
-        ParallelForFunction(const JobDesc& desc, SizeT itemCount, SizeT batchSize, IndexedJobFunction function);
+        [[nodiscard]] Result<JobHandle> ParallelForFunction(const JobDesc& desc, SizeT itemCount, SizeT batchSize, IndexedJobFunction function);
 
         std::unique_ptr<JobSystemImpl> impl_;
     };

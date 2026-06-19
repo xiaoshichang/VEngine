@@ -29,7 +29,7 @@ Rules:
 
 - Use 4 spaces for indentation.
 - Do not use tabs.
-- Use a 120-column limit.
+- Use a 160-column limit.
 - Use Allman braces.
 - Indent declarations and definitions inside namespaces.
 - Use `.h` and `.cpp` for C++.

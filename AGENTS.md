@@ -38,7 +38,7 @@ Follow `Docs/CodingStyle.md` and `.clang-format`.
 Key defaults:
 
 - C++20.
-- 4 spaces, no tabs, 120-column limit.
+- 4 spaces, no tabs, 160-column limit.
 - Allman braces.
 - Indent declarations and definitions inside namespaces.
 - `PascalCase` types, functions, constants, files, and CMake targets.

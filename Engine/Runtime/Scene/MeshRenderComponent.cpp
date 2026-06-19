@@ -16,8 +16,7 @@ namespace ve
         VE_ASSERT(transform != nullptr);
         if (transform != nullptr)
         {
-            transformChangedCallbackId_ =
-                transform->AddTransformChangedCallback([this]() { MarkRenderItemTransformDirty(); });
+            transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkRenderItemTransformDirty(); });
         }
     }
 

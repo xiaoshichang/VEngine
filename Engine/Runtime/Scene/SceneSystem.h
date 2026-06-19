@@ -66,10 +66,7 @@ namespace ve
         /// Creates an empty active Scene and starts the Scene Thread.
         ///
         /// timeSystem must already be initialized by EngineRuntime before SceneSystem starts.
-        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam,
-                                           TimeSystem& timeSystem,
-                                           InputSystem& inputSystem,
-                                           RenderSystem& renderSystem);
+        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, InputSystem& inputSystem, RenderSystem& renderSystem);
 
         /// Stops Scene updates and joins the Scene Thread.
         ///
@@ -89,9 +86,7 @@ namespace ve
 
         /// Returns the active Scene. The returned pointer remains owned by SceneSystem.
         [[nodiscard]] const Scene* GetScene() const noexcept;
-        [[nodiscard]] Result<Scene*> LoadScene(const SceneLoadDesc& desc,
-                                               const IAssetRecordProvider& provider,
-                                               ResourceSystem& resourceSystem);
+        [[nodiscard]] Result<Scene*> LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem);
         void UnloadActiveScene() noexcept;
 
         /// Queues one OS event for Scene Thread processing.
@@ -124,7 +119,6 @@ namespace ve
 
         /// notify scene thread to start main loop.
         void StartLoop() noexcept;
-
 
     private:
         std::unique_ptr<SceneSystemImpl> impl_;

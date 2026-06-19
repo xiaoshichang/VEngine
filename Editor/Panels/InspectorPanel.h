@@ -9,7 +9,7 @@ namespace ve
     class LightComponent;
     class MeshRenderComponent;
     class TransformComponent;
-}
+} // namespace ve
 
 namespace ve::editor
 {

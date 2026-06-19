@@ -22,14 +22,11 @@ namespace ve::editor
         [[nodiscard]] const Path& GetProjectRoot() const noexcept;
 
         template<typename TResource>
-        [[nodiscard]] Result<AssetRef<TResource>> LoadResource(const AssetID& id,
-                                                               const EditorAssetDatabase& assetDatabase,
-                                                               ResourceSystem& resourceSystem);
+        [[nodiscard]] Result<AssetRef<TResource>> LoadResource(const AssetID& id, const EditorAssetDatabase& assetDatabase, ResourceSystem& resourceSystem);
 
         template<typename TResource>
-        [[nodiscard]] Result<AssetRef<TResource>> LoadResource(const Path& projectRelativePath,
-                                                               const EditorAssetDatabase& assetDatabase,
-                                                               ResourceSystem& resourceSystem);
+        [[nodiscard]] Result<AssetRef<TResource>>
+        LoadResource(const Path& projectRelativePath, const EditorAssetDatabase& assetDatabase, ResourceSystem& resourceSystem);
 
     private:
         Path projectRoot_;
@@ -37,28 +34,23 @@ namespace ve::editor
     };
 
     template<typename TResource>
-    Result<AssetRef<TResource>> EditorResourceLoader::LoadResource(const AssetID& id,
-                                                                   const EditorAssetDatabase& assetDatabase,
-                                                                   ResourceSystem& resourceSystem)
+    Result<AssetRef<TResource>> EditorResourceLoader::LoadResource(const AssetID& id, const EditorAssetDatabase& assetDatabase, ResourceSystem& resourceSystem)
     {
         if (!initialized_)
         {
-            return Result<AssetRef<TResource>>::Failure(
-                Error(ErrorCode::InvalidState, "EditorResourceLoader is not initialized."));
+            return Result<AssetRef<TResource>>::Failure(Error(ErrorCode::InvalidState, "EditorResourceLoader is not initialized."));
         }
 
         return resourceSystem.Request<TResource>(id, assetDatabase);
     }
 
     template<typename TResource>
-    Result<AssetRef<TResource>> EditorResourceLoader::LoadResource(const Path& projectRelativePath,
-                                                                   const EditorAssetDatabase& assetDatabase,
-                                                                   ResourceSystem& resourceSystem)
+    Result<AssetRef<TResource>>
+    EditorResourceLoader::LoadResource(const Path& projectRelativePath, const EditorAssetDatabase& assetDatabase, ResourceSystem& resourceSystem)
     {
         if (!initialized_)
         {
-            return Result<AssetRef<TResource>>::Failure(
-                Error(ErrorCode::InvalidState, "EditorResourceLoader is not initialized."));
+            return Result<AssetRef<TResource>>::Failure(Error(ErrorCode::InvalidState, "EditorResourceLoader is not initialized."));
         }
 
         const EditorAssetRecord* asset = assetDatabase.FindAsset(projectRelativePath);

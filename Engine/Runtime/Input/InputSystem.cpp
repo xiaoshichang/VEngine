@@ -1,8 +1,9 @@
 #include "Engine/Runtime/Input/InputSystem.h"
+
 #include "Engine/Runtime/Logging/Log.h"
 
-#include <array>
 #include <algorithm>
+#include <array>
 
 namespace ve
 {

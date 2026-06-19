@@ -154,8 +154,7 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
             return false;
         }
 
-        commandList->SetViewport(ve::rhi::RhiViewport{
-            0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f});
+        commandList->SetViewport(ve::rhi::RhiViewport{0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f});
         commandList->SetScissor(ve::rhi::RhiScissorRect{0, 0, extent.width, extent.height});
         commandList->SetPipeline(*pipelineState);
         commandList->SetVertexBuffer(0, *vertexBuffer, sizeof(TriangleVertex), 0);

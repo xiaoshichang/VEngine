@@ -9,10 +9,7 @@ namespace ve
 {
     namespace
     {
-        [[nodiscard]] rhi::RhiBufferDesc MakeBufferDesc(UInt64 size,
-                                                        rhi::RhiBufferUsage usage,
-                                                        const void* initialData,
-                                                        const char* debugName) noexcept
+        [[nodiscard]] rhi::RhiBufferDesc MakeBufferDesc(UInt64 size, rhi::RhiBufferUsage usage, const void* initialData, const char* debugName) noexcept
         {
             rhi::RhiBufferDesc desc = {};
             desc.size = size;
@@ -96,10 +93,7 @@ namespace ve
         }
 
         const UInt64 vertexBufferSize = static_cast<UInt64>(desc_.vertices.size() * sizeof(RTMeshVertex));
-        vertexBuffer_ = device.CreateBuffer(MakeBufferDesc(vertexBufferSize,
-                                                           rhi::RhiBufferUsage::Vertex,
-                                                           desc_.vertices.data(),
-                                                           "RTMeshResourceVertexBuffer"));
+        vertexBuffer_ = device.CreateBuffer(MakeBufferDesc(vertexBufferSize, rhi::RhiBufferUsage::Vertex, desc_.vertices.data(), "RTMeshResourceVertexBuffer"));
         VE_ASSERT_MESSAGE(vertexBuffer_ != nullptr, "RTMeshResource failed to create vertex buffer.");
 
         if (desc_.indices.empty())
@@ -108,10 +102,7 @@ namespace ve
         }
 
         const UInt64 indexBufferSize = static_cast<UInt64>(desc_.indices.size() * sizeof(UInt32));
-        indexBuffer_ = device.CreateBuffer(MakeBufferDesc(indexBufferSize,
-                                                          rhi::RhiBufferUsage::Index,
-                                                          desc_.indices.data(),
-                                                          "RTMeshResourceIndexBuffer"));
+        indexBuffer_ = device.CreateBuffer(MakeBufferDesc(indexBufferSize, rhi::RhiBufferUsage::Index, desc_.indices.data(), "RTMeshResourceIndexBuffer"));
         VE_ASSERT_MESSAGE(indexBuffer_ != nullptr, "RTMeshResource failed to create index buffer.");
     }
 
@@ -155,10 +146,8 @@ namespace ve
         desc_ = std::move(desc);
 
         const RTMaterialUniformData uniformData = ToUniformData(desc_);
-        uniformBuffer_ = device.CreateBuffer(MakeBufferDesc(sizeof(RTMaterialUniformData),
-                                                            rhi::RhiBufferUsage::Uniform,
-                                                            &uniformData,
-                                                            "RTMaterialResourceUniformBuffer"));
+        uniformBuffer_ =
+            device.CreateBuffer(MakeBufferDesc(sizeof(RTMaterialUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "RTMaterialResourceUniformBuffer"));
         VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "RTMaterialResource failed to create uniform buffer.");
     }
 

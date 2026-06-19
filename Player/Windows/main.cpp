@@ -1,7 +1,6 @@
-#include "Player/Windows/WindowsPlayer.h"
-
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
+#include "Player/Windows/WindowsPlayer.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN

@@ -13,8 +13,7 @@ namespace ve
 #if VE_PLATFORM_WINDOWS
         return Win32Window::CreatePlatformWindow(desc);
 #else
-        return Result<std::unique_ptr<Window>>::Failure(
-            Error(ErrorCode::Unsupported, "This platform does not have a Window backend yet."));
+        return Result<std::unique_ptr<Window>>::Failure(Error(ErrorCode::Unsupported, "This platform does not have a Window backend yet."));
 #endif
     }
 } // namespace ve

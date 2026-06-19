@@ -68,10 +68,7 @@ namespace ve
     [[nodiscard]] LogCallback GetLogCallback() noexcept;
 
     /// Logs an already formatted message through the facade.
-    void LogMessage(LogSeverity severity,
-                    const char* category,
-                    std::string_view message,
-                    SourceLocation location = SourceLocation::current());
+    void LogMessage(LogSeverity severity, const char* category, std::string_view message, SourceLocation location = SourceLocation::current());
 
     [[nodiscard]] const char* ToString(LogSeverity severity) noexcept;
 
@@ -83,21 +80,18 @@ namespace ve
             return std::format(formatString, std::forward<TArgs>(args)...);
         }
 
-        void
-        LogFormattedMessage(LogSeverity severity, const char* category, std::string message, SourceLocation location);
+        void LogFormattedMessage(LogSeverity severity, const char* category, std::string message, SourceLocation location);
     } // namespace detail
 } // namespace ve
 
-#define VE_DETAIL_LOG(severityName, categoryName, ...)                                                                 \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (::ve::ShouldLog(::ve::LogSeverity::severityName))                                                          \
-        {                                                                                                              \
-            ::ve::detail::LogFormattedMessage(::ve::LogSeverity::severityName,                                         \
-                                              categoryName,                                                            \
-                                              ::ve::detail::FormatLogMessage(__VA_ARGS__),                             \
-                                              ::ve::SourceLocation::current());                                        \
-        }                                                                                                              \
+#define VE_DETAIL_LOG(severityName, categoryName, ...)                                                                                                         \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        if (::ve::ShouldLog(::ve::LogSeverity::severityName))                                                                                                  \
+        {                                                                                                                                                      \
+            ::ve::detail::LogFormattedMessage(                                                                                                                 \
+                ::ve::LogSeverity::severityName, categoryName, ::ve::detail::FormatLogMessage(__VA_ARGS__), ::ve::SourceLocation::current());                  \
+        }                                                                                                                                                      \
     } while (false)
 
 #define VE_LOG_TRACE(...) VE_DETAIL_LOG(Trace, "General", __VA_ARGS__)

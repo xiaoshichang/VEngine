@@ -45,8 +45,7 @@ namespace ve
                 return {};
             }
 
-            const int requiredLength = MultiByteToWideChar(
-                CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
+            const int requiredLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
 
             if (requiredLength <= 0)
             {
@@ -54,12 +53,7 @@ namespace ve
             }
 
             std::wstring wideText(static_cast<size_t>(requiredLength), L'\0');
-            MultiByteToWideChar(CP_UTF8,
-                                MB_ERR_INVALID_CHARS,
-                                text.data(),
-                                static_cast<int>(text.size()),
-                                wideText.data(),
-                                requiredLength);
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), wideText.data(), requiredLength);
             return wideText;
         }
 #endif

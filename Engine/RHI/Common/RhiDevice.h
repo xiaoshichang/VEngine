@@ -162,8 +162,7 @@ namespace ve::rhi
         [[nodiscard]] virtual std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) = 0;
 
         /// Creates immutable graphics pipeline state.
-        [[nodiscard]] virtual std::unique_ptr<RhiPipelineState>
-        CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
+        [[nodiscard]] virtual std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
 
         /// Creates a command list object compatible with this device.
         [[nodiscard]] virtual std::unique_ptr<RhiCommandList> CreateCommandList() = 0;

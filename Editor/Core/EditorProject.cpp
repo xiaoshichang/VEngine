@@ -10,9 +10,7 @@ namespace ve::editor
 {
     namespace
     {
-        [[nodiscard]] std::string ReadString(const boost::json::object& object,
-                                             boost::json::string_view key,
-                                             std::string fallback = {})
+        [[nodiscard]] std::string ReadString(const boost::json::object& object, boost::json::string_view key, std::string fallback = {})
         {
             if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_string())
             {
@@ -32,8 +30,7 @@ namespace ve::editor
             boost::json::object object;
             object["schemaVersion"] = 1;
             object["name"] = descriptor.name;
-            object["engineVersion"] =
-                descriptor.engineVersion.empty() ? GetCurrentEngineVersion() : descriptor.engineVersion;
+            object["engineVersion"] = descriptor.engineVersion.empty() ? GetCurrentEngineVersion() : descriptor.engineVersion;
             object["startScene"] = descriptor.startScene;
             return object;
         }
@@ -123,8 +120,7 @@ namespace ve::editor
         const boost::json::value& value = jsonResult.GetValue();
         if (!value.is_object())
         {
-            return Result<EditorProjectDescriptor>::Failure(
-                Error(ErrorCode::InvalidArgument, "Project descriptor root must be a JSON object."));
+            return Result<EditorProjectDescriptor>::Failure(Error(ErrorCode::InvalidArgument, "Project descriptor root must be a JSON object."));
         }
 
         const boost::json::object& object = value.as_object();

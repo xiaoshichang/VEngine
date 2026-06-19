@@ -32,8 +32,7 @@ namespace
         bool passed = true;
 
         ve::PoolAllocator allocator;
-        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{32, 4, 16}),
-                           "PoolAllocator should initialize with a valid descriptor");
+        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{32, 4, 16}), "PoolAllocator should initialize with a valid descriptor");
 
         const ve::PoolAllocatorStats stats = allocator.GetStats();
         passed &= Expect(allocator.IsInitialized(), "PoolAllocator should report initialized state");
@@ -43,8 +42,7 @@ namespace
         passed &= Expect((stats.blockStride % 16) == 0, "PoolAllocator stride should honor requested alignment");
         passed &= Expect(stats.allocatedBlockCount == 0, "PoolAllocator should start with no allocated blocks");
         passed &= Expect(stats.highWaterMark == 0, "PoolAllocator high water mark should start at zero");
-        passed &=
-            Expect(stats.totalBytes == stats.blockStride * stats.blockCount, "PoolAllocator total bytes should match");
+        passed &= Expect(stats.totalBytes == stats.blockStride * stats.blockCount, "PoolAllocator total bytes should match");
 
         allocator.Shutdown();
         passed &= Expect(!allocator.IsInitialized(), "PoolAllocator should report shutdown state");
@@ -58,8 +56,7 @@ namespace
         bool passed = true;
 
         ve::PoolAllocator allocator;
-        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{sizeof(int), 2, alignof(int)}),
-                           "PoolAllocator should initialize for small blocks");
+        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{sizeof(int), 2, alignof(int)}), "PoolAllocator should initialize for small blocks");
 
         void* first = allocator.Allocate();
         void* second = allocator.Allocate();
@@ -92,8 +89,7 @@ namespace
         bool passed = true;
 
         ve::PoolAllocator allocator;
-        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{24, 3, 32}),
-                           "PoolAllocator should initialize with a larger alignment");
+        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{24, 3, 32}), "PoolAllocator should initialize with a larger alignment");
 
         void* first = allocator.Allocate();
         void* second = allocator.Allocate();
@@ -118,20 +114,17 @@ namespace
 
         const ve::ErrorCode zeroBlockSize = allocator.Initialize(ve::PoolAllocatorDesc{0, 1, 8});
         passed &= Expect(zeroBlockSize != ve::ErrorCode::None, "Zero block size should fail");
-        passed &=
-            Expect(zeroBlockSize == ve::ErrorCode::InvalidArgument, "Zero block size should return InvalidArgument");
+        passed &= Expect(zeroBlockSize == ve::ErrorCode::InvalidArgument, "Zero block size should return InvalidArgument");
 
         const ve::ErrorCode zeroBlockCount = allocator.Initialize(ve::PoolAllocatorDesc{8, 0, 8});
         passed &= Expect(zeroBlockCount != ve::ErrorCode::None, "Zero block count should fail");
-        passed &=
-            Expect(zeroBlockCount == ve::ErrorCode::InvalidArgument, "Zero block count should return InvalidArgument");
+        passed &= Expect(zeroBlockCount == ve::ErrorCode::InvalidArgument, "Zero block count should return InvalidArgument");
 
         const ve::ErrorCode badAlignment = allocator.Initialize(ve::PoolAllocatorDesc{8, 1, 3});
         passed &= Expect(badAlignment != ve::ErrorCode::None, "Non-power-of-two alignment should fail");
         passed &= Expect(badAlignment == ve::ErrorCode::InvalidArgument, "Bad alignment should return InvalidArgument");
 
-        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{16, 1, 8}),
-                           "PoolAllocator should initialize after rejected descriptors");
+        passed &= ExpectOk(allocator.Initialize(ve::PoolAllocatorDesc{16, 1, 8}), "PoolAllocator should initialize after rejected descriptors");
 
         int foreignValue = 0;
         void* block = allocator.Allocate();

@@ -50,14 +50,12 @@ namespace ve
             VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
             if (componentSlot == nullptr)
             {
-                return Result<TComponent*>::Failure(
-                    Error(ErrorCode::InvalidArgument, "GameObject component slot lookup failed."));
+                return Result<TComponent*>::Failure(Error(ErrorCode::InvalidArgument, "GameObject component slot lookup failed."));
             }
 
             if (*componentSlot != nullptr)
             {
-                return Result<TComponent*>::Failure(
-                    Error(ErrorCode::InvalidState, "GameObject already owns this component type."));
+                return Result<TComponent*>::Failure(Error(ErrorCode::InvalidState, "GameObject already owns this component type."));
             }
 
             try
@@ -66,8 +64,7 @@ namespace ve
             }
             catch (const std::bad_alloc&)
             {
-                return Result<TComponent*>::Failure(
-                    Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
+                return Result<TComponent*>::Failure(Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
             }
         }
 
@@ -154,11 +151,8 @@ namespace ve
         friend class TransformComponent;
 
         template<typename TComponent>
-        static constexpr bool IsSupportedComponentTypeV =
-                std::is_same_v<TComponent, TransformComponent> ||
-                std::is_same_v<TComponent, MeshRenderComponent> ||
-                std::is_same_v<TComponent, CameraComponent> ||
-                std::is_same_v<TComponent, LightComponent>;
+        static constexpr bool IsSupportedComponentTypeV = std::is_same_v<TComponent, TransformComponent> || std::is_same_v<TComponent, MeshRenderComponent> ||
+                                                          std::is_same_v<TComponent, CameraComponent> || std::is_same_v<TComponent, LightComponent>;
 
         template<typename TComponent>
         [[nodiscard]] std::unique_ptr<TComponent>* ResolveComponentSlot() noexcept
@@ -219,20 +213,17 @@ namespace ve
             VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
             if (componentSlot == nullptr)
             {
-                return Result<TComponent*>::Failure(
-                    Error(ErrorCode::InvalidArgument, "GameObject component slot lookup failed."));
+                return Result<TComponent*>::Failure(Error(ErrorCode::InvalidArgument, "GameObject component slot lookup failed."));
             }
 
             if (*componentSlot != nullptr)
             {
-                return Result<TComponent*>::Failure(
-                    Error(ErrorCode::InvalidState, "GameObject already owns this component type."));
+                return Result<TComponent*>::Failure(Error(ErrorCode::InvalidState, "GameObject already owns this component type."));
             }
 
             try
             {
-                std::unique_ptr<TComponent> component =
-                    std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
+                std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
                 TComponent* componentPointer = component.get();
                 *componentSlot = std::move(component);
                 if (registerRenderThread)
@@ -254,8 +245,7 @@ namespace ve
             }
             catch (const std::bad_alloc&)
             {
-                return Result<TComponent*>::Failure(
-                    Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
+                return Result<TComponent*>::Failure(Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
             }
         }
 

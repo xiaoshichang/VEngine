@@ -8,21 +8,11 @@ namespace ve
     {
         renderPassDesc_ = {};
         renderPassDesc_.debugName = passName;
-        renderPassDesc_.renderArea = rhi::RhiRenderArea{0,
-                                                        0,
-                                                        frameContext.mainSurfaceExtent.width,
-                                                        frameContext.mainSurfaceExtent.height};
+        renderPassDesc_.renderArea = rhi::RhiRenderArea{0, 0, frameContext.mainSurfaceExtent.width, frameContext.mainSurfaceExtent.height};
 
-        viewport_ = rhi::RhiViewport{0.0f,
-                                     0.0f,
-                                     static_cast<Float32>(frameContext.mainSurfaceExtent.width),
-                                     static_cast<Float32>(frameContext.mainSurfaceExtent.height),
-                                     0.0f,
-                                     1.0f};
-        scissorRect_ = rhi::RhiScissorRect{0,
-                                           0,
-                                           frameContext.mainSurfaceExtent.width,
-                                           frameContext.mainSurfaceExtent.height};
+        viewport_ = rhi::RhiViewport{
+            0.0f, 0.0f, static_cast<Float32>(frameContext.mainSurfaceExtent.width), static_cast<Float32>(frameContext.mainSurfaceExtent.height), 0.0f, 1.0f};
+        scissorRect_ = rhi::RhiScissorRect{0, 0, frameContext.mainSurfaceExtent.width, frameContext.mainSurfaceExtent.height};
     }
 
     void RenderPassBuilder::SetRenderArea(const rhi::RhiRenderArea& renderArea) noexcept
@@ -40,15 +30,12 @@ namespace ve
         scissorRect_ = scissorRect;
     }
 
-    void RenderPassBuilder::AddSwapchainColorAttachment(rhi::RhiLoadAction loadAction,
-                                                        rhi::RhiStoreAction storeAction,
-                                                        rhi::RhiColor clearColor) noexcept
+    void RenderPassBuilder::AddSwapchainColorAttachment(rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor) noexcept
     {
         VE_ASSERT_MESSAGE(renderPassDesc_.colorAttachmentCount < rhi::RhiMaxColorAttachments,
                           "RenderPassBuilder color attachment count exceeded RhiMaxColorAttachments.");
 
-        rhi::RhiRenderPassColorAttachmentDesc& attachment =
-            renderPassDesc_.colorAttachments[renderPassDesc_.colorAttachmentCount];
+        rhi::RhiRenderPassColorAttachmentDesc& attachment = renderPassDesc_.colorAttachments[renderPassDesc_.colorAttachmentCount];
         attachment.texture = nullptr;
         attachment.loadAction = loadAction;
         attachment.storeAction = storeAction;
@@ -64,8 +51,7 @@ namespace ve
         VE_ASSERT_MESSAGE(renderPassDesc_.colorAttachmentCount < rhi::RhiMaxColorAttachments,
                           "RenderPassBuilder color attachment count exceeded RhiMaxColorAttachments.");
 
-        rhi::RhiRenderPassColorAttachmentDesc& attachment =
-            renderPassDesc_.colorAttachments[renderPassDesc_.colorAttachmentCount];
+        rhi::RhiRenderPassColorAttachmentDesc& attachment = renderPassDesc_.colorAttachments[renderPassDesc_.colorAttachmentCount];
         attachment.texture = &texture;
         attachment.loadAction = loadAction;
         attachment.storeAction = storeAction;

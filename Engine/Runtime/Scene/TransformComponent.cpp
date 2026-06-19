@@ -132,8 +132,7 @@ namespace ve
             VE_ASSERT_MESSAGE(childTransform != nullptr, "GameObject should always own TransformComponent.");
             if (childTransform == nullptr)
             {
-                return Result<GameObject*>::Failure(
-                    Error(ErrorCode::InvalidState, "GameObject child is missing TransformComponent."));
+                return Result<GameObject*>::Failure(Error(ErrorCode::InvalidState, "GameObject child is missing TransformComponent."));
             }
 
             childTransform->SetParent(this);
@@ -149,9 +148,7 @@ namespace ve
     bool TransformComponent::DestroyChild(GameObject& child) noexcept
     {
         auto it =
-            std::find_if(children_.begin(),
-                         children_.end(),
-                         [&child](const std::unique_ptr<GameObject>& candidate) { return candidate.get() == &child; });
+            std::find_if(children_.begin(), children_.end(), [&child](const std::unique_ptr<GameObject>& candidate) { return candidate.get() == &child; });
 
         if (it == children_.end())
         {
@@ -192,11 +189,10 @@ namespace ve
     {
         VE_ASSERT(callbackId != 0);
 
-        transformChangedCallbacks_.erase(
-            std::remove_if(transformChangedCallbacks_.begin(),
-                           transformChangedCallbacks_.end(),
-                           [callbackId](const TransformChangedCallbackEntry& entry) { return entry.id == callbackId; }),
-            transformChangedCallbacks_.end());
+        transformChangedCallbacks_.erase(std::remove_if(transformChangedCallbacks_.begin(),
+                                                        transformChangedCallbacks_.end(),
+                                                        [callbackId](const TransformChangedCallbackEntry& entry) { return entry.id == callbackId; }),
+                                         transformChangedCallbacks_.end());
     }
 
     void TransformComponent::SetParent(TransformComponent* parent) noexcept

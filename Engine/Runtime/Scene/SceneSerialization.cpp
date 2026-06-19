@@ -1,7 +1,7 @@
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 
-#include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/Core/Guid.h"
+#include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -12,7 +12,6 @@
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <boost/json.hpp>
-
 #include <string>
 #include <string_view>
 
@@ -76,38 +75,30 @@ namespace ve
             const boost::json::array& array = value.as_array();
             if (!array[0].is_number() || !array[1].is_number() || !array[2].is_number())
             {
-                return Result<Vector3>::Failure(
-                    MakeSceneJsonError(std::string(fieldName) + " must contain numeric values."));
+                return Result<Vector3>::Failure(MakeSceneJsonError(std::string(fieldName) + " must contain numeric values."));
             }
 
-            return Result<Vector3>::Success(
-                Vector3(ReadNumberAsFloat(array[0]), ReadNumberAsFloat(array[1]), ReadNumberAsFloat(array[2])));
+            return Result<Vector3>::Success(Vector3(ReadNumberAsFloat(array[0]), ReadNumberAsFloat(array[1]), ReadNumberAsFloat(array[2])));
         }
 
         [[nodiscard]] Result<Quaternion> ReadQuaternion(const boost::json::value& value, std::string_view fieldName)
         {
             if (!value.is_array() || value.as_array().size() != 4)
             {
-                return Result<Quaternion>::Failure(
-                    MakeSceneJsonError(std::string(fieldName) + " must be a 4-item array."));
+                return Result<Quaternion>::Failure(MakeSceneJsonError(std::string(fieldName) + " must be a 4-item array."));
             }
 
             const boost::json::array& array = value.as_array();
             if (!array[0].is_number() || !array[1].is_number() || !array[2].is_number() || !array[3].is_number())
             {
-                return Result<Quaternion>::Failure(
-                    MakeSceneJsonError(std::string(fieldName) + " must contain numeric values."));
+                return Result<Quaternion>::Failure(MakeSceneJsonError(std::string(fieldName) + " must contain numeric values."));
             }
 
-            return Result<Quaternion>::Success(Quaternion(ReadNumberAsFloat(array[0]),
-                                                          ReadNumberAsFloat(array[1]),
-                                                          ReadNumberAsFloat(array[2]),
-                                                          ReadNumberAsFloat(array[3])));
+            return Result<Quaternion>::Success(
+                Quaternion(ReadNumberAsFloat(array[0]), ReadNumberAsFloat(array[1]), ReadNumberAsFloat(array[2]), ReadNumberAsFloat(array[3])));
         }
 
-        [[nodiscard]] std::string ReadString(const boost::json::object& object,
-                                             boost::json::string_view key,
-                                             std::string fallback = {})
+        [[nodiscard]] std::string ReadString(const boost::json::object& object, boost::json::string_view key, std::string fallback = {})
         {
             if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_string())
             {
@@ -134,9 +125,7 @@ namespace ve
             return guid.GetValue();
         }
 
-        [[nodiscard]] UInt64 ReadUInt64(const boost::json::object& object,
-                                        boost::json::string_view key,
-                                        UInt64 fallback = 0)
+        [[nodiscard]] UInt64 ReadUInt64(const boost::json::object& object, boost::json::string_view key, UInt64 fallback = 0)
         {
             const boost::json::value* value = object.if_contains(key);
             if (value == nullptr)
@@ -189,16 +178,13 @@ namespace ve
             return AssetID(guid.GetValue(), ReadUInt64(object, "subID", 0));
         }
 
-        [[nodiscard]] AssetID ReadAssetRef(const boost::json::object& object,
-                                           boost::json::string_view objectKey,
-                                           boost::json::string_view legacyGuidKey,
-                                           const AssetID& fallback)
+        [[nodiscard]] AssetID
+        ReadAssetRef(const boost::json::object& object, boost::json::string_view objectKey, boost::json::string_view legacyGuidKey, const AssetID& fallback)
         {
             if (const boost::json::value* value = object.if_contains(objectKey); value != nullptr && value->is_object())
             {
                 const boost::json::object& assetRefObject = value->as_object();
-                if (const boost::json::value* assetIDValue = assetRefObject.if_contains("assetID");
-                    assetIDValue != nullptr && assetIDValue->is_object())
+                if (const boost::json::value* assetIDValue = assetRefObject.if_contains("assetID"); assetIDValue != nullptr && assetIDValue->is_object())
                 {
                     return ReadAssetID(assetIDValue->as_object(), fallback);
                 }
@@ -228,8 +214,7 @@ namespace ve
             return fallback;
         }
 
-        [[nodiscard]] const boost::json::object* FindComponent(const boost::json::array& components,
-                                                               std::string_view type)
+        [[nodiscard]] const boost::json::object* FindComponent(const boost::json::array& components, std::string_view type)
         {
             for (const boost::json::value& componentValue : components)
             {
@@ -466,8 +451,7 @@ namespace ve
             }
 
             mesh->SetMeshAssetID(ReadAssetRef(object, "mesh", "meshAssetGuid", mesh->GetMeshAssetID()));
-            mesh->SetMaterialAssetID(
-                ReadAssetRef(object, "material", "materialAssetGuid", mesh->GetMaterialAssetID()));
+            mesh->SetMaterialAssetID(ReadAssetRef(object, "material", "materialAssetGuid", mesh->GetMaterialAssetID()));
 
             if (const boost::json::value* value = object.if_contains("boundsCenter"); value != nullptr)
             {
@@ -508,8 +492,7 @@ namespace ve
 
             camera->SetPrimary(ReadBool(object, "primary", camera->IsPrimary()));
             camera->SetProjectionMode(ParseProjectionMode(ReadString(object, "projectionMode", ToString(camera->GetProjectionMode()))));
-            camera->SetVerticalFieldOfViewRadians(
-                ReadFloat(object, "verticalFieldOfViewRadians", camera->GetVerticalFieldOfViewRadians()));
+            camera->SetVerticalFieldOfViewRadians(ReadFloat(object, "verticalFieldOfViewRadians", camera->GetVerticalFieldOfViewRadians()));
             camera->SetOrthographicSize(ReadFloat(object, "orthographicSize", camera->GetOrthographicSize()));
             camera->SetAspectRatio(ReadFloat(object, "aspectRatio", camera->GetAspectRatio()));
             camera->SetNearClipPlane(ReadFloat(object, "nearClipPlane", camera->GetNearClipPlane()));
@@ -593,9 +576,7 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode ReadGameObjectRecursive(Scene& scene,
-                                                        TransformComponent* parent,
-                                                        const boost::json::object& object)
+        [[nodiscard]] ErrorCode ReadGameObjectRecursive(Scene& scene, TransformComponent* parent, const boost::json::object& object)
         {
             const std::string name = ReadString(object, "name");
 

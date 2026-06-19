@@ -28,11 +28,11 @@ namespace ve
     void ReportAssertionFailure(const AssertionInfo& info) noexcept;
 } // namespace ve
 
-#define VE_DETAIL_REPORT_ASSERTION_FAILURE(expressionText, messageText)                                                \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        const ::ve::AssertionInfo assertionInfo{expressionText, messageText, __FILE__, __func__, __LINE__};            \
-        ::ve::ReportAssertionFailure(assertionInfo);                                                                   \
+#define VE_DETAIL_REPORT_ASSERTION_FAILURE(expressionText, messageText)                                                                                        \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        const ::ve::AssertionInfo assertionInfo{expressionText, messageText, __FILE__, __func__, __LINE__};                                                    \
+        ::ve::ReportAssertionFailure(assertionInfo);                                                                                                           \
     } while (false)
 
 #if VE_BUILD_DEBUG
@@ -42,21 +42,21 @@ namespace ve
 #endif
 
 #if VE_BUILD_DEBUG
-#define VE_ASSERT_MESSAGE(expression, message)                                                                         \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (!(expression))                                                                                             \
-        {                                                                                                              \
-            VE_DETAIL_REPORT_ASSERTION_FAILURE(#expression, message);                                                  \
-            VE_DETAIL_DEBUG_BREAK_AFTER_ASSERTION();                                                                   \
-        }                                                                                                              \
+#define VE_ASSERT_MESSAGE(expression, message)                                                                                                                 \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        if (!(expression))                                                                                                                                     \
+        {                                                                                                                                                      \
+            VE_DETAIL_REPORT_ASSERTION_FAILURE(#expression, message);                                                                                          \
+            VE_DETAIL_DEBUG_BREAK_AFTER_ASSERTION();                                                                                                           \
+        }                                                                                                                                                      \
     } while (false)
 #else
-#define VE_ASSERT_MESSAGE(expression, message)                                                                         \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        (void)sizeof(expression);                                                                                      \
-        (void)sizeof(message);                                                                                         \
+#define VE_ASSERT_MESSAGE(expression, message)                                                                                                                 \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        (void)sizeof(expression);                                                                                                                              \
+        (void)sizeof(message);                                                                                                                                 \
     } while (false)
 #endif
 
@@ -65,24 +65,24 @@ namespace ve
 #if VE_BUILD_DEBUG
 #define VE_VERIFY_MESSAGE(expression, message) VE_ASSERT_MESSAGE(expression, message)
 #else
-#define VE_VERIFY_MESSAGE(expression, message)                                                                         \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        (void)(expression);                                                                                            \
-        (void)sizeof(message);                                                                                         \
+#define VE_VERIFY_MESSAGE(expression, message)                                                                                                                 \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        (void)(expression);                                                                                                                                    \
+        (void)sizeof(message);                                                                                                                                 \
     } while (false)
 #endif
 
 #define VE_VERIFY(expression) VE_VERIFY_MESSAGE(expression, nullptr)
 
-#define VE_ASSERT_ALWAYS_MESSAGE(expression, message)                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (!(expression))                                                                                             \
-        {                                                                                                              \
-            VE_DETAIL_REPORT_ASSERTION_FAILURE(#expression, message);                                                  \
-            VE_DETAIL_DEBUG_BREAK_AFTER_ASSERTION();                                                                   \
-        }                                                                                                              \
+#define VE_ASSERT_ALWAYS_MESSAGE(expression, message)                                                                                                          \
+    do                                                                                                                                                         \
+    {                                                                                                                                                          \
+        if (!(expression))                                                                                                                                     \
+        {                                                                                                                                                      \
+            VE_DETAIL_REPORT_ASSERTION_FAILURE(#expression, message);                                                                                          \
+            VE_DETAIL_DEBUG_BREAK_AFTER_ASSERTION();                                                                                                           \
+        }                                                                                                                                                      \
     } while (false)
 
 #define VE_ASSERT_ALWAYS(expression) VE_ASSERT_ALWAYS_MESSAGE(expression, nullptr)

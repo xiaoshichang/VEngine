@@ -16,8 +16,8 @@
 #include "Engine/Runtime/Render/BaseRenderer.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Threading/Atomic.h"
-#include "Engine/Runtime/Threading/ThreadEnsure.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <exception>
 #include <optional>
@@ -232,8 +232,7 @@ namespace ve
         void EnqueueInternalCommand(RenderSystemImpl& impl, RenderCommand command) noexcept
         {
             ErrorCode pushResult = impl.commandQueue.Push(std::move(command));
-            VE_ASSERT_MESSAGE(pushResult == ErrorCode::None,
-                              "RenderSystem failed to enqueue an internal render command.");
+            VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "RenderSystem failed to enqueue an internal render command.");
             impl.commandSemaphore.Release();
         }
 
@@ -296,8 +295,7 @@ namespace ve
             impl_->sceneThreadRenderThreadFrameEndSync->Reset();
         }
 
-        ErrorCode startResult = impl_->thread.Start(initParam.threadName.empty() ? ThreadDesc{"VEngineRenderThread"}
-                                                                                 : ThreadDesc{initParam.threadName},
+        ErrorCode startResult = impl_->thread.Start(initParam.threadName.empty() ? ThreadDesc{"VEngineRenderThread"} : ThreadDesc{initParam.threadName},
                                                     [this]() { RenderThreadLoop(*impl_); });
 
         if (startResult != ErrorCode::None)
@@ -334,8 +332,7 @@ namespace ve
 
     void RenderSystem::SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept
     {
-        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire),
-                          "SetSceneThreadRenderThreadFrameEndSync requires RenderSystem to be stopped.");
+        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire), "SetSceneThreadRenderThreadFrameEndSync requires RenderSystem to be stopped.");
         impl_->sceneThreadRenderThreadFrameEndSync = sync;
     }
 
@@ -343,10 +340,7 @@ namespace ve
     {
         VE_ASSERT_SCENE_THREAD();
         EnqueueCommand("RenderSystemFrameEndFenceSignal",
-                       [sync = impl_->sceneThreadRenderThreadFrameEndSync, fenceIndex]()
-                       {
-                           sync->NotifyRenderThreadFrameEnd(fenceIndex);
-                       });
+                       [sync = impl_->sceneThreadRenderThreadFrameEndSync, fenceIndex]() { sync->NotifyRenderThreadFrameEnd(fenceIndex); });
     }
 
     ErrorCode RenderSystem::InitializeDevice(const RenderDeviceDesc& desc)
@@ -366,8 +360,7 @@ namespace ve
                                       }
 
                                       impl_->device = std::move(device);
-                                      impl_->backendValue.store(static_cast<int>(desc.backend),
-                                                                std::memory_order_release);
+                                      impl_->backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
                                       VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
                                       return ErrorCode::None;
                                   });
@@ -383,8 +376,7 @@ namespace ve
                                           return ErrorCode::InvalidState;
                                       }
 
-                                      outHandles.backend = static_cast<RenderBackend>(
-                                          impl_->backendValue.load(std::memory_order_acquire));
+                                      outHandles.backend = static_cast<RenderBackend>(impl_->backendValue.load(std::memory_order_acquire));
                                       outHandles.hasMainSwapchain = impl_->mainSwapchain != nullptr;
                                       outHandles.device = impl_->device->GetNativeDeviceHandle();
                                       outHandles.immediateContext = impl_->device->GetNativeImmediateContextHandle();
@@ -438,8 +430,7 @@ namespace ve
                                           return ErrorCode::InvalidState;
                                       }
 
-                                      std::unique_ptr<rhi::RhiSwapchain> swapchain =
-                                          impl_->device->CreateSwapchain(ToRhiSwapchainDesc(desc));
+                                      std::unique_ptr<rhi::RhiSwapchain> swapchain = impl_->device->CreateSwapchain(ToRhiSwapchainDesc(desc));
                                       if (swapchain == nullptr)
                                       {
                                           return ErrorCode::PlatformError;
@@ -506,8 +497,7 @@ namespace ve
                        });
     }
 
-    void RenderSystem::InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource,
-                                          RTMaterialResourceDesc desc)
+    void RenderSystem::InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource, RTMaterialResourceDesc desc)
     {
         VE_ASSERT_SCENE_THREAD();
         VE_ASSERT_MESSAGE(materialResource != nullptr, "RenderSystem::InitRenderResource requires a material resource.");
@@ -540,8 +530,7 @@ namespace ve
 
     void RenderSystem::Flush()
     {
-        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire),
-                          "RenderSystem::Flush requires RenderSystem to accept commands.");
+        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire), "RenderSystem::Flush requires RenderSystem to accept commands.");
 
         auto completed = std::make_shared<ManualResetEvent>(false);
         EnqueueCommand("RenderSystemFlush", [completed]() { completed->Set(); });
@@ -579,11 +568,9 @@ namespace ve
         VE_ASSERT_MESSAGE(function != nullptr, "RenderSystem::EnqueueCommand requires a callable function.");
 
         impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
-        auto submitCounterGuard =
-            MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
+        auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire),
-                          "RenderSystem::EnqueueCommand requires RenderSystem to accept commands.");
+        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire), "RenderSystem::EnqueueCommand requires RenderSystem to accept commands.");
 
         ErrorCode pushResult = impl_->commandQueue.Push(RenderCommand{std::move(debugName), std::move(function)});
         VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "RenderSystem failed to enqueue render command.");

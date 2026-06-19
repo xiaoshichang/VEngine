@@ -86,8 +86,7 @@ namespace ve
 
         void RemoveContinuation(JobState& dependency, const std::shared_ptr<JobState>& continuation)
         {
-            const auto iterator =
-                std::find(dependency.continuations.begin(), dependency.continuations.end(), continuation);
+            const auto iterator = std::find(dependency.continuations.begin(), dependency.continuations.end(), continuation);
             if (iterator != dependency.continuations.end())
             {
                 dependency.continuations.erase(iterator);
@@ -129,8 +128,7 @@ namespace ve
                 state->schedulerComplete = true;
                 for (const std::shared_ptr<JobState>& continuation : state->continuations)
                 {
-                    VE_ASSERT_MESSAGE(continuation->pendingDependencies > 0,
-                                      "Job continuation dependency count underflowed.");
+                    VE_ASSERT_MESSAGE(continuation->pendingDependencies > 0, "Job continuation dependency count underflowed.");
 
                     --continuation->pendingDependencies;
                     if (continuation->pendingDependencies == 0)
@@ -344,9 +342,7 @@ namespace ve
         return Result<JobFunction>::Success(std::move(function));
     }
 
-    Result<JobHandle> JobSystem::ScheduleFunction(const JobDesc& desc,
-                                                  Result<JobFunction> functionResult,
-                                                  std::span<const JobHandle> dependencies)
+    Result<JobHandle> JobSystem::ScheduleFunction(const JobDesc& desc, Result<JobFunction> functionResult, std::span<const JobHandle> dependencies)
     {
         if (!functionResult)
         {
@@ -408,8 +404,7 @@ namespace ve
         return Result<JobHandle>::Success(JobHandle(std::move(state)));
     }
 
-    Result<JobHandle>
-    JobSystem::ParallelForFunction(const JobDesc& desc, SizeT itemCount, SizeT batchSize, IndexedJobFunction function)
+    Result<JobHandle> JobSystem::ParallelForFunction(const JobDesc& desc, SizeT itemCount, SizeT batchSize, IndexedJobFunction function)
     {
         if (!function)
         {
