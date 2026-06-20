@@ -54,10 +54,9 @@ namespace ve
 
         /// Records all render passes for this renderer into an already-begun command list.
         ///
-        /// The caller owns the command list frame lifetime (`Begin`/`End`) and the main swapchain. `BaseRenderer`
-        /// builds a per-frame context, lets each pass declare its attachments, begins each render pass, executes it,
-        /// and closes it before returning. Renderer failures are treated as engine invariants: this function asserts
-        /// and safely stops recording the renderer instead of returning an `ErrorCode`.
+        /// The caller owns the command list frame lifetime (`Begin`/`End`) and the main swapchain through
+        /// FrameRenderPipelineData. BaseRenderer keeps a reference to that frame data only during this call; pass-local
+        /// RenderPassData is created, used, and destroyed for each pass.
         void RenderScene(const FrameRenderPipelineData& frameData);
 
         /// Returns true only while RenderScene is actively building or recording passes.
@@ -65,10 +64,7 @@ namespace ve
         /// This is mainly a guard for renderer mutation APIs such as AddRenderPass and ClearRenderPasses.
         [[nodiscard]] bool IsFrameActive() const noexcept;
 
-        /// Returns the renderer data built for the currently active scene render, or the most recently built data.
-        ///
-        /// Render passes should prefer the RenderPassContext they receive during execution. This accessor exists for
-        /// diagnostics and tightly-scoped renderer extensions that need to inspect the current renderer state.
+        /// Returns this renderer's lifetime data and current recording state.
         [[nodiscard]] const RendererData& GetRendererData() const noexcept;
 
     protected:
@@ -102,21 +98,21 @@ namespace ve
         void ClearRenderPasses() noexcept;
 
     private:
-        void BuildRendererData(const FrameRenderPipelineData& frameData) noexcept;
+        void RefreshRendererSceneData() noexcept;
         void UpdateRenderWorld();
         void BuildVisibleDrawLists();
         void BeginSceneRender(const FrameRenderPipelineData& frameData);
         void ExecutePassesInOrder();
         void EndSceneRender();
-        void BuildPassData();
-        void BeginCurrentPass();
+        [[nodiscard]] RenderPassData BuildPassData(RenderPass& pass);
+        [[nodiscard]] bool BeginPass(const RenderPassData& passData);
 
         std::shared_ptr<RTScene> scene_;
         std::shared_ptr<RTCamera> overrideCamera_;
         std::vector<std::unique_ptr<RenderPass>> passes_;
-        std::vector<RenderPassData> renderPassData_;
         RendererData rendererData_ = {};
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
+        const FrameRenderPipelineData* frameRenderData_ = nullptr;
     };
 
     class ForwardRenderer final : public BaseRenderer

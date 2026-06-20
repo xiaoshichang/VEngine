@@ -364,7 +364,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
                 rhi::RhiDevice& device = context.GetDevice();
 
-                ShaderManager* shaderManager = context.GetRendererData().shaderManager;
+                ShaderManager* shaderManager = context.GetFrameData().shaderManager;
                 VE_ASSERT_MESSAGE(shaderManager != nullptr, "OpaqueScenePass requires a ShaderManager.");
 
                 rhi::RhiShaderModuleDesc vertexShaderDesc = {};
@@ -462,7 +462,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
                     return target_.colorTexture->GetDesc().colorFormat;
                 }
 
-                return context.GetRendererData().mainColorFormat;
+                VE_ASSERT(context.GetFrameData().mainSwapchain != nullptr);
+                return context.GetFrameData().mainSwapchain->GetColorFormat();
             }
 
             RendererRenderTarget target_;
@@ -527,26 +528,13 @@ float4 PSMain(VSOutput input) : SV_TARGET
     {
         VE_ASSERT_MESSAGE(!rendererData_.active, "BaseRenderer::ClearRenderPasses requires no active renderer.");
         passes_.clear();
-        renderPassData_.clear();
     }
 
-    void BaseRenderer::BuildRendererData(const FrameRenderPipelineData& frameData) noexcept
+    void BaseRenderer::RefreshRendererSceneData() noexcept
     {
-        VE_ASSERT(frameData.device != nullptr);
-        VE_ASSERT(frameData.commandList != nullptr);
-        VE_ASSERT(frameData.mainSwapchain != nullptr);
-        VE_ASSERT(frameData.shaderManager != nullptr);
-
-        rendererData_.frameIndex = frameData.frameIndex;
-        rendererData_.mainSurfaceExtent = frameData.mainSwapchain->GetExtent();
-        rendererData_.mainColorFormat = frameData.mainSwapchain->GetColorFormat();
         rendererData_.scene = scene_;
         rendererData_.camera = overrideCamera_ != nullptr || scene_ == nullptr ? overrideCamera_ : FindFrameCamera(*scene_);
         rendererData_.clearColor = rendererData_.camera != nullptr ? rendererData_.camera->GetDesc().clearColor : ResolveFrameClearColor(scene_);
-        rendererData_.device = frameData.device;
-        rendererData_.commandList = frameData.commandList;
-        rendererData_.mainSwapchain = frameData.mainSwapchain;
-        rendererData_.shaderManager = frameData.shaderManager;
         rendererData_.activeRenderPassIndex = 0;
         rendererData_.active = false;
         rendererData_.renderPassOpen = false;
@@ -565,11 +553,15 @@ float4 PSMain(VSOutput input) : SV_TARGET
     void BaseRenderer::BeginSceneRender(const FrameRenderPipelineData& frameData)
     {
         VE_ASSERT_MESSAGE(!rendererData_.active, "BaseRenderer::BeginSceneRender requires no active renderer.");
+        VE_ASSERT(frameData.device != nullptr);
+        VE_ASSERT(frameData.commandList != nullptr);
+        VE_ASSERT(frameData.mainSwapchain != nullptr);
+        VE_ASSERT(frameData.shaderManager != nullptr);
 
-        BuildRendererData(frameData);
+        frameRenderData_ = &frameData;
+        RefreshRendererSceneData();
         UpdateRenderWorld();
         BuildVisibleDrawLists();
-        BuildPassData();
 
         rendererData_.activeRenderPassIndex = 0;
         rendererData_.active = true;
@@ -579,29 +571,24 @@ float4 PSMain(VSOutput input) : SV_TARGET
     void BaseRenderer::ExecutePassesInOrder()
     {
         VE_ASSERT_MESSAGE(rendererData_.active, "BaseRenderer::ExecutePassesInOrder requires an active renderer.");
-        VE_ASSERT_MESSAGE(rendererData_.commandList != nullptr, "BaseRenderer::ExecutePassesInOrder requires an active command list.");
+        VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer::ExecutePassesInOrder requires active frame data.");
+        VE_ASSERT_MESSAGE(frameRenderData_->commandList != nullptr, "BaseRenderer::ExecutePassesInOrder requires an active command list.");
 
-        while (rendererData_.activeRenderPassIndex < renderPassData_.size())
+        while (rendererData_.activeRenderPassIndex < passes_.size())
         {
-            if (!rendererData_.renderPassOpen)
-            {
-                BeginCurrentPass();
-                if (!rendererData_.renderPassOpen)
-                {
-                    return;
-                }
-            }
-
-            RenderPassData& passData = renderPassData_[rendererData_.activeRenderPassIndex];
             std::unique_ptr<RenderPass>& pass = passes_[rendererData_.activeRenderPassIndex];
             VE_ASSERT(pass != nullptr);
 
-            VE_ASSERT(rendererData_.device != nullptr);
-            RenderPassContext passContext(
-                *rendererData_.device, *rendererData_.commandList, rendererData_, passData.renderPassDesc, passData.viewport, passData.scissorRect);
+            RenderPassData passData = BuildPassData(*pass);
+            if (!BeginPass(passData))
+            {
+                return;
+            }
+
+            RenderPassContext passContext(*frameRenderData_, *this, passData);
             pass->Execute(passContext);
 
-            rendererData_.commandList->EndRenderPass();
+            frameRenderData_->commandList->EndRenderPass();
             rendererData_.renderPassOpen = false;
             ++rendererData_.activeRenderPassIndex;
         }
@@ -610,60 +597,54 @@ float4 PSMain(VSOutput input) : SV_TARGET
     void BaseRenderer::EndSceneRender()
     {
         VE_ASSERT_MESSAGE(rendererData_.active, "BaseRenderer::EndSceneRender requires an active scene render.");
-        VE_ASSERT(rendererData_.commandList != nullptr);
+        VE_ASSERT(frameRenderData_ != nullptr);
+        VE_ASSERT(frameRenderData_->commandList != nullptr);
 
         if (rendererData_.renderPassOpen)
         {
-            rendererData_.commandList->EndRenderPass();
+            frameRenderData_->commandList->EndRenderPass();
             rendererData_.renderPassOpen = false;
         }
 
-        rendererData_.commandList = nullptr;
-        rendererData_.device = nullptr;
-        rendererData_.mainSwapchain = nullptr;
+        frameRenderData_ = nullptr;
         rendererData_.activeRenderPassIndex = 0;
         rendererData_.active = false;
     }
 
-    void BaseRenderer::BuildPassData()
+    RenderPassData BaseRenderer::BuildPassData(RenderPass& pass)
     {
-        renderPassData_.clear();
-        renderPassData_.reserve(passes_.size());
-
+        VE_ASSERT(frameRenderData_ != nullptr);
         RenderPassBuilder builder;
-        for (const std::unique_ptr<RenderPass>& pass : passes_)
-        {
-            VE_ASSERT(pass != nullptr);
-            builder.Reset(pass->GetName(), rendererData_);
-            pass->Setup(builder);
+        builder.Reset(pass.GetName(), *frameRenderData_, rendererData_);
+        pass.Setup(builder);
 
-            RenderPassData passData = {};
-            passData.renderPassDesc = builder.GetRenderPassDesc();
-            passData.viewport = builder.GetViewport();
-            passData.scissorRect = builder.GetScissor();
-            renderPassData_.push_back(passData);
-        }
+        RenderPassData passData = {};
+        passData.renderPassDesc = builder.GetRenderPassDesc();
+        passData.viewport = builder.GetViewport();
+        passData.scissorRect = builder.GetScissor();
+        return passData;
     }
 
-    void BaseRenderer::BeginCurrentPass()
+    bool BaseRenderer::BeginPass(const RenderPassData& passData)
     {
         VE_ASSERT(rendererData_.active);
-        VE_ASSERT(rendererData_.commandList != nullptr);
-        VE_ASSERT(rendererData_.mainSwapchain != nullptr);
-        VE_ASSERT(rendererData_.activeRenderPassIndex < renderPassData_.size());
+        VE_ASSERT(frameRenderData_ != nullptr);
+        VE_ASSERT(frameRenderData_->commandList != nullptr);
+        VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
+        VE_ASSERT(rendererData_.activeRenderPassIndex < passes_.size());
         VE_ASSERT(!rendererData_.renderPassOpen);
 
-        const RenderPassData& passData = renderPassData_[rendererData_.activeRenderPassIndex];
-        const bool beganRenderPass = rendererData_.commandList->BeginRenderPass(*rendererData_.mainSwapchain, passData.renderPassDesc);
+        const bool beganRenderPass = frameRenderData_->commandList->BeginRenderPass(*frameRenderData_->mainSwapchain, passData.renderPassDesc);
         VE_ASSERT_MESSAGE(beganRenderPass, "BaseRenderer failed to begin render pass.");
         if (!beganRenderPass)
         {
-            return;
+            return false;
         }
 
-        rendererData_.commandList->SetViewport(passData.viewport);
-        rendererData_.commandList->SetScissor(passData.scissorRect);
+        frameRenderData_->commandList->SetViewport(passData.viewport);
+        frameRenderData_->commandList->SetScissor(passData.scissorRect);
         rendererData_.renderPassOpen = true;
+        return true;
     }
 
     ForwardRenderer::ForwardRenderer(ForwardRendererDesc desc)

@@ -4,32 +4,25 @@
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Render/RenderFramePipelineData.h"
 
 #include <memory>
 
 namespace ve
 {
+    class BaseRenderer;
     class RTCamera;
     class RTScene;
-    class ShaderManager;
 
-    /// Data owned by one Renderer invocation.
+    /// Data owned by one renderer instance across its lifetime.
     ///
-    /// Its lifetime is one scene-tree render inside a frame pipeline. Frame-wide RHI state is seeded by
-    /// FrameRenderPipelineData; the renderer fills scene, camera, target surface, and pass-progress fields before
-    /// executing its RenderPass list.
+    /// It stores renderer state and render-scene choices that are meaningful beyond a single pass. Frame-wide RHI data
+    /// stays in FrameRenderPipelineData and pass-local attachment state stays in RenderPassData.
     struct RendererData
     {
-        UInt64 frameIndex = 0;
-        rhi::RhiExtent2D mainSurfaceExtent = {};
-        rhi::RhiFormat mainColorFormat = rhi::RhiFormat::Bgra8Unorm;
         rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
         std::shared_ptr<RTScene> scene;
         std::shared_ptr<RTCamera> camera;
-        rhi::RhiDevice* device = nullptr;
-        rhi::RhiCommandList* commandList = nullptr;
-        rhi::RhiSwapchain* mainSwapchain = nullptr;
-        ShaderManager* shaderManager = nullptr;
         UInt32 activeRenderPassIndex = 0;
         bool active = false;
         bool renderPassOpen = false;
@@ -52,7 +45,7 @@ namespace ve
     public:
         RenderPassBuilder() = default;
 
-        void Reset(const char* passName, const RendererData& rendererData) noexcept;
+        void Reset(const char* passName, const FrameRenderPipelineData& frameData, const RendererData& rendererData) noexcept;
 
         void SetRenderArea(const rhi::RhiRenderArea& renderArea) noexcept;
         void SetViewport(const rhi::RhiViewport& viewport) noexcept;
@@ -69,11 +62,13 @@ namespace ve
                                        rhi::RhiDepthStencilClearValue clearValue) noexcept;
 
         [[nodiscard]] const rhi::RhiRenderPassDesc& GetRenderPassDesc() const noexcept;
+        [[nodiscard]] const FrameRenderPipelineData& GetFrameData() const noexcept;
         [[nodiscard]] const RendererData& GetRendererData() const noexcept;
         [[nodiscard]] const rhi::RhiViewport& GetViewport() const noexcept;
         [[nodiscard]] const rhi::RhiScissorRect& GetScissor() const noexcept;
 
     private:
+        const FrameRenderPipelineData* frameData_ = nullptr;
         const RendererData* rendererData_ = nullptr;
         rhi::RhiRenderPassDesc renderPassDesc_ = {};
         rhi::RhiViewport viewport_ = {};
@@ -84,27 +79,24 @@ namespace ve
     class RenderPassContext : public NonCopyable
     {
     public:
-        RenderPassContext(rhi::RhiDevice& device,
-                          rhi::RhiCommandList& commandList,
-                          const RendererData& rendererData,
-                          const rhi::RhiRenderPassDesc& renderPassDesc,
-                          const rhi::RhiViewport& viewport,
-                          const rhi::RhiScissorRect& scissorRect) noexcept;
+        RenderPassContext(const FrameRenderPipelineData& frameData,
+                          BaseRenderer& renderer,
+                          const RenderPassData& passData) noexcept;
 
+        [[nodiscard]] const FrameRenderPipelineData& GetFrameData() const noexcept;
+        [[nodiscard]] BaseRenderer& GetRenderer() noexcept;
         [[nodiscard]] rhi::RhiDevice& GetDevice() noexcept;
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() noexcept;
         [[nodiscard]] const RendererData& GetRendererData() const noexcept;
+        [[nodiscard]] const RenderPassData& GetPassData() const noexcept;
         [[nodiscard]] const rhi::RhiRenderPassDesc& GetRenderPassDesc() const noexcept;
         [[nodiscard]] const rhi::RhiViewport& GetViewport() const noexcept;
         [[nodiscard]] const rhi::RhiScissorRect& GetScissor() const noexcept;
 
     private:
-        rhi::RhiDevice* device_ = nullptr;
-        rhi::RhiCommandList* commandList_ = nullptr;
-        const RendererData* rendererData_ = nullptr;
-        const rhi::RhiRenderPassDesc* renderPassDesc_ = nullptr;
-        rhi::RhiViewport viewport_ = {};
-        rhi::RhiScissorRect scissorRect_ = {};
+        const FrameRenderPipelineData* frameData_ = nullptr;
+        BaseRenderer* renderer_ = nullptr;
+        const RenderPassData* passData_ = nullptr;
     };
 
     /// Long-lived renderer pass implementation. Per-frame attachment state is declared through RenderPassBuilder.
