@@ -9,7 +9,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
-#include "Engine/Runtime/Render/SceneGridRenderPass.h"
+#include "Engine/Runtime/Render/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <imgui.h>

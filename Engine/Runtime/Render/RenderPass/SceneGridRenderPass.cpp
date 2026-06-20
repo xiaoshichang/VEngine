@@ -1,4 +1,4 @@
-#include "Engine/Runtime/Render/SceneGridRenderPass.h"
+#include "Engine/Runtime/Render/RenderPass/SceneGridRenderPass.h"
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Math.h"

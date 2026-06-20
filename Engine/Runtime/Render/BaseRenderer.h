@@ -5,7 +5,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
-#include "Engine/Runtime/Render/RenderPass.h"
+#include "Engine/Runtime/Render/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 

@@ -6,7 +6,7 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/BaseRenderer.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
-#include "Engine/Runtime/Render/RenderPass.h"
+#include "Engine/Runtime/Render/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderTarget.h"
 #include "Engine/Runtime/Render/RenderTexture.h"

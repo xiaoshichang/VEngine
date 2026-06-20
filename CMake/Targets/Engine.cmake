@@ -30,11 +30,12 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderTexture.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
-            Engine/Runtime/Render/RenderPass.cpp
+            Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.cpp
+            Engine/Runtime/Render/RenderPass/RenderPass.cpp
+            Engine/Runtime/Render/RenderPass/SceneGridRenderPass.cpp
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
             Engine/Runtime/Render/RenderSystem.cpp
-            Engine/Runtime/Render/SceneGridRenderPass.cpp
             Engine/Runtime/Render/ShaderManager.cpp
             Engine/Runtime/Render/ViewportClient.cpp
             Engine/Runtime/Resource/AssetID.cpp
@@ -95,11 +96,12 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderTexture.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderFramePipeline.h
-            Engine/Runtime/Render/RenderPass.h
+            Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.h
+            Engine/Runtime/Render/RenderPass/RenderPass.h
+            Engine/Runtime/Render/RenderPass/SceneGridRenderPass.h
             Engine/Runtime/Render/RenderResource.h
             Engine/Runtime/Render/RenderScene.h
             Engine/Runtime/Render/RenderShaderIDs.h
-            Engine/Runtime/Render/SceneGridRenderPass.h
             Engine/Runtime/Render/RenderSystem.h
             Engine/Runtime/Render/ShaderManager.h
             Engine/Runtime/Render/ViewportClient.h
