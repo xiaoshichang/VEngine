@@ -262,6 +262,7 @@ namespace ve::rhi
         RhiFormat depthFormat = RhiFormat::Depth32Float;
         bool depthTestEnabled = false;
         bool depthWriteEnabled = false;
+        bool alphaBlendEnabled = false;
         const char* debugName = nullptr;
     };
 } // namespace ve::rhi

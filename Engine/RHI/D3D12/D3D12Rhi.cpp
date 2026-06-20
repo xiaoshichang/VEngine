@@ -1081,6 +1081,13 @@ namespace ve::rhi
                 rasterizerDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
                 D3D12_BLEND_DESC blendDesc = {};
+                blendDesc.RenderTarget[0].BlendEnable = desc.alphaBlendEnabled ? TRUE : FALSE;
+                blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+                blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+                blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+                blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+                blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+                blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
                 blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 
                 D3D12_DEPTH_STENCIL_DESC depthStencilDesc = {};

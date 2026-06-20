@@ -34,6 +34,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
             Engine/Runtime/Render/RenderSystem.cpp
+            Engine/Runtime/Render/SceneGridRenderPass.cpp
             Engine/Runtime/Render/ShaderManager.cpp
             Engine/Runtime/Render/ViewportClient.cpp
             Engine/Runtime/Resource/AssetID.cpp
@@ -97,6 +98,8 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderPass.h
             Engine/Runtime/Render/RenderResource.h
             Engine/Runtime/Render/RenderScene.h
+            Engine/Runtime/Render/RenderShaderIDs.h
+            Engine/Runtime/Render/SceneGridRenderPass.h
             Engine/Runtime/Render/RenderSystem.h
             Engine/Runtime/Render/ShaderManager.h
             Engine/Runtime/Render/ViewportClient.h

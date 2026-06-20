@@ -314,13 +314,15 @@ namespace ve::rhi
                                ComPtr<ID3D11PixelShader> pixelShader,
                                ComPtr<ID3D11InputLayout> inputLayout,
                                ComPtr<ID3D11RasterizerState> rasterizerState,
-                               ComPtr<ID3D11DepthStencilState> depthStencilState)
+                               ComPtr<ID3D11DepthStencilState> depthStencilState,
+                               ComPtr<ID3D11BlendState> blendState)
                 : topology_(topology)
                 , vertexShader_(std::move(vertexShader))
                 , pixelShader_(std::move(pixelShader))
                 , inputLayout_(std::move(inputLayout))
                 , rasterizerState_(std::move(rasterizerState))
                 , depthStencilState_(std::move(depthStencilState))
+                , blendState_(std::move(blendState))
             {
             }
 
@@ -335,6 +337,8 @@ namespace ve::rhi
                 context->IASetInputLayout(inputLayout_.Get());
                 context->RSSetState(rasterizerState_.Get());
                 context->OMSetDepthStencilState(depthStencilState_.Get(), 0);
+                const float blendFactor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+                context->OMSetBlendState(blendState_.Get(), blendFactor, 0xFFFFFFFFu);
                 context->VSSetShader(vertexShader_.Get(), nullptr, 0);
                 context->PSSetShader(pixelShader_.Get(), nullptr, 0);
             }
@@ -346,6 +350,7 @@ namespace ve::rhi
             ComPtr<ID3D11InputLayout> inputLayout_;
             ComPtr<ID3D11RasterizerState> rasterizerState_;
             ComPtr<ID3D11DepthStencilState> depthStencilState_;
+            ComPtr<ID3D11BlendState> blendState_;
         };
 
         class D3D11Swapchain final : public RhiSwapchain
@@ -985,7 +990,25 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11PipelineState>(desc.topology, vertexShader, pixelShader, inputLayout, rasterizerState, depthStencilState);
+                D3D11_BLEND_DESC blendDesc = {};
+                blendDesc.RenderTarget[0].BlendEnable = desc.alphaBlendEnabled ? TRUE : FALSE;
+                blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+                blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+                blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+                blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+                blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+                blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+                blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+                ComPtr<ID3D11BlendState> blendState;
+                result = device_->CreateBlendState(&blendDesc, &blendState);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateBlendState", result));
+                    return nullptr;
+                }
+
+                return std::make_unique<D3D11PipelineState>(desc.topology, vertexShader, pixelShader, inputLayout, rasterizerState, depthStencilState, blendState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

@@ -6,11 +6,23 @@
 #include "Engine/Runtime/Core/Types.h"
 
 #include <memory>
+#include <string>
 #include <unordered_map>
 
 namespace ve
 {
-    using ShaderID = UInt64;
+    struct ShaderID
+    {
+        std::string name;
+        Int32 variant = 0;
+
+        [[nodiscard]] bool operator==(const ShaderID& other) const noexcept;
+    };
+
+    struct ShaderIDHash
+    {
+        [[nodiscard]] SizeT operator()(const ShaderID& id) const noexcept;
+    };
 
     class ShaderManager final : public NonMovable
     {
@@ -24,6 +36,6 @@ namespace ve
         void Clear() noexcept;
 
     private:
-        std::unordered_map<ShaderID, std::unique_ptr<rhi::RhiShaderModule>> shaders_;
+        std::unordered_map<ShaderID, std::unique_ptr<rhi::RhiShaderModule>, ShaderIDHash> shaders_;
     };
 } // namespace ve

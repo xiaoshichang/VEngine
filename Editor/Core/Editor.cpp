@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Render/SceneGridRenderPass.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <imgui.h>
@@ -228,12 +229,18 @@ namespace ve::editor
         std::shared_ptr<RTRenderTexture> sceneViewTexture;
         std::shared_ptr<RTCamera> sceneViewCameraSnapshot;
         rhi::RhiFillMode sceneViewFillMode = rhi::RhiFillMode::Solid;
+        bool sceneViewGridEnabled = false;
+        Float32 sceneViewGridOpacity = 0.45f;
+        Float32 sceneViewGridUnitSize = 1.0f;
         std::shared_ptr<RTRenderTexture> gameViewTexture;
         if (mainView_ == MainView::ProjectEditing)
         {
             sceneViewTexture = projectEditingView_->GetSceneViewTexture();
             sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraDesc());
             sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
+            sceneViewGridEnabled = projectEditingView_->IsSceneViewGridEnabled();
+            sceneViewGridOpacity = projectEditingView_->GetSceneViewGridOpacity();
+            sceneViewGridUnitSize = projectEditingView_->GetSceneViewGridUnitSize();
             gameViewTexture = projectEditingView_->GetGameViewTexture();
         }
 
@@ -265,17 +272,36 @@ namespace ve::editor
         {
             ForwardRendererDesc rendererDesc = {};
             rendererDesc.scene = renderScene;
-            rendererDesc.camera = std::move(sceneViewCameraSnapshot);
-            rendererDesc.target.colorTexture = std::move(sceneViewTexture);
+            rendererDesc.camera = sceneViewCameraSnapshot;
+            rendererDesc.target.colorTexture = sceneViewTexture;
             rendererDesc.fillMode = sceneViewFillMode;
+            rendererDesc.target.colorLoadAction = rhi::RhiLoadAction::Load;
+            rendererDesc.target.colorStoreAction = rhi::RhiStoreAction::Store;
             pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+
+            if (sceneViewGridEnabled)
+            {
+                SceneGridRenderPassDesc gridPassDesc = {};
+                gridPassDesc.colorTexture = sceneViewTexture;
+                gridPassDesc.opacity = sceneViewGridOpacity;
+                gridPassDesc.unitSize = sceneViewGridUnitSize;
+                ForwardRendererDesc gridRendererDesc = {};
+                gridRendererDesc.scene = renderScene;
+                gridRendererDesc.camera = sceneViewCameraSnapshot;
+                gridRendererDesc.target.colorTexture = sceneViewTexture;
+                gridRendererDesc.target.colorLoadAction = rhi::RhiLoadAction::Load;
+                gridRendererDesc.target.colorStoreAction = rhi::RhiStoreAction::Store;
+                gridRendererDesc.addOpaquePass = false;
+                gridRendererDesc.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassDesc)));
+                pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(gridRendererDesc)));
+            }
         }
 
         if (gameViewTexture != nullptr)
         {
             ForwardRendererDesc rendererDesc = {};
-            rendererDesc.scene = std::move(renderScene);
-            rendererDesc.target.colorTexture = std::move(gameViewTexture);
+            rendererDesc.scene = renderScene;
+            rendererDesc.target.colorTexture = gameViewTexture;
             pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
         }
 

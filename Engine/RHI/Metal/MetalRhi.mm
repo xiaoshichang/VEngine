@@ -669,6 +669,13 @@ namespace ve::rhi
                 pipelineDescriptor.fragmentFunction = fragmentShaderModule->GetFunction();
                 pipelineDescriptor.vertexDescriptor = vertexDescriptor;
                 pipelineDescriptor.colorAttachments[0].pixelFormat = ToMetalPixelFormat(desc.colorFormat);
+                pipelineDescriptor.colorAttachments[0].blendingEnabled = desc.alphaBlendEnabled ? YES : NO;
+                pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+                pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+                pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+                pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+                pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+                pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
                 pipelineDescriptor.depthAttachmentPixelFormat = desc.depthTestEnabled ? ToMetalPixelFormat(desc.depthFormat) : MTLPixelFormatInvalid;
 
                 NSError* error = nil;

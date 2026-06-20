@@ -26,6 +26,9 @@ namespace ve::editor
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewTexture() const noexcept;
         [[nodiscard]] RTCameraDesc GetSceneViewCameraDesc() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetSceneViewFillMode() const noexcept;
+        [[nodiscard]] bool IsSceneViewGridEnabled() const noexcept;
+        [[nodiscard]] Float32 GetSceneViewGridOpacity() const noexcept;
+        [[nodiscard]] Float32 GetSceneViewGridUnitSize() const noexcept;
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewTexture() const noexcept;
 
     private:

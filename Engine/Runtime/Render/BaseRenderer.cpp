@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/RenderResource.h"
+#include "Engine/Runtime/Render/RenderShaderIDs.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -82,9 +83,6 @@ float4 PSMain(VSOutput input) : SV_TARGET
         static_assert(sizeof(OpaqueSceneObjectUniformData) == 256);
         static_assert(sizeof(OpaqueSceneLightUniformData) == 256);
         static_assert(sizeof(RTMaterialUniformData) == 256);
-
-        constexpr ShaderID OpaqueSceneVertexShaderID = 1;
-        constexpr ShaderID OpaqueSceneFragmentShaderID = 2;
 
         [[nodiscard]] rhi::RhiBufferDesc MakeUniformBufferDesc(UInt64 size, const void* initialData, const char* debugName) noexcept
         {
@@ -373,7 +371,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 vertexShaderDesc.entryPoint = "VSMain";
                 vertexShaderDesc.debugName = "OpaqueSceneVertexShader";
 
-                rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(device, OpaqueSceneVertexShaderID, vertexShaderDesc);
+                rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(device, RenderShaderIDs::OpaqueSceneVertex, vertexShaderDesc);
                 VE_ASSERT_MESSAGE(vertexShader != nullptr, "OpaqueScenePass failed to get vertex shader.");
 
                 rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
@@ -382,7 +380,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 fragmentShaderDesc.entryPoint = "PSMain";
                 fragmentShaderDesc.debugName = "OpaqueSceneFragmentShader";
 
-                rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(device, OpaqueSceneFragmentShaderID, fragmentShaderDesc);
+                rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(device, RenderShaderIDs::OpaqueSceneFragment, fragmentShaderDesc);
                 VE_ASSERT_MESSAGE(fragmentShader != nullptr, "OpaqueScenePass failed to get fragment shader.");
 
                 rhi::RhiVertexAttributeDesc positionAttribute = {};

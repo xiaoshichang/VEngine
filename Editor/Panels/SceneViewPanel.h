@@ -24,6 +24,9 @@ namespace ve::editor
         [[nodiscard]] RenderTexture& GetSceneViewTexture() noexcept;
         [[nodiscard]] RTCameraDesc GetSceneViewCameraDesc() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetFillMode() const noexcept;
+        [[nodiscard]] bool IsGridEnabled() const noexcept;
+        [[nodiscard]] Float32 GetGridOpacity() const noexcept;
+        [[nodiscard]] Float32 GetGridUnitSize() const noexcept;
 
     private:
         struct SceneViewCameraState
@@ -49,6 +52,13 @@ namespace ve::editor
             bool showAxis = true;
         };
 
+        struct SceneViewGridState
+        {
+            bool enabled = true;
+            Float32 opacity = 0.45f;
+            Int32 unitSizeIndex = 1;
+        };
+
         [[nodiscard]] const char* GetName() const noexcept override;
         void RenderContent() override;
 
@@ -56,6 +66,7 @@ namespace ve::editor
         void RenderCameraPopup();
         void RenderRenderPopup();
         void RenderOverlayPopup();
+        void RenderGridPopup();
         void RenderSceneViewOverlays(const ImVec2& imageMin, const ImVec2& imageSize);
         void RenderAxisOverlay(const ImVec2& imageMin, const ImVec2& imageSize);
         void UpdateCameraFromInput(bool viewportHovered, bool viewportClicked, bool viewportRightClicked);
@@ -74,6 +85,7 @@ namespace ve::editor
         Editor* activeEditor_ = nullptr;
         SceneViewCameraState camera_;
         SceneViewOverlayState overlays_;
+        SceneViewGridState grid_;
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
         bool sceneViewFocused_ = false;
         bool cameraLookActive_ = false;

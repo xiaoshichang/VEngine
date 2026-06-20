@@ -18,6 +18,7 @@ namespace ve::editor
         constexpr float ControlButtonWidth = 82.0f;
         constexpr float ControlButtonHeight = 0.0f;
         constexpr float PopupWidth = 320.0f;
+        constexpr float GridPopupWidth = 340.0f;
         constexpr float MaxPitchRadians = Math::HalfPi - 0.01f;
         constexpr float MaxMouseLookDelta = 128.0f;
         constexpr float CameraLookSmoothingSpeed = 48.0f;
@@ -27,6 +28,7 @@ namespace ve::editor
         constexpr float AxisOverlayDepthScale = 0.35f;
         constexpr float AxisOverlayLineThickness = 2.5f;
         constexpr float AxisOverlayDotRadius = 4.0f;
+        constexpr Float32 GridUnitSizes[] = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f};
 
         struct AxisOverlayEntry
         {
@@ -78,6 +80,12 @@ namespace ve::editor
         [[nodiscard]] bool AxisDepthLess(const AxisOverlayEntry& left, const AxisOverlayEntry& right) noexcept
         {
             return left.depth < right.depth;
+        }
+
+        [[nodiscard]] float GetGridUnitSizeByIndex(Int32 index) noexcept
+        {
+            const Int32 clampedIndex = std::clamp<Int32>(index, 0, static_cast<Int32>(IM_ARRAYSIZE(GridUnitSizes) - 1));
+            return GridUnitSizes[clampedIndex];
         }
     } // namespace
 
@@ -132,6 +140,21 @@ namespace ve::editor
     rhi::RhiFillMode SceneViewPanel::GetFillMode() const noexcept
     {
         return fillMode_;
+    }
+
+    bool SceneViewPanel::IsGridEnabled() const noexcept
+    {
+        return grid_.enabled;
+    }
+
+    Float32 SceneViewPanel::GetGridOpacity() const noexcept
+    {
+        return grid_.opacity;
+    }
+
+    Float32 SceneViewPanel::GetGridUnitSize() const noexcept
+    {
+        return GetGridUnitSizeByIndex(grid_.unitSizeIndex);
     }
 
     const char* SceneViewPanel::GetName() const noexcept
@@ -194,6 +217,13 @@ namespace ve::editor
             ImGui::OpenPopup("SceneViewOverlayPopup");
         }
         RenderOverlayPopup();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Grid", ImVec2(ControlButtonWidth, ControlButtonHeight)))
+        {
+            ImGui::OpenPopup("SceneViewGridPopup");
+        }
+        RenderGridPopup();
     }
 
     void SceneViewPanel::RenderCameraPopup()
@@ -276,6 +306,30 @@ namespace ve::editor
         }
 
         ImGui::Checkbox("Axis", &overlays_.showAxis);
+        ImGui::EndPopup();
+    }
+
+    void SceneViewPanel::RenderGridPopup()
+    {
+        ImGui::SetNextWindowSize(ImVec2(GridPopupWidth, 0.0f), ImGuiCond_Appearing);
+        if (!ImGui::BeginPopup("SceneViewGridPopup"))
+        {
+            return;
+        }
+
+        ImGui::Checkbox("Enable Grid", &grid_.enabled);
+
+        ImGui::BeginDisabled(!grid_.enabled);
+        ImGui::SliderFloat("Opacity", &grid_.opacity, 0.0f, 1.0f, "%.2f");
+
+        int unitSizeIndex = grid_.unitSizeIndex;
+        const char* unitLabels[] = {"0.25", "0.5", "1", "2", "4", "8"};
+        if (ImGui::Combo("Unit Size", &unitSizeIndex, unitLabels, IM_ARRAYSIZE(unitLabels)))
+        {
+            grid_.unitSizeIndex = unitSizeIndex;
+        }
+        ImGui::EndDisabled();
+
         ImGui::EndPopup();
     }
 

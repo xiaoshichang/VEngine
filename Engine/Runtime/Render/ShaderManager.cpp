@@ -3,10 +3,23 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <functional>
 #include <utility>
 
 namespace ve
 {
+    bool ShaderID::operator==(const ShaderID& other) const noexcept
+    {
+        return variant == other.variant && name == other.name;
+    }
+
+    SizeT ShaderIDHash::operator()(const ShaderID& id) const noexcept
+    {
+        const SizeT nameHash = std::hash<std::string>{}(id.name);
+        const SizeT variantHash = std::hash<Int32>{}(id.variant);
+        return nameHash ^ (variantHash + 0x9E3779B97F4A7C15ull + (nameHash << 6) + (nameHash >> 2));
+    }
+
     rhi::RhiShaderModule* ShaderManager::GetShader(ShaderID id) noexcept
     {
         const auto existing = shaders_.find(id);

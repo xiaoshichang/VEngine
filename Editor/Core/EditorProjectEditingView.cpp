@@ -66,6 +66,21 @@ namespace ve::editor
         return sceneViewPanel_.GetFillMode();
     }
 
+    bool ProjectEditingView::IsSceneViewGridEnabled() const noexcept
+    {
+        return sceneViewPanel_.IsGridEnabled();
+    }
+
+    Float32 ProjectEditingView::GetSceneViewGridOpacity() const noexcept
+    {
+        return sceneViewPanel_.GetGridOpacity();
+    }
+
+    Float32 ProjectEditingView::GetSceneViewGridUnitSize() const noexcept
+    {
+        return sceneViewPanel_.GetGridUnitSize();
+    }
+
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept
     {
         return gameViewPanel_.GetGameViewTexture().GetRTRenderTexture();
