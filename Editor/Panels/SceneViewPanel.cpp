@@ -21,6 +21,20 @@ namespace ve::editor
         constexpr float MaxPitchRadians = Math::HalfPi - 0.01f;
         constexpr float MaxMouseLookDelta = 128.0f;
         constexpr float CameraLookSmoothingSpeed = 48.0f;
+        constexpr float AxisOverlaySize = 96.0f;
+        constexpr float AxisOverlayPadding = 14.0f;
+        constexpr float AxisOverlayRadius = 28.0f;
+        constexpr float AxisOverlayDepthScale = 0.35f;
+        constexpr float AxisOverlayLineThickness = 2.5f;
+        constexpr float AxisOverlayDotRadius = 4.0f;
+
+        struct AxisOverlayEntry
+        {
+            const char* label = "";
+            Vector3 direction = Vector3::Zero();
+            ImU32 color = 0;
+            float depth = 0.0f;
+        };
 
         [[nodiscard]] std::array<float, 3> ToFloat3(const Vector3& value) noexcept
         {
@@ -54,6 +68,16 @@ namespace ve::editor
                 value -= 1.0f;
             }
             return value;
+        }
+
+        [[nodiscard]] ImVec2 ProjectAxisDirection(const Vector3& direction, const ImVec2& origin) noexcept
+        {
+            return ImVec2(origin.x + (direction.GetX() * AxisOverlayRadius), origin.y - (direction.GetY() * AxisOverlayRadius) + (direction.GetZ() * AxisOverlayRadius * AxisOverlayDepthScale));
+        }
+
+        [[nodiscard]] bool AxisDepthLess(const AxisOverlayEntry& left, const AxisOverlayEntry& right) noexcept
+        {
+            return left.depth < right.depth;
         }
     } // namespace
 
@@ -145,6 +169,7 @@ namespace ve::editor
         }
 
         ImGui::Image(ImTextureRef(static_cast<ImTextureID>(reinterpret_cast<intptr_t>(resourceView))), imageSize);
+        RenderSceneViewOverlays(ImGui::GetItemRectMin(), imageSize);
         UpdateCameraFromInput(ImGui::IsItemHovered(), ImGui::IsItemClicked(), ImGui::IsItemClicked(ImGuiMouseButton_Right));
     }
 
@@ -162,6 +187,13 @@ namespace ve::editor
             ImGui::OpenPopup("SceneViewRenderPopup");
         }
         RenderRenderPopup();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Overlay", ImVec2(ControlButtonWidth, ControlButtonHeight)))
+        {
+            ImGui::OpenPopup("SceneViewOverlayPopup");
+        }
+        RenderOverlayPopup();
     }
 
     void SceneViewPanel::RenderCameraPopup()
@@ -233,6 +265,76 @@ namespace ve::editor
         }
 
         ImGui::EndPopup();
+    }
+
+    void SceneViewPanel::RenderOverlayPopup()
+    {
+        ImGui::SetNextWindowSize(ImVec2(PopupWidth, 0.0f), ImGuiCond_Appearing);
+        if (!ImGui::BeginPopup("SceneViewOverlayPopup"))
+        {
+            return;
+        }
+
+        ImGui::Checkbox("Axis", &overlays_.showAxis);
+        ImGui::EndPopup();
+    }
+
+    void SceneViewPanel::RenderSceneViewOverlays(const ImVec2& imageMin, const ImVec2& imageSize)
+    {
+        if (overlays_.showAxis)
+        {
+            RenderAxisOverlay(imageMin, imageSize);
+        }
+    }
+
+    void SceneViewPanel::RenderAxisOverlay(const ImVec2& imageMin, const ImVec2& imageSize)
+    {
+        if (imageSize.x <= AxisOverlaySize || imageSize.y <= AxisOverlaySize)
+        {
+            return;
+        }
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        if (drawList == nullptr)
+        {
+            return;
+        }
+
+        const Matrix44 cameraLocalToWorld = BuildCameraLocalToWorld();
+        const Vector3 cameraRight = cameraLocalToWorld.TransformDirection(Vector3::UnitX()).Normalized();
+        const Vector3 cameraUp = cameraLocalToWorld.TransformDirection(Vector3::UnitY()).Normalized();
+        const Vector3 cameraForward = cameraLocalToWorld.TransformDirection(Vector3::UnitZ()).Normalized();
+
+        AxisOverlayEntry axes[] = {
+            AxisOverlayEntry{"X", Vector3(Vector3::Dot(Vector3::UnitX(), cameraRight), Vector3::Dot(Vector3::UnitX(), cameraUp), Vector3::Dot(Vector3::UnitX(), cameraForward)), IM_COL32(225, 72, 72, 255), 0.0f},
+            AxisOverlayEntry{"Y", Vector3(Vector3::Dot(Vector3::UnitY(), cameraRight), Vector3::Dot(Vector3::UnitY(), cameraUp), Vector3::Dot(Vector3::UnitY(), cameraForward)), IM_COL32(92, 190, 92, 255), 0.0f},
+            AxisOverlayEntry{"Z", Vector3(Vector3::Dot(Vector3::UnitZ(), cameraRight), Vector3::Dot(Vector3::UnitZ(), cameraUp), Vector3::Dot(Vector3::UnitZ(), cameraForward)), IM_COL32(86, 132, 235, 255), 0.0f},
+        };
+
+        for (AxisOverlayEntry& axis : axes)
+        {
+            axis.depth = axis.direction.GetZ();
+        }
+        std::sort(std::begin(axes), std::end(axes), AxisDepthLess);
+
+        const ImVec2 origin(imageMin.x + imageSize.x - AxisOverlayPadding - (AxisOverlaySize * 0.5f), imageMin.y + AxisOverlayPadding + (AxisOverlaySize * 0.5f));
+        const ImU32 panelColor = IM_COL32(24, 28, 34, 150);
+        const ImU32 borderColor = IM_COL32(255, 255, 255, 36);
+        const ImVec2 panelMin(origin.x - (AxisOverlaySize * 0.5f), origin.y - (AxisOverlaySize * 0.5f));
+        const ImVec2 panelMax(origin.x + (AxisOverlaySize * 0.5f), origin.y + (AxisOverlaySize * 0.5f));
+        drawList->AddRectFilled(panelMin, panelMax, panelColor, 6.0f);
+        drawList->AddRect(panelMin, panelMax, borderColor, 6.0f);
+
+        for (const AxisOverlayEntry& axis : axes)
+        {
+            const ImVec2 end = ProjectAxisDirection(axis.direction, origin);
+            const float depthAlpha = 0.55f + (Clamp(axis.depth, -1.0f, 1.0f) + 1.0f) * 0.225f;
+            const ImU32 color = (axis.color & IM_COL32(255, 255, 255, 0)) | (static_cast<ImU32>(255.0f * depthAlpha) << IM_COL32_A_SHIFT);
+
+            drawList->AddLine(origin, end, color, AxisOverlayLineThickness);
+            drawList->AddCircleFilled(end, AxisOverlayDotRadius, color);
+            drawList->AddText(ImVec2(end.x + 5.0f, end.y - 7.0f), color, axis.label);
+        }
     }
 
     void SceneViewPanel::UpdateCameraFromInput(bool viewportHovered, bool viewportClicked, bool viewportRightClicked)

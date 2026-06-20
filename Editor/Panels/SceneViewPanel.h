@@ -44,12 +44,20 @@ namespace ve::editor
             rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
         };
 
+        struct SceneViewOverlayState
+        {
+            bool showAxis = true;
+        };
+
         [[nodiscard]] const char* GetName() const noexcept override;
         void RenderContent() override;
 
         void RenderControlBar();
         void RenderCameraPopup();
         void RenderRenderPopup();
+        void RenderOverlayPopup();
+        void RenderSceneViewOverlays(const ImVec2& imageMin, const ImVec2& imageSize);
+        void RenderAxisOverlay(const ImVec2& imageMin, const ImVec2& imageSize);
         void UpdateCameraFromInput(bool viewportHovered, bool viewportClicked, bool viewportRightClicked);
         [[nodiscard]] bool ApplyCameraLookSmoothing(Float32 deltaSeconds) noexcept;
         void UpdateSceneViewCamera();
@@ -65,6 +73,7 @@ namespace ve::editor
         WindowExtent renderTargetExtent_ = {};
         Editor* activeEditor_ = nullptr;
         SceneViewCameraState camera_;
+        SceneViewOverlayState overlays_;
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
         bool sceneViewFocused_ = false;
         bool cameraLookActive_ = false;
