@@ -52,29 +52,37 @@ VSOutput VSMain(VSInput input)
 
 float GridLine(float coordinate, float spacing, float width)
 {
-    float halfSpacing = spacing * 0.5f;
-    float distanceToLine = abs(frac((coordinate + halfSpacing) / spacing) - 0.5f) * spacing;
-    return 1.0f - smoothstep(width, width * 2.0f, distanceToLine);
+    float scaledCoordinate = coordinate / spacing;
+    float distanceToLine = abs(frac(scaledCoordinate - 0.5f) - 0.5f);
+    float antiAlias = max(fwidth(scaledCoordinate), 0.0001f);
+    return 1.0f - smoothstep(0.0f, antiAlias * width, distanceToLine);
+}
+
+float AxisLine(float coordinate, float width)
+{
+    float antiAlias = max(fwidth(coordinate), 0.0001f);
+    return 1.0f - smoothstep(0.0f, antiAlias * width, abs(coordinate));
 }
 
 float4 PSMain(VSOutput input) : SV_TARGET
 {
     float unitSize = max(gridParams.x, 0.001f);
     float opacity = saturate(gridParams.y);
-    float lineWidth = max(gridParams.z, 0.001f);
+    float lineWidth = max(gridParams.z, 0.5f);
     float majorEvery = max(gridParams.w, 1.0f);
+    float distanceFade = 1.0f - saturate(length(input.worldPosition.xz) / 600.0f);
 
     float minorLine = max(GridLine(input.worldPosition.x, unitSize, lineWidth), GridLine(input.worldPosition.z, unitSize, lineWidth));
     float majorSpacing = unitSize * majorEvery;
     float majorLine = max(GridLine(input.worldPosition.x, majorSpacing, lineWidth * 1.35f), GridLine(input.worldPosition.z, majorSpacing, lineWidth * 1.35f));
-    float xAxis = GridLine(input.worldPosition.z, majorSpacing * 10000.0f, lineWidth * 1.8f);
-    float zAxis = GridLine(input.worldPosition.x, majorSpacing * 10000.0f, lineWidth * 1.8f);
+    float xAxis = AxisLine(input.worldPosition.z, lineWidth * 1.8f);
+    float zAxis = AxisLine(input.worldPosition.x, lineWidth * 1.8f);
 
     float4 color = minorColor;
     color = lerp(color, majorColor, saturate(majorLine));
     color = lerp(color, xAxisColor, saturate(xAxis));
     color = lerp(color, zAxisColor, saturate(zAxis));
-    color.a *= saturate(max(max(minorLine, majorLine), max(xAxis, zAxis)) * opacity);
+    color.a *= saturate(max(max(minorLine, majorLine), max(xAxis, zAxis)) * opacity * (0.25f + distanceFade * 0.75f));
     return color;
 }
 )";
@@ -183,7 +191,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             std::memcpy(data.worldViewProjection, values.data(), sizeof(data.worldViewProjection));
             data.gridParams[0] = std::max(desc.unitSize, 0.001f);
             data.gridParams[1] = Clamp(desc.opacity, 0.0f, 1.0f);
-            data.gridParams[2] = std::max(desc.unitSize * 0.025f, 0.002f);
+            data.gridParams[2] = 1.25f;
             data.gridParams[3] = 10.0f;
             return data;
         }
@@ -210,7 +218,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
             d.position[1] = 0.0f;
             d.position[2] = GridExtent;
 
-            return {a, b, c, a, c, d};
+            // Draw both windings so the grid remains visible regardless of backend front-face convention.
+            return {a, b, c, a, c, d, a, c, b, a, d, c};
         }
     } // namespace
 
@@ -256,7 +265,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *uniformBuffer_, 0);
         commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(RTMeshVertex), 0);
-        commandList.Draw(6, 0);
+        commandList.Draw(12, 0);
     }
 
     void SceneGridRenderPass::EnsureResources(RenderPassContext& context)
