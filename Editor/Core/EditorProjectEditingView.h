@@ -13,6 +13,8 @@
 
 #include <memory>
 
+struct ImVec2;
+
 namespace ve::editor
 {
     class Editor;
@@ -36,6 +38,7 @@ namespace ve::editor
 
     private:
         void RenderMainMenu();
+        void RenderStatusBar(Editor& editor, const ImVec2& position, const ImVec2& size);
 
         HierarchyPanel hierarchyPanel_;
         SceneViewPanel sceneViewPanel_;
