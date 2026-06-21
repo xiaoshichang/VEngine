@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Logging/Log.h"
 
 #include <algorithm>
 #include <array>
@@ -17,6 +18,16 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#endif
 
 namespace ve::editor
 {
@@ -183,7 +194,27 @@ namespace ve::editor
             return quoted;
         }
 
-        [[nodiscard]] int RunProcess(const std::vector<std::string>& arguments)
+#if defined(_WIN32)
+        [[nodiscard]] std::wstring Utf8ToWide(std::string_view text)
+        {
+            if (text.empty())
+            {
+                return {};
+            }
+
+            const int requiredLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
+            if (requiredLength <= 0)
+            {
+                return {};
+            }
+
+            std::wstring wideText(static_cast<size_t>(requiredLength), L'\0');
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), wideText.data(), requiredLength);
+            return wideText;
+        }
+#endif
+
+        [[nodiscard]] std::string BuildProcessCommandLine(const std::vector<std::string>& arguments)
         {
             std::ostringstream command;
             for (SizeT index = 0; index < arguments.size(); ++index)
@@ -196,11 +227,56 @@ namespace ve::editor
                 command << QuoteProcessArgument(arguments[index]);
             }
 
-            std::string commandLine = command.str();
+            return command.str();
+        }
+
+        [[nodiscard]] int RunProcess(const std::vector<std::string>& arguments)
+        {
+            if (arguments.empty())
+            {
+                return -1;
+            }
+
+            const std::string commandLineText = BuildProcessCommandLine(arguments);
 #if defined(_WIN32)
-            commandLine = "\"" + commandLine + "\"";
+            std::wstring commandLine = Utf8ToWide(commandLineText);
+            std::wstring applicationPath = Utf8ToWide(arguments[0]);
+            std::wstring workingDirectory = Utf8ToWide(FileSystem::GetCurrentWorkingDirectory().GetString());
+            if (commandLine.empty() || applicationPath.empty())
+            {
+                return -1;
+            }
+
+            STARTUPINFOW startupInfo = {};
+            startupInfo.cb = sizeof(startupInfo);
+
+            PROCESS_INFORMATION processInfo = {};
+            const BOOL created = CreateProcessW(applicationPath.c_str(),
+                                                commandLine.data(),
+                                                nullptr,
+                                                nullptr,
+                                                FALSE,
+                                                0,
+                                                nullptr,
+                                                workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
+                                                &startupInfo,
+                                                &processInfo);
+            if (created == FALSE)
+            {
+                VE_LOG_ERROR_CATEGORY("Editor", "Failed to start process with Win32 error {}: {}", GetLastError(), commandLineText);
+                return -1;
+            }
+
+            WaitForSingleObject(processInfo.hProcess, INFINITE);
+
+            DWORD exitCode = 1;
+            const BOOL gotExitCode = GetExitCodeProcess(processInfo.hProcess, &exitCode);
+            CloseHandle(processInfo.hThread);
+            CloseHandle(processInfo.hProcess);
+            return gotExitCode != FALSE ? static_cast<int>(exitCode) : -1;
+#else
+            return std::system(commandLineText.c_str());
 #endif
-            return std::system(commandLine.c_str());
         }
 
         [[nodiscard]] Path ResolveProjectRelativeReference(std::string_view reference, std::string_view fallbackExtension)
@@ -245,49 +321,9 @@ namespace ve::editor
             return projectRoot / descriptorProjectPath.GetParentPath() / sourcePath;
         }
 
-        [[nodiscard]] std::optional<Path> FindWindowsSdkFxcPath()
+        [[nodiscard]] Path GetBuiltinFxcPath(const Path& repositoryRoot)
         {
-#if defined(_WIN32)
-            namespace fs = std::filesystem;
-
-            const fs::path sdkBinRoot = fs::path("C:/Program Files (x86)/Windows Kits/10/bin");
-            std::error_code errorCode;
-            if (!fs::is_directory(sdkBinRoot, errorCode))
-            {
-                return std::nullopt;
-            }
-
-            fs::path bestPath;
-            for (const fs::directory_entry& entry : fs::directory_iterator(sdkBinRoot, errorCode))
-            {
-                if (errorCode)
-                {
-                    return std::nullopt;
-                }
-
-                if (!entry.is_directory(errorCode))
-                {
-                    continue;
-                }
-
-                const fs::path candidate = entry.path() / "x64" / "fxc.exe";
-                if (!fs::is_regular_file(candidate, errorCode))
-                {
-                    continue;
-                }
-
-                if (bestPath.empty() || candidate.parent_path().parent_path().filename().wstring() > bestPath.parent_path().parent_path().filename().wstring())
-                {
-                    bestPath = candidate;
-                }
-            }
-
-            if (!bestPath.empty())
-            {
-                return Path(bestPath.generic_string());
-            }
-#endif
-            return std::nullopt;
+            return repositoryRoot / "ThirdParty/WindowsSdkTools/Tools/x64/fxc.exe";
         }
 
         [[nodiscard]] boost::json::array WriteVector3(const std::array<double, 3>& value)
@@ -549,6 +585,21 @@ namespace ve::editor
         {
             if (!path.IsAbsolute())
             {
+                const Path relativeToProject = projectRoot / path;
+                if (FileSystem::IsFile(relativeToProject))
+                {
+                    return path;
+                }
+
+                const std::string projectDirectoryName = projectRoot.GetFilename();
+                const std::string pathText = path.GetString();
+                const std::string projectDirectoryPrefix = projectDirectoryName + "/";
+                if (!projectDirectoryName.empty() && pathText.starts_with(projectDirectoryPrefix) &&
+                    FileSystem::IsFile(projectRoot.GetParentPath() / path))
+                {
+                    return Path(pathText.substr(projectDirectoryPrefix.size()));
+                }
+
                 return path;
             }
 
@@ -635,6 +686,37 @@ namespace ve::editor
             }
 
             return AssetID(guid.MoveValue(), 0);
+        }
+
+        [[nodiscard]] bool IsFileNewerThan(const Path& left, const Path& right)
+        {
+            namespace fs = std::filesystem;
+
+            std::error_code errorCode;
+            const fs::file_time_type leftWriteTime = fs::last_write_time(fs::path(left.GetString()), errorCode);
+            if (errorCode)
+            {
+                return true;
+            }
+
+            const fs::file_time_type rightWriteTime = fs::last_write_time(fs::path(right.GetString()), errorCode);
+            if (errorCode)
+            {
+                return true;
+            }
+
+            return leftWriteTime > rightWriteTime;
+        }
+
+        [[nodiscard]] bool ShouldImportShader(
+            const Path& shaderDescriptorPhysicalPath, const Path& shaderSourcePhysicalPath, const Path& shaderRuntimePhysicalPath, bool force)
+        {
+            if (force || !FileSystem::IsFile(shaderRuntimePhysicalPath))
+            {
+                return true;
+            }
+
+            return IsFileNewerThan(shaderDescriptorPhysicalPath, shaderRuntimePhysicalPath) || IsFileNewerThan(shaderSourcePhysicalPath, shaderRuntimePhysicalPath);
         }
 
     } // namespace
@@ -938,12 +1020,8 @@ namespace ve::editor
         const std::string shaderName = shaderNameResult.GetValue();
         const Path shaderRuntimePath = GetImportedShaderPath(guid, shaderName);
         const Path shaderRuntimePhysicalPath = projectRoot_ / shaderRuntimePath;
-        if (!force && FileSystem::IsFile(shaderRuntimePhysicalPath))
-        {
-            return ErrorCode::None;
-        }
-
-        Result<std::string> descriptorText = FileSystem::ReadTextFile(projectRoot_ / shaderProjectPath);
+        const Path shaderDescriptorPhysicalPath = projectRoot_ / shaderProjectPath;
+        Result<std::string> descriptorText = FileSystem::ReadTextFile(shaderDescriptorPhysicalPath);
         if (!descriptorText)
         {
             return descriptorText.GetError().GetCode();
@@ -960,6 +1038,11 @@ namespace ve::editor
         if (shaderName.empty() || sourcePath.IsEmpty() || !FileSystem::IsFile(sourcePath))
         {
             return ErrorCode::NotFound;
+        }
+
+        if (!ShouldImportShader(shaderDescriptorPhysicalPath, sourcePath, shaderRuntimePhysicalPath, force))
+        {
+            return RewriteShaderArtifactPaths(projectRoot_, shaderRuntimePhysicalPath);
         }
 
         const Path outputDirectory = projectRoot_ / GetImportedShaderDirectory(guid);
@@ -989,11 +1072,15 @@ namespace ve::editor
             arguments.push_back(dxcPath.GetString());
         }
 
-        if (std::optional<Path> fxcPath = FindWindowsSdkFxcPath())
+        const Path fxcPath = GetBuiltinFxcPath(repositoryRoot);
+        if (!FileSystem::IsFile(fxcPath))
         {
-            arguments.push_back("--fxc");
-            arguments.push_back(fxcPath->GetString());
+            VE_LOG_ERROR_CATEGORY("Editor", "Builtin fxc.exe was not found: {}", fxcPath.GetString());
+            return ErrorCode::NotFound;
         }
+
+        arguments.push_back("--fxc");
+        arguments.push_back(fxcPath.GetString());
 
         const Path spirvCrossPath = repositoryRoot / "ThirdParty/SPIRV-Cross/Build/Windows64/vulkan-sdk-1.4.309.0/Release/spirv-cross.exe";
         if (FileSystem::IsFile(spirvCrossPath))
@@ -1002,7 +1089,8 @@ namespace ve::editor
             arguments.push_back(spirvCrossPath.GetString());
         }
 
-        if (RunProcess(arguments) != 0)
+        const int shaderToolExitCode = RunProcess(arguments);
+        if (shaderToolExitCode != 0)
         {
             return ErrorCode::IOError;
         }

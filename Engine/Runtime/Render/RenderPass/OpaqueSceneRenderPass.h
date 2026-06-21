@@ -24,7 +24,7 @@ namespace ve
         void Execute(RenderPassContext& context) override;
 
     private:
-        void EnsurePipeline(RenderPassContext& context, std::shared_ptr<RTShaderResource> shaderResource);
+        void EnsurePipeline(RenderPassContext& context);
         void BindLightUniform(RenderPassContext& context, const RTScene& scene);
         void BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc);
         void EnsureDefaultMaterialBuffer(rhi::RhiDevice& device);
@@ -39,6 +39,5 @@ namespace ve
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
         std::weak_ptr<RTShaderResource> pipelineShaderResource_;
         bool pipelineDepthEnabled_ = false;
-        bool pipelineUsesResourceShader_ = false;
     };
 } // namespace ve

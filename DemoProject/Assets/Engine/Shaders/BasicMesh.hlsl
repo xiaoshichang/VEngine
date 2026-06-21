@@ -1,7 +1,7 @@
 cbuffer ObjectConstants : register(b0, space0)
 {
-    row_major float4x4 worldViewProjection;
-    row_major float4x4 localToWorld;
+    float4x4 worldViewProjection;
+    float4x4 localToWorld;
 };
 
 cbuffer MaterialConstants : register(b1, space0)
