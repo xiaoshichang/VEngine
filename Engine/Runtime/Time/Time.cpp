@@ -150,8 +150,6 @@ namespace ve
         if (frameRateIntervalElapsedSeconds_ >= 1.0)
         {
             frameRateStats.averageFramesPerSecond = static_cast<Float32>(static_cast<Float64>(frameRateIntervalFrameCount_) / frameRateIntervalElapsedSeconds_);
-            VE_LOG_DEBUG("frame rate: {}", frameRateStats.averageFramesPerSecond);
-
             frameRateIntervalElapsedSeconds_ = 0.0;
             frameRateIntervalFrameCount_ = 0;
         }
