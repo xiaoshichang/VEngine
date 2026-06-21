@@ -23,9 +23,6 @@ namespace ve
         rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
         std::shared_ptr<RTScene> scene;
         std::shared_ptr<RTCamera> camera;
-        UInt32 activeRenderPassIndex = 0;
-        bool active = false;
-        bool renderPassOpen = false;
     };
 
     /// Data owned by one RenderPass invocation.

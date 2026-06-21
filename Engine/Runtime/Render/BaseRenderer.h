@@ -59,11 +59,6 @@ namespace ve
         /// RenderPassData is created, used, and destroyed for each pass.
         void RenderScene(const FrameRenderPipelineData& frameData);
 
-        /// Returns true only while RenderScene is actively building or recording passes.
-        ///
-        /// This is mainly a guard for renderer mutation APIs such as AddRenderPass and ClearRenderPasses.
-        [[nodiscard]] bool IsFrameActive() const noexcept;
-
         /// Returns this renderer's lifetime data and current recording state.
         [[nodiscard]] const RendererData& GetRendererData() const noexcept;
 
@@ -98,10 +93,9 @@ namespace ve
         void ClearRenderPasses() noexcept;
 
     private:
-        void RefreshRendererSceneData() noexcept;
+        void SetupRendererData() noexcept;
         void UpdateRenderWorld();
         void BuildVisibleDrawLists();
-        void BeginSceneRender(const FrameRenderPipelineData& frameData);
         void ExecutePassesInOrder();
         void EndSceneRender();
         [[nodiscard]] RenderPassData BuildPassData(RenderPass& pass);

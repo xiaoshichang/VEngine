@@ -51,15 +51,17 @@ namespace ve
     void BaseRenderer::RenderScene(const FrameRenderPipelineData& frameData)
     {
         VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(frameData.device != nullptr);
+        VE_ASSERT(frameData.commandList != nullptr);
+        VE_ASSERT(frameData.mainSwapchain != nullptr);
+        VE_ASSERT(frameData.shaderManager != nullptr);
 
-        BeginSceneRender(frameData);
+        frameRenderData_ = &frameData;
+        SetupRendererData();
+        UpdateRenderWorld();
+        BuildVisibleDrawLists();
         ExecutePassesInOrder();
         EndSceneRender();
-    }
-
-    bool BaseRenderer::IsFrameActive() const noexcept
-    {
-        return rendererData_.active;
     }
 
     const RendererData& BaseRenderer::GetRendererData() const noexcept
@@ -89,25 +91,20 @@ namespace ve
 
     void BaseRenderer::AddRenderPass(std::unique_ptr<RenderPass> pass)
     {
-        VE_ASSERT_MESSAGE(!rendererData_.active, "BaseRenderer::AddRenderPass requires no active renderer.");
         VE_ASSERT_MESSAGE(pass != nullptr, "BaseRenderer::AddRenderPass requires a valid pass.");
         passes_.push_back(std::move(pass));
     }
 
     void BaseRenderer::ClearRenderPasses() noexcept
     {
-        VE_ASSERT_MESSAGE(!rendererData_.active, "BaseRenderer::ClearRenderPasses requires no active renderer.");
         passes_.clear();
     }
 
-    void BaseRenderer::RefreshRendererSceneData() noexcept
+    void BaseRenderer::SetupRendererData() noexcept
     {
         rendererData_.scene = scene_;
         rendererData_.camera = overrideCamera_ != nullptr || scene_ == nullptr ? overrideCamera_ : FindFrameCamera(*scene_);
         rendererData_.clearColor = rendererData_.camera != nullptr ? rendererData_.camera->GetDesc().clearColor : ResolveFrameClearColor(scene_);
-        rendererData_.activeRenderPassIndex = 0;
-        rendererData_.active = false;
-        rendererData_.renderPassOpen = false;
     }
 
     void BaseRenderer::UpdateRenderWorld()
@@ -120,33 +117,15 @@ namespace ve
         // Visibility and batching stay here so concrete renderers only choose their pass topology.
     }
 
-    void BaseRenderer::BeginSceneRender(const FrameRenderPipelineData& frameData)
-    {
-        VE_ASSERT_MESSAGE(!rendererData_.active, "BaseRenderer::BeginSceneRender requires no active renderer.");
-        VE_ASSERT(frameData.device != nullptr);
-        VE_ASSERT(frameData.commandList != nullptr);
-        VE_ASSERT(frameData.mainSwapchain != nullptr);
-        VE_ASSERT(frameData.shaderManager != nullptr);
-
-        frameRenderData_ = &frameData;
-        RefreshRendererSceneData();
-        UpdateRenderWorld();
-        BuildVisibleDrawLists();
-
-        rendererData_.activeRenderPassIndex = 0;
-        rendererData_.active = true;
-        rendererData_.renderPassOpen = false;
-    }
 
     void BaseRenderer::ExecutePassesInOrder()
     {
-        VE_ASSERT_MESSAGE(rendererData_.active, "BaseRenderer::ExecutePassesInOrder requires an active renderer.");
         VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer::ExecutePassesInOrder requires active frame data.");
         VE_ASSERT_MESSAGE(frameRenderData_->commandList != nullptr, "BaseRenderer::ExecutePassesInOrder requires an active command list.");
 
-        while (rendererData_.activeRenderPassIndex < passes_.size())
+        for (SizeT passIndex = 0; passIndex < passes_.size(); ++passIndex)
         {
-            std::unique_ptr<RenderPass>& pass = passes_[rendererData_.activeRenderPassIndex];
+            std::unique_ptr<RenderPass>& pass = passes_[passIndex];
             VE_ASSERT(pass != nullptr);
 
             RenderPassData passData = BuildPassData(*pass);
@@ -159,26 +138,14 @@ namespace ve
             pass->Execute(passContext);
 
             frameRenderData_->commandList->EndRenderPass();
-            rendererData_.renderPassOpen = false;
-            ++rendererData_.activeRenderPassIndex;
         }
     }
 
     void BaseRenderer::EndSceneRender()
     {
-        VE_ASSERT_MESSAGE(rendererData_.active, "BaseRenderer::EndSceneRender requires an active scene render.");
         VE_ASSERT(frameRenderData_ != nullptr);
         VE_ASSERT(frameRenderData_->commandList != nullptr);
-
-        if (rendererData_.renderPassOpen)
-        {
-            frameRenderData_->commandList->EndRenderPass();
-            rendererData_.renderPassOpen = false;
-        }
-
         frameRenderData_ = nullptr;
-        rendererData_.activeRenderPassIndex = 0;
-        rendererData_.active = false;
     }
 
     RenderPassData BaseRenderer::BuildPassData(RenderPass& pass)
@@ -197,12 +164,9 @@ namespace ve
 
     bool BaseRenderer::BeginPass(const RenderPassData& passData)
     {
-        VE_ASSERT(rendererData_.active);
         VE_ASSERT(frameRenderData_ != nullptr);
         VE_ASSERT(frameRenderData_->commandList != nullptr);
         VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
-        VE_ASSERT(rendererData_.activeRenderPassIndex < passes_.size());
-        VE_ASSERT(!rendererData_.renderPassOpen);
 
         const bool beganRenderPass = frameRenderData_->commandList->BeginRenderPass(*frameRenderData_->mainSwapchain, passData.renderPassDesc);
         VE_ASSERT_MESSAGE(beganRenderPass, "BaseRenderer failed to begin render pass.");
@@ -213,7 +177,6 @@ namespace ve
 
         frameRenderData_->commandList->SetViewport(passData.viewport);
         frameRenderData_->commandList->SetScissor(passData.scissorRect);
-        rendererData_.renderPassOpen = true;
         return true;
     }
 
