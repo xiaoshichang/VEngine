@@ -117,12 +117,12 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         positionAttribute.offset = 0;
 
         ve::rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
-        pipelineDesc.vertexShader = vertexShader.get();
-        pipelineDesc.fragmentShader = fragmentShader.get();
-        pipelineDesc.vertexLayout.attributes = &positionAttribute;
-        pipelineDesc.vertexLayout.attributeCount = 1;
-        pipelineDesc.vertexLayout.stride = sizeof(TriangleVertex);
-        pipelineDesc.topology = ve::rhi::RhiPrimitiveTopology::TriangleList;
+        pipelineDesc.boundShaderState.vertexShader = vertexShader.get();
+        pipelineDesc.boundShaderState.fragmentShader = fragmentShader.get();
+        pipelineDesc.boundShaderState.vertexDeclaration.attributes = &positionAttribute;
+        pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 1;
+        pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(TriangleVertex);
+        pipelineDesc.primitiveType = ve::rhi::RhiPrimitiveTopology::TriangleList;
         pipelineDesc.colorFormat = swapchain->GetColorFormat();
         pipelineDesc.debugName = "TrianglePipeline";
 

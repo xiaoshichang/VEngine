@@ -67,6 +67,146 @@ namespace ve::rhi
             }
         }
 
+        D3D12_CULL_MODE ToD3D12CullMode(RhiCullMode cullMode)
+        {
+            switch (cullMode)
+            {
+            case RhiCullMode::None:
+                return D3D12_CULL_MODE_NONE;
+            case RhiCullMode::Front:
+                return D3D12_CULL_MODE_FRONT;
+            case RhiCullMode::Back:
+            default:
+                return D3D12_CULL_MODE_BACK;
+            }
+        }
+
+        D3D12_COMPARISON_FUNC ToD3D12ComparisonFunc(RhiCompareFunction compareFunction)
+        {
+            switch (compareFunction)
+            {
+            case RhiCompareFunction::Never:
+                return D3D12_COMPARISON_FUNC_NEVER;
+            case RhiCompareFunction::Less:
+                return D3D12_COMPARISON_FUNC_LESS;
+            case RhiCompareFunction::Equal:
+                return D3D12_COMPARISON_FUNC_EQUAL;
+            case RhiCompareFunction::Always:
+                return D3D12_COMPARISON_FUNC_ALWAYS;
+            case RhiCompareFunction::LessEqual:
+                return D3D12_COMPARISON_FUNC_LESS_EQUAL;
+            case RhiCompareFunction::Greater:
+                return D3D12_COMPARISON_FUNC_GREATER;
+            case RhiCompareFunction::NotEqual:
+                return D3D12_COMPARISON_FUNC_NOT_EQUAL;
+            case RhiCompareFunction::GreaterEqual:
+            default:
+                return D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+            }
+        }
+
+        D3D12_BLEND ToD3D12Blend(RhiBlendFactor factor)
+        {
+            switch (factor)
+            {
+            case RhiBlendFactor::Zero:
+                return D3D12_BLEND_ZERO;
+            case RhiBlendFactor::One:
+                return D3D12_BLEND_ONE;
+            case RhiBlendFactor::SourceColor:
+                return D3D12_BLEND_SRC_COLOR;
+            case RhiBlendFactor::OneMinusSourceColor:
+                return D3D12_BLEND_INV_SRC_COLOR;
+            case RhiBlendFactor::SourceAlpha:
+                return D3D12_BLEND_SRC_ALPHA;
+            case RhiBlendFactor::OneMinusSourceAlpha:
+                return D3D12_BLEND_INV_SRC_ALPHA;
+            case RhiBlendFactor::DestinationColor:
+                return D3D12_BLEND_DEST_COLOR;
+            case RhiBlendFactor::OneMinusDestinationColor:
+                return D3D12_BLEND_INV_DEST_COLOR;
+            case RhiBlendFactor::DestinationAlpha:
+                return D3D12_BLEND_DEST_ALPHA;
+            case RhiBlendFactor::OneMinusDestinationAlpha:
+            default:
+                return D3D12_BLEND_INV_DEST_ALPHA;
+            }
+        }
+
+        D3D12_BLEND_OP ToD3D12BlendOp(RhiBlendOperation operation)
+        {
+            switch (operation)
+            {
+            case RhiBlendOperation::Add:
+                return D3D12_BLEND_OP_ADD;
+            case RhiBlendOperation::Subtract:
+                return D3D12_BLEND_OP_SUBTRACT;
+            case RhiBlendOperation::ReverseSubtract:
+                return D3D12_BLEND_OP_REV_SUBTRACT;
+            case RhiBlendOperation::Min:
+                return D3D12_BLEND_OP_MIN;
+            case RhiBlendOperation::Max:
+            default:
+                return D3D12_BLEND_OP_MAX;
+            }
+        }
+
+        D3D12_STENCIL_OP ToD3D12StencilOp(RhiStencilOperation operation)
+        {
+            switch (operation)
+            {
+            case RhiStencilOperation::Keep:
+                return D3D12_STENCIL_OP_KEEP;
+            case RhiStencilOperation::Zero:
+                return D3D12_STENCIL_OP_ZERO;
+            case RhiStencilOperation::Replace:
+                return D3D12_STENCIL_OP_REPLACE;
+            case RhiStencilOperation::IncrementClamp:
+                return D3D12_STENCIL_OP_INCR_SAT;
+            case RhiStencilOperation::DecrementClamp:
+                return D3D12_STENCIL_OP_DECR_SAT;
+            case RhiStencilOperation::Invert:
+                return D3D12_STENCIL_OP_INVERT;
+            case RhiStencilOperation::IncrementWrap:
+                return D3D12_STENCIL_OP_INCR;
+            case RhiStencilOperation::DecrementWrap:
+            default:
+                return D3D12_STENCIL_OP_DECR;
+            }
+        }
+
+        D3D12_DEPTH_STENCILOP_DESC ToD3D12StencilFaceDesc(const RhiStencilFaceDesc& desc)
+        {
+            D3D12_DEPTH_STENCILOP_DESC d3dDesc = {};
+            d3dDesc.StencilFailOp = ToD3D12StencilOp(desc.failOperation);
+            d3dDesc.StencilDepthFailOp = ToD3D12StencilOp(desc.depthFailOperation);
+            d3dDesc.StencilPassOp = ToD3D12StencilOp(desc.passOperation);
+            d3dDesc.StencilFunc = ToD3D12ComparisonFunc(desc.compareFunction);
+            return d3dDesc;
+        }
+
+        UINT8 ToD3D12ColorWriteMask(uint8_t mask)
+        {
+            UINT8 d3dMask = 0;
+            if ((mask & RhiColorWriteRed) != 0)
+            {
+                d3dMask |= D3D12_COLOR_WRITE_ENABLE_RED;
+            }
+            if ((mask & RhiColorWriteGreen) != 0)
+            {
+                d3dMask |= D3D12_COLOR_WRITE_ENABLE_GREEN;
+            }
+            if ((mask & RhiColorWriteBlue) != 0)
+            {
+                d3dMask |= D3D12_COLOR_WRITE_ENABLE_BLUE;
+            }
+            if ((mask & RhiColorWriteAlpha) != 0)
+            {
+                d3dMask |= D3D12_COLOR_WRITE_ENABLE_ALPHA;
+            }
+            return d3dMask;
+        }
+
         D3D12_RESOURCE_FLAGS ToD3D12TextureFlags(RhiTextureUsage usage)
         {
             D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE;
@@ -995,8 +1135,9 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
-                const auto* vertexShaderModule = dynamic_cast<const D3D12ShaderModule*>(desc.vertexShader);
-                const auto* fragmentShaderModule = dynamic_cast<const D3D12ShaderModule*>(desc.fragmentShader);
+                const RhiBoundShaderStateDesc& boundShaderState = desc.boundShaderState;
+                const auto* vertexShaderModule = dynamic_cast<const D3D12ShaderModule*>(boundShaderState.vertexShader);
+                const auto* fragmentShaderModule = dynamic_cast<const D3D12ShaderModule*>(boundShaderState.fragmentShader);
 
                 if (vertexShaderModule == nullptr || fragmentShaderModule == nullptr)
                 {
@@ -1051,11 +1192,11 @@ namespace ve::rhi
                 }
 
                 std::vector<D3D12_INPUT_ELEMENT_DESC> inputElements;
-                inputElements.reserve(desc.vertexLayout.attributeCount);
+                inputElements.reserve(boundShaderState.vertexDeclaration.attributeCount);
 
-                for (uint32_t index = 0; index < desc.vertexLayout.attributeCount; ++index)
+                for (uint32_t index = 0; index < boundShaderState.vertexDeclaration.attributeCount; ++index)
                 {
-                    const RhiVertexAttributeDesc& attribute = desc.vertexLayout.attributes[index];
+                    const RhiVertexAttributeDesc& attribute = boundShaderState.vertexDeclaration.attributes[index];
                     D3D12_INPUT_ELEMENT_DESC inputElement = {};
                     inputElement.SemanticName = attribute.semanticName;
                     inputElement.SemanticIndex = attribute.semanticIndex;
@@ -1068,33 +1209,43 @@ namespace ve::rhi
                 }
 
                 D3D12_RASTERIZER_DESC rasterizerDesc = {};
-                rasterizerDesc.FillMode = desc.fillMode == RhiFillMode::Wireframe ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
-                rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
-                rasterizerDesc.FrontCounterClockwise = FALSE;
-                rasterizerDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-                rasterizerDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-                rasterizerDesc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-                rasterizerDesc.DepthClipEnable = TRUE;
-                rasterizerDesc.MultisampleEnable = FALSE;
-                rasterizerDesc.AntialiasedLineEnable = FALSE;
+                rasterizerDesc.FillMode = desc.rasterizerState.fillMode == RhiFillMode::Wireframe ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
+                rasterizerDesc.CullMode = ToD3D12CullMode(desc.rasterizerState.cullMode);
+                rasterizerDesc.FrontCounterClockwise = desc.rasterizerState.frontCounterClockwise ? TRUE : FALSE;
+                rasterizerDesc.DepthBias = desc.rasterizerState.depthBias;
+                rasterizerDesc.DepthBiasClamp = desc.rasterizerState.depthBiasClamp;
+                rasterizerDesc.SlopeScaledDepthBias = desc.rasterizerState.slopeScaledDepthBias;
+                rasterizerDesc.DepthClipEnable = desc.rasterizerState.depthClipEnabled ? TRUE : FALSE;
+                rasterizerDesc.MultisampleEnable = desc.rasterizerState.multisampleEnabled ? TRUE : FALSE;
+                rasterizerDesc.AntialiasedLineEnable = desc.rasterizerState.antialiasedLineEnabled ? TRUE : FALSE;
                 rasterizerDesc.ForcedSampleCount = 0;
                 rasterizerDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
                 D3D12_BLEND_DESC blendDesc = {};
-                blendDesc.RenderTarget[0].BlendEnable = desc.alphaBlendEnabled ? TRUE : FALSE;
-                blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-                blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-                blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-                blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-                blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
-                blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-                blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+                blendDesc.AlphaToCoverageEnable = desc.blendState.alphaToCoverageEnabled ? TRUE : FALSE;
+                blendDesc.IndependentBlendEnable = desc.blendState.independentBlendEnabled ? TRUE : FALSE;
+                for (uint32_t index = 0; index < RhiMaxColorAttachments; ++index)
+                {
+                    const RhiBlendRenderTargetDesc& targetDesc = desc.blendState.renderTargets[index];
+                    blendDesc.RenderTarget[index].BlendEnable = targetDesc.blendEnabled ? TRUE : FALSE;
+                    blendDesc.RenderTarget[index].SrcBlend = ToD3D12Blend(targetDesc.sourceColorBlendFactor);
+                    blendDesc.RenderTarget[index].DestBlend = ToD3D12Blend(targetDesc.destinationColorBlendFactor);
+                    blendDesc.RenderTarget[index].BlendOp = ToD3D12BlendOp(targetDesc.colorBlendOperation);
+                    blendDesc.RenderTarget[index].SrcBlendAlpha = ToD3D12Blend(targetDesc.sourceAlphaBlendFactor);
+                    blendDesc.RenderTarget[index].DestBlendAlpha = ToD3D12Blend(targetDesc.destinationAlphaBlendFactor);
+                    blendDesc.RenderTarget[index].BlendOpAlpha = ToD3D12BlendOp(targetDesc.alphaBlendOperation);
+                    blendDesc.RenderTarget[index].RenderTargetWriteMask = ToD3D12ColorWriteMask(targetDesc.colorWriteMask);
+                }
 
                 D3D12_DEPTH_STENCIL_DESC depthStencilDesc = {};
-                depthStencilDesc.DepthEnable = desc.depthTestEnabled ? TRUE : FALSE;
-                depthStencilDesc.DepthWriteMask = desc.depthWriteEnabled ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
-                depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-                depthStencilDesc.StencilEnable = FALSE;
+                depthStencilDesc.DepthEnable = desc.depthStencilState.depthTestEnabled ? TRUE : FALSE;
+                depthStencilDesc.DepthWriteMask = desc.depthStencilState.depthWriteEnabled ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
+                depthStencilDesc.DepthFunc = ToD3D12ComparisonFunc(desc.depthStencilState.depthCompareFunction);
+                depthStencilDesc.StencilEnable = desc.depthStencilState.stencilEnabled ? TRUE : FALSE;
+                depthStencilDesc.StencilReadMask = desc.depthStencilState.stencilReadMask;
+                depthStencilDesc.StencilWriteMask = desc.depthStencilState.stencilWriteMask;
+                depthStencilDesc.FrontFace = ToD3D12StencilFaceDesc(desc.depthStencilState.frontFace);
+                depthStencilDesc.BackFace = ToD3D12StencilFaceDesc(desc.depthStencilState.backFace);
 
                 D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = {};
                 pipelineDesc.pRootSignature = rootSignature.Get();
@@ -1105,10 +1256,10 @@ namespace ve::rhi
                 pipelineDesc.RasterizerState = rasterizerDesc;
                 pipelineDesc.DepthStencilState = depthStencilDesc;
                 pipelineDesc.InputLayout = {inputElements.data(), static_cast<UINT>(inputElements.size())};
-                pipelineDesc.PrimitiveTopologyType = ToD3D12TopologyType(desc.topology);
+                pipelineDesc.PrimitiveTopologyType = ToD3D12TopologyType(desc.primitiveType);
                 pipelineDesc.NumRenderTargets = 1;
                 pipelineDesc.RTVFormats[0] = ToDxgiFormat(desc.colorFormat);
-                pipelineDesc.DSVFormat = desc.depthTestEnabled ? ToDxgiFormat(desc.depthFormat) : DXGI_FORMAT_UNKNOWN;
+                pipelineDesc.DSVFormat = desc.depthStencilState.depthTestEnabled ? ToDxgiFormat(desc.depthFormat) : DXGI_FORMAT_UNKNOWN;
                 pipelineDesc.SampleDesc.Count = 1;
 
                 ComPtr<ID3D12PipelineState> pipelineState;
@@ -1120,7 +1271,7 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D12PipelineState>(desc.topology, rootSignature, pipelineState);
+                return std::make_unique<D3D12PipelineState>(desc.primitiveType, rootSignature, pipelineState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

@@ -35,6 +35,82 @@ namespace ve::rhi
         Wireframe,
     };
 
+    enum class RhiBlendFactor
+    {
+        Zero,
+        One,
+        SourceColor,
+        OneMinusSourceColor,
+        SourceAlpha,
+        OneMinusSourceAlpha,
+        DestinationColor,
+        OneMinusDestinationColor,
+        DestinationAlpha,
+        OneMinusDestinationAlpha,
+    };
+
+    enum class RhiBlendOperation
+    {
+        Add,
+        Subtract,
+        ReverseSubtract,
+        Min,
+        Max,
+    };
+
+    enum class RhiCullMode
+    {
+        None,
+        Front,
+        Back,
+    };
+
+    enum class RhiCompareFunction
+    {
+        Never,
+        Less,
+        Equal,
+        Always,
+        LessEqual,
+        Greater,
+        NotEqual,
+        GreaterEqual,
+    };
+
+    enum class RhiStencilOperation
+    {
+        Keep,
+        Zero,
+        Replace,
+        IncrementClamp,
+        DecrementClamp,
+        Invert,
+        IncrementWrap,
+        DecrementWrap,
+    };
+
+    enum class RhiSamplerFilter
+    {
+        Point,
+        Bilinear,
+        Trilinear,
+        Anisotropic,
+    };
+
+    enum class RhiSamplerAddressMode
+    {
+        Wrap,
+        Mirror,
+        Clamp,
+        Border,
+    };
+
+    enum class RhiSamplerReductionMode
+    {
+        Standard,
+        Comparison,
+    };
+
     /// Describes a small set of cross-backend texture and vertex formats.
     enum class RhiFormat
     {
@@ -147,6 +223,47 @@ namespace ve::rhi
         uint32_t stencil = 0;
     };
 
+    inline constexpr uint8_t RhiColorWriteRed = 1 << 0;
+    inline constexpr uint8_t RhiColorWriteGreen = 1 << 1;
+    inline constexpr uint8_t RhiColorWriteBlue = 1 << 2;
+    inline constexpr uint8_t RhiColorWriteAlpha = 1 << 3;
+    inline constexpr uint8_t RhiColorWriteAll = RhiColorWriteRed | RhiColorWriteGreen | RhiColorWriteBlue | RhiColorWriteAlpha;
+
+    struct RhiBlendRenderTargetDesc
+    {
+        bool blendEnabled = false;
+        RhiBlendFactor sourceColorBlendFactor = RhiBlendFactor::One;
+        RhiBlendFactor destinationColorBlendFactor = RhiBlendFactor::Zero;
+        RhiBlendOperation colorBlendOperation = RhiBlendOperation::Add;
+        RhiBlendFactor sourceAlphaBlendFactor = RhiBlendFactor::One;
+        RhiBlendFactor destinationAlphaBlendFactor = RhiBlendFactor::Zero;
+        RhiBlendOperation alphaBlendOperation = RhiBlendOperation::Add;
+        uint8_t colorWriteMask = RhiColorWriteAll;
+    };
+
+    struct RhiStencilFaceDesc
+    {
+        RhiStencilOperation failOperation = RhiStencilOperation::Keep;
+        RhiStencilOperation depthFailOperation = RhiStencilOperation::Keep;
+        RhiStencilOperation passOperation = RhiStencilOperation::Keep;
+        RhiCompareFunction compareFunction = RhiCompareFunction::Always;
+    };
+
+    struct RhiSamplerDesc
+    {
+        RhiSamplerFilter filter = RhiSamplerFilter::Bilinear;
+        RhiSamplerAddressMode addressU = RhiSamplerAddressMode::Wrap;
+        RhiSamplerAddressMode addressV = RhiSamplerAddressMode::Wrap;
+        RhiSamplerAddressMode addressW = RhiSamplerAddressMode::Wrap;
+        RhiSamplerReductionMode reductionMode = RhiSamplerReductionMode::Standard;
+        RhiCompareFunction comparisonFunction = RhiCompareFunction::LessEqual;
+        float mipBias = 0.0f;
+        uint32_t maxAnisotropy = 1;
+        RhiColor borderColor = {};
+        float minLod = 0.0f;
+        float maxLod = 3.402823466e+38f;
+    };
+
     /// Describes how a swapchain should be created for a native surface.
     struct RhiSwapchainDesc
     {
@@ -250,19 +367,56 @@ namespace ve::rhi
 
     class RhiShaderModule;
 
-    /// Describes immutable graphics pipeline state.
-    struct RhiGraphicsPipelineDesc
+    struct RhiBlendStateDesc
+    {
+        bool alphaToCoverageEnabled = false;
+        bool independentBlendEnabled = false;
+        RhiBlendRenderTargetDesc renderTargets[RhiMaxColorAttachments] = {};
+    };
+
+    struct RhiRasterizerStateDesc
+    {
+        RhiFillMode fillMode = RhiFillMode::Solid;
+        RhiCullMode cullMode = RhiCullMode::Back;
+        bool frontCounterClockwise = false;
+        bool depthClipEnabled = true;
+        bool scissorEnabled = false;
+        bool multisampleEnabled = false;
+        bool antialiasedLineEnabled = false;
+        int32_t depthBias = 0;
+        float depthBiasClamp = 0.0f;
+        float slopeScaledDepthBias = 0.0f;
+    };
+
+    struct RhiDepthStencilStateDesc
+    {
+        bool depthTestEnabled = false;
+        bool depthWriteEnabled = false;
+        RhiCompareFunction depthCompareFunction = RhiCompareFunction::LessEqual;
+        bool stencilEnabled = false;
+        uint8_t stencilReadMask = 0xFF;
+        uint8_t stencilWriteMask = 0xFF;
+        RhiStencilFaceDesc frontFace = {};
+        RhiStencilFaceDesc backFace = {};
+    };
+
+    struct RhiBoundShaderStateDesc
     {
         const RhiShaderModule* vertexShader = nullptr;
         const RhiShaderModule* fragmentShader = nullptr;
-        RhiVertexLayoutDesc vertexLayout = {};
-        RhiPrimitiveTopology topology = RhiPrimitiveTopology::TriangleList;
-        RhiFillMode fillMode = RhiFillMode::Solid;
+        RhiVertexLayoutDesc vertexDeclaration = {};
+    };
+
+    /// Describes immutable graphics pipeline state.
+    struct RhiGraphicsPipelineDesc
+    {
+        RhiBlendStateDesc blendState = {};
+        RhiRasterizerStateDesc rasterizerState = {};
+        RhiDepthStencilStateDesc depthStencilState = {};
+        RhiBoundShaderStateDesc boundShaderState = {};
+        RhiPrimitiveTopology primitiveType = RhiPrimitiveTopology::TriangleList;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
         RhiFormat depthFormat = RhiFormat::Depth32Float;
-        bool depthTestEnabled = false;
-        bool depthWriteEnabled = false;
-        bool alphaBlendEnabled = false;
         const char* debugName = nullptr;
     };
 } // namespace ve::rhi

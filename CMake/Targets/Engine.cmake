@@ -126,6 +126,7 @@ function(ve_add_engine)
             Engine/Runtime/Threading/Thread.h
             Engine/Runtime/Time/Time.h
             Engine/RHI/Common/RhiDevice.h
+            Engine/RHI/Common/RhiStaticStates.h
             Engine/RHI/Common/RhiTypes.h
             Engine/RHI/Common/RhiUtils.h
     )

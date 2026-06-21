@@ -1,5 +1,6 @@
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 
+#include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Render/RenderScene.h"
@@ -231,17 +232,16 @@ float4 PSMain(VSOutput input) : SV_TARGET
         const rhi::RhiVertexAttributeDesc vertexAttributes[] = {positionAttribute, colorAttribute};
 
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
-        pipelineDesc.vertexShader = vertexShader;
-        pipelineDesc.fragmentShader = fragmentShader;
-        pipelineDesc.vertexLayout.attributes = vertexAttributes;
-        pipelineDesc.vertexLayout.attributeCount = 2;
-        pipelineDesc.vertexLayout.stride = sizeof(EditorGizmoVertex);
-        pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
-        pipelineDesc.fillMode = rhi::RhiFillMode::Solid;
+        pipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
+        pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
+        pipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
+        pipelineDesc.boundShaderState.vertexShader = vertexShader;
+        pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
+        pipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
+        pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
+        pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoVertex);
+        pipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
         pipelineDesc.colorFormat = targetFormat;
-        pipelineDesc.depthTestEnabled = false;
-        pipelineDesc.depthWriteEnabled = false;
-        pipelineDesc.alphaBlendEnabled = true;
         pipelineDesc.debugName = "EditorGizmoPipeline";
 
         pipelineState_ = context.GetDevice().CreateGraphicsPipeline(pipelineDesc);

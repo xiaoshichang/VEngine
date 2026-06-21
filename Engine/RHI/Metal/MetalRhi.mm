@@ -104,6 +104,144 @@ namespace ve::rhi
             }
         }
 
+        MTLCullMode ToMetalCullMode(RhiCullMode cullMode)
+        {
+            switch (cullMode)
+            {
+            case RhiCullMode::None:
+                return MTLCullModeNone;
+            case RhiCullMode::Front:
+                return MTLCullModeFront;
+            case RhiCullMode::Back:
+            default:
+                return MTLCullModeBack;
+            }
+        }
+
+        MTLCompareFunction ToMetalCompareFunction(RhiCompareFunction compareFunction)
+        {
+            switch (compareFunction)
+            {
+            case RhiCompareFunction::Never:
+                return MTLCompareFunctionNever;
+            case RhiCompareFunction::Less:
+                return MTLCompareFunctionLess;
+            case RhiCompareFunction::Equal:
+                return MTLCompareFunctionEqual;
+            case RhiCompareFunction::Always:
+                return MTLCompareFunctionAlways;
+            case RhiCompareFunction::LessEqual:
+                return MTLCompareFunctionLessEqual;
+            case RhiCompareFunction::Greater:
+                return MTLCompareFunctionGreater;
+            case RhiCompareFunction::NotEqual:
+                return MTLCompareFunctionNotEqual;
+            case RhiCompareFunction::GreaterEqual:
+            default:
+                return MTLCompareFunctionGreaterEqual;
+            }
+        }
+
+        MTLStencilOperation ToMetalStencilOperation(RhiStencilOperation operation)
+        {
+            switch (operation)
+            {
+            case RhiStencilOperation::Keep:
+                return MTLStencilOperationKeep;
+            case RhiStencilOperation::Zero:
+                return MTLStencilOperationZero;
+            case RhiStencilOperation::Replace:
+                return MTLStencilOperationReplace;
+            case RhiStencilOperation::IncrementClamp:
+                return MTLStencilOperationIncrementClamp;
+            case RhiStencilOperation::DecrementClamp:
+                return MTLStencilOperationDecrementClamp;
+            case RhiStencilOperation::Invert:
+                return MTLStencilOperationInvert;
+            case RhiStencilOperation::IncrementWrap:
+                return MTLStencilOperationIncrementWrap;
+            case RhiStencilOperation::DecrementWrap:
+            default:
+                return MTLStencilOperationDecrementWrap;
+            }
+        }
+
+        MTLBlendFactor ToMetalBlendFactor(RhiBlendFactor factor)
+        {
+            switch (factor)
+            {
+            case RhiBlendFactor::Zero:
+                return MTLBlendFactorZero;
+            case RhiBlendFactor::One:
+                return MTLBlendFactorOne;
+            case RhiBlendFactor::SourceColor:
+                return MTLBlendFactorSourceColor;
+            case RhiBlendFactor::OneMinusSourceColor:
+                return MTLBlendFactorOneMinusSourceColor;
+            case RhiBlendFactor::SourceAlpha:
+                return MTLBlendFactorSourceAlpha;
+            case RhiBlendFactor::OneMinusSourceAlpha:
+                return MTLBlendFactorOneMinusSourceAlpha;
+            case RhiBlendFactor::DestinationColor:
+                return MTLBlendFactorDestinationColor;
+            case RhiBlendFactor::OneMinusDestinationColor:
+                return MTLBlendFactorOneMinusDestinationColor;
+            case RhiBlendFactor::DestinationAlpha:
+                return MTLBlendFactorDestinationAlpha;
+            case RhiBlendFactor::OneMinusDestinationAlpha:
+            default:
+                return MTLBlendFactorOneMinusDestinationAlpha;
+            }
+        }
+
+        MTLBlendOperation ToMetalBlendOperation(RhiBlendOperation operation)
+        {
+            switch (operation)
+            {
+            case RhiBlendOperation::Add:
+                return MTLBlendOperationAdd;
+            case RhiBlendOperation::Subtract:
+                return MTLBlendOperationSubtract;
+            case RhiBlendOperation::ReverseSubtract:
+                return MTLBlendOperationReverseSubtract;
+            case RhiBlendOperation::Min:
+                return MTLBlendOperationMin;
+            case RhiBlendOperation::Max:
+            default:
+                return MTLBlendOperationMax;
+            }
+        }
+
+        MTLColorWriteMask ToMetalColorWriteMask(uint8_t mask)
+        {
+            MTLColorWriteMask metalMask = 0;
+            if ((mask & RhiColorWriteRed) != 0)
+            {
+                metalMask |= MTLColorWriteMaskRed;
+            }
+            if ((mask & RhiColorWriteGreen) != 0)
+            {
+                metalMask |= MTLColorWriteMaskGreen;
+            }
+            if ((mask & RhiColorWriteBlue) != 0)
+            {
+                metalMask |= MTLColorWriteMaskBlue;
+            }
+            if ((mask & RhiColorWriteAlpha) != 0)
+            {
+                metalMask |= MTLColorWriteMaskAlpha;
+            }
+            return metalMask;
+        }
+
+        void ApplyMetalStencilFaceDesc(MTLStencilDescriptor* metalDesc, const RhiStencilFaceDesc& desc)
+        {
+            metalDesc.stencilFailureOperation = ToMetalStencilOperation(desc.failOperation);
+            metalDesc.depthFailureOperation = ToMetalStencilOperation(desc.depthFailOperation);
+            metalDesc.depthStencilPassOperation = ToMetalStencilOperation(desc.passOperation);
+            metalDesc.stencilCompareFunction = ToMetalCompareFunction(desc.compareFunction);
+        }
+
         std::string ToString(NSError* error)
         {
             if (error == nil)
@@ -241,10 +379,14 @@ namespace ve::rhi
         class MetalPipelineState final : public RhiPipelineState
         {
         public:
-            MetalPipelineState(RhiPrimitiveTopology topology, RhiFillMode fillMode, id<MTLRenderPipelineState> pipelineState)
+            MetalPipelineState(RhiPrimitiveTopology topology,
+                               RhiRasterizerStateDesc rasterizerState,
+                               id<MTLRenderPipelineState> pipelineState,
+                               id<MTLDepthStencilState> depthStencilState)
                 : topology_(topology)
-                , fillMode_(fillMode)
+                , rasterizerState_(rasterizerState)
                 , pipelineState_(pipelineState)
+                , depthStencilState_(depthStencilState)
             {
             }
 
@@ -258,15 +400,21 @@ namespace ve::rhi
                 return pipelineState_;
             }
 
-            [[nodiscard]] RhiFillMode GetFillMode() const noexcept
+            [[nodiscard]] const RhiRasterizerStateDesc& GetRasterizerState() const noexcept
             {
-                return fillMode_;
+                return rasterizerState_;
+            }
+
+            [[nodiscard]] id<MTLDepthStencilState> GetNativeDepthStencilState() const noexcept
+            {
+                return depthStencilState_;
             }
 
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
-            RhiFillMode fillMode_ = RhiFillMode::Solid;
+            RhiRasterizerStateDesc rasterizerState_ = {};
             id<MTLRenderPipelineState> pipelineState_ = nil;
+            id<MTLDepthStencilState> depthStencilState_ = nil;
         };
 
         class MetalSwapchain final : public RhiSwapchain
@@ -385,10 +533,12 @@ namespace ve::rhi
             {
                 const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
-                [renderCommandEncoder_ setFrontFacingWinding:MTLWindingClockwise];
-                [renderCommandEncoder_ setCullMode:MTLCullModeBack];
-                [renderCommandEncoder_ setTriangleFillMode:metalPipelineState.GetFillMode() == RhiFillMode::Wireframe ? MTLTriangleFillModeLines
-                                                                                                                        : MTLTriangleFillModeFill];
+                [renderCommandEncoder_ setDepthStencilState:metalPipelineState.GetNativeDepthStencilState()];
+
+                const RhiRasterizerStateDesc& rasterizerState = metalPipelineState.GetRasterizerState();
+                [renderCommandEncoder_ setFrontFacingWinding:rasterizerState.frontCounterClockwise ? MTLWindingCounterClockwise : MTLWindingClockwise];
+                [renderCommandEncoder_ setCullMode:ToMetalCullMode(rasterizerState.cullMode)];
+                [renderCommandEncoder_ setTriangleFillMode:rasterizerState.fillMode == RhiFillMode::Wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -641,8 +791,9 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
-                const auto* vertexShaderModule = dynamic_cast<const MetalShaderModule*>(desc.vertexShader);
-                const auto* fragmentShaderModule = dynamic_cast<const MetalShaderModule*>(desc.fragmentShader);
+                const RhiBoundShaderStateDesc& boundShaderState = desc.boundShaderState;
+                const auto* vertexShaderModule = dynamic_cast<const MetalShaderModule*>(boundShaderState.vertexShader);
+                const auto* fragmentShaderModule = dynamic_cast<const MetalShaderModule*>(boundShaderState.fragmentShader);
 
                 if (vertexShaderModule == nullptr || fragmentShaderModule == nullptr)
                 {
@@ -652,15 +803,15 @@ namespace ve::rhi
 
                 MTLVertexDescriptor* vertexDescriptor = [[MTLVertexDescriptor alloc] init];
 
-                for (uint32_t index = 0; index < desc.vertexLayout.attributeCount; ++index)
+                for (uint32_t index = 0; index < boundShaderState.vertexDeclaration.attributeCount; ++index)
                 {
-                    const RhiVertexAttributeDesc& attribute = desc.vertexLayout.attributes[index];
+                    const RhiVertexAttributeDesc& attribute = boundShaderState.vertexDeclaration.attributes[index];
                     vertexDescriptor.attributes[index].format = ToMetalVertexFormat(attribute.format);
                     vertexDescriptor.attributes[index].offset = attribute.offset;
                     vertexDescriptor.attributes[index].bufferIndex = 0;
                 }
 
-                vertexDescriptor.layouts[0].stride = desc.vertexLayout.stride;
+                vertexDescriptor.layouts[0].stride = boundShaderState.vertexDeclaration.stride;
                 vertexDescriptor.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
                 vertexDescriptor.layouts[0].stepRate = 1;
 
@@ -669,14 +820,17 @@ namespace ve::rhi
                 pipelineDescriptor.fragmentFunction = fragmentShaderModule->GetFunction();
                 pipelineDescriptor.vertexDescriptor = vertexDescriptor;
                 pipelineDescriptor.colorAttachments[0].pixelFormat = ToMetalPixelFormat(desc.colorFormat);
-                pipelineDescriptor.colorAttachments[0].blendingEnabled = desc.alphaBlendEnabled ? YES : NO;
-                pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-                pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-                pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
-                pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-                pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-                pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
-                pipelineDescriptor.depthAttachmentPixelFormat = desc.depthTestEnabled ? ToMetalPixelFormat(desc.depthFormat) : MTLPixelFormatInvalid;
+                const RhiBlendRenderTargetDesc& colorBlendDesc = desc.blendState.renderTargets[0];
+                pipelineDescriptor.colorAttachments[0].blendingEnabled = colorBlendDesc.blendEnabled ? YES : NO;
+                pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = ToMetalBlendFactor(colorBlendDesc.sourceColorBlendFactor);
+                pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = ToMetalBlendFactor(colorBlendDesc.destinationColorBlendFactor);
+                pipelineDescriptor.colorAttachments[0].rgbBlendOperation = ToMetalBlendOperation(colorBlendDesc.colorBlendOperation);
+                pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = ToMetalBlendFactor(colorBlendDesc.sourceAlphaBlendFactor);
+                pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = ToMetalBlendFactor(colorBlendDesc.destinationAlphaBlendFactor);
+                pipelineDescriptor.colorAttachments[0].alphaBlendOperation = ToMetalBlendOperation(colorBlendDesc.alphaBlendOperation);
+                pipelineDescriptor.colorAttachments[0].writeMask = ToMetalColorWriteMask(colorBlendDesc.colorWriteMask);
+                pipelineDescriptor.depthAttachmentPixelFormat =
+                    desc.depthStencilState.depthTestEnabled ? ToMetalPixelFormat(desc.depthFormat) : MTLPixelFormatInvalid;
 
                 NSError* error = nil;
                 id<MTLRenderPipelineState> pipelineState = [device_ newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
@@ -690,7 +844,31 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<MetalPipelineState>(desc.topology, desc.fillMode, pipelineState);
+                MTLDepthStencilDescriptor* depthStencilDescriptor = [[MTLDepthStencilDescriptor alloc] init];
+                depthStencilDescriptor.depthCompareFunction = desc.depthStencilState.depthTestEnabled
+                                                                  ? ToMetalCompareFunction(desc.depthStencilState.depthCompareFunction)
+                                                                  : MTLCompareFunctionAlways;
+                depthStencilDescriptor.depthWriteEnabled = desc.depthStencilState.depthWriteEnabled ? YES : NO;
+                if (desc.depthStencilState.stencilEnabled)
+                {
+                    depthStencilDescriptor.frontFaceStencil.readMask = desc.depthStencilState.stencilReadMask;
+                    depthStencilDescriptor.frontFaceStencil.writeMask = desc.depthStencilState.stencilWriteMask;
+                    depthStencilDescriptor.backFaceStencil.readMask = desc.depthStencilState.stencilReadMask;
+                    depthStencilDescriptor.backFaceStencil.writeMask = desc.depthStencilState.stencilWriteMask;
+                    ApplyMetalStencilFaceDesc(depthStencilDescriptor.frontFaceStencil, desc.depthStencilState.frontFace);
+                    ApplyMetalStencilFaceDesc(depthStencilDescriptor.backFaceStencil, desc.depthStencilState.backFace);
+                }
+
+                id<MTLDepthStencilState> depthStencilState = [device_ newDepthStencilStateWithDescriptor:depthStencilDescriptor];
+                [depthStencilDescriptor release];
+
+                if (depthStencilState == nil)
+                {
+                    SetLastError("MTLDevice newDepthStencilStateWithDescriptor failed.");
+                    return nullptr;
+                }
+
+                return std::make_unique<MetalPipelineState>(desc.primitiveType, desc.rasterizerState, pipelineState, depthStencilState);
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

@@ -1,5 +1,6 @@
 #include "Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.h"
 
+#include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Render/RenderResource.h"
@@ -349,16 +350,17 @@ float4 PSMain(VSOutput input) : SV_TARGET
         const rhi::RhiVertexAttributeDesc vertexAttributes[] = {positionAttribute, normalAttribute};
 
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
-        pipelineDesc.vertexShader = vertexShader;
-        pipelineDesc.fragmentShader = fragmentShader;
-        pipelineDesc.vertexLayout.attributes = vertexAttributes;
-        pipelineDesc.vertexLayout.attributeCount = 2;
-        pipelineDesc.vertexLayout.stride = sizeof(RTMeshVertex);
-        pipelineDesc.topology = rhi::RhiPrimitiveTopology::TriangleList;
-        pipelineDesc.fillMode = fillMode_;
+        pipelineDesc.blendState = rhi::StaticRenderStates::OpaqueBlend;
+        pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
+        pipelineDesc.rasterizerState.fillMode = fillMode_;
+        pipelineDesc.depthStencilState = depthEnabled ? rhi::StaticRenderStates::DepthReadWriteLessEqual : rhi::StaticRenderStates::DepthDisabled;
+        pipelineDesc.boundShaderState.vertexShader = vertexShader;
+        pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
+        pipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
+        pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
+        pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(RTMeshVertex);
+        pipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
         pipelineDesc.colorFormat = targetFormat;
-        pipelineDesc.depthTestEnabled = depthEnabled;
-        pipelineDesc.depthWriteEnabled = depthEnabled;
         pipelineDesc.debugName = "OpaqueScenePipeline";
 
         pipelineState_ = device.CreateGraphicsPipeline(pipelineDesc);
