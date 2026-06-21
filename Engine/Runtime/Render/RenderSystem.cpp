@@ -509,6 +509,19 @@ namespace ve
                        });
     }
 
+    void RenderSystem::InitRenderResource(std::shared_ptr<RTShaderResource> shaderResource, RTShaderResourceDesc desc)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(shaderResource != nullptr, "RenderSystem::InitRenderResource requires a shader resource.");
+
+        EnqueueCommand("RenderSystemInitShaderResource",
+                       [this, shaderResource = std::move(shaderResource), desc = std::move(desc)]() mutable
+                       {
+                           VE_ASSERT(impl_->device != nullptr);
+                           shaderResource->InitRenderResource(*impl_->device, std::move(desc));
+                       });
+    }
+
     void RenderSystem::InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource, RTMaterialResourceDesc desc)
     {
         VE_ASSERT_SCENE_THREAD();

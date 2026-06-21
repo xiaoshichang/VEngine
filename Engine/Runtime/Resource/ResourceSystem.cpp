@@ -273,6 +273,16 @@ namespace ve
 
             return Result<std::unique_ptr<ResourceObject>>::Success(std::make_unique<MaterialResource>(record, text.MoveValue()));
         }
+        case ResourceType::Shader:
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(physicalPath);
+            if (!text)
+            {
+                return Result<std::unique_ptr<ResourceObject>>::Failure(text.GetError());
+            }
+
+            return Result<std::unique_ptr<ResourceObject>>::Success(std::make_unique<ShaderResource>(record, text.MoveValue()));
+        }
         case ResourceType::Texture:
         {
             Result<std::vector<std::byte>> bytes = FileSystem::ReadBinaryFile(physicalPath);

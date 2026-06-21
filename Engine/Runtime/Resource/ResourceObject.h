@@ -16,6 +16,7 @@ namespace ve
     class ResourceLoadContext;
     class RTMaterialResource;
     class RTMeshResource;
+    class RTShaderResource;
 
     class ResourceObject : public NonMovable
     {
@@ -71,12 +72,33 @@ namespace ve
         [[nodiscard]] const std::string& GetText() const noexcept;
         [[nodiscard]] std::shared_ptr<RTMaterialResource> GetRTMaterialResource() const noexcept;
 
+        ErrorCode Load(ResourceLoadContext& context) override;
         void InitRenderResource(RenderSystem& renderSystem) override;
         void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
 
     private:
         std::string text_;
         std::shared_ptr<RTMaterialResource> rtMaterialResource_;
+        std::shared_ptr<RTShaderResource> rtShaderResource_;
+    };
+
+    class ShaderResource final : public ResourceObject
+    {
+    public:
+        ShaderResource(AssetRecord record, std::string text);
+
+        [[nodiscard]] const std::string& GetText() const noexcept;
+        [[nodiscard]] const std::string& GetReflectionText() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTShaderResource> GetRTShaderResource() const noexcept;
+
+        ErrorCode Load(ResourceLoadContext& context) override;
+        void InitRenderResource(RenderSystem& renderSystem) override;
+        void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
+
+    private:
+        std::string text_;
+        std::string reflectionText_;
+        std::shared_ptr<RTShaderResource> rtShaderResource_;
     };
 
     class SceneResource final : public ResourceObject
@@ -130,5 +152,12 @@ namespace ve
     {
         static constexpr ResourceType Type = ResourceType::Texture;
         static constexpr const char* Name = "TextureResource";
+    };
+
+    template<>
+    struct ResourceObjectTraits<ShaderResource>
+    {
+        static constexpr ResourceType Type = ResourceType::Shader;
+        static constexpr const char* Name = "ShaderResource";
     };
 } // namespace ve

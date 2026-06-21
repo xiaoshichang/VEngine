@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Math/Vector4.h"
 
 #include <memory>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -61,10 +62,48 @@ namespace ve
         std::unique_ptr<rhi::RhiBuffer> indexBuffer_;
     };
 
+    struct RTShaderStageResourceDesc
+    {
+        rhi::RhiShaderStage stage = rhi::RhiShaderStage::Vertex;
+        std::string entryPoint;
+        std::vector<std::byte> d3d11Bytecode;
+        std::vector<std::byte> d3d12Bytecode;
+        std::string metalSource;
+        std::string debugName;
+    };
+
+    struct RTShaderResourceDesc
+    {
+        std::string name = "ShaderResource";
+        std::vector<RTShaderStageResourceDesc> stages;
+    };
+
+    class RTShaderResource final : public RHIResource
+    {
+    public:
+        explicit RTShaderResource(RTShaderResourceDesc desc);
+
+        [[nodiscard]] const RTShaderResourceDesc& GetDesc() const noexcept;
+        [[nodiscard]] bool IsInitialized() const noexcept;
+        [[nodiscard]] rhi::RhiShaderModule* GetVertexShader() noexcept;
+        [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept;
+        [[nodiscard]] rhi::RhiShaderModule* GetFragmentShader() noexcept;
+        [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept;
+
+        void InitRenderResource(rhi::RhiDevice& device, RTShaderResourceDesc desc);
+        void ResetRenderResource() noexcept;
+
+    private:
+        RTShaderResourceDesc desc_;
+        std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
+        std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
+    };
+
     struct RTMaterialResourceDesc
     {
         std::string name = "MaterialResource";
         Vector4 baseColor = Vector4::One();
+        std::shared_ptr<RTShaderResource> shaderResource;
     };
 
     /// Packed constants uploaded for the first-stage material resource.
@@ -84,6 +123,7 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] rhi::RhiBuffer* GetUniformBuffer() noexcept;
         [[nodiscard]] const rhi::RhiBuffer* GetUniformBuffer() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTShaderResource> GetShaderResource() const noexcept;
 
         void InitRenderResource(rhi::RhiDevice& device, RTMaterialResourceDesc desc);
         void ResetRenderResource() noexcept;

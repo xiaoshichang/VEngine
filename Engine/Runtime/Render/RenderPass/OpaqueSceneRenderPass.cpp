@@ -218,6 +218,32 @@ float4 PSMain(VSOutput input) : SV_TARGET
             data.lightColorAndAmbient[3] = 0.35f;
             return data;
         }
+
+        [[nodiscard]] std::shared_ptr<RTShaderResource> FindFirstReadyShaderResource(const RTScene& scene) noexcept
+        {
+            for (SizeT itemIndex = 0; itemIndex < scene.GetRenderItemCount(); ++itemIndex)
+            {
+                const std::shared_ptr<RTRenderItem> item = scene.GetRenderItem(itemIndex);
+                if (item == nullptr)
+                {
+                    continue;
+                }
+
+                const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item->GetDesc().materialResource);
+                if (materialResource == nullptr)
+                {
+                    continue;
+                }
+
+                std::shared_ptr<RTShaderResource> shaderResource = materialResource->GetShaderResource();
+                if (shaderResource != nullptr && shaderResource->GetVertexShader() != nullptr && shaderResource->GetFragmentShader() != nullptr)
+                {
+                    return shaderResource;
+                }
+            }
+
+            return nullptr;
+        }
     } // namespace
 
     OpaqueSceneRenderPass::OpaqueSceneRenderPass(RendererRenderTarget target, rhi::RhiFillMode fillMode)
@@ -252,12 +278,13 @@ float4 PSMain(VSOutput input) : SV_TARGET
     {
         VE_ASSERT_RENDER_THREAD();
 
-        EnsurePipeline(context);
         const std::shared_ptr<RTScene> scene = context.GetRendererData().scene;
         if (scene == nullptr)
         {
             return;
         }
+
+        EnsurePipeline(context, FindFirstReadyShaderResource(*scene));
 
         rhi::RhiCommandList& commandList = context.GetCommandList();
         commandList.SetPipeline(*pipelineState_);
@@ -303,37 +330,47 @@ float4 PSMain(VSOutput input) : SV_TARGET
         }
     }
 
-    void OpaqueSceneRenderPass::EnsurePipeline(RenderPassContext& context)
+    void OpaqueSceneRenderPass::EnsurePipeline(RenderPassContext& context, std::shared_ptr<RTShaderResource> shaderResource)
     {
         const rhi::RhiFormat targetFormat = ResolveTargetFormat(context);
         const bool depthEnabled = context.GetRenderPassDesc().hasDepthStencilAttachment;
-        if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode_ && pipelineDepthEnabled_ == depthEnabled)
+        bool usesResourceShader = shaderResource != nullptr;
+        const bool sameResourceShader = usesResourceShader ? pipelineShaderResource_.lock() == shaderResource : pipelineShaderResource_.expired();
+        if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode_ && pipelineDepthEnabled_ == depthEnabled &&
+            pipelineUsesResourceShader_ == usesResourceShader && sameResourceShader)
         {
             return;
         }
 
         rhi::RhiDevice& device = context.GetDevice();
 
-        ShaderManager* shaderManager = context.GetFrameData().shaderManager;
-        VE_ASSERT_MESSAGE(shaderManager != nullptr, "OpaqueScenePass requires a ShaderManager.");
+        rhi::RhiShaderModule* vertexShader = shaderResource != nullptr ? shaderResource->GetVertexShader() : nullptr;
+        rhi::RhiShaderModule* fragmentShader = shaderResource != nullptr ? shaderResource->GetFragmentShader() : nullptr;
+        if (vertexShader == nullptr || fragmentShader == nullptr)
+        {
+            ShaderManager* shaderManager = context.GetFrameData().shaderManager;
+            VE_ASSERT_MESSAGE(shaderManager != nullptr, "OpaqueScenePass requires a ShaderManager.");
 
-        rhi::RhiShaderModuleDesc vertexShaderDesc = {};
-        vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-        vertexShaderDesc.source = OpaqueSceneShaderSource;
-        vertexShaderDesc.entryPoint = "VSMain";
-        vertexShaderDesc.debugName = "OpaqueSceneVertexShader";
+            rhi::RhiShaderModuleDesc vertexShaderDesc = {};
+            vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
+            vertexShaderDesc.source = OpaqueSceneShaderSource;
+            vertexShaderDesc.entryPoint = "VSMain";
+            vertexShaderDesc.debugName = "OpaqueSceneVertexShader";
 
-        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(device, RenderShaderIDs::OpaqueSceneVertex, vertexShaderDesc);
-        VE_ASSERT_MESSAGE(vertexShader != nullptr, "OpaqueScenePass failed to get vertex shader.");
+            vertexShader = shaderManager->GetOrCompileShader(device, RenderShaderIDs::OpaqueSceneVertex, vertexShaderDesc);
+            VE_ASSERT_MESSAGE(vertexShader != nullptr, "OpaqueScenePass failed to get vertex shader.");
 
-        rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
-        fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-        fragmentShaderDesc.source = OpaqueSceneShaderSource;
-        fragmentShaderDesc.entryPoint = "PSMain";
-        fragmentShaderDesc.debugName = "OpaqueSceneFragmentShader";
+            rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
+            fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
+            fragmentShaderDesc.source = OpaqueSceneShaderSource;
+            fragmentShaderDesc.entryPoint = "PSMain";
+            fragmentShaderDesc.debugName = "OpaqueSceneFragmentShader";
 
-        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(device, RenderShaderIDs::OpaqueSceneFragment, fragmentShaderDesc);
-        VE_ASSERT_MESSAGE(fragmentShader != nullptr, "OpaqueScenePass failed to get fragment shader.");
+            fragmentShader = shaderManager->GetOrCompileShader(device, RenderShaderIDs::OpaqueSceneFragment, fragmentShaderDesc);
+            VE_ASSERT_MESSAGE(fragmentShader != nullptr, "OpaqueScenePass failed to get fragment shader.");
+            shaderResource.reset();
+            usesResourceShader = false;
+        }
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
         positionAttribute.semanticName = "POSITION";
@@ -368,6 +405,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
         pipelineColorFormat_ = targetFormat;
         pipelineFillMode_ = fillMode_;
         pipelineDepthEnabled_ = depthEnabled;
+        pipelineShaderResource_ = shaderResource;
+        pipelineUsesResourceShader_ = usesResourceShader;
     }
 
     void OpaqueSceneRenderPass::BindLightUniform(RenderPassContext& context, const RTScene& scene)

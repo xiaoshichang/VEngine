@@ -9,7 +9,10 @@
 #include <boost/json.hpp>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -50,6 +53,11 @@ namespace ve::editor
                 return EditorAssetType::Material;
             }
 
+            if (extension == ".veshader")
+            {
+                return EditorAssetType::Shader;
+            }
+
             if (extension == ".vescene")
             {
                 return EditorAssetType::Scene;
@@ -78,6 +86,8 @@ namespace ve::editor
                 return "Mesh";
             case EditorAssetType::Material:
                 return "Material";
+            case EditorAssetType::Shader:
+                return "Shader";
             case EditorAssetType::Scene:
                 return "Scene";
             case EditorAssetType::Unknown:
@@ -89,7 +99,17 @@ namespace ve::editor
 
         [[nodiscard]] const char* GetDefaultImporter(EditorAssetType type) noexcept
         {
-            return type == EditorAssetType::ObjSource ? "ObjMeshImporter" : "";
+            if (type == EditorAssetType::ObjSource)
+            {
+                return "ObjMeshImporter";
+            }
+
+            if (type == EditorAssetType::Shader)
+            {
+                return "ShaderImporter";
+            }
+
+            return "";
         }
 
         [[nodiscard]] ResourceType ToResourceType(EditorAssetType type) noexcept
@@ -101,6 +121,8 @@ namespace ve::editor
                 return ResourceType::Mesh;
             case EditorAssetType::Material:
                 return ResourceType::Material;
+            case EditorAssetType::Shader:
+                return ResourceType::Shader;
             case EditorAssetType::Scene:
                 return ResourceType::Scene;
             case EditorAssetType::Unknown:
@@ -135,6 +157,137 @@ namespace ve::editor
         [[nodiscard]] std::string GetImportedMeshFilename(const Path& objProjectPath)
         {
             return GetStem(objProjectPath) + ".vemesh";
+        }
+
+        [[nodiscard]] std::string GetImportedShaderFilename(std::string_view shaderName)
+        {
+            return std::string(shaderName) + ".veshader.json";
+        }
+
+        [[nodiscard]] std::string QuoteProcessArgument(std::string_view argument)
+        {
+            std::string quoted = "\"";
+            for (const char value : argument)
+            {
+                if (value == '"')
+                {
+                    quoted += "\\\"";
+                }
+                else
+                {
+                    quoted += value;
+                }
+            }
+
+            quoted += "\"";
+            return quoted;
+        }
+
+        [[nodiscard]] int RunProcess(const std::vector<std::string>& arguments)
+        {
+            std::ostringstream command;
+            for (SizeT index = 0; index < arguments.size(); ++index)
+            {
+                if (index > 0)
+                {
+                    command << ' ';
+                }
+
+                command << QuoteProcessArgument(arguments[index]);
+            }
+
+            std::string commandLine = command.str();
+#if defined(_WIN32)
+            commandLine = "\"" + commandLine + "\"";
+#endif
+            return std::system(commandLine.c_str());
+        }
+
+        [[nodiscard]] Path ResolveProjectRelativeReference(std::string_view reference, std::string_view fallbackExtension)
+        {
+            if (reference.empty())
+            {
+                return Path();
+            }
+
+            std::string path(reference);
+            if (!path.starts_with("Assets/"))
+            {
+                path = "Assets/" + path;
+            }
+
+            if (Path(path).GetExtension().empty() && !fallbackExtension.empty())
+            {
+                path += fallbackExtension;
+            }
+
+            return Path(path);
+        }
+
+        [[nodiscard]] Path ResolveSourcePath(const Path& projectRoot, const Path& descriptorProjectPath, std::string_view source)
+        {
+            if (source.empty())
+            {
+                return Path();
+            }
+
+            const Path sourcePath(source);
+            if (sourcePath.IsAbsolute())
+            {
+                return sourcePath;
+            }
+
+            if (sourcePath.GetString().starts_with("Assets/") || sourcePath.GetString().starts_with("Library/"))
+            {
+                return projectRoot / sourcePath;
+            }
+
+            return projectRoot / descriptorProjectPath.GetParentPath() / sourcePath;
+        }
+
+        [[nodiscard]] std::optional<Path> FindWindowsSdkFxcPath()
+        {
+#if defined(_WIN32)
+            namespace fs = std::filesystem;
+
+            const fs::path sdkBinRoot = fs::path("C:/Program Files (x86)/Windows Kits/10/bin");
+            std::error_code errorCode;
+            if (!fs::is_directory(sdkBinRoot, errorCode))
+            {
+                return std::nullopt;
+            }
+
+            fs::path bestPath;
+            for (const fs::directory_entry& entry : fs::directory_iterator(sdkBinRoot, errorCode))
+            {
+                if (errorCode)
+                {
+                    return std::nullopt;
+                }
+
+                if (!entry.is_directory(errorCode))
+                {
+                    continue;
+                }
+
+                const fs::path candidate = entry.path() / "x64" / "fxc.exe";
+                if (!fs::is_regular_file(candidate, errorCode))
+                {
+                    continue;
+                }
+
+                if (bestPath.empty() || candidate.parent_path().parent_path().filename().wstring() > bestPath.parent_path().parent_path().filename().wstring())
+                {
+                    bestPath = candidate;
+                }
+            }
+
+            if (!bestPath.empty())
+            {
+                return Path(bestPath.generic_string());
+            }
+#endif
+            return std::nullopt;
         }
 
         [[nodiscard]] boost::json::array WriteVector3(const std::array<double, 3>& value)
@@ -392,6 +545,98 @@ namespace ve::editor
             return object;
         }
 
+        [[nodiscard]] Path MakeProjectRelativePath(const Path& projectRoot, const Path& path)
+        {
+            if (!path.IsAbsolute())
+            {
+                return path;
+            }
+
+            const std::string& root = projectRoot.GetString();
+            const std::string& pathText = path.GetString();
+            const std::string prefix = root.ends_with('/') ? root : root + "/";
+            if (pathText.starts_with(prefix))
+            {
+                return Path(pathText.substr(prefix.size()));
+            }
+
+            return path;
+        }
+
+        [[nodiscard]] ErrorCode RewriteShaderArtifactPaths(const Path& projectRoot, const Path& shaderRuntimePhysicalPath)
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(shaderRuntimePhysicalPath);
+            if (!text)
+            {
+                return text.GetError().GetCode();
+            }
+
+            Result<boost::json::value> json = JsonUtils::Parse(text.GetValue());
+            if (!json || !json.GetValue().is_object())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            boost::json::object& object = json.GetValue().as_object();
+            boost::json::value* stagesValue = object.if_contains("stages");
+            if (stagesValue == nullptr || !stagesValue->is_array())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            for (boost::json::value& stageValue : stagesValue->as_array())
+            {
+                if (!stageValue.is_object())
+                {
+                    continue;
+                }
+
+                boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
+                if (artifactsValue == nullptr || !artifactsValue->is_object())
+                {
+                    continue;
+                }
+
+                boost::json::object& artifacts = artifactsValue->as_object();
+                for (const char* key : {"d3d11", "d3d12", "spirv", "metal", "reflection"})
+                {
+                    boost::json::value* artifactValue = artifacts.if_contains(key);
+                    if (artifactValue == nullptr || !artifactValue->is_string())
+                    {
+                        continue;
+                    }
+
+                    artifacts[key] = MakeProjectRelativePath(projectRoot, Path(std::string(artifactValue->as_string()))).GetString();
+                }
+            }
+
+            object["source"] = MakeProjectRelativePath(projectRoot, Path(ReadString(object, "source"))).GetString();
+            return FileSystem::WriteTextFile(shaderRuntimePhysicalPath, JsonUtils::SerializePretty(json.GetValue()));
+        }
+
+        [[nodiscard]] AssetID ReadDependencyIDFromMeta(const Path& metaPhysicalPath)
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(metaPhysicalPath);
+            if (!text)
+            {
+                return AssetID();
+            }
+
+            Result<boost::json::value> json = JsonUtils::Parse(text.GetValue());
+            if (!json || !json.GetValue().is_object())
+            {
+                return AssetID();
+            }
+
+            Result<Guid> guid = Guid::Parse(ReadString(json.GetValue().as_object(), "guid"));
+            if (!guid || guid.GetValue().IsEmpty())
+            {
+                return AssetID();
+            }
+
+            return AssetID(guid.MoveValue(), 0);
+        }
+
     } // namespace
 
     ErrorCode EditorAssetDatabase::Initialize(const Path& projectRoot)
@@ -449,7 +694,7 @@ namespace ve::editor
         {
             return result;
         }
-        return ErrorCode::None;
+        return ResolveAssetDependencies();
     }
 
     ErrorCode EditorAssetDatabase::ReimportAll()
@@ -472,7 +717,7 @@ namespace ve::editor
         {
             return result;
         }
-        return ErrorCode::None;
+        return ResolveAssetDependencies();
     }
 
     ErrorCode EditorAssetDatabase::ReimportAsset(const Path& projectRelativePath)
@@ -491,6 +736,14 @@ namespace ve::editor
         if (asset->type == EditorAssetType::ObjSource)
         {
             const ErrorCode result = ImportObjAsMesh(asset->path, asset->asset.id.GetGuid(), true);
+            if (result != ErrorCode::None)
+            {
+                return result;
+            }
+        }
+        else if (asset->type == EditorAssetType::Shader)
+        {
+            const ErrorCode result = ImportShader(asset->path, asset->asset.id.GetGuid(), true);
             if (result != ErrorCode::None)
             {
                 return result;
@@ -563,6 +816,8 @@ namespace ve::editor
             return "Mesh";
         case EditorAssetType::Material:
             return "Material";
+        case EditorAssetType::Shader:
+            return "Shader";
         case EditorAssetType::Scene:
             return "Scene";
         case EditorAssetType::Unknown:
@@ -617,6 +872,23 @@ namespace ve::editor
                     record.imported = true;
                     record.importedPath = GetImportedMeshPath(guid, record.path);
                 }
+                else if (record.type == EditorAssetType::Shader)
+                {
+                    Result<std::string> shaderName = ReadShaderName(record.path);
+                    if (!shaderName)
+                    {
+                        return shaderName.GetError().GetCode();
+                    }
+
+                    const ErrorCode importResult = ImportShader(record.path, guid, force);
+                    if (importResult != ErrorCode::None)
+                    {
+                        return importResult;
+                    }
+
+                    record.imported = true;
+                    record.importedPath = GetImportedShaderPath(guid, shaderName.GetValue());
+                }
                 record.asset.runtimePath = record.imported ? record.importedPath : record.path;
 
                 AddAssetRecord(std::move(record));
@@ -648,6 +920,146 @@ namespace ve::editor
 
         const boost::json::value meshJson(BuildMeshAssetJson(meshData.GetValue(), guid));
         return FileSystem::WriteTextFile(meshPhysicalPath, JsonUtils::SerializePretty(meshJson));
+    }
+
+    ErrorCode EditorAssetDatabase::ImportShader(const Path& shaderProjectPath, const Guid& guid, bool force)
+    {
+        if (shaderProjectPath.IsEmpty() || guid.IsEmpty())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        Result<std::string> shaderNameResult = ReadShaderName(shaderProjectPath);
+        if (!shaderNameResult)
+        {
+            return shaderNameResult.GetError().GetCode();
+        }
+
+        const std::string shaderName = shaderNameResult.GetValue();
+        const Path shaderRuntimePath = GetImportedShaderPath(guid, shaderName);
+        const Path shaderRuntimePhysicalPath = projectRoot_ / shaderRuntimePath;
+        if (!force && FileSystem::IsFile(shaderRuntimePhysicalPath))
+        {
+            return ErrorCode::None;
+        }
+
+        Result<std::string> descriptorText = FileSystem::ReadTextFile(projectRoot_ / shaderProjectPath);
+        if (!descriptorText)
+        {
+            return descriptorText.GetError().GetCode();
+        }
+
+        Result<boost::json::value> descriptorJson = JsonUtils::Parse(descriptorText.GetValue());
+        if (!descriptorJson || !descriptorJson.GetValue().is_object())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        const boost::json::object& descriptor = descriptorJson.GetValue().as_object();
+        const Path sourcePath = ResolveSourcePath(projectRoot_, shaderProjectPath, ReadString(descriptor, "source"));
+        if (shaderName.empty() || sourcePath.IsEmpty() || !FileSystem::IsFile(sourcePath))
+        {
+            return ErrorCode::NotFound;
+        }
+
+        const Path outputDirectory = projectRoot_ / GetImportedShaderDirectory(guid);
+        const Path executableDirectory = FileSystem::GetExecutableDirectory();
+        const Path shaderToolPath = executableDirectory / "VEngineShaderTool.exe";
+        if (!FileSystem::IsFile(shaderToolPath))
+        {
+            return ErrorCode::NotFound;
+        }
+
+        std::vector<std::string> arguments = {
+            shaderToolPath.GetString(),
+            "compile",
+            "--source",
+            sourcePath.GetString(),
+            "--output",
+            outputDirectory.GetString(),
+            "--name",
+            shaderName,
+        };
+
+        const Path repositoryRoot = executableDirectory.GetParentPath().GetParentPath().GetParentPath();
+        const Path dxcPath = repositoryRoot / "ThirdParty/DirectXShaderCompiler/Build/Windows64/1.9.2602.17/Tools/x64/dxc.exe";
+        if (FileSystem::IsFile(dxcPath))
+        {
+            arguments.push_back("--dxc");
+            arguments.push_back(dxcPath.GetString());
+        }
+
+        if (std::optional<Path> fxcPath = FindWindowsSdkFxcPath())
+        {
+            arguments.push_back("--fxc");
+            arguments.push_back(fxcPath->GetString());
+        }
+
+        const Path spirvCrossPath = repositoryRoot / "ThirdParty/SPIRV-Cross/Build/Windows64/vulkan-sdk-1.4.309.0/Release/spirv-cross.exe";
+        if (FileSystem::IsFile(spirvCrossPath))
+        {
+            arguments.push_back("--spirv-cross");
+            arguments.push_back(spirvCrossPath.GetString());
+        }
+
+        if (RunProcess(arguments) != 0)
+        {
+            return ErrorCode::IOError;
+        }
+
+        if (!FileSystem::IsFile(shaderRuntimePhysicalPath))
+        {
+            return ErrorCode::NotFound;
+        }
+
+        return RewriteShaderArtifactPaths(projectRoot_, shaderRuntimePhysicalPath);
+    }
+
+    ErrorCode EditorAssetDatabase::ResolveAssetDependencies()
+    {
+        for (auto& pair : assetsByID_)
+        {
+            EditorAssetRecord& record = pair.second;
+            record.asset.dependencies.clear();
+
+            if (record.type != EditorAssetType::Material)
+            {
+                continue;
+            }
+
+            Result<std::string> materialText = FileSystem::ReadTextFile(projectRoot_ / record.path);
+            if (!materialText)
+            {
+                return materialText.GetError().GetCode();
+            }
+
+            Result<boost::json::value> materialJson = JsonUtils::Parse(materialText.GetValue());
+            if (!materialJson || !materialJson.GetValue().is_object())
+            {
+                continue;
+            }
+
+            const Path shaderProjectPath = ResolveProjectRelativeReference(ReadString(materialJson.GetValue().as_object(), "shader"), ".veshader");
+            if (shaderProjectPath.IsEmpty())
+            {
+                continue;
+            }
+
+            const auto shaderID = assetIDsByAssetPath_.find(shaderProjectPath.GetString());
+            if (shaderID != assetIDsByAssetPath_.end())
+            {
+                record.asset.dependencies.push_back(shaderID->second);
+                continue;
+            }
+
+            const AssetID idFromMeta = ReadDependencyIDFromMeta(projectRoot_ / GetMetaPath(shaderProjectPath));
+            if (!idFromMeta.IsEmpty())
+            {
+                record.asset.dependencies.push_back(idFromMeta);
+            }
+        }
+
+        return ErrorCode::None;
     }
 
     Result<Guid> EditorAssetDatabase::EnsureMeta(const EditorAssetRecord& record) const
@@ -706,6 +1118,39 @@ namespace ve::editor
     Path EditorAssetDatabase::GetImportedMeshPath(const Guid& guid, const Path& objProjectPath) const
     {
         return Path(EditorProject::LibraryDirectoryName) / ImportedDirectoryName / guid.ToString() / GetImportedMeshFilename(objProjectPath);
+    }
+
+    Path EditorAssetDatabase::GetImportedShaderDirectory(const Guid& guid) const
+    {
+        return Path(EditorProject::LibraryDirectoryName) / ImportedDirectoryName / guid.ToString();
+    }
+
+    Path EditorAssetDatabase::GetImportedShaderPath(const Guid& guid, std::string_view shaderName) const
+    {
+        return GetImportedShaderDirectory(guid) / GetImportedShaderFilename(shaderName);
+    }
+
+    Result<std::string> EditorAssetDatabase::ReadShaderName(const Path& shaderProjectPath) const
+    {
+        Result<std::string> descriptorText = FileSystem::ReadTextFile(projectRoot_ / shaderProjectPath);
+        if (!descriptorText)
+        {
+            return descriptorText;
+        }
+
+        Result<boost::json::value> descriptorJson = JsonUtils::Parse(descriptorText.GetValue());
+        if (!descriptorJson || !descriptorJson.GetValue().is_object())
+        {
+            return Result<std::string>::Failure(Error(ErrorCode::InvalidArgument, "Shader source descriptor root must be a JSON object."));
+        }
+
+        const std::string shaderName = ReadString(descriptorJson.GetValue().as_object(), "name", GetStem(shaderProjectPath));
+        if (shaderName.empty())
+        {
+            return Result<std::string>::Failure(Error(ErrorCode::InvalidArgument, "Shader source descriptor requires a non-empty shader name."));
+        }
+
+        return Result<std::string>::Success(shaderName);
     }
 
     Path EditorAssetDatabase::GetMetaPath(const Path& assetProjectPath) const

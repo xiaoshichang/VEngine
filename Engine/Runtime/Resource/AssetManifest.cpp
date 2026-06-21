@@ -206,6 +206,8 @@ namespace ve
             return "Material";
         case ResourceType::Texture:
             return "Texture";
+        case ResourceType::Shader:
+            return "Shader";
         }
 
         return "Unknown";
@@ -231,6 +233,11 @@ namespace ve
         if (text == "Texture")
         {
             return ResourceType::Texture;
+        }
+
+        if (text == "Shader")
+        {
+            return ResourceType::Shader;
         }
 
         return ResourceType::Unknown;

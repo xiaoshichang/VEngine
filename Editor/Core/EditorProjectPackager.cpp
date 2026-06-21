@@ -50,6 +50,64 @@ namespace ve::editor
         {
             return std::string(operation) + " failed for '" + path.GetString() + "': " + errorCode.message();
         }
+
+        [[nodiscard]] std::string ReadString(const boost::json::object& object, boost::json::string_view key, std::string fallback = {})
+        {
+            if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_string())
+            {
+                return std::string(value->as_string());
+            }
+
+            return fallback;
+        }
+
+        [[nodiscard]] Result<std::vector<Path>> CollectShaderArtifactPaths(const Path& shaderDescriptorPath)
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(shaderDescriptorPath);
+            if (!text)
+            {
+                return Result<std::vector<Path>>::Failure(text.GetError());
+            }
+
+            Result<boost::json::value> json = JsonUtils::Parse(text.GetValue());
+            if (!json || !json.GetValue().is_object())
+            {
+                return Result<std::vector<Path>>::Failure(Error(ErrorCode::InvalidArgument, "Shader descriptor root must be a JSON object."));
+            }
+
+            const boost::json::value* stagesValue = json.GetValue().as_object().if_contains("stages");
+            if (stagesValue == nullptr || !stagesValue->is_array())
+            {
+                return Result<std::vector<Path>>::Failure(Error(ErrorCode::InvalidArgument, "Shader descriptor missing stages array."));
+            }
+
+            std::vector<Path> paths;
+            for (const boost::json::value& stageValue : stagesValue->as_array())
+            {
+                if (!stageValue.is_object())
+                {
+                    continue;
+                }
+
+                const boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
+                if (artifactsValue == nullptr || !artifactsValue->is_object())
+                {
+                    continue;
+                }
+
+                const boost::json::object& artifacts = artifactsValue->as_object();
+                for (const char* key : {"d3d11", "d3d12", "spirv", "metal", "reflection"})
+                {
+                    const std::string artifactPath = ReadString(artifacts, key);
+                    if (!artifactPath.empty())
+                    {
+                        paths.emplace_back(artifactPath);
+                    }
+                }
+            }
+
+            return Result<std::vector<Path>>::Success(std::move(paths));
+        }
     } // namespace
 
     EditorProjectPackager::~EditorProjectPackager()
@@ -326,6 +384,38 @@ namespace ve::editor
 
             ++copiedCount;
             LogLine("Copied runtime asset: " + sourcePath.GetString() + " -> " + destinationPath.GetString());
+
+            if (pair.second.asset.type != ResourceType::Shader)
+            {
+                continue;
+            }
+
+            Result<std::vector<Path>> artifactPaths = CollectShaderArtifactPaths(sourcePath);
+            if (!artifactPaths)
+            {
+                LogError(artifactPaths.GetError().GetCode(), "Failed to read shader artifact list: " + sourcePath.GetString());
+                return artifactPaths.GetError().GetCode();
+            }
+
+            for (const Path& artifactRuntimePath : artifactPaths.GetValue())
+            {
+                if (artifactRuntimePath.IsEmpty() || artifactRuntimePath.IsAbsolute())
+                {
+                    LogError(ErrorCode::InvalidArgument, "Shader artifact path must be project-relative: " + artifactRuntimePath.GetString());
+                    return ErrorCode::InvalidArgument;
+                }
+
+                const Path artifactSourcePath = projectRoot_ / artifactRuntimePath;
+                const Path artifactDestinationPath = packageDataRoot_ / artifactRuntimePath;
+                if (!CopyFileWithDirectories(artifactSourcePath, artifactDestinationPath, errorCode))
+                {
+                    LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", artifactSourcePath, errorCode));
+                    return ErrorCode::IOError;
+                }
+
+                ++copiedCount;
+                LogLine("Copied shader artifact: " + artifactSourcePath.GetString() + " -> " + artifactDestinationPath.GetString());
+            }
         }
 
         LogLine("Runtime asset copy completed. File count: " + std::to_string(copiedCount));

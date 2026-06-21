@@ -16,6 +16,7 @@ namespace ve
         Mesh,
         Material,
         Texture,
+        Shader,
     };
 
     struct AssetRecord

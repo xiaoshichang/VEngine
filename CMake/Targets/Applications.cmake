@@ -80,6 +80,9 @@ function(ve_add_windows_editor)
                 VEngine
         )
 
+        ve_add_shader_tool()
+        add_dependencies(VEngineEditor VEngineShaderTool)
+
         ve_setup_imgui(VEngineEditor)
 
         ve_configure_target(VEngineEditor)

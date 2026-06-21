@@ -1005,6 +1005,26 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
             {
+                if (desc.codeFormat == RhiShaderCodeFormat::Bytecode)
+                {
+                    if (desc.bytecode == nullptr || desc.bytecodeSize == 0)
+                    {
+                        SetLastError("D3D11 shader module bytecode input is empty.");
+                        return nullptr;
+                    }
+
+                    ComPtr<ID3DBlob> bytecode;
+                    HRESULT result = D3DCreateBlob(static_cast<SIZE_T>(desc.bytecodeSize), &bytecode);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("D3DCreateBlob", result));
+                        return nullptr;
+                    }
+
+                    std::memcpy(bytecode->GetBufferPointer(), desc.bytecode, static_cast<size_t>(desc.bytecodeSize));
+                    return std::make_unique<D3D11ShaderModule>(desc.stage, bytecode);
+                }
+
                 if (desc.source == nullptr || desc.entryPoint == nullptr)
                 {
                     SetLastError("D3D11 shader module requires source and entry point.");

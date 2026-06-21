@@ -339,11 +339,20 @@ namespace ve::rhi
         const char* debugName = nullptr;
     };
 
-    /// Describes source code and entry point for creating a shader module.
+    enum class RhiShaderCodeFormat
+    {
+        Source,
+        Bytecode,
+    };
+
+    /// Describes source code or precompiled bytecode used to create a shader module.
     struct RhiShaderModuleDesc
     {
         RhiShaderStage stage = RhiShaderStage::Vertex;
+        RhiShaderCodeFormat codeFormat = RhiShaderCodeFormat::Source;
         const char* source = nullptr;
+        const void* bytecode = nullptr;
+        uint64_t bytecodeSize = 0;
         const char* entryPoint = nullptr;
         const char* debugName = nullptr;
     };

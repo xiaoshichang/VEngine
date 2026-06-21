@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Resource/AssetRecord.h"
 
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -20,6 +21,7 @@ namespace ve::editor
         ObjSource,
         Mesh,
         Material,
+        Shader,
         Scene,
     };
 
@@ -61,9 +63,14 @@ namespace ve::editor
     private:
         [[nodiscard]] ErrorCode ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force);
         [[nodiscard]] ErrorCode ImportObjAsMesh(const Path& objProjectPath, const Guid& guid, bool force);
+        [[nodiscard]] ErrorCode ImportShader(const Path& shaderProjectPath, const Guid& guid, bool force);
+        [[nodiscard]] ErrorCode ResolveAssetDependencies();
         [[nodiscard]] Result<Guid> EnsureMeta(const EditorAssetRecord& record) const;
         [[nodiscard]] Result<Guid> ReadMetaGuid(const Path& metaPhysicalPath) const;
         [[nodiscard]] Path GetImportedMeshPath(const Guid& guid, const Path& objProjectPath) const;
+        [[nodiscard]] Path GetImportedShaderDirectory(const Guid& guid) const;
+        [[nodiscard]] Path GetImportedShaderPath(const Guid& guid, std::string_view shaderName) const;
+        [[nodiscard]] Result<std::string> ReadShaderName(const Path& shaderProjectPath) const;
         [[nodiscard]] Path GetMetaPath(const Path& assetProjectPath) const;
         [[nodiscard]] Path ToProjectRelativePath(const Path& physicalPath) const;
         void AddAssetRecord(EditorAssetRecord record);

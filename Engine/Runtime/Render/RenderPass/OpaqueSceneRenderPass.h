@@ -12,6 +12,7 @@ namespace ve
 {
     struct RTRenderItemDesc;
     class RTScene;
+    class RTShaderResource;
 
     class OpaqueSceneRenderPass final : public RenderPass
     {
@@ -23,7 +24,7 @@ namespace ve
         void Execute(RenderPassContext& context) override;
 
     private:
-        void EnsurePipeline(RenderPassContext& context);
+        void EnsurePipeline(RenderPassContext& context, std::shared_ptr<RTShaderResource> shaderResource);
         void BindLightUniform(RenderPassContext& context, const RTScene& scene);
         void BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc);
         void EnsureDefaultMaterialBuffer(rhi::RhiDevice& device);
@@ -36,6 +37,8 @@ namespace ve
         std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
+        std::weak_ptr<RTShaderResource> pipelineShaderResource_;
         bool pipelineDepthEnabled_ = false;
+        bool pipelineUsesResourceShader_ = false;
     };
 } // namespace ve
