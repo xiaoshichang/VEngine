@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/Core/Gizmos.h"
 #include "Editor/Panels/BasePanel.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Platform/Window.h"
@@ -27,6 +28,9 @@ namespace ve::editor
         [[nodiscard]] bool IsGridEnabled() const noexcept;
         [[nodiscard]] Float32 GetGridOpacity() const noexcept;
         [[nodiscard]] Float32 GetGridUnitSize() const noexcept;
+        [[nodiscard]] Gizmos& GetGizmos() noexcept;
+        [[nodiscard]] const Gizmos& GetGizmos() const noexcept;
+        [[nodiscard]] Matrix44 GetSceneViewCameraLocalToWorld() const noexcept;
 
     private:
         struct SceneViewCameraState
@@ -67,6 +71,7 @@ namespace ve::editor
         void RenderRenderPopup();
         void RenderOverlayPopup();
         void RenderGridPopup();
+        void RenderGizmosPopup();
         void RenderSceneViewOverlays(const ImVec2& imageMin, const ImVec2& imageSize);
         void RenderAxisOverlay(const ImVec2& imageMin, const ImVec2& imageSize);
         void UpdateCameraFromInput(bool viewportHovered, bool viewportClicked, bool viewportRightClicked);
@@ -86,6 +91,7 @@ namespace ve::editor
         SceneViewCameraState camera_;
         SceneViewOverlayState overlays_;
         SceneViewGridState grid_;
+        Gizmos gizmos_;
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
         bool sceneViewFocused_ = false;
         bool cameraLookActive_ = false;

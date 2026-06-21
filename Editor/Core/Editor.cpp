@@ -7,9 +7,10 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Editor/RenderPass/EditorGizmoRenderPass.h"
+#include "Editor/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
-#include "Engine/Runtime/Render/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <imgui.h>
@@ -40,6 +41,18 @@ namespace ve::editor
         ImDrawData drawData;
         ImVector<ImTextureData*> textureRefs;
         std::vector<std::unique_ptr<ImDrawList>> ownedCmdLists;
+    };
+
+    struct EditorFrameRenderViews
+    {
+        std::shared_ptr<RTRenderTexture> sceneViewTexture;
+        std::shared_ptr<RTCamera> sceneViewCameraSnapshot;
+        rhi::RhiFillMode sceneViewFillMode = rhi::RhiFillMode::Solid;
+        bool sceneViewGridEnabled = false;
+        Float32 sceneViewGridOpacity = 0.45f;
+        Float32 sceneViewGridUnitSize = 1.0f;
+        std::shared_ptr<EditorGizmoDrawList> sceneViewGizmoDrawList;
+        std::shared_ptr<RTRenderTexture> gameViewTexture;
     };
 
     namespace
@@ -211,6 +224,22 @@ namespace ve::editor
             return nullptr;
         }
 
+        RenderActiveMainView();
+
+        std::shared_ptr<EditorFrameDrawData> frameDrawData = CaptureImGuiFrameDrawData();
+        EditorFrameRenderViews views = CollectFrameRenderViews();
+        std::shared_ptr<RTScene> renderScene = GetActiveRenderScene();
+
+        EditorRenderFramePipelineDesc pipelineDesc = {};
+        AddSceneViewRenderer(pipelineDesc, views, renderScene);
+        AddGameViewRenderer(pipelineDesc, views, renderScene);
+        pipelineDesc.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
+        pipelineDesc.overlayRenderCallback = BuildOverlayRenderCallback(std::move(frameDrawData));
+        return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineDesc));
+    }
+
+    void Editor::RenderActiveMainView()
+    {
         switch (mainView_)
         {
         case MainView::ProjectSelection:
@@ -222,29 +251,43 @@ namespace ve::editor
         }
 
         ImGui::Render();
+    }
 
+    std::shared_ptr<EditorFrameDrawData> Editor::CaptureImGuiFrameDrawData() const
+    {
         std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
         VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
+        return frameDrawData;
+    }
 
-        std::shared_ptr<RTRenderTexture> sceneViewTexture;
-        std::shared_ptr<RTCamera> sceneViewCameraSnapshot;
-        rhi::RhiFillMode sceneViewFillMode = rhi::RhiFillMode::Solid;
-        bool sceneViewGridEnabled = false;
-        Float32 sceneViewGridOpacity = 0.45f;
-        Float32 sceneViewGridUnitSize = 1.0f;
-        std::shared_ptr<RTRenderTexture> gameViewTexture;
-        if (mainView_ == MainView::ProjectEditing)
+    EditorFrameRenderViews Editor::CollectFrameRenderViews() const
+    {
+        EditorFrameRenderViews views = {};
+        if (mainView_ != MainView::ProjectEditing)
         {
-            sceneViewTexture = projectEditingView_->GetSceneViewTexture();
-            sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraDesc());
-            sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
-            sceneViewGridEnabled = projectEditingView_->IsSceneViewGridEnabled();
-            sceneViewGridOpacity = projectEditingView_->GetSceneViewGridOpacity();
-            sceneViewGridUnitSize = projectEditingView_->GetSceneViewGridUnitSize();
-            gameViewTexture = projectEditingView_->GetGameViewTexture();
+            return views;
         }
 
-        EditorOverlayRenderCallback overlayCallback = [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)]()
+        views.sceneViewTexture = projectEditingView_->GetSceneViewTexture();
+        views.sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraDesc());
+        views.sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
+        views.sceneViewGridEnabled = projectEditingView_->IsSceneViewGridEnabled();
+        views.sceneViewGridOpacity = projectEditingView_->GetSceneViewGridOpacity();
+        views.sceneViewGridUnitSize = projectEditingView_->GetSceneViewGridUnitSize();
+
+        const Scene* scene = sceneSystem_ != nullptr ? sceneSystem_->GetScene() : nullptr;
+        views.sceneViewGizmoDrawList = projectEditingView_->GetSceneViewGizmos().BuildDrawList(GizmoBuildDesc{
+            scene,
+            GetSelectedGameObject(),
+            projectEditingView_->GetSceneViewCameraLocalToWorld(),
+        });
+        views.gameViewTexture = projectEditingView_->GetGameViewTexture();
+        return views;
+    }
+
+    EditorOverlayRenderCallback Editor::BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const
+    {
+        return [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)]()
         {
             VE_ASSERT_RENDER_THREAD();
 
@@ -265,49 +308,66 @@ namespace ve::editor
                 break;
             }
         };
+    }
 
-        EditorRenderFramePipelineDesc pipelineDesc = {};
-        std::shared_ptr<RTScene> renderScene = sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
-        if (sceneViewTexture != nullptr)
+    void Editor::AddSceneViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc,
+                                      const EditorFrameRenderViews& views,
+                                      const std::shared_ptr<RTScene>& renderScene) const
+    {
+        if (views.sceneViewTexture == nullptr)
         {
-            ForwardRendererDesc rendererDesc = {};
-            rendererDesc.scene = renderScene;
-            rendererDesc.camera = sceneViewCameraSnapshot;
-            rendererDesc.target.colorTexture = sceneViewTexture;
-            rendererDesc.fillMode = sceneViewFillMode;
-            rendererDesc.target.colorLoadAction = rhi::RhiLoadAction::Load;
-            rendererDesc.target.colorStoreAction = rhi::RhiStoreAction::Store;
-            pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
-
-            if (sceneViewGridEnabled)
-            {
-                SceneGridRenderPassDesc gridPassDesc = {};
-                gridPassDesc.colorTexture = sceneViewTexture;
-                gridPassDesc.opacity = sceneViewGridOpacity;
-                gridPassDesc.unitSize = sceneViewGridUnitSize;
-                ForwardRendererDesc gridRendererDesc = {};
-                gridRendererDesc.scene = renderScene;
-                gridRendererDesc.camera = sceneViewCameraSnapshot;
-                gridRendererDesc.target.colorTexture = sceneViewTexture;
-                gridRendererDesc.target.colorLoadAction = rhi::RhiLoadAction::Load;
-                gridRendererDesc.target.colorStoreAction = rhi::RhiStoreAction::Store;
-                gridRendererDesc.addOpaquePass = false;
-                gridRendererDesc.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassDesc)));
-                pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(gridRendererDesc)));
-            }
+            return;
         }
 
-        if (gameViewTexture != nullptr)
+        // Scene View is one renderer with a normal scene pass followed by editor-only visual aid passes.
+        // Keeping the pass list together avoids repeating BaseRenderer setup for grid and gizmo overlays.
+        ForwardRendererDesc rendererDesc = {};
+        rendererDesc.scene = renderScene;
+        rendererDesc.camera = views.sceneViewCameraSnapshot;
+        rendererDesc.target.colorTexture = views.sceneViewTexture;
+        rendererDesc.fillMode = views.sceneViewFillMode;
+        rendererDesc.target.colorLoadAction = rhi::RhiLoadAction::Load;
+        rendererDesc.target.colorStoreAction = rhi::RhiStoreAction::Store;
+
+        if (views.sceneViewGridEnabled)
         {
-            ForwardRendererDesc rendererDesc = {};
-            rendererDesc.scene = renderScene;
-            rendererDesc.target.colorTexture = gameViewTexture;
-            pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+            SceneGridRenderPassDesc gridPassDesc = {};
+            gridPassDesc.colorTexture = views.sceneViewTexture;
+            gridPassDesc.opacity = views.sceneViewGridOpacity;
+            gridPassDesc.unitSize = views.sceneViewGridUnitSize;
+            rendererDesc.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassDesc)));
         }
 
-        pipelineDesc.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
-        pipelineDesc.overlayRenderCallback = std::move(overlayCallback);
-        return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineDesc));
+        if (views.sceneViewGizmoDrawList != nullptr)
+        {
+            EditorGizmoRenderPassDesc gizmoPassDesc = {};
+            gizmoPassDesc.colorTexture = views.sceneViewTexture;
+            gizmoPassDesc.drawList = views.sceneViewGizmoDrawList;
+            rendererDesc.additionalPasses.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassDesc)));
+        }
+
+        pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+    }
+
+    void Editor::AddGameViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc,
+                                     const EditorFrameRenderViews& views,
+                                     const std::shared_ptr<RTScene>& renderScene) const
+    {
+        if (views.gameViewTexture == nullptr)
+        {
+            return;
+        }
+
+        // Game View intentionally stays free of editor gizmo/grid passes for now.
+        ForwardRendererDesc rendererDesc = {};
+        rendererDesc.scene = renderScene;
+        rendererDesc.target.colorTexture = views.gameViewTexture;
+        pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+    }
+
+    std::shared_ptr<RTScene> Editor::GetActiveRenderScene() const
+    {
+        return sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
     }
 
     void Editor::UnInit() noexcept

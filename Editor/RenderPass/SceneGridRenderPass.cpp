@@ -1,9 +1,8 @@
-#include "Engine/Runtime/Render/RenderPass/SceneGridRenderPass.h"
+#include "Editor/RenderPass/SceneGridRenderPass.h"
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Render/RenderResource.h"
-#include "Engine/Runtime/Render/RenderShaderIDs.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -17,6 +16,11 @@ namespace ve
 {
     namespace
     {
+        inline constexpr const char* SceneGridVertexShaderName = "SceneGrid.Vertex";
+        inline constexpr const char* SceneGridFragmentShaderName = "SceneGrid.Fragment";
+        const ShaderID SceneGridVertexShaderID{SceneGridVertexShaderName, 0};
+        const ShaderID SceneGridFragmentShaderID{SceneGridFragmentShaderName, 0};
+
         constexpr Float32 GridExtent = 1000.0f;
 
         const char* SceneGridShaderSource = R"(
@@ -299,7 +303,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         vertexShaderDesc.entryPoint = "VSMain";
         vertexShaderDesc.debugName = "SceneGridVertexShader";
 
-        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.GetDevice(), RenderShaderIDs::SceneGridVertex, vertexShaderDesc);
+        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.GetDevice(), SceneGridVertexShaderID, vertexShaderDesc);
         VE_ASSERT_MESSAGE(vertexShader != nullptr, "SceneGridRenderPass failed to get vertex shader.");
 
         rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
@@ -308,7 +312,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         fragmentShaderDesc.entryPoint = "PSMain";
         fragmentShaderDesc.debugName = "SceneGridFragmentShader";
 
-        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.GetDevice(), RenderShaderIDs::SceneGridFragment, fragmentShaderDesc);
+        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.GetDevice(), SceneGridFragmentShaderID, fragmentShaderDesc);
         VE_ASSERT_MESSAGE(fragmentShader != nullptr, "SceneGridRenderPass failed to get fragment shader.");
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};

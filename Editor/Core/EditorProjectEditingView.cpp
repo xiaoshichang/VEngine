@@ -81,6 +81,16 @@ namespace ve::editor
         return sceneViewPanel_.GetGridUnitSize();
     }
 
+    const Gizmos& ProjectEditingView::GetSceneViewGizmos() const noexcept
+    {
+        return sceneViewPanel_.GetGizmos();
+    }
+
+    Matrix44 ProjectEditingView::GetSceneViewCameraLocalToWorld() const noexcept
+    {
+        return sceneViewPanel_.GetSceneViewCameraLocalToWorld();
+    }
+
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept
     {
         return gameViewPanel_.GetGameViewTexture().GetRTRenderTexture();

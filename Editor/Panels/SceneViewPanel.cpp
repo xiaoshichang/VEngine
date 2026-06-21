@@ -19,6 +19,7 @@ namespace ve::editor
         constexpr float ControlButtonHeight = 0.0f;
         constexpr float PopupWidth = 320.0f;
         constexpr float GridPopupWidth = 340.0f;
+        constexpr float GizmosPopupWidth = 280.0f;
         constexpr float MaxPitchRadians = Math::HalfPi - 0.01f;
         constexpr float MaxMouseLookDelta = 128.0f;
         constexpr float CameraLookSmoothingSpeed = 48.0f;
@@ -157,6 +158,21 @@ namespace ve::editor
         return GetGridUnitSizeByIndex(grid_.unitSizeIndex);
     }
 
+    Gizmos& SceneViewPanel::GetGizmos() noexcept
+    {
+        return gizmos_;
+    }
+
+    const Gizmos& SceneViewPanel::GetGizmos() const noexcept
+    {
+        return gizmos_;
+    }
+
+    Matrix44 SceneViewPanel::GetSceneViewCameraLocalToWorld() const noexcept
+    {
+        return BuildCameraLocalToWorld();
+    }
+
     const char* SceneViewPanel::GetName() const noexcept
     {
         return "Scene View";
@@ -224,6 +240,13 @@ namespace ve::editor
             ImGui::OpenPopup("SceneViewGridPopup");
         }
         RenderGridPopup();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Gizmos", ImVec2(ControlButtonWidth, ControlButtonHeight)))
+        {
+            ImGui::OpenPopup("SceneViewGizmosPopup");
+        }
+        RenderGizmosPopup();
     }
 
     void SceneViewPanel::RenderCameraPopup()
@@ -277,6 +300,20 @@ namespace ve::editor
         }
 
         UpdateSceneViewCamera();
+        ImGui::EndPopup();
+    }
+
+    void SceneViewPanel::RenderGizmosPopup()
+    {
+        ImGui::SetNextWindowSize(ImVec2(GizmosPopupWidth, 0.0f), ImGuiCond_Appearing);
+        if (!ImGui::BeginPopup("SceneViewGizmosPopup"))
+        {
+            return;
+        }
+
+        GizmoComponentVisibility& visibility = gizmos_.GetComponentVisibility();
+        ImGui::Checkbox("Camera", &visibility.camera);
+        ImGui::Checkbox("Light", &visibility.light);
         ImGui::EndPopup();
     }
 

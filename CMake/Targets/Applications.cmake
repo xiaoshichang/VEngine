@@ -52,6 +52,12 @@ function(ve_add_windows_editor)
             Editor/Core/EditorProjectSelectionView.h
             "../../Editor/Core/EditorResourceLoader.cpp"
             "../../Editor/Core/EditorResourceLoader.h"
+            Editor/Core/Gizmos.cpp
+            Editor/Core/Gizmos.h
+            Editor/RenderPass/EditorGizmoRenderPass.cpp
+            Editor/RenderPass/EditorGizmoRenderPass.h
+            Editor/RenderPass/SceneGridRenderPass.cpp
+            Editor/RenderPass/SceneGridRenderPass.h
             Editor/Panels/AssetsPanel.cpp
             Editor/Panels/AssetsPanel.h
             Editor/Panels/BasePanel.cpp

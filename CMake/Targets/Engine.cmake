@@ -32,7 +32,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderFramePipeline.cpp
             Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.cpp
             Engine/Runtime/Render/RenderPass/RenderPass.cpp
-            Engine/Runtime/Render/RenderPass/SceneGridRenderPass.cpp
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
             Engine/Runtime/Render/RenderSystem.cpp
@@ -98,7 +97,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderFramePipeline.h
             Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.h
             Engine/Runtime/Render/RenderPass/RenderPass.h
-            Engine/Runtime/Render/RenderPass/SceneGridRenderPass.h
             Engine/Runtime/Render/RenderResource.h
             Engine/Runtime/Render/RenderScene.h
             Engine/Runtime/Render/RenderShaderIDs.h

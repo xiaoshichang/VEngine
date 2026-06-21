@@ -23,6 +23,8 @@ namespace ve
 
 namespace ve::editor
 {
+    struct EditorFrameDrawData;
+    struct EditorFrameRenderViews;
     class ProjectEditingView;
     class ProjectSelectionView;
 
@@ -79,6 +81,13 @@ namespace ve::editor
 
         [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
         void ShutdownRenderBackend() noexcept;
+        void RenderActiveMainView();
+        [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CaptureImGuiFrameDrawData() const;
+        [[nodiscard]] EditorFrameRenderViews CollectFrameRenderViews() const;
+        [[nodiscard]] EditorOverlayRenderCallback BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const;
+        void AddSceneViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc, const EditorFrameRenderViews& views, const std::shared_ptr<RTScene>& renderScene) const;
+        void AddGameViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc, const EditorFrameRenderViews& views, const std::shared_ptr<RTScene>& renderScene) const;
+        [[nodiscard]] std::shared_ptr<RTScene> GetActiveRenderScene() const;
         void ShutdownOpenProjectState() noexcept;
         [[nodiscard]] Result<EditorProjectDescriptor> PrepareOpenProjectDescriptor(const Path& projectRoot, const std::string& projectPath);
         [[nodiscard]] ErrorCode InitializeOpenProjectAssetServices(const Path& projectRoot, const std::string& projectPath);

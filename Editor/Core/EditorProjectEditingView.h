@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/Core/Gizmos.h"
 #include "Editor/Core/EditorBuildPackageDialog.h"
 #include "Editor/Core/EditorProjectDirectoryDialog.h"
 #include "Editor/Panels/AssetsPanel.h"
@@ -29,6 +30,8 @@ namespace ve::editor
         [[nodiscard]] bool IsSceneViewGridEnabled() const noexcept;
         [[nodiscard]] Float32 GetSceneViewGridOpacity() const noexcept;
         [[nodiscard]] Float32 GetSceneViewGridUnitSize() const noexcept;
+        [[nodiscard]] const Gizmos& GetSceneViewGizmos() const noexcept;
+        [[nodiscard]] Matrix44 GetSceneViewCameraLocalToWorld() const noexcept;
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewTexture() const noexcept;
 
     private:
