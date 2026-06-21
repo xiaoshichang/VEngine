@@ -26,14 +26,12 @@ namespace ve
     private:
         void EnsurePipeline(RenderPassContext& context);
         void BindLightUniform(RenderPassContext& context, const RTScene& scene);
-        void BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc);
-        void EnsureDefaultMaterialBuffer(rhi::RhiDevice& device);
+        [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc);
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
         RendererRenderTarget target_;
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
         std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
-        std::unique_ptr<rhi::RhiBuffer> defaultMaterialUniformBuffer_;
         std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;

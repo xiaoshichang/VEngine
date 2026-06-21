@@ -30,6 +30,7 @@ namespace ve::editor
         void RenderCameraComponent(CameraComponent& camera);
         void RenderLightComponent(LightComponent& light);
         void RenderAsset(const EditorAssetRecord& asset);
+        void RenderMaterialAsset(const EditorAssetRecord& asset);
 
         Editor* editor_ = nullptr;
     };

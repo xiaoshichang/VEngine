@@ -1,5 +1,46 @@
 {
     "schemaVersion": 1,
     "name": "BasicMesh",
-    "source": "BasicMesh.hlsl"
+    "source": "BasicMesh.hlsl",
+    "material": {
+        "constantBuffer": "MaterialConstants",
+        "constantBufferSize": 256,
+        "properties": [
+            {
+                "name": "baseColor",
+                "displayName": "Base Color",
+                "type": "Color",
+                "default": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "binding": {
+                    "kind": "ConstantBuffer",
+                    "buffer": "MaterialConstants",
+                    "field": "baseColor",
+                    "offset": 0,
+                    "size": 16,
+                    "slot": 1,
+                    "space": 0
+                }
+            },
+            {
+                "name": "mainTexture",
+                "displayName": "Main Texture",
+                "type": "Texture2D",
+                "default": null,
+                "binding": {
+                    "kind": "Texture",
+                    "buffer": "",
+                    "field": "MainTexture",
+                    "offset": 0,
+                    "size": 0,
+                    "slot": 0,
+                    "space": 0
+                }
+            }
+        ]
+    }
 }

@@ -2,12 +2,13 @@
     "schemaVersion": 1,
     "name": "Default",
     "shader": "Engine/Shaders/BasicMesh",
-    "parameters": {
+    "properties": {
         "baseColor": [
             1,
             1,
             1,
             1
-        ]
+        ],
+        "mainTexture": null
     }
 }

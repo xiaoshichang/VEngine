@@ -34,7 +34,6 @@ namespace ve
 
         static_assert(sizeof(OpaqueSceneObjectUniformData) == 256);
         static_assert(sizeof(OpaqueSceneLightUniformData) == 256);
-        static_assert(sizeof(RTMaterialUniformData) == 256);
 
         [[nodiscard]] rhi::RhiBufferDesc MakeUniformBufferDesc(UInt64 size, const void* initialData, const char* debugName) noexcept
         {
@@ -269,7 +268,10 @@ namespace ve
             commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *objectUniformBuffer, 0);
             frameUniformBuffers_.push_back(std::move(objectUniformBuffer));
 
-            BindMaterialUniform(context, itemDesc);
+            if (!BindMaterialUniform(context, itemDesc))
+            {
+                continue;
+            }
 
             commandList.SetVertexBuffer(0, *meshResource->GetVertexBuffer(), meshResource->GetVertexStride(), 0);
             if (meshResource->GetIndexBuffer() != nullptr && meshResource->GetIndexCount() > 0)
@@ -365,30 +367,17 @@ namespace ve
         frameUniformBuffers_.push_back(std::move(lightUniformBuffer));
     }
 
-    void OpaqueSceneRenderPass::BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc)
+    bool OpaqueSceneRenderPass::BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc)
     {
         const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(itemDesc.materialResource);
         if (materialResource != nullptr && materialResource->GetUniformBuffer() != nullptr)
         {
             context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *materialResource->GetUniformBuffer(), 0);
-            return;
+            return true;
         }
 
-        EnsureDefaultMaterialBuffer(context.GetDevice());
-        context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *defaultMaterialUniformBuffer_, 0);
-    }
-
-    void OpaqueSceneRenderPass::EnsureDefaultMaterialBuffer(rhi::RhiDevice& device)
-    {
-        if (defaultMaterialUniformBuffer_ != nullptr)
-        {
-            return;
-        }
-
-        RTMaterialUniformData uniformData = {};
-        defaultMaterialUniformBuffer_ =
-            device.CreateBuffer(MakeUniformBufferDesc(sizeof(RTMaterialUniformData), &uniformData, "OpaqueSceneDefaultMaterialUniformBuffer"));
-        VE_ASSERT_MESSAGE(defaultMaterialUniformBuffer_ != nullptr, "OpaqueScenePass failed to create default material uniform buffer.");
+        VE_ASSERT_ALWAYS_MESSAGE(false, "OpaqueScenePass requires a material resource with an initialized uniform buffer.");
+        return false;
     }
 
     rhi::RhiFormat OpaqueSceneRenderPass::ResolveTargetFormat(const RenderPassContext& context) const noexcept

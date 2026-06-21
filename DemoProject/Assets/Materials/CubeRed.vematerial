@@ -2,12 +2,8 @@
     "schemaVersion": 1,
     "name": "Cube Red",
     "shader": "Engine/Shaders/BasicMesh",
-    "parameters": {
-        "baseColor": [
-            1,
-            0.12,
-            0.08,
-            1
-        ]
+    "properties": {
+        "baseColor": [1E0, 1E0, 1E0, 1E0],
+        "mainTexture": null
     }
 }

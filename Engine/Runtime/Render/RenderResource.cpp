@@ -19,15 +19,6 @@ namespace ve
             return desc;
         }
 
-        [[nodiscard]] RTMaterialUniformData ToUniformData(const RTMaterialResourceDesc& desc) noexcept
-        {
-            RTMaterialUniformData data = {};
-            data.baseColor[0] = desc.baseColor.GetX();
-            data.baseColor[1] = desc.baseColor.GetY();
-            data.baseColor[2] = desc.baseColor.GetZ();
-            data.baseColor[3] = desc.baseColor.GetW();
-            return data;
-        }
     } // namespace
 
     RTMeshResource::RTMeshResource(RTMeshResourceDesc desc)
@@ -237,16 +228,24 @@ namespace ve
         return desc_.shaderResource;
     }
 
+    UInt64 RTMaterialResource::GetRevision() const noexcept
+    {
+        return desc_.revision;
+    }
+
     void RTMaterialResource::InitRenderResource(rhi::RhiDevice& device, RTMaterialResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
         ResetRenderResource();
         desc_ = std::move(desc);
+        if (desc_.constantData.empty())
+        {
+            return;
+        }
 
-        const RTMaterialUniformData uniformData = ToUniformData(desc_);
-        uniformBuffer_ =
-            device.CreateBuffer(MakeBufferDesc(sizeof(RTMaterialUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "RTMaterialResourceUniformBuffer"));
+        uniformBuffer_ = device.CreateBuffer(MakeBufferDesc(
+            static_cast<UInt64>(desc_.constantData.size()), rhi::RhiBufferUsage::Uniform, desc_.constantData.data(), "RTMaterialResourceUniformBuffer"));
         VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "RTMaterialResource failed to create uniform buffer.");
     }
 

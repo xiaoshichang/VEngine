@@ -40,6 +40,7 @@ function(ve_add_engine)
             Engine/Runtime/Resource/AssetID.cpp
             Engine/Runtime/Resource/AssetRef.cpp
             Engine/Runtime/Resource/AssetManifest.cpp
+            Engine/Runtime/Resource/MaterialProperty.cpp
             Engine/Runtime/Resource/ResourceObject.cpp
             Engine/Runtime/Resource/ResourceSystem.cpp
             Engine/Runtime/Resource/RuntimeAssetLoader.cpp
@@ -107,6 +108,7 @@ function(ve_add_engine)
             Engine/Runtime/Resource/AssetRecord.h
             Engine/Runtime/Resource/AssetRef.h
             Engine/Runtime/Resource/AssetManifest.h
+            Engine/Runtime/Resource/MaterialProperty.h
             Engine/Runtime/Resource/ResourceObject.h
             Engine/Runtime/Resource/ResourceSystem.h
             Engine/Runtime/Resource/RuntimeAssetLoader.h

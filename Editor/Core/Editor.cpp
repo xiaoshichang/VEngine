@@ -429,6 +429,18 @@ namespace ve::editor
         return *sceneSystem_;
     }
 
+    EngineRuntime& Editor::GetRuntime() noexcept
+    {
+        VE_ASSERT_MESSAGE(runtime_ != nullptr, "Editor::GetRuntime requires an initialized editor.");
+        return *runtime_;
+    }
+
+    const EngineRuntime& Editor::GetRuntime() const noexcept
+    {
+        VE_ASSERT_MESSAGE(runtime_ != nullptr, "Editor::GetRuntime requires an initialized editor.");
+        return *runtime_;
+    }
+
     RenderSystem& Editor::GetRenderSystem() noexcept
     {
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::GetRenderSystem requires an initialized editor.");

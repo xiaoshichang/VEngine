@@ -4,7 +4,6 @@
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Math/Vector4.h"
 
 #include <memory>
 #include <cstddef>
@@ -102,15 +101,9 @@ namespace ve
     struct RTMaterialResourceDesc
     {
         std::string name = "MaterialResource";
-        Vector4 baseColor = Vector4::One();
+        std::vector<std::byte> constantData;
         std::shared_ptr<RTShaderResource> shaderResource;
-    };
-
-    /// Packed constants uploaded for the first-stage material resource.
-    struct RTMaterialUniformData
-    {
-        Float32 baseColor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        Float32 padding[60] = {};
+        UInt64 revision = 0;
     };
 
     /// Render Thread proxy for a material resource.
@@ -124,6 +117,7 @@ namespace ve
         [[nodiscard]] rhi::RhiBuffer* GetUniformBuffer() noexcept;
         [[nodiscard]] const rhi::RhiBuffer* GetUniformBuffer() const noexcept;
         [[nodiscard]] std::shared_ptr<RTShaderResource> GetShaderResource() const noexcept;
+        [[nodiscard]] UInt64 GetRevision() const noexcept;
 
         void InitRenderResource(rhi::RhiDevice& device, RTMaterialResourceDesc desc);
         void ResetRenderResource() noexcept;

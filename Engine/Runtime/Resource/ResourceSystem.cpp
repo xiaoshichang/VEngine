@@ -57,6 +57,18 @@ namespace ve
         EnsureRenderResourceInternal(id, renderSystem, renderStack);
     }
 
+    ResourceObject* ResourceSystem::FindLoadedResource(const AssetID& id) noexcept
+    {
+        const auto it = cache_.find(id);
+        return it != cache_.end() ? it->second.resource.get() : nullptr;
+    }
+
+    const ResourceObject* ResourceSystem::FindLoadedResource(const AssetID& id) const noexcept
+    {
+        const auto it = cache_.find(id);
+        return it != cache_.end() ? it->second.resource.get() : nullptr;
+    }
+
     Result<ResourceObject*> ResourceSystem::RequestResourceInternal(const AssetID& id, ResourceLoadContext& context)
     {
         if (!initialized_)

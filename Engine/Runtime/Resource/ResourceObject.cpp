@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Resource/ResourceSystem.h"
 
 #include <boost/json.hpp>
+#include <algorithm>
 #include <cstddef>
 #include <string_view>
 #include <utility>
@@ -224,42 +225,15 @@ namespace ve
             return desc;
         }
 
-        [[nodiscard]] RTMaterialResourceDesc ParseMaterialRenderDesc(const std::string& text, const AssetRecord& record)
+        [[nodiscard]] Result<boost::json::object> ParseJsonObject(const std::string& text, const char* errorMessage)
         {
-            RTMaterialResourceDesc desc;
-            desc.name = record.runtimePath.GetString();
-
             Result<boost::json::value> json = JsonUtils::Parse(text);
             if (!json || !json.GetValue().is_object())
             {
-                return desc;
+                return Result<boost::json::object>::Failure(Error(ErrorCode::InvalidArgument, errorMessage));
             }
 
-            const boost::json::object& object = json.GetValue().as_object();
-            const boost::json::value* parametersValue = object.if_contains("parameters");
-            if (parametersValue == nullptr || !parametersValue->is_object())
-            {
-                return desc;
-            }
-
-            const boost::json::value* baseColorValue = parametersValue->as_object().if_contains("baseColor");
-            if (baseColorValue == nullptr || !baseColorValue->is_array() || baseColorValue->as_array().size() < 4)
-            {
-                return desc;
-            }
-
-            const boost::json::array& baseColor = baseColorValue->as_array();
-            desc.baseColor =
-                Vector4(ReadFloat(baseColor[0], 1.0f), ReadFloat(baseColor[1], 1.0f), ReadFloat(baseColor[2], 1.0f), ReadFloat(baseColor[3], 1.0f));
-            return desc;
-        }
-
-        [[nodiscard]] RTMaterialResourceDesc BuildMaterialRenderDesc(
-            const std::string& text, const AssetRecord& record, std::shared_ptr<RTShaderResource> shaderResource)
-        {
-            RTMaterialResourceDesc desc = ParseMaterialRenderDesc(text, record);
-            desc.shaderResource = std::move(shaderResource);
-            return desc;
+            return Result<boost::json::object>::Success(json.GetValue().as_object());
         }
     } // namespace
 
@@ -357,7 +331,7 @@ namespace ve
     MaterialResource::MaterialResource(AssetRecord record, std::string text)
         : ResourceObject(std::move(record))
         , text_(std::move(text))
-        , rtMaterialResource_(std::make_shared<RTMaterialResource>(ParseMaterialRenderDesc(text_, GetAssetRecord())))
+        , rtMaterialResource_(std::make_shared<RTMaterialResource>(RTMaterialResourceDesc{}))
     {
     }
 
@@ -371,8 +345,41 @@ namespace ve
         return rtMaterialResource_;
     }
 
+    const ShaderMaterialLayout& MaterialResource::GetMaterialLayout() const noexcept
+    {
+        return materialLayout_;
+    }
+
+    const std::vector<MaterialPropertyValue>& MaterialResource::GetPropertyValues() const noexcept
+    {
+        return propertyValues_;
+    }
+
+    bool MaterialResource::IsDirty() const noexcept
+    {
+        return dirty_;
+    }
+
+    UInt64 MaterialResource::GetRevision() const noexcept
+    {
+        return revision_;
+    }
+
     ErrorCode MaterialResource::Load(ResourceLoadContext& context)
     {
+        Result<boost::json::object> materialJson = ParseJsonObject(text_, "Material descriptor root must be a JSON object.");
+        if (!materialJson)
+        {
+            return materialJson.GetError().GetCode();
+        }
+
+        const boost::json::value* propertiesValue = materialJson.GetValue().if_contains("properties");
+        if (propertiesValue == nullptr || !propertiesValue->is_object())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        ShaderResource* shaderResource = nullptr;
         for (const AssetID& dependency : GetDependencies())
         {
             Result<ResourceObject*> dependencyResource = context.RequestDependency(dependency);
@@ -383,21 +390,68 @@ namespace ve
 
             if (dependencyResource.GetValue()->GetType() == ResourceType::Shader)
             {
-                ShaderResource* shaderResource = dynamic_cast<ShaderResource*>(dependencyResource.GetValue());
-                if (shaderResource != nullptr)
-                {
-                    rtShaderResource_ = shaderResource->GetRTShaderResource();
-                }
+                shaderResource = dynamic_cast<ShaderResource*>(dependencyResource.GetValue());
             }
         }
 
-        rtMaterialResource_ = std::make_shared<RTMaterialResource>(BuildMaterialRenderDesc(text_, GetAssetRecord(), rtShaderResource_));
+        if (shaderResource == nullptr)
+        {
+            return ErrorCode::NotFound;
+        }
+
+        materialLayout_ = shaderResource->GetMaterialLayout();
+        Result<std::vector<MaterialPropertyValue>> values = ResolveMaterialPropertyValues(materialLayout_, propertiesValue->as_object());
+        if (!values)
+        {
+            return values.GetError().GetCode();
+        }
+
+        propertyValues_ = values.MoveValue();
+        rtShaderResource_ = shaderResource->GetRTShaderResource();
+        rtMaterialResource_ = std::make_shared<RTMaterialResource>(BuildRenderDesc());
+        MarkDirty();
         return ErrorCode::None;
     }
 
     void MaterialResource::InitRenderResource(RenderSystem& renderSystem)
     {
-        renderSystem.InitRenderResource(rtMaterialResource_, BuildMaterialRenderDesc(text_, GetAssetRecord(), rtShaderResource_));
+        SyncRenderResource(renderSystem);
+    }
+
+    void MaterialResource::SyncRenderResource(RenderSystem& renderSystem)
+    {
+        if (!dirty_)
+        {
+            return;
+        }
+
+        renderSystem.InitRenderResource(rtMaterialResource_, BuildRenderDesc());
+        ClearDirty();
+    }
+
+    ErrorCode MaterialResource::SetPropertyValue(std::string_view name, MaterialPropertyValue value)
+    {
+        const auto propertyIt = std::find_if(
+            materialLayout_.properties.begin(), materialLayout_.properties.end(), [name](const ShaderMaterialPropertyDesc& property) { return property.name == name; });
+        if (propertyIt == materialLayout_.properties.end())
+        {
+            return ErrorCode::NotFound;
+        }
+
+        if (propertyIt->type != value.type)
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        const SizeT index = static_cast<SizeT>(std::distance(materialLayout_.properties.begin(), propertyIt));
+        if (index >= propertyValues_.size())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        propertyValues_[index] = std::move(value);
+        MarkDirty();
+        return ErrorCode::None;
     }
 
     void MaterialResource::ReleaseRenderResource(RenderSystem& renderSystem) noexcept
@@ -411,6 +465,27 @@ namespace ve
         {
             VE_ASSERT_ALWAYS_MESSAGE(false, "MaterialResource failed to enqueue render resource release.");
         }
+    }
+
+    RTMaterialResourceDesc MaterialResource::BuildRenderDesc() const
+    {
+        RTMaterialResourceDesc desc;
+        desc.name = GetRuntimePath().GetString();
+        desc.constantData = BuildMaterialConstantData(materialLayout_, propertyValues_);
+        desc.shaderResource = rtShaderResource_;
+        desc.revision = revision_;
+        return desc;
+    }
+
+    void MaterialResource::MarkDirty() noexcept
+    {
+        dirty_ = true;
+        ++revision_;
+    }
+
+    void MaterialResource::ClearDirty() noexcept
+    {
+        dirty_ = false;
     }
 
     ShaderResource::ShaderResource(AssetRecord record, std::string text)
@@ -431,6 +506,11 @@ namespace ve
         return reflectionText_;
     }
 
+    const ShaderMaterialLayout& ShaderResource::GetMaterialLayout() const noexcept
+    {
+        return materialLayout_;
+    }
+
     std::shared_ptr<RTShaderResource> ShaderResource::GetRTShaderResource() const noexcept
     {
         return rtShaderResource_;
@@ -445,6 +525,19 @@ namespace ve
         }
 
         reflectionText_ = text_;
+        Result<boost::json::object> shaderJson = ParseJsonObject(text_, "Shader descriptor root must be a JSON object.");
+        if (!shaderJson)
+        {
+            return shaderJson.GetError().GetCode();
+        }
+
+        Result<ShaderMaterialLayout> materialLayout = ReadShaderMaterialLayoutJson(shaderJson.GetValue());
+        if (!materialLayout)
+        {
+            return materialLayout.GetError().GetCode();
+        }
+
+        materialLayout_ = materialLayout.MoveValue();
         rtShaderResource_ = std::make_shared<RTShaderResource>(desc.MoveValue());
         return ErrorCode::None;
     }

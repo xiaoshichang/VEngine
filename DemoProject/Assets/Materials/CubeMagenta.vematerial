@@ -2,12 +2,13 @@
     "schemaVersion": 1,
     "name": "Cube Magenta",
     "shader": "Engine/Shaders/BasicMesh",
-    "parameters": {
+    "properties": {
         "baseColor": [
             0.9,
             0.18,
             0.78,
             1
-        ]
+        ],
+        "mainTexture": null
     }
 }

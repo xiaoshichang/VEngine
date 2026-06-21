@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Resource/AssetRecord.h"
+#include "Engine/Runtime/Resource/MaterialProperty.h"
 
 #include <cstddef>
 #include <memory>
@@ -15,6 +16,7 @@ namespace ve
     class RenderSystem;
     class ResourceLoadContext;
     class RTMaterialResource;
+    struct RTMaterialResourceDesc;
     class RTMeshResource;
     class RTShaderResource;
 
@@ -70,14 +72,28 @@ namespace ve
         MaterialResource(AssetRecord record, std::string text);
 
         [[nodiscard]] const std::string& GetText() const noexcept;
+        [[nodiscard]] const ShaderMaterialLayout& GetMaterialLayout() const noexcept;
         [[nodiscard]] std::shared_ptr<RTMaterialResource> GetRTMaterialResource() const noexcept;
+        [[nodiscard]] const std::vector<MaterialPropertyValue>& GetPropertyValues() const noexcept;
+        [[nodiscard]] bool IsDirty() const noexcept;
+        [[nodiscard]] UInt64 GetRevision() const noexcept;
 
         ErrorCode Load(ResourceLoadContext& context) override;
         void InitRenderResource(RenderSystem& renderSystem) override;
+        void SyncRenderResource(RenderSystem& renderSystem);
         void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
+        [[nodiscard]] ErrorCode SetPropertyValue(std::string_view name, MaterialPropertyValue value);
 
     private:
+        [[nodiscard]] RTMaterialResourceDesc BuildRenderDesc() const;
+        void MarkDirty() noexcept;
+        void ClearDirty() noexcept;
+
         std::string text_;
+        ShaderMaterialLayout materialLayout_;
+        std::vector<MaterialPropertyValue> propertyValues_;
+        UInt64 revision_ = 1;
+        bool dirty_ = true;
         std::shared_ptr<RTMaterialResource> rtMaterialResource_;
         std::shared_ptr<RTShaderResource> rtShaderResource_;
     };
@@ -89,6 +105,7 @@ namespace ve
 
         [[nodiscard]] const std::string& GetText() const noexcept;
         [[nodiscard]] const std::string& GetReflectionText() const noexcept;
+        [[nodiscard]] const ShaderMaterialLayout& GetMaterialLayout() const noexcept;
         [[nodiscard]] std::shared_ptr<RTShaderResource> GetRTShaderResource() const noexcept;
 
         ErrorCode Load(ResourceLoadContext& context) override;
@@ -98,6 +115,7 @@ namespace ve
     private:
         std::string text_;
         std::string reflectionText_;
+        ShaderMaterialLayout materialLayout_;
         std::shared_ptr<RTShaderResource> rtShaderResource_;
     };
 

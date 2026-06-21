@@ -49,6 +49,8 @@ namespace ve::editor
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] SceneSystem& GetSceneSystem() noexcept;
         [[nodiscard]] const SceneSystem& GetSceneSystem() const noexcept;
+        [[nodiscard]] EngineRuntime& GetRuntime() noexcept;
+        [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
         [[nodiscard]] EditorAssetDatabase& GetAssetDatabase() noexcept;
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;

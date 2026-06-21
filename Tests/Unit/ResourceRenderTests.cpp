@@ -1,7 +1,9 @@
 #include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Render/RenderResource.h"
+#include "Engine/Runtime/Resource/MaterialProperty.h"
 #include "Engine/Runtime/Resource/ResourceObject.h"
 
+#include <cstddef>
 #include <iostream>
 #include <memory>
 
@@ -58,25 +60,36 @@ namespace
         return passed;
     }
 
-    bool TestMaterialResourceBuildsRenderDesc()
+    bool TestMaterialConstantDataBuildsRenderDesc()
     {
-        constexpr const char* MaterialText = R"({
-            "schemaVersion": 1,
-            "name": "Tinted",
-            "shader": "Engine/Shaders/BasicMesh",
-            "parameters": {
-                "baseColor": [0.25, 0.5, 0.75, 1.0]
-            }
-        })";
+        ve::ShaderMaterialLayout layout;
+        layout.constantBufferSize = 256;
 
-        ve::MaterialResource material(MakeRecord(ve::ResourceType::Material, "22222222-2222-2222-2222-222222222222", "Materials/Tinted.vematerial"),
-                                      MaterialText);
+        ve::ShaderMaterialPropertyDesc property;
+        property.name = "baseColor";
+        property.type = ve::MaterialPropertyType::Color;
+        property.binding.kind = ve::MaterialPropertyBindingKind::ConstantBuffer;
+        property.binding.offset = 0;
+        property.binding.size = 16;
+        layout.properties.push_back(std::move(property));
 
-        std::shared_ptr<ve::RTMaterialResource> rtMaterial = material.GetRTMaterialResource();
+        ve::MaterialPropertyValue value;
+        value.type = ve::MaterialPropertyType::Color;
+        value.vectorValue = ve::Vector4(0.25f, 0.5f, 0.75f, 1.0f);
+
+        ve::RTMaterialResourceDesc desc;
+        desc.name = "Materials/Tinted.vematerial";
+        desc.constantData = ve::BuildMaterialConstantData(layout, {value});
+        desc.revision = 7;
+
+        std::shared_ptr<ve::RTMaterialResource> rtMaterial = std::make_shared<ve::RTMaterialResource>(desc);
         bool passed = true;
         passed &= Expect(rtMaterial != nullptr, "MaterialResource should create an RT proxy");
-        passed &= Expect(rtMaterial->GetDesc().baseColor.IsNearlyEqual(ve::Vector4(0.25f, 0.5f, 0.75f, 1.0f)),
-                         "MaterialResource should parse baseColor for RT upload");
+        passed &= Expect(rtMaterial->GetDesc().constantData.size() == 256, "Material constant data should use the shader layout size");
+        const auto* color = reinterpret_cast<const float*>(rtMaterial->GetDesc().constantData.data());
+        passed &= Expect(color[0] == 0.25f && color[1] == 0.5f && color[2] == 0.75f && color[3] == 1.0f,
+                         "Material constant data should pack baseColor at the reflected offset");
+        passed &= Expect(rtMaterial->GetRevision() == 7, "Material render desc should preserve the submitted revision");
         return passed;
     }
 } // namespace
@@ -86,7 +99,7 @@ int main()
     bool passed = true;
 
     passed &= TestMeshResourceBuildsRenderDesc();
-    passed &= TestMaterialResourceBuildsRenderDesc();
+    passed &= TestMaterialConstantDataBuildsRenderDesc();
 
     if (passed)
     {

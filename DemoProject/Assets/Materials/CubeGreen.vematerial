@@ -2,12 +2,13 @@
     "schemaVersion": 1,
     "name": "Cube Green",
     "shader": "Engine/Shaders/BasicMesh",
-    "parameters": {
+    "properties": {
         "baseColor": [
             0.08,
             0.78,
             0.24,
             1
-        ]
+        ],
+        "mainTexture": null
     }
 }

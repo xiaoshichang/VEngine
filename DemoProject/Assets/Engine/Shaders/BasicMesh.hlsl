@@ -9,6 +9,8 @@ cbuffer MaterialConstants : register(b1, space0)
     float4 baseColor;
 };
 
+Texture2D MainTexture : register(t0, space0);
+
 cbuffer LightConstants : register(b2, space0)
 {
     float4 lightDirectionAndIntensity;

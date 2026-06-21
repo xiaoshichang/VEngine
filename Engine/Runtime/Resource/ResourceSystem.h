@@ -67,6 +67,8 @@ namespace ve
         /// ResourceSystem owns dependency ordering: dependencies are initialized first, while release happens when
         /// the owning CPU ResourceObject reference count reaches zero.
         void EnsureRenderResource(const AssetRefBase& assetRef, RenderSystem& renderSystem);
+        [[nodiscard]] ResourceObject* FindLoadedResource(const AssetID& id) noexcept;
+        [[nodiscard]] const ResourceObject* FindLoadedResource(const AssetID& id) const noexcept;
         [[nodiscard]] SizeT CollectUnusedResources(const ResourceCollectUnusedParams& params);
         void ClearCache() noexcept;
 

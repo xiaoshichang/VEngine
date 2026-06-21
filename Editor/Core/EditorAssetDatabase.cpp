@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Resource/MaterialProperty.h"
 
 #include <algorithm>
 #include <array>
@@ -719,6 +720,67 @@ namespace ve::editor
             return IsFileNewerThan(shaderDescriptorPhysicalPath, shaderRuntimePhysicalPath) || IsFileNewerThan(shaderSourcePhysicalPath, shaderRuntimePhysicalPath);
         }
 
+        [[nodiscard]] ErrorCode MergeShaderMaterialLayout(
+            const boost::json::object& shaderDescriptor, const Path& shaderRuntimePhysicalPath)
+        {
+            Result<std::string> runtimeText = FileSystem::ReadTextFile(shaderRuntimePhysicalPath);
+            if (!runtimeText)
+            {
+                return runtimeText.GetError().GetCode();
+            }
+
+            Result<boost::json::value> runtimeJson = JsonUtils::Parse(runtimeText.GetValue());
+            if (!runtimeJson || !runtimeJson.GetValue().is_object())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            Result<ShaderMaterialLayout> layout = ReadShaderMaterialLayoutJson(shaderDescriptor);
+            if (!layout)
+            {
+                return layout.GetError().GetCode();
+            }
+
+            runtimeJson.GetValue().as_object()["material"] = WriteShaderMaterialLayoutJson(layout.GetValue());
+            return FileSystem::WriteTextFile(shaderRuntimePhysicalPath, JsonUtils::SerializePretty(runtimeJson.GetValue()));
+        }
+
+        void AddDependencyIfValid(std::vector<AssetID>& dependencies, const AssetID& id)
+        {
+            if (id.IsEmpty())
+            {
+                return;
+            }
+
+            if (std::find(dependencies.begin(), dependencies.end(), id) == dependencies.end())
+            {
+                dependencies.push_back(id);
+            }
+        }
+
+        void ResolveMaterialTextureDependencies(const boost::json::object& materialProperties, const ShaderMaterialLayout& layout, std::vector<AssetID>& dependencies)
+        {
+            for (const ShaderMaterialPropertyDesc& property : layout.properties)
+            {
+                if (property.type != MaterialPropertyType::Texture2D)
+                {
+                    continue;
+                }
+
+                const boost::json::value* value = materialProperties.if_contains(property.name);
+                if (value == nullptr || value->is_null())
+                {
+                    continue;
+                }
+
+                Result<MaterialPropertyValue> propertyValue = ReadMaterialPropertyValueJson(property.type, *value);
+                if (propertyValue && !propertyValue.GetValue().assetValue.IsEmpty())
+                {
+                    AddDependencyIfValid(dependencies, propertyValue.GetValue().assetValue);
+                }
+            }
+        }
+
     } // namespace
 
     ErrorCode EditorAssetDatabase::Initialize(const Path& projectRoot)
@@ -1042,7 +1104,13 @@ namespace ve::editor
 
         if (!ShouldImportShader(shaderDescriptorPhysicalPath, sourcePath, shaderRuntimePhysicalPath, force))
         {
-            return RewriteShaderArtifactPaths(projectRoot_, shaderRuntimePhysicalPath);
+            const ErrorCode rewriteResult = RewriteShaderArtifactPaths(projectRoot_, shaderRuntimePhysicalPath);
+            if (rewriteResult != ErrorCode::None)
+            {
+                return rewriteResult;
+            }
+
+            return MergeShaderMaterialLayout(descriptor, shaderRuntimePhysicalPath);
         }
 
         const Path outputDirectory = projectRoot_ / GetImportedShaderDirectory(guid);
@@ -1100,7 +1168,13 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        return RewriteShaderArtifactPaths(projectRoot_, shaderRuntimePhysicalPath);
+        const ErrorCode rewriteResult = RewriteShaderArtifactPaths(projectRoot_, shaderRuntimePhysicalPath);
+        if (rewriteResult != ErrorCode::None)
+        {
+            return rewriteResult;
+        }
+
+        return MergeShaderMaterialLayout(descriptor, shaderRuntimePhysicalPath);
     }
 
     ErrorCode EditorAssetDatabase::ResolveAssetDependencies()
@@ -1133,18 +1207,52 @@ namespace ve::editor
                 continue;
             }
 
+            AssetID shaderDependencyID;
+            const EditorAssetRecord* shaderAsset = nullptr;
             const auto shaderID = assetIDsByAssetPath_.find(shaderProjectPath.GetString());
             if (shaderID != assetIDsByAssetPath_.end())
             {
-                record.asset.dependencies.push_back(shaderID->second);
+                shaderDependencyID = shaderID->second;
+                shaderAsset = FindAssetByID(shaderDependencyID);
+            }
+            else
+            {
+                shaderDependencyID = ReadDependencyIDFromMeta(projectRoot_ / GetMetaPath(shaderProjectPath));
+                shaderAsset = FindAssetByID(shaderDependencyID);
+            }
+
+            if (shaderDependencyID.IsEmpty() || shaderAsset == nullptr)
+            {
                 continue;
             }
 
-            const AssetID idFromMeta = ReadDependencyIDFromMeta(projectRoot_ / GetMetaPath(shaderProjectPath));
-            if (!idFromMeta.IsEmpty())
+            AddDependencyIfValid(record.asset.dependencies, shaderDependencyID);
+
+            Result<std::string> shaderText = FileSystem::ReadTextFile(projectRoot_ / shaderAsset->asset.runtimePath);
+            if (!shaderText)
             {
-                record.asset.dependencies.push_back(idFromMeta);
+                return shaderText.GetError().GetCode();
             }
+
+            Result<boost::json::value> shaderJson = JsonUtils::Parse(shaderText.GetValue());
+            if (!shaderJson || !shaderJson.GetValue().is_object())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            Result<ShaderMaterialLayout> layout = ReadShaderMaterialLayoutJson(shaderJson.GetValue().as_object());
+            if (!layout)
+            {
+                return layout.GetError().GetCode();
+            }
+
+            const boost::json::value* propertiesValue = materialJson.GetValue().as_object().if_contains("properties");
+            if (propertiesValue == nullptr || !propertiesValue->is_object())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            ResolveMaterialTextureDependencies(propertiesValue->as_object(), layout.GetValue(), record.asset.dependencies);
         }
 
         return ErrorCode::None;
