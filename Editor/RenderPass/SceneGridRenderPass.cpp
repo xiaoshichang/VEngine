@@ -352,7 +352,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     void SceneGridRenderPass::UploadUniforms(RenderPassContext& context)
     {
-        const SceneGridUniformData uniformData = BuildUniformData(context.rendererData.camera, initParam_);
+        const SceneGridUniformData uniformData = BuildUniformData(context.rendererData.resolvedCamera, initParam_);
         uniformBuffer_ = context.device.CreateBuffer(
             MakeBufferDesc(sizeof(SceneGridUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "SceneGridUniformBuffer"));
         VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "SceneGridRenderPass failed to create uniform buffer.");

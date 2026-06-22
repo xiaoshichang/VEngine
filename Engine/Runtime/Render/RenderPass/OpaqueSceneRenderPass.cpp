@@ -191,6 +191,17 @@ namespace ve
 
             return nullptr;
         }
+
+        [[nodiscard]] rhi::RhiColor ResolvePassClearColor(const RendererData& rendererData) noexcept
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(rendererData.resolvedCamera != nullptr, "OpaqueScenePass requires a resolved camera for clear color.");
+            if (rendererData.resolvedCamera == nullptr)
+            {
+                return rhi::RhiColor{};
+            }
+
+            return rendererData.resolvedCamera->GetDesc().clearColor;
+        }
     } // namespace
 
     OpaqueSceneRenderPass::OpaqueSceneRenderPass(OpaqueSceneRenderPassInitParam initParam)
@@ -206,7 +217,7 @@ namespace ve
 
     void OpaqueSceneRenderPass::Setup(RenderPassBuilder& builder)
     {
-        const rhi::RhiColor clearColor = builder.rendererData.clearColor;
+        const rhi::RhiColor clearColor = ResolvePassClearColor(builder.rendererData);
         if (target_.colorTexture != nullptr && target_.colorTexture->GetTexture() != nullptr)
         {
             builder.AddTextureColorAttachment(*target_.colorTexture->GetTexture(), rhi::RhiLoadAction::Clear, target_.colorStoreAction, clearColor);
@@ -242,7 +253,7 @@ namespace ve
 
         frameUniformBuffers_.clear();
         BindLightUniform(context, *scene);
-        const Matrix44 viewProjection = BuildViewProjectionMatrix(context.rendererData.camera);
+        const Matrix44 viewProjection = BuildViewProjectionMatrix(context.rendererData.resolvedCamera);
         for (SizeT itemIndex = 0; itemIndex < scene->GetRenderItemCount(); ++itemIndex)
         {
             const std::shared_ptr<RTRenderItem> item = scene->GetRenderItem(itemIndex);

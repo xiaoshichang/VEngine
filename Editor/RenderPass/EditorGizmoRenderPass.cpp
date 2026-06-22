@@ -260,7 +260,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
                                                                    "EditorGizmoVertexBuffer"));
         VE_ASSERT_MESSAGE(vertexBuffer_ != nullptr, "EditorGizmoRenderPass failed to create vertex buffer.");
 
-        const EditorGizmoUniformData uniformData = BuildUniformData(context.rendererData.camera);
+        const EditorGizmoUniformData uniformData = BuildUniformData(context.rendererData.resolvedCamera);
         uniformBuffer_ =
             context.device.CreateBuffer(MakeBufferDesc(sizeof(EditorGizmoUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "EditorGizmoUniformBuffer"));
         VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "EditorGizmoRenderPass failed to create uniform buffer.");

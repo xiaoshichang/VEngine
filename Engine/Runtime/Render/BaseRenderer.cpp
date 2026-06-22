@@ -35,17 +35,6 @@ namespace ve
             return fallback;
         }
 
-        [[nodiscard]] rhi::RhiColor ResolveFrameClearColor(const std::shared_ptr<RTScene>& scene) noexcept
-        {
-            if (scene == nullptr)
-            {
-                return rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
-            }
-
-            const std::shared_ptr<RTCamera> camera = FindFrameCamera(*scene);
-            return camera != nullptr ? camera->GetDesc().clearColor : rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
-        }
-
         void ValidateRenderPasses(const std::vector<std::unique_ptr<RenderPass>>& passes)
         {
             for (const std::unique_ptr<RenderPass>& pass : passes)
@@ -84,12 +73,8 @@ namespace ve
         VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer construction requires frame data.");
 
         rendererData_.scene = std::move(initParam.scene);
-        rendererData_.camera = initParam.camera != nullptr || rendererData_.scene == nullptr ? std::move(initParam.camera) : FindFrameCamera(*rendererData_.scene);
-        rendererData_.clearColor =
-            rendererData_.camera != nullptr ? rendererData_.camera->GetDesc().clearColor : ResolveFrameClearColor(rendererData_.scene);
-        rendererData_.activeRenderPassIndex = 0;
-        rendererData_.active = false;
-        rendererData_.renderPassOpen = false;
+        rendererData_.resolvedCamera =
+            initParam.camera != nullptr || rendererData_.scene == nullptr ? std::move(initParam.camera) : FindFrameCamera(*rendererData_.scene);
     }
 
     void BaseRenderer::RenderScene()
@@ -98,7 +83,6 @@ namespace ve
 
         BeginSceneRender();
         ExecutePassesInOrder();
-        EndSceneRender();
     }
 
     void BaseRenderer::UpdateRenderWorld()
@@ -116,7 +100,6 @@ namespace ve
     void BaseRenderer::BeginSceneRender()
     {
         VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT_MESSAGE(!rendererData_.active, "BaseRenderer::BeginSceneRender requires no active renderer.");
         VE_ASSERT(frameRenderData_ != nullptr);
         VE_ASSERT(frameRenderData_->device != nullptr);
         VE_ASSERT(frameRenderData_->commandList != nullptr);
@@ -125,22 +108,17 @@ namespace ve
 
         UpdateRenderWorld();
         BuildVisibleDrawLists();
-
-        rendererData_.activeRenderPassIndex = 0;
-        rendererData_.active = true;
-        rendererData_.renderPassOpen = false;
     }
 
     void BaseRenderer::ExecutePassesInOrder()
     {
         VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT_MESSAGE(rendererData_.active, "BaseRenderer::ExecutePassesInOrder requires an active renderer.");
         VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer::ExecutePassesInOrder requires active frame data.");
         VE_ASSERT_MESSAGE(frameRenderData_->commandList != nullptr, "BaseRenderer::ExecutePassesInOrder requires an active command list.");
 
-        while (rendererData_.activeRenderPassIndex < passes_.size())
+        for (SizeT passIndex = 0; passIndex < passes_.size(); ++passIndex)
         {
-            std::unique_ptr<RenderPass>& pass = passes_[rendererData_.activeRenderPassIndex];
+            std::unique_ptr<RenderPass>& pass = passes_[passIndex];
             VE_ASSERT(pass != nullptr);
 
             RenderPassData passData = BuildPassData(*pass);
@@ -153,26 +131,7 @@ namespace ve
             pass->Execute(passContext);
 
             frameRenderData_->commandList->EndRenderPass();
-            rendererData_.renderPassOpen = false;
-            ++rendererData_.activeRenderPassIndex;
         }
-    }
-
-    void BaseRenderer::EndSceneRender()
-    {
-        VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT_MESSAGE(rendererData_.active, "BaseRenderer::EndSceneRender requires an active scene render.");
-        VE_ASSERT(frameRenderData_ != nullptr);
-        VE_ASSERT(frameRenderData_->commandList != nullptr);
-
-        if (rendererData_.renderPassOpen)
-        {
-            frameRenderData_->commandList->EndRenderPass();
-            rendererData_.renderPassOpen = false;
-        }
-
-        rendererData_.activeRenderPassIndex = 0;
-        rendererData_.active = false;
     }
 
     RenderPassData BaseRenderer::BuildPassData(RenderPass& pass)
@@ -187,12 +146,9 @@ namespace ve
     bool BaseRenderer::BeginPass(const RenderPassData& passData)
     {
         VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT(rendererData_.active);
         VE_ASSERT(frameRenderData_ != nullptr);
         VE_ASSERT(frameRenderData_->commandList != nullptr);
         VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
-        VE_ASSERT(rendererData_.activeRenderPassIndex < passes_.size());
-        VE_ASSERT(!rendererData_.renderPassOpen);
 
         const bool beganRenderPass = frameRenderData_->commandList->BeginRenderPass(*frameRenderData_->mainSwapchain, passData.renderPassDesc);
         VE_ASSERT_MESSAGE(beganRenderPass, "BaseRenderer failed to begin render pass.");
@@ -203,7 +159,6 @@ namespace ve
 
         frameRenderData_->commandList->SetViewport(passData.viewport);
         frameRenderData_->commandList->SetScissor(passData.scissorRect);
-        rendererData_.renderPassOpen = true;
         return true;
     }
 

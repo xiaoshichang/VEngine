@@ -15,16 +15,12 @@ namespace ve
 
     /// Data owned by one renderer instance across its lifetime.
     ///
-    /// It stores renderer state and render-scene choices that are meaningful beyond a single pass. Frame-wide RHI data
-    /// stays in FrameRenderPipelineData and pass-local attachment state stays in RenderPassData.
+    /// It stores render-scene choices that are meaningful beyond a single pass. Frame-wide RHI data stays in
+    /// FrameRenderPipelineData and pass-local attachment state stays in RenderPassData.
     struct RendererData
     {
-        rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
         std::shared_ptr<RTScene> scene;
-        std::shared_ptr<RTCamera> camera;
-        UInt32 activeRenderPassIndex = 0;
-        bool active = false;
-        bool renderPassOpen = false;
+        std::shared_ptr<RTCamera> resolvedCamera;
     };
 
     /// Data owned by one RenderPass invocation.

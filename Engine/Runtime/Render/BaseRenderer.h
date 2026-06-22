@@ -26,7 +26,6 @@ namespace ve
         std::shared_ptr<RTRenderTexture> colorTexture;
         rhi::RhiLoadAction colorLoadAction = rhi::RhiLoadAction::Clear;
         rhi::RhiStoreAction colorStoreAction = rhi::RhiStoreAction::Store;
-        rhi::RhiColor clearColor{0.05f, 0.07f, 0.10f, 1.0f};
     };
 
     struct BaseRendererInitParam
@@ -72,7 +71,6 @@ namespace ve
         void BuildVisibleDrawLists();
         void BeginSceneRender();
         void ExecutePassesInOrder();
-        void EndSceneRender();
         [[nodiscard]] RenderPassData BuildPassData(RenderPass& pass);
         [[nodiscard]] bool BeginPass(const RenderPassData& passData);
 
