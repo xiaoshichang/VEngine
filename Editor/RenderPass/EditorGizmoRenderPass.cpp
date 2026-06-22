@@ -145,8 +145,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
         }
     } // namespace
 
-    EditorGizmoRenderPass::EditorGizmoRenderPass(EditorGizmoRenderPassDesc desc)
-        : desc_(std::move(desc))
+    EditorGizmoRenderPass::EditorGizmoRenderPass(EditorGizmoRenderPassInitParam initParam)
+        : initParam_(std::move(initParam))
     {
     }
 
@@ -157,23 +157,23 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     void EditorGizmoRenderPass::Setup(RenderPassBuilder& builder)
     {
-        if (desc_.colorTexture == nullptr || desc_.colorTexture->GetTexture() == nullptr)
+        if (initParam_.colorTexture == nullptr || initParam_.colorTexture->GetTexture() == nullptr)
         {
             return;
         }
 
-        builder.AddTextureColorAttachment(*desc_.colorTexture->GetTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
-        if (desc_.colorTexture->GetDepthTexture() != nullptr)
+        builder.AddTextureColorAttachment(*initParam_.colorTexture->GetTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
+        if (initParam_.colorTexture->GetDepthTexture() != nullptr)
         {
             builder.SetDepthStencilAttachment(
-                *desc_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
+                *initParam_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
         }
     }
 
     void EditorGizmoRenderPass::Execute(RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
-        if (desc_.drawList == nullptr || desc_.drawList->vertices.empty())
+        if (initParam_.drawList == nullptr || initParam_.drawList->vertices.empty())
         {
             return;
         }
@@ -181,7 +181,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         EnsurePipeline(context);
         UploadFrameResources(context);
 
-        rhi::RhiCommandList& commandList = context.GetCommandList();
+        rhi::RhiCommandList& commandList = context.commandList;
         commandList.SetPipeline(*pipelineState_);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
         commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(EditorGizmoVertex), 0);
@@ -196,7 +196,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return;
         }
 
-        ShaderManager* shaderManager = context.GetFrameData().shaderManager;
+        ShaderManager* shaderManager = context.frameData.shaderManager;
         VE_ASSERT_MESSAGE(shaderManager != nullptr, "EditorGizmoRenderPass requires a ShaderManager.");
 
         rhi::RhiShaderModuleDesc vertexShaderDesc = {};
@@ -205,7 +205,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         vertexShaderDesc.entryPoint = "VSMain";
         vertexShaderDesc.debugName = "EditorGizmoVertexShader";
 
-        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.GetDevice(), EditorGizmoVertexShaderID, vertexShaderDesc);
+        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoVertexShaderID, vertexShaderDesc);
         VE_ASSERT_MESSAGE(vertexShader != nullptr, "EditorGizmoRenderPass failed to get vertex shader.");
 
         rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
@@ -214,7 +214,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         fragmentShaderDesc.entryPoint = "PSMain";
         fragmentShaderDesc.debugName = "EditorGizmoFragmentShader";
 
-        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.GetDevice(), EditorGizmoFragmentShaderID, fragmentShaderDesc);
+        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoFragmentShaderID, fragmentShaderDesc);
         VE_ASSERT_MESSAGE(fragmentShader != nullptr, "EditorGizmoRenderPass failed to get fragment shader.");
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
@@ -244,36 +244,36 @@ float4 PSMain(VSOutput input) : SV_TARGET
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = "EditorGizmoPipeline";
 
-        pipelineState_ = context.GetDevice().CreateGraphicsPipeline(pipelineDesc);
+        pipelineState_ = context.device.CreateGraphicsPipeline(pipelineDesc);
         VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "EditorGizmoRenderPass failed to create pipeline state.");
         pipelineColorFormat_ = targetFormat;
     }
 
     void EditorGizmoRenderPass::UploadFrameResources(RenderPassContext& context)
     {
-        VE_ASSERT(desc_.drawList != nullptr);
-        uploadedVertexCount_ = desc_.drawList->vertices.size();
+        VE_ASSERT(initParam_.drawList != nullptr);
+        uploadedVertexCount_ = initParam_.drawList->vertices.size();
 
-        vertexBuffer_ = context.GetDevice().CreateBuffer(MakeBufferDesc(static_cast<UInt64>(uploadedVertexCount_ * sizeof(EditorGizmoVertex)),
-                                                                        rhi::RhiBufferUsage::Vertex,
-                                                                        desc_.drawList->vertices.data(),
-                                                                        "EditorGizmoVertexBuffer"));
+        vertexBuffer_ = context.device.CreateBuffer(MakeBufferDesc(static_cast<UInt64>(uploadedVertexCount_ * sizeof(EditorGizmoVertex)),
+                                                                   rhi::RhiBufferUsage::Vertex,
+                                                                   initParam_.drawList->vertices.data(),
+                                                                   "EditorGizmoVertexBuffer"));
         VE_ASSERT_MESSAGE(vertexBuffer_ != nullptr, "EditorGizmoRenderPass failed to create vertex buffer.");
 
-        const EditorGizmoUniformData uniformData = BuildUniformData(context.GetRendererData().camera);
+        const EditorGizmoUniformData uniformData = BuildUniformData(context.rendererData.resolvedCamera);
         uniformBuffer_ =
-            context.GetDevice().CreateBuffer(MakeBufferDesc(sizeof(EditorGizmoUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "EditorGizmoUniformBuffer"));
+            context.device.CreateBuffer(MakeBufferDesc(sizeof(EditorGizmoUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "EditorGizmoUniformBuffer"));
         VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "EditorGizmoRenderPass failed to create uniform buffer.");
     }
 
     rhi::RhiFormat EditorGizmoRenderPass::ResolveTargetFormat(const RenderPassContext& context) const noexcept
     {
-        if (desc_.colorTexture != nullptr)
+        if (initParam_.colorTexture != nullptr)
         {
-            return desc_.colorTexture->GetDesc().colorFormat;
+            return initParam_.colorTexture->GetDesc().colorFormat;
         }
 
-        VE_ASSERT(context.GetFrameData().mainSwapchain != nullptr);
-        return context.GetFrameData().mainSwapchain->GetColorFormat();
+        VE_ASSERT(context.frameData.mainSwapchain != nullptr);
+        return context.frameData.mainSwapchain->GetColorFormat();
     }
 } // namespace ve

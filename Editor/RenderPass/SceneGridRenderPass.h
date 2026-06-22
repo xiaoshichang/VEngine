@@ -11,7 +11,7 @@
 
 namespace ve
 {
-    struct SceneGridRenderPassDesc
+    struct SceneGridRenderPassInitParam
     {
         std::shared_ptr<RTRenderTexture> colorTexture;
         Float32 opacity = 0.45f;
@@ -21,7 +21,7 @@ namespace ve
     class SceneGridRenderPass final : public RenderPass
     {
     public:
-        explicit SceneGridRenderPass(SceneGridRenderPassDesc desc);
+        explicit SceneGridRenderPass(SceneGridRenderPassInitParam initParam);
 
         [[nodiscard]] const char* GetName() const noexcept override;
         void Setup(RenderPassBuilder& builder) override;
@@ -32,7 +32,7 @@ namespace ve
         void EnsurePipeline(RenderPassContext& context);
         void UploadUniforms(RenderPassContext& context);
 
-        SceneGridRenderPassDesc desc_;
+        SceneGridRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiBuffer> vertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
         std::unique_ptr<rhi::RhiPipelineState> pipelineState_;

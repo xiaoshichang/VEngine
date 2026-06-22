@@ -9,6 +9,5 @@ option(VE_BUILD_IOS_PLAYER "Build iOS player app" OFF)
 option(VE_ENABLE_D3D11 "Enable D3D11 RHI" ON)
 option(VE_ENABLE_D3D12 "Enable D3D12 RHI" ON)
 option(VE_ENABLE_METAL "Enable Metal RHI" OFF)
-option(VE_ENABLE_SCRIPTING "Enable C# scripting" ON)
 
 set(VE_IOS_BUNDLE_IDENTIFIER "com.vengine.player" CACHE STRING "iOS player bundle identifier")

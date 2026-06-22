@@ -14,12 +14,22 @@ namespace ve::editor
         ~EditorInput();
 
         [[nodiscard]] ErrorCode Init(void* nativeWindowHandle);
+        void BeginOSEventFrame() noexcept;
         void StartFrame();
         [[nodiscard]] bool OnOSEvent(const OSEvent& event);
         void Shutdown() noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
+        [[nodiscard]] Int32 GetMouseDeltaX() const noexcept;
+        [[nodiscard]] Int32 GetMouseDeltaY() const noexcept;
 
     private:
+        void StoreMousePosition(const OSEvent& event) noexcept;
+
         bool initialized_ = false;
+        Int32 mouseX_ = 0;
+        Int32 mouseY_ = 0;
+        Int32 mouseDeltaX_ = 0;
+        Int32 mouseDeltaY_ = 0;
+        bool hasMousePosition_ = false;
     };
 } // namespace ve::editor

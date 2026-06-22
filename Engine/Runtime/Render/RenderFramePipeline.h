@@ -19,17 +19,17 @@ namespace ve
     using EditorOverlayRenderCallback = std::function<void()>;
 
     /// Describes the editor frame flow after editor UI has produced draw data on the Scene Thread.
-    struct EditorRenderFramePipelineDesc
+    struct EditorRenderFramePipelineInitParam
     {
-        std::vector<std::shared_ptr<BaseRenderer>> sceneRenderers;
+        std::vector<ForwardRendererInitParam> sceneRenderers;
         rhi::RhiLoadAction overlayColorLoadAction = rhi::RhiLoadAction::Clear;
         EditorOverlayRenderCallback overlayRenderCallback;
     };
 
     /// Describes the player frame flow: render the scene to an intermediate color texture, then present it.
-    struct PlayerRenderFramePipelineDesc
+    struct PlayerRenderFramePipelineInitParam
     {
-        std::shared_ptr<BaseRenderer> sceneRenderer;
+        ForwardRendererInitParam sceneRenderer;
         std::shared_ptr<RTRenderTexture> sceneColorTexture;
     };
 
@@ -50,14 +50,14 @@ namespace ve
     class EditorRenderFramePipeline final : public FrameRenderPipeline
     {
     public:
-        explicit EditorRenderFramePipeline(EditorRenderFramePipelineDesc desc);
+        explicit EditorRenderFramePipeline(EditorRenderFramePipelineInitParam initParam);
 
         [[nodiscard]] ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) override;
 
     private:
         [[nodiscard]] ErrorCode RecordOverlayPass(const FrameRenderPipelineData& frameData);
 
-        std::vector<std::shared_ptr<BaseRenderer>> sceneRenderers_;
+        std::vector<ForwardRendererInitParam> sceneRenderers_;
         rhi::RhiLoadAction overlayColorLoadAction_ = rhi::RhiLoadAction::Clear;
         EditorOverlayRenderCallback overlayRenderCallback_;
     };
@@ -65,7 +65,7 @@ namespace ve
     class PlayerRenderFramePipeline final : public FrameRenderPipeline
     {
     public:
-        explicit PlayerRenderFramePipeline(PlayerRenderFramePipelineDesc desc);
+        explicit PlayerRenderFramePipeline(PlayerRenderFramePipelineInitParam initParam);
 
         [[nodiscard]] ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) override;
 
@@ -73,7 +73,7 @@ namespace ve
         void EnsureSceneColorTexture(rhi::RhiDevice& device, const rhi::RhiSwapchain& mainSwapchain);
         [[nodiscard]] ErrorCode CopySceneColorToSwapchain(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
 
-        std::shared_ptr<BaseRenderer> sceneRenderer_;
+        ForwardRendererInitParam sceneRenderer_;
         std::shared_ptr<RTRenderTexture> sceneColorTexture_;
     };
 } // namespace ve

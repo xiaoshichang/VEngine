@@ -1218,7 +1218,6 @@ option(VE_BUILD_IOS_PLAYER "Build iOS player" OFF)
 option(VE_ENABLE_D3D11 "Enable D3D11 RHI" ON)
 option(VE_ENABLE_D3D12 "Enable D3D12 RHI" ON)
 option(VE_ENABLE_METAL "Enable Metal RHI" OFF)
-option(VE_ENABLE_SCRIPTING "Enable C# scripting" ON)
 ```
 
 Recommended presets:
@@ -1226,7 +1225,6 @@ Recommended presets:
 ```text
 windows-msvc-debug
 windows-msvc-release
-windows-msvc-editor
 windows-msvc-tests
 ios-simulator-debug
 ios-simulator-release

@@ -14,10 +14,16 @@ namespace ve
     class RTScene;
     class RTShaderResource;
 
+    struct OpaqueSceneRenderPassInitParam
+    {
+        RendererRenderTarget target;
+        rhi::RhiFillMode fillMode = rhi::RhiFillMode::Solid;
+    };
+
     class OpaqueSceneRenderPass final : public RenderPass
     {
     public:
-        OpaqueSceneRenderPass(RendererRenderTarget target, rhi::RhiFillMode fillMode);
+        explicit OpaqueSceneRenderPass(OpaqueSceneRenderPassInitParam initParam);
 
         [[nodiscard]] const char* GetName() const noexcept override;
         void Setup(RenderPassBuilder& builder) override;
@@ -29,8 +35,7 @@ namespace ve
         [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc);
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
-        RendererRenderTarget target_;
-        rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
+        OpaqueSceneRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
         std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;

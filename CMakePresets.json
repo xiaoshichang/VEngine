@@ -28,8 +28,7 @@
                 "VE_BUILD_IOS_PLAYER": "OFF",
                 "VE_ENABLE_D3D11": "ON",
                 "VE_ENABLE_D3D12": "ON",
-                "VE_ENABLE_METAL": "OFF",
-                "VE_ENABLE_SCRIPTING": "ON"
+                "VE_ENABLE_METAL": "OFF"
             }
         },
         {
@@ -37,18 +36,6 @@
             "displayName": "Windows MSVC Release",
             "inherits": "windows-msvc-debug",
             "binaryDir": "${sourceDir}/Build/windows-msvc-release"
-        },
-        {
-            "name": "windows-msvc-editor",
-            "displayName": "Windows MSVC Editor",
-            "inherits": "windows-msvc-debug",
-            "binaryDir": "${sourceDir}/Build/windows-msvc-editor",
-            "cacheVariables": {
-                "VE_BUILD_PLAYER": "ON",
-                "VE_BUILD_EDITOR": "ON",
-                "VE_BUILD_TESTS": "OFF",
-                "VE_BUILD_TOOLS": "ON"
-            }
         },
         {
             "name": "windows-msvc-tests",
@@ -78,8 +65,7 @@
                 "VE_BUILD_IOS_PLAYER": "ON",
                 "VE_ENABLE_D3D11": "OFF",
                 "VE_ENABLE_D3D12": "OFF",
-                "VE_ENABLE_METAL": "ON",
-                "VE_ENABLE_SCRIPTING": "OFF"
+                "VE_ENABLE_METAL": "ON"
             }
         },
         {
@@ -99,11 +85,6 @@
             "name": "windows-msvc-release",
             "configurePreset": "windows-msvc-release",
             "configuration": "Release"
-        },
-        {
-            "name": "windows-msvc-editor",
-            "configurePreset": "windows-msvc-editor",
-            "configuration": "Debug"
         },
         {
             "name": "windows-msvc-tests",

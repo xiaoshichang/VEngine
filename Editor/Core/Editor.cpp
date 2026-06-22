@@ -10,6 +10,7 @@
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 #include "Editor/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
+#include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -183,6 +184,7 @@ namespace ve::editor
         nativeWindowHandle_ = nativeWindowHandle;
         initialized_.store(true, std::memory_order_release);
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
+            .onBeforeOSEvents = [this]() { input_.BeginOSEventFrame(); },
             .onStartFrame = [this]() { StartFrame(); },
             .onOSEvent = [this](const OSEvent& event) { return input_.OnOSEvent(event); },
             .onRender = [this]() { return Render(); },
@@ -230,12 +232,12 @@ namespace ve::editor
         EditorFrameRenderViews views = CollectFrameRenderViews();
         std::shared_ptr<RTScene> renderScene = GetActiveRenderScene();
 
-        EditorRenderFramePipelineDesc pipelineDesc = {};
-        AddSceneViewRenderer(pipelineDesc, views, renderScene);
-        AddGameViewRenderer(pipelineDesc, views, renderScene);
-        pipelineDesc.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
-        pipelineDesc.overlayRenderCallback = BuildOverlayRenderCallback(std::move(frameDrawData));
-        return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineDesc));
+        EditorRenderFramePipelineInitParam pipelineInitParam = {};
+        AddSceneViewRenderer(pipelineInitParam, views, renderScene);
+        AddGameViewRenderer(pipelineInitParam, views, renderScene);
+        pipelineInitParam.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
+        pipelineInitParam.overlayRenderCallback = BuildOverlayRenderCallback(std::move(frameDrawData));
+        return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineInitParam));
     }
 
     void Editor::RenderActiveMainView()
@@ -310,7 +312,7 @@ namespace ve::editor
         };
     }
 
-    void Editor::AddSceneViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc,
+    void Editor::AddSceneViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
                                       const EditorFrameRenderViews& views,
                                       const std::shared_ptr<RTScene>& renderScene) const
     {
@@ -321,35 +323,35 @@ namespace ve::editor
 
         // Scene View is one renderer with a normal scene pass followed by editor-only visual aid passes.
         // Keeping the pass list together avoids repeating BaseRenderer setup for grid and gizmo overlays.
-        ForwardRendererDesc rendererDesc = {};
-        rendererDesc.scene = renderScene;
-        rendererDesc.camera = views.sceneViewCameraSnapshot;
-        rendererDesc.target.colorTexture = views.sceneViewTexture;
-        rendererDesc.fillMode = views.sceneViewFillMode;
-        rendererDesc.target.colorLoadAction = rhi::RhiLoadAction::Load;
-        rendererDesc.target.colorStoreAction = rhi::RhiStoreAction::Store;
+        ForwardRendererInitParam rendererInitParam = {};
+        rendererInitParam.scene = renderScene;
+        rendererInitParam.externalCamera = views.sceneViewCameraSnapshot;
+        rendererInitParam.target.colorTexture = views.sceneViewTexture;
+        rendererInitParam.fillMode = views.sceneViewFillMode;
+        rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Load;
+        rendererInitParam.target.colorStoreAction = rhi::RhiStoreAction::Store;
 
         if (views.sceneViewGridEnabled)
         {
-            SceneGridRenderPassDesc gridPassDesc = {};
-            gridPassDesc.colorTexture = views.sceneViewTexture;
-            gridPassDesc.opacity = views.sceneViewGridOpacity;
-            gridPassDesc.unitSize = views.sceneViewGridUnitSize;
-            rendererDesc.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassDesc)));
+            SceneGridRenderPassInitParam gridPassInitParam = {};
+            gridPassInitParam.colorTexture = views.sceneViewTexture;
+            gridPassInitParam.opacity = views.sceneViewGridOpacity;
+            gridPassInitParam.unitSize = views.sceneViewGridUnitSize;
+            rendererInitParam.passes.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassInitParam)));
         }
 
         if (views.sceneViewGizmoDrawList != nullptr)
         {
-            EditorGizmoRenderPassDesc gizmoPassDesc = {};
-            gizmoPassDesc.colorTexture = views.sceneViewTexture;
-            gizmoPassDesc.drawList = views.sceneViewGizmoDrawList;
-            rendererDesc.additionalPasses.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassDesc)));
+            EditorGizmoRenderPassInitParam gizmoPassInitParam = {};
+            gizmoPassInitParam.colorTexture = views.sceneViewTexture;
+            gizmoPassInitParam.drawList = views.sceneViewGizmoDrawList;
+            rendererInitParam.passes.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassInitParam)));
         }
 
-        pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+        pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
     }
 
-    void Editor::AddGameViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc,
+    void Editor::AddGameViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
                                      const EditorFrameRenderViews& views,
                                      const std::shared_ptr<RTScene>& renderScene) const
     {
@@ -359,10 +361,10 @@ namespace ve::editor
         }
 
         // Game View intentionally stays free of editor gizmo/grid passes for now.
-        ForwardRendererDesc rendererDesc = {};
-        rendererDesc.scene = renderScene;
-        rendererDesc.target.colorTexture = views.gameViewTexture;
-        pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+        ForwardRendererInitParam rendererInitParam = {};
+        rendererInitParam.scene = renderScene;
+        rendererInitParam.target.colorTexture = views.gameViewTexture;
+        pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
     }
 
     std::shared_ptr<RTScene> Editor::GetActiveRenderScene() const
@@ -445,6 +447,11 @@ namespace ve::editor
     {
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::GetRenderSystem requires an initialized editor.");
         return *renderSystem_;
+    }
+
+    const EditorInput& Editor::GetInput() const noexcept
+    {
+        return input_;
     }
 
     EditorAssetDatabase& Editor::GetAssetDatabase() noexcept
@@ -574,6 +581,7 @@ namespace ve::editor
         assetDatabase_.Shutdown();
         currentProjectPath_.clear();
         currentProjectName_.clear();
+        currentScenePath_ = Path();
         mainView_ = MainView::ProjectSelection;
         EnqueueMainWindowTitleUpdate();
     }
@@ -663,7 +671,11 @@ namespace ve::editor
         if (!sceneResult)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to construct project start scene '{}': {}", descriptor.startScene, sceneResult.GetError().GetMessage());
+            currentScenePath_ = Path();
+            return;
         }
+
+        currentScenePath_ = sceneAsset->path;
     }
 
     void Editor::EnterProjectEditingView()
@@ -721,6 +733,87 @@ namespace ve::editor
         ClearSelection();
     }
 
+    void Editor::OpenScene(Path scenePath)
+    {
+        if (scenePath.IsEmpty())
+        {
+            return;
+        }
+
+        if (sceneSystem_ == nullptr || runtime_ == nullptr)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped opening scene '{}' because runtime scene services are not ready.", scenePath.GetString());
+            return;
+        }
+
+        const EditorAssetRecord* sceneAsset = assetDatabase_.FindAsset(scenePath);
+        if (sceneAsset == nullptr)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Scene '{}' was not found in the asset database.", scenePath.GetString());
+            return;
+        }
+
+        if (sceneAsset->type != EditorAssetType::Scene)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Asset '{}' is not a scene.", scenePath.GetString());
+            return;
+        }
+
+        Result<Scene*> sceneResult =
+            sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem());
+        if (!sceneResult)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to open scene '{}': {}", scenePath.GetString(), sceneResult.GetError().GetMessage());
+            return;
+        }
+
+        currentScenePath_ = sceneAsset->path;
+        ClearSelection();
+        CollectUnusedResources();
+        VE_LOG_INFO_CATEGORY("Editor", "Opened scene: {}", currentScenePath_.GetString());
+    }
+
+    void Editor::SaveCurrentScene()
+    {
+        if (!CanSaveCurrentScene())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped saving scene because no editable scene is active.");
+            return;
+        }
+
+        VE_ASSERT(sceneSystem_ != nullptr);
+        const Scene* scene = sceneSystem_->GetScene();
+        VE_ASSERT(scene != nullptr);
+
+        Result<std::string> serializedScene = SceneSerialization::SaveToString(*scene);
+        if (!serializedScene)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to serialize scene '{}': {}", currentScenePath_.GetString(), serializedScene.GetError().GetMessage());
+            return;
+        }
+
+        const ErrorCode writeResult = FileSystem::WriteTextFile(assetDatabase_.GetProjectRoot() / currentScenePath_, serializedScene.GetValue());
+        if (writeResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to save scene '{}': {}", currentScenePath_.GetString(), ToString(writeResult));
+            return;
+        }
+
+        const ErrorCode refreshResult = assetDatabase_.Refresh();
+        if (refreshResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Saved scene '{}' but failed to refresh asset database: {}", currentScenePath_.GetString(), ToString(refreshResult));
+            return;
+        }
+
+        VE_LOG_INFO_CATEGORY("Editor", "Saved scene: {}", currentScenePath_.GetString());
+    }
+
+    bool Editor::CanSaveCurrentScene() const noexcept
+    {
+        return sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr && !currentScenePath_.IsEmpty() && assetDatabase_.IsInitialized();
+    }
+
     const std::string& Editor::GetCurrentProjectPath() const noexcept
     {
         return currentProjectPath_;
@@ -729,6 +822,11 @@ namespace ve::editor
     const std::string& Editor::GetCurrentProjectName() const noexcept
     {
         return currentProjectName_;
+    }
+
+    const Path& Editor::GetCurrentScenePath() const noexcept
+    {
+        return currentScenePath_;
     }
 
     const std::vector<std::string>& Editor::GetRecentProjects() const noexcept

@@ -188,14 +188,14 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return BuildProjectionMatrix(cameraDesc) * BuildRigidInverse(cameraDesc.localToWorld);
         }
 
-        [[nodiscard]] SceneGridUniformData BuildUniformData(const std::shared_ptr<RTCamera>& camera, const SceneGridRenderPassDesc& desc) noexcept
+        [[nodiscard]] SceneGridUniformData BuildUniformData(const std::shared_ptr<RTCamera>& camera, const SceneGridRenderPassInitParam& initParam) noexcept
         {
             SceneGridUniformData data = {};
             const Matrix44 worldViewProjection = BuildViewProjectionMatrix(camera).Transposed();
             const std::array<Float32, 16>& values = worldViewProjection.GetValues();
             std::memcpy(data.worldViewProjection, values.data(), sizeof(data.worldViewProjection));
-            data.gridParams[0] = std::max(desc.unitSize, 0.001f);
-            data.gridParams[1] = Clamp(desc.opacity, 0.0f, 1.0f);
+            data.gridParams[0] = std::max(initParam.unitSize, 0.001f);
+            data.gridParams[1] = Clamp(initParam.opacity, 0.0f, 1.0f);
             data.gridParams[2] = 1.25f;
             data.gridParams[3] = 10.0f;
             return data;
@@ -228,8 +228,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
         }
     } // namespace
 
-    SceneGridRenderPass::SceneGridRenderPass(SceneGridRenderPassDesc desc)
-        : desc_(std::move(desc))
+    SceneGridRenderPass::SceneGridRenderPass(SceneGridRenderPassInitParam initParam)
+        : initParam_(std::move(initParam))
     {
     }
 
@@ -240,23 +240,23 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     void SceneGridRenderPass::Setup(RenderPassBuilder& builder)
     {
-        if (desc_.colorTexture == nullptr || desc_.colorTexture->GetTexture() == nullptr)
+        if (initParam_.colorTexture == nullptr || initParam_.colorTexture->GetTexture() == nullptr)
         {
             return;
         }
 
-        builder.AddTextureColorAttachment(*desc_.colorTexture->GetTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
-        if (desc_.colorTexture->GetDepthTexture() != nullptr)
+        builder.AddTextureColorAttachment(*initParam_.colorTexture->GetTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
+        if (initParam_.colorTexture->GetDepthTexture() != nullptr)
         {
             builder.SetDepthStencilAttachment(
-                *desc_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
+                *initParam_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
         }
     }
 
     void SceneGridRenderPass::Execute(RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
-        if (desc_.opacity <= 0.0f)
+        if (initParam_.opacity <= 0.0f)
         {
             return;
         }
@@ -265,7 +265,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         EnsurePipeline(context);
         UploadUniforms(context);
 
-        rhi::RhiCommandList& commandList = context.GetCommandList();
+        rhi::RhiCommandList& commandList = context.commandList;
         commandList.SetPipeline(*pipelineState_);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *uniformBuffer_, 0);
@@ -281,21 +281,22 @@ float4 PSMain(VSOutput input) : SV_TARGET
         }
 
         const std::vector<RTMeshVertex> vertices = BuildGridPlaneVertices();
-        vertexBuffer_ = context.GetDevice().CreateBuffer(
+        vertexBuffer_ = context.device.CreateBuffer(
             MakeBufferDesc(static_cast<UInt64>(vertices.size() * sizeof(RTMeshVertex)), rhi::RhiBufferUsage::Vertex, vertices.data(), "SceneGridVertexBuffer"));
         VE_ASSERT_MESSAGE(vertexBuffer_ != nullptr, "SceneGridRenderPass failed to create vertex buffer.");
     }
 
     void SceneGridRenderPass::EnsurePipeline(RenderPassContext& context)
     {
-        const bool depthEnabled = context.GetRenderPassDesc().hasDepthStencilAttachment;
-        const rhi::RhiFormat targetFormat = desc_.colorTexture != nullptr ? desc_.colorTexture->GetDesc().colorFormat : context.GetFrameData().mainSwapchain->GetColorFormat();
+        const bool depthEnabled = context.passData.renderPassDesc.hasDepthStencilAttachment;
+        const rhi::RhiFormat targetFormat =
+            initParam_.colorTexture != nullptr ? initParam_.colorTexture->GetDesc().colorFormat : context.frameData.mainSwapchain->GetColorFormat();
         if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineDepthEnabled_ == depthEnabled)
         {
             return;
         }
 
-        ShaderManager* shaderManager = context.GetFrameData().shaderManager;
+        ShaderManager* shaderManager = context.frameData.shaderManager;
         VE_ASSERT_MESSAGE(shaderManager != nullptr, "SceneGridRenderPass requires a ShaderManager.");
 
         rhi::RhiShaderModuleDesc vertexShaderDesc = {};
@@ -304,7 +305,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         vertexShaderDesc.entryPoint = "VSMain";
         vertexShaderDesc.debugName = "SceneGridVertexShader";
 
-        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.GetDevice(), SceneGridVertexShaderID, vertexShaderDesc);
+        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.device, SceneGridVertexShaderID, vertexShaderDesc);
         VE_ASSERT_MESSAGE(vertexShader != nullptr, "SceneGridRenderPass failed to get vertex shader.");
 
         rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
@@ -313,7 +314,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         fragmentShaderDesc.entryPoint = "PSMain";
         fragmentShaderDesc.debugName = "SceneGridFragmentShader";
 
-        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.GetDevice(), SceneGridFragmentShaderID, fragmentShaderDesc);
+        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.device, SceneGridFragmentShaderID, fragmentShaderDesc);
         VE_ASSERT_MESSAGE(fragmentShader != nullptr, "SceneGridRenderPass failed to get fragment shader.");
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
@@ -343,7 +344,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = "SceneGridPipeline";
 
-        pipelineState_ = context.GetDevice().CreateGraphicsPipeline(pipelineDesc);
+        pipelineState_ = context.device.CreateGraphicsPipeline(pipelineDesc);
         VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "SceneGridRenderPass failed to create pipeline state.");
         pipelineColorFormat_ = targetFormat;
         pipelineDepthEnabled_ = depthEnabled;
@@ -351,8 +352,8 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
     void SceneGridRenderPass::UploadUniforms(RenderPassContext& context)
     {
-        const SceneGridUniformData uniformData = BuildUniformData(context.GetRendererData().camera, desc_);
-        uniformBuffer_ = context.GetDevice().CreateBuffer(
+        const SceneGridUniformData uniformData = BuildUniformData(context.rendererData.resolvedCamera, initParam_);
+        uniformBuffer_ = context.device.CreateBuffer(
             MakeBufferDesc(sizeof(SceneGridUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "SceneGridUniformBuffer"));
         VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "SceneGridRenderPass failed to create uniform buffer.");
     }

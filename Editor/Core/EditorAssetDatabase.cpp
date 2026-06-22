@@ -46,6 +46,14 @@ namespace ve::editor
             std::array<double, 3> boundsExtents = {0.0, 0.0, 0.0};
         };
 
+        constexpr UInt32 InvalidObjIndex = (std::numeric_limits<UInt32>::max)();
+
+        struct ObjFaceVertex
+        {
+            UInt32 vertexIndex = InvalidObjIndex;
+            UInt32 normalIndex = InvalidObjIndex;
+        };
+
         [[nodiscard]] std::string ToLowerCopy(std::string text)
         {
             std::transform(text.begin(), text.end(), text.begin(), [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
@@ -398,32 +406,66 @@ namespace ve::editor
             return array;
         }
 
-        [[nodiscard]] Result<UInt32> ParseObjVertexIndex(std::string_view token, SizeT vertexCount)
+        [[nodiscard]] Result<UInt32> ParseObjElementIndex(std::string_view indexText, SizeT elementCount, const char* elementName)
         {
-            const size_t slash = token.find('/');
-            const std::string indexText(slash == std::string_view::npos ? token : token.substr(0, slash));
             if (indexText.empty())
             {
-                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face has an empty vertex index."));
+                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, std::string("OBJ face has an empty ") + elementName + " index."));
             }
 
             int objIndex = 0;
             try
             {
-                objIndex = std::stoi(indexText);
+                objIndex = std::stoi(std::string(indexText));
             }
             catch (const std::exception&)
             {
-                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face has an invalid vertex index: " + indexText));
+                return Result<UInt32>::Failure(
+                    Error(ErrorCode::InvalidArgument, std::string("OBJ face has an invalid ") + elementName + " index: " + std::string(indexText)));
             }
 
-            const int zeroBasedIndex = objIndex > 0 ? objIndex - 1 : static_cast<int>(vertexCount) + objIndex;
-            if (zeroBasedIndex < 0 || static_cast<SizeT>(zeroBasedIndex) >= vertexCount)
+            const int zeroBasedIndex = objIndex > 0 ? objIndex - 1 : static_cast<int>(elementCount) + objIndex;
+            if (zeroBasedIndex < 0 || static_cast<SizeT>(zeroBasedIndex) >= elementCount)
             {
-                return Result<UInt32>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face vertex index is outside the vertex array."));
+                return Result<UInt32>::Failure(
+                    Error(ErrorCode::InvalidArgument, std::string("OBJ face ") + elementName + " index is outside the source array."));
             }
 
             return Result<UInt32>::Success(static_cast<UInt32>(zeroBasedIndex));
+        }
+
+        [[nodiscard]] Result<ObjFaceVertex> ParseObjFaceVertex(std::string_view token, SizeT vertexCount, SizeT normalCount)
+        {
+            const size_t vertexEnd = token.find('/');
+            const std::string_view vertexIndexText = vertexEnd == std::string_view::npos ? token : token.substr(0, vertexEnd);
+            Result<UInt32> vertexIndex = ParseObjElementIndex(vertexIndexText, vertexCount, "vertex");
+            if (!vertexIndex)
+            {
+                return Result<ObjFaceVertex>::Failure(vertexIndex.GetError());
+            }
+
+            ObjFaceVertex faceVertex = {};
+            faceVertex.vertexIndex = vertexIndex.GetValue();
+
+            if (vertexEnd == std::string_view::npos)
+            {
+                return Result<ObjFaceVertex>::Success(faceVertex);
+            }
+
+            const size_t normalStart = token.find('/', vertexEnd + 1);
+            if (normalStart == std::string_view::npos || normalStart + 1 >= token.size())
+            {
+                return Result<ObjFaceVertex>::Success(faceVertex);
+            }
+
+            Result<UInt32> normalIndex = ParseObjElementIndex(token.substr(normalStart + 1), normalCount, "normal");
+            if (!normalIndex)
+            {
+                return Result<ObjFaceVertex>::Failure(normalIndex.GetError());
+            }
+
+            faceVertex.normalIndex = normalIndex.GetValue();
+            return Result<ObjFaceVertex>::Success(faceVertex);
         }
 
         void UpdateBounds(ObjMeshData& mesh)
@@ -466,6 +508,7 @@ namespace ve::editor
             ObjMeshData mesh;
             mesh.name = GetStem(objProjectPath);
             std::vector<std::array<double, 3>> sourceVertices;
+            std::vector<std::array<double, 3>> sourceNormals;
 
             std::istringstream input(text.GetValue());
             std::string line;
@@ -493,40 +536,52 @@ namespace ve::editor
                     }
                     sourceVertices.push_back(vertex);
                 }
+                else if (command == "vn")
+                {
+                    std::array<double, 3> normal = {0.0, 0.0, 0.0};
+                    if (!(lineInput >> normal[0] >> normal[1] >> normal[2]))
+                    {
+                        return Result<ObjMeshData>::Failure(Error(ErrorCode::InvalidArgument, "OBJ normal line must contain three numeric values."));
+                    }
+                    sourceNormals.push_back(Normalize(normal));
+                }
                 else if (command == "f")
                 {
-                    std::vector<UInt32> faceIndices;
+                    std::vector<ObjFaceVertex> faceVertices;
                     std::string token;
                     while (lineInput >> token)
                     {
-                        Result<UInt32> indexResult = ParseObjVertexIndex(token, sourceVertices.size());
-                        if (!indexResult)
+                        Result<ObjFaceVertex> faceVertex = ParseObjFaceVertex(token, sourceVertices.size(), sourceNormals.size());
+                        if (!faceVertex)
                         {
-                            return Result<ObjMeshData>::Failure(indexResult.GetError());
+                            return Result<ObjMeshData>::Failure(faceVertex.GetError());
                         }
 
-                        faceIndices.push_back(indexResult.GetValue());
+                        faceVertices.push_back(faceVertex.GetValue());
                     }
 
-                    if (faceIndices.size() < 3)
+                    if (faceVertices.size() < 3)
                     {
                         return Result<ObjMeshData>::Failure(Error(ErrorCode::InvalidArgument, "OBJ face line must contain at least three vertices."));
                     }
 
-                    for (SizeT index = 1; index + 1 < faceIndices.size(); ++index)
+                    for (SizeT index = 1; index + 1 < faceVertices.size(); ++index)
                     {
-                        const std::array<double, 3>& a = sourceVertices[faceIndices[0]];
-                        const std::array<double, 3>& b = sourceVertices[faceIndices[index]];
-                        const std::array<double, 3>& c = sourceVertices[faceIndices[index + 1]];
+                        const ObjFaceVertex& aVertex = faceVertices[0];
+                        const ObjFaceVertex& bVertex = faceVertices[index];
+                        const ObjFaceVertex& cVertex = faceVertices[index + 1];
+                        const std::array<double, 3>& a = sourceVertices[aVertex.vertexIndex];
+                        const std::array<double, 3>& b = sourceVertices[bVertex.vertexIndex];
+                        const std::array<double, 3>& c = sourceVertices[cVertex.vertexIndex];
                         const std::array<double, 3> normal = CalculateFaceNormal(a, b, c);
                         const UInt32 firstVertex = static_cast<UInt32>(mesh.vertices.size());
 
                         mesh.vertices.push_back(a);
                         mesh.vertices.push_back(b);
                         mesh.vertices.push_back(c);
-                        mesh.normals.push_back(normal);
-                        mesh.normals.push_back(normal);
-                        mesh.normals.push_back(normal);
+                        mesh.normals.push_back(aVertex.normalIndex != InvalidObjIndex ? sourceNormals[aVertex.normalIndex] : normal);
+                        mesh.normals.push_back(bVertex.normalIndex != InvalidObjIndex ? sourceNormals[bVertex.normalIndex] : normal);
+                        mesh.normals.push_back(cVertex.normalIndex != InvalidObjIndex ? sourceNormals[cVertex.normalIndex] : normal);
                         mesh.indices.push_back(firstVertex);
                         mesh.indices.push_back(firstVertex + 1);
                         mesh.indices.push_back(firstVertex + 2);

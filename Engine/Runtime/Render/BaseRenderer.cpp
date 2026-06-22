@@ -10,7 +10,7 @@ namespace ve
 {
     namespace
     {
-        [[nodiscard]] std::shared_ptr<RTCamera> FindFrameCamera(const RTScene& scene) noexcept
+        [[nodiscard]] std::shared_ptr<RTCamera> FindCameraFromScene(const RTScene& scene) noexcept
         {
             std::shared_ptr<RTCamera> fallback;
             for (SizeT cameraIndex = 0; cameraIndex < scene.GetCameraCount(); ++cameraIndex)
@@ -35,91 +35,77 @@ namespace ve
             return fallback;
         }
 
-        [[nodiscard]] rhi::RhiColor ResolveFrameClearColor(const std::shared_ptr<RTScene>& scene) noexcept
+        void ValidateRenderPasses(const std::vector<std::unique_ptr<RenderPass>>& passes)
         {
-            if (scene == nullptr)
+            for (const std::unique_ptr<RenderPass>& pass : passes)
             {
-                return rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
+                VE_ASSERT_MESSAGE(pass != nullptr, "Renderer construction requires valid render passes.");
             }
-
-            const std::shared_ptr<RTCamera> camera = FindFrameCamera(*scene);
-            return camera != nullptr ? camera->GetDesc().clearColor : rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
         }
 
     } // namespace
 
-    void BaseRenderer::RenderScene(const FrameRenderPipelineData& frameData)
+    BaseRendererInitParam ForwardRendererInitParam::TakeBaseInitParam() &&
+    {
+        if (addOpaquePass)
+        {
+            OpaqueSceneRenderPassInitParam passInitParam = {};
+            passInitParam.target = std::move(target);
+            passInitParam.fillMode = fillMode;
+            passes.insert(passes.begin(), std::make_unique<OpaqueSceneRenderPass>(std::move(passInitParam)));
+        }
+
+        ValidateRenderPasses(passes);
+
+        BaseRendererInitParam baseInitParam = {};
+        baseInitParam.frameData = frameData;
+        baseInitParam.scene = std::move(scene);
+        baseInitParam.externalCamera = std::move(externalCamera);
+        baseInitParam.passes = std::move(passes);
+        return baseInitParam;
+    }
+
+    BaseRenderer::BaseRenderer(BaseRendererInitParam initParam)
+        : passes_(std::move(initParam.passes))
+        , frameRenderData_(initParam.frameData)
     {
         VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT(frameData.device != nullptr);
-        VE_ASSERT(frameData.commandList != nullptr);
-        VE_ASSERT(frameData.mainSwapchain != nullptr);
-        VE_ASSERT(frameData.shaderManager != nullptr);
+        VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer construction requires frame data.");
+        VE_ASSERT(initParam.scene != nullptr);
 
-        frameRenderData_ = &frameData;
-        SetupRendererData();
+        rendererData_.scene = std::move(initParam.scene);
+        rendererData_.resolvedCamera =
+            initParam.externalCamera != nullptr ? std::move(initParam.externalCamera) : FindCameraFromScene(*rendererData_.scene);
+    }
+
+    void BaseRenderer::RenderScene()
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(frameRenderData_ != nullptr);
+        VE_ASSERT(frameRenderData_->device != nullptr);
+        VE_ASSERT(frameRenderData_->commandList != nullptr);
+        VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
+        VE_ASSERT(frameRenderData_->shaderManager != nullptr);
         UpdateRenderWorld();
         BuildVisibleDrawLists();
         ExecutePassesInOrder();
-        EndSceneRender();
-    }
-
-    const RendererData& BaseRenderer::GetRendererData() const noexcept
-    {
-        return rendererData_;
-    }
-
-    void BaseRenderer::SetScene(std::shared_ptr<RTScene> scene) noexcept
-    {
-        scene_ = std::move(scene);
-    }
-
-    void BaseRenderer::SetOverrideCamera(std::shared_ptr<RTCamera> camera) noexcept
-    {
-        overrideCamera_ = std::move(camera);
-    }
-
-    void BaseRenderer::SetFillMode(rhi::RhiFillMode fillMode) noexcept
-    {
-        fillMode_ = fillMode;
-    }
-
-    std::shared_ptr<RTScene> BaseRenderer::GetScene() const noexcept
-    {
-        return scene_;
-    }
-
-    void BaseRenderer::AddRenderPass(std::unique_ptr<RenderPass> pass)
-    {
-        VE_ASSERT_MESSAGE(pass != nullptr, "BaseRenderer::AddRenderPass requires a valid pass.");
-        passes_.push_back(std::move(pass));
-    }
-
-    void BaseRenderer::ClearRenderPasses() noexcept
-    {
-        passes_.clear();
-    }
-
-    void BaseRenderer::SetupRendererData() noexcept
-    {
-        rendererData_.scene = scene_;
-        rendererData_.camera = overrideCamera_ != nullptr || scene_ == nullptr ? overrideCamera_ : FindFrameCamera(*scene_);
-        rendererData_.clearColor = rendererData_.camera != nullptr ? rendererData_.camera->GetDesc().clearColor : ResolveFrameClearColor(scene_);
     }
 
     void BaseRenderer::UpdateRenderWorld()
     {
+        VE_ASSERT_RENDER_THREAD();
         // Render world updates will consume scene snapshots here once the render proxy layer grows.
     }
 
     void BaseRenderer::BuildVisibleDrawLists()
     {
+        VE_ASSERT_RENDER_THREAD();
         // Visibility and batching stay here so concrete renderers only choose their pass topology.
     }
 
-
     void BaseRenderer::ExecutePassesInOrder()
     {
+        VE_ASSERT_RENDER_THREAD();
         VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer::ExecutePassesInOrder requires active frame data.");
         VE_ASSERT_MESSAGE(frameRenderData_->commandList != nullptr, "BaseRenderer::ExecutePassesInOrder requires an active command list.");
 
@@ -134,36 +120,25 @@ namespace ve
                 return;
             }
 
-            RenderPassContext passContext(*frameRenderData_, *this, passData);
+            RenderPassContext passContext(RenderPassContextInitParam{*frameRenderData_, rendererData_, passData});
             pass->Execute(passContext);
 
             frameRenderData_->commandList->EndRenderPass();
         }
     }
 
-    void BaseRenderer::EndSceneRender()
-    {
-        VE_ASSERT(frameRenderData_ != nullptr);
-        VE_ASSERT(frameRenderData_->commandList != nullptr);
-        frameRenderData_ = nullptr;
-    }
-
     RenderPassData BaseRenderer::BuildPassData(RenderPass& pass)
     {
+        VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(frameRenderData_ != nullptr);
-        RenderPassBuilder builder;
-        builder.Reset(pass.GetName(), *frameRenderData_, rendererData_);
+        RenderPassBuilder builder(RenderPassBuilderInitParam{pass.GetName(), *frameRenderData_, rendererData_});
         pass.Setup(builder);
-
-        RenderPassData passData = {};
-        passData.renderPassDesc = builder.GetRenderPassDesc();
-        passData.viewport = builder.GetViewport();
-        passData.scissorRect = builder.GetScissor();
-        return passData;
+        return builder.Build();
     }
 
     bool BaseRenderer::BeginPass(const RenderPassData& passData)
     {
+        VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(frameRenderData_ != nullptr);
         VE_ASSERT(frameRenderData_->commandList != nullptr);
         VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
@@ -180,19 +155,8 @@ namespace ve
         return true;
     }
 
-    ForwardRenderer::ForwardRenderer(ForwardRendererDesc desc)
+    ForwardRenderer::ForwardRenderer(ForwardRendererInitParam initParam)
+        : BaseRenderer(std::move(initParam).TakeBaseInitParam())
     {
-        SetScene(std::move(desc.scene));
-        SetOverrideCamera(std::move(desc.camera));
-        SetFillMode(desc.fillMode);
-        if (desc.addOpaquePass)
-        {
-            AddRenderPass(std::make_unique<OpaqueSceneRenderPass>(std::move(desc.target), desc.fillMode));
-        }
-
-        for (std::unique_ptr<RenderPass>& pass : desc.additionalPasses)
-        {
-            AddRenderPass(std::move(pass));
-        }
     }
 } // namespace ve

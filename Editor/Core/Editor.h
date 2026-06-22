@@ -52,6 +52,7 @@ namespace ve::editor
         [[nodiscard]] EngineRuntime& GetRuntime() noexcept;
         [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
+        [[nodiscard]] const EditorInput& GetInput() const noexcept;
         [[nodiscard]] EditorAssetDatabase& GetAssetDatabase() noexcept;
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
         [[nodiscard]] EditorResourceLoader& GetResourceLoader() noexcept;
@@ -69,8 +70,12 @@ namespace ve::editor
 
         void OpenProject(std::string projectPath);
         void ShowProjectSelection();
+        void OpenScene(Path scenePath);
+        void SaveCurrentScene();
+        [[nodiscard]] bool CanSaveCurrentScene() const noexcept;
         [[nodiscard]] const std::string& GetCurrentProjectPath() const noexcept;
         [[nodiscard]] const std::string& GetCurrentProjectName() const noexcept;
+        [[nodiscard]] const Path& GetCurrentScenePath() const noexcept;
         [[nodiscard]] const std::vector<std::string>& GetRecentProjects() const noexcept;
         [[nodiscard]] static std::string GetProjectDisplayName(const std::string& projectPath);
 
@@ -87,8 +92,12 @@ namespace ve::editor
         [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CaptureImGuiFrameDrawData() const;
         [[nodiscard]] EditorFrameRenderViews CollectFrameRenderViews() const;
         [[nodiscard]] EditorOverlayRenderCallback BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const;
-        void AddSceneViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc, const EditorFrameRenderViews& views, const std::shared_ptr<RTScene>& renderScene) const;
-        void AddGameViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc, const EditorFrameRenderViews& views, const std::shared_ptr<RTScene>& renderScene) const;
+        void AddSceneViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
+                                  const EditorFrameRenderViews& views,
+                                  const std::shared_ptr<RTScene>& renderScene) const;
+        void AddGameViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
+                                 const EditorFrameRenderViews& views,
+                                 const std::shared_ptr<RTScene>& renderScene) const;
         [[nodiscard]] std::shared_ptr<RTScene> GetActiveRenderScene() const;
         void ShutdownOpenProjectState() noexcept;
         [[nodiscard]] Result<EditorProjectDescriptor> PrepareOpenProjectDescriptor(const Path& projectRoot, const std::string& projectPath);
@@ -126,5 +135,6 @@ namespace ve::editor
         std::vector<std::string> recentProjects_;
         std::string currentProjectPath_;
         std::string currentProjectName_;
+        Path currentScenePath_;
     };
 } // namespace ve::editor

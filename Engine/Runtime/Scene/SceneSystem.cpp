@@ -93,15 +93,19 @@ namespace ve
 
         void SceneThreadLoop_StartFrame(SceneSystemImpl& impl)
         {
-            if (impl.editorCallback.onStartFrame != nullptr)
-            {
-                impl.editorCallback.onStartFrame();
-            }
             if (impl.inputSystem != nullptr)
             {
                 impl.inputSystem->BeginFrame();
             }
+            if (impl.editorCallback.onBeforeOSEvents != nullptr)
+            {
+                impl.editorCallback.onBeforeOSEvents();
+            }
             ProcessOSEvents(impl);
+            if (impl.editorCallback.onStartFrame != nullptr)
+            {
+                impl.editorCallback.onStartFrame();
+            }
         }
 
         [[nodiscard]] std::shared_ptr<FrameRenderPipeline> CreatePlayerFramePipeline(SceneSystemImpl& impl)
@@ -116,14 +120,14 @@ namespace ve
                 impl.playerSceneColorTexture = std::make_shared<RTRenderTexture>(std::move(textureDesc));
             }
 
-            ForwardRendererDesc rendererDesc = {};
-            rendererDesc.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
-            rendererDesc.target.colorTexture = impl.playerSceneColorTexture;
+            ForwardRendererInitParam rendererInitParam = {};
+            rendererInitParam.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
+            rendererInitParam.target.colorTexture = impl.playerSceneColorTexture;
 
-            PlayerRenderFramePipelineDesc pipelineDesc = {};
-            pipelineDesc.sceneRenderer = std::make_shared<ForwardRenderer>(std::move(rendererDesc));
-            pipelineDesc.sceneColorTexture = impl.playerSceneColorTexture;
-            return std::make_shared<PlayerRenderFramePipeline>(std::move(pipelineDesc));
+            PlayerRenderFramePipelineInitParam pipelineInitParam = {};
+            pipelineInitParam.sceneRenderer = std::move(rendererInitParam);
+            pipelineInitParam.sceneColorTexture = impl.playerSceneColorTexture;
+            return std::make_shared<PlayerRenderFramePipeline>(std::move(pipelineInitParam));
         }
 
         void SceneThreadLoop_Render_Editor(SceneSystemImpl& impl)
