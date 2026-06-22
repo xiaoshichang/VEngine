@@ -149,7 +149,6 @@ function(ve_add_engine)
             VE_ENABLE_D3D11=$<BOOL:${VE_ENABLE_D3D11}>
             VE_ENABLE_D3D12=$<BOOL:${VE_ENABLE_D3D12}>
             VE_ENABLE_METAL=$<BOOL:${VE_ENABLE_METAL}>
-            VE_ENABLE_SCRIPTING=$<BOOL:${VE_ENABLE_SCRIPTING}>
     )
 
     if(WIN32)
