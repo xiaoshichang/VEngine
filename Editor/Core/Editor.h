@@ -69,8 +69,12 @@ namespace ve::editor
 
         void OpenProject(std::string projectPath);
         void ShowProjectSelection();
+        void OpenScene(Path scenePath);
+        void SaveCurrentScene();
+        [[nodiscard]] bool CanSaveCurrentScene() const noexcept;
         [[nodiscard]] const std::string& GetCurrentProjectPath() const noexcept;
         [[nodiscard]] const std::string& GetCurrentProjectName() const noexcept;
+        [[nodiscard]] const Path& GetCurrentScenePath() const noexcept;
         [[nodiscard]] const std::vector<std::string>& GetRecentProjects() const noexcept;
         [[nodiscard]] static std::string GetProjectDisplayName(const std::string& projectPath);
 
@@ -130,5 +134,6 @@ namespace ve::editor
         std::vector<std::string> recentProjects_;
         std::string currentProjectPath_;
         std::string currentProjectName_;
+        Path currentScenePath_;
     };
 } // namespace ve::editor

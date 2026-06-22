@@ -1,9 +1,12 @@
 #include "Editor/Core/EditorProjectEditingView.h"
 
 #include "Editor/Core/Editor.h"
+#include "Engine/Runtime/Core/Assert.h"
 
 #include <algorithm>
 #include <imgui.h>
+#include <string>
+#include <vector>
 
 namespace ve::editor
 {
@@ -14,6 +17,31 @@ namespace ve::editor
         constexpr float InspectorWidth = 310.0F;
         constexpr float AssetsHeight = 230.0F;
         constexpr float StatusBarHeight = 24.0F;
+        constexpr float OpenSceneDialogWidth = 560.0F;
+        constexpr float OpenSceneDialogHeight = 420.0F;
+
+        [[nodiscard]] std::vector<const EditorAssetRecord*> BuildSceneAssetList(const EditorAssetDatabase& assetDatabase)
+        {
+            std::vector<const EditorAssetRecord*> sceneAssets;
+            for (const auto& pair : assetDatabase.GetAssetsByID())
+            {
+                const EditorAssetRecord& asset = pair.second;
+                if (asset.type == EditorAssetType::Scene)
+                {
+                    sceneAssets.push_back(&asset);
+                }
+            }
+
+            std::sort(sceneAssets.begin(),
+                      sceneAssets.end(),
+                      [](const EditorAssetRecord* left, const EditorAssetRecord* right)
+                      {
+                          VE_ASSERT(left != nullptr);
+                          VE_ASSERT(right != nullptr);
+                          return left->path.GetString() < right->path.GetString();
+                      });
+            return sceneAssets;
+        }
     } // namespace
 
     void ProjectEditingView::Init(Editor& editor)
@@ -31,7 +59,8 @@ namespace ve::editor
     void ProjectEditingView::Render(Editor& editor)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
-        RenderMainMenu();
+        RenderMainMenu(editor);
+        RenderOpenSceneDialog(editor);
         projectDirectoryDialog_.Render(editor);
         buildPackageDialog_.Render(editor);
 
@@ -102,7 +131,7 @@ namespace ve::editor
         return gameViewPanel_.GetGameViewTexture().GetRTRenderTexture();
     }
 
-    void ProjectEditingView::RenderMainMenu()
+    void ProjectEditingView::RenderMainMenu(Editor& editor)
     {
         if (!ImGui::BeginMainMenuBar())
         {
@@ -111,6 +140,18 @@ namespace ve::editor
 
         if (ImGui::BeginMenu("Project"))
         {
+            if (ImGui::MenuItem("Open Scene..."))
+            {
+                openSceneDialogRequested_ = true;
+            }
+
+            if (ImGui::MenuItem("Save Scene", nullptr, false, editor.CanSaveCurrentScene()))
+            {
+                editor.SaveCurrentScene();
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem("Open Project..."))
             {
                 projectDirectoryDialog_.RequestOpen();
@@ -130,6 +171,67 @@ namespace ve::editor
         }
 
         ImGui::EndMainMenuBar();
+    }
+
+    void ProjectEditingView::RenderOpenSceneDialog(Editor& editor)
+    {
+        if (openSceneDialogRequested_)
+        {
+            openSceneDialogRequested_ = false;
+            openSceneSelectedPath_ = editor.GetCurrentScenePath();
+            ImGui::OpenPopup("Open Scene");
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(OpenSceneDialogWidth, OpenSceneDialogHeight), ImGuiCond_Appearing);
+        if (!ImGui::BeginPopupModal("Open Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            return;
+        }
+
+        const std::vector<const EditorAssetRecord*> sceneAssets = BuildSceneAssetList(editor.GetAssetDatabase());
+        if (sceneAssets.empty())
+        {
+            ImGui::TextDisabled("No scene assets found.");
+        }
+        else
+        {
+            ImGui::BeginChild("OpenSceneList", ImVec2(OpenSceneDialogWidth, OpenSceneDialogHeight - 86.0F), true);
+            for (const EditorAssetRecord* sceneAsset : sceneAssets)
+            {
+                VE_ASSERT(sceneAsset != nullptr);
+                const bool selected = openSceneSelectedPath_ == sceneAsset->path;
+                if (ImGui::Selectable(sceneAsset->path.GetString().c_str(), selected))
+                {
+                    openSceneSelectedPath_ = sceneAsset->path;
+                }
+            }
+            ImGui::EndChild();
+        }
+
+        const bool canOpen = !openSceneSelectedPath_.IsEmpty();
+        if (!canOpen)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        if (ImGui::Button("Open", ImVec2(96.0F, 0.0F)))
+        {
+            editor.OpenScene(openSceneSelectedPath_);
+            ImGui::CloseCurrentPopup();
+        }
+
+        if (!canOpen)
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(96.0F, 0.0F)))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 
     void ProjectEditingView::RenderStatusBar(Editor& editor, const ImVec2& position, const ImVec2& size)

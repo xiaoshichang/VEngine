@@ -10,6 +10,7 @@
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 #include "Editor/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
+#include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -574,6 +575,7 @@ namespace ve::editor
         assetDatabase_.Shutdown();
         currentProjectPath_.clear();
         currentProjectName_.clear();
+        currentScenePath_ = Path();
         mainView_ = MainView::ProjectSelection;
         EnqueueMainWindowTitleUpdate();
     }
@@ -663,7 +665,11 @@ namespace ve::editor
         if (!sceneResult)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to construct project start scene '{}': {}", descriptor.startScene, sceneResult.GetError().GetMessage());
+            currentScenePath_ = Path();
+            return;
         }
+
+        currentScenePath_ = sceneAsset->path;
     }
 
     void Editor::EnterProjectEditingView()
@@ -721,6 +727,87 @@ namespace ve::editor
         ClearSelection();
     }
 
+    void Editor::OpenScene(Path scenePath)
+    {
+        if (scenePath.IsEmpty())
+        {
+            return;
+        }
+
+        if (sceneSystem_ == nullptr || runtime_ == nullptr)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped opening scene '{}' because runtime scene services are not ready.", scenePath.GetString());
+            return;
+        }
+
+        const EditorAssetRecord* sceneAsset = assetDatabase_.FindAsset(scenePath);
+        if (sceneAsset == nullptr)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Scene '{}' was not found in the asset database.", scenePath.GetString());
+            return;
+        }
+
+        if (sceneAsset->type != EditorAssetType::Scene)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Asset '{}' is not a scene.", scenePath.GetString());
+            return;
+        }
+
+        Result<Scene*> sceneResult =
+            sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem());
+        if (!sceneResult)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to open scene '{}': {}", scenePath.GetString(), sceneResult.GetError().GetMessage());
+            return;
+        }
+
+        currentScenePath_ = sceneAsset->path;
+        ClearSelection();
+        CollectUnusedResources();
+        VE_LOG_INFO_CATEGORY("Editor", "Opened scene: {}", currentScenePath_.GetString());
+    }
+
+    void Editor::SaveCurrentScene()
+    {
+        if (!CanSaveCurrentScene())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped saving scene because no editable scene is active.");
+            return;
+        }
+
+        VE_ASSERT(sceneSystem_ != nullptr);
+        const Scene* scene = sceneSystem_->GetScene();
+        VE_ASSERT(scene != nullptr);
+
+        Result<std::string> serializedScene = SceneSerialization::SaveToString(*scene);
+        if (!serializedScene)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to serialize scene '{}': {}", currentScenePath_.GetString(), serializedScene.GetError().GetMessage());
+            return;
+        }
+
+        const ErrorCode writeResult = FileSystem::WriteTextFile(assetDatabase_.GetProjectRoot() / currentScenePath_, serializedScene.GetValue());
+        if (writeResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to save scene '{}': {}", currentScenePath_.GetString(), ToString(writeResult));
+            return;
+        }
+
+        const ErrorCode refreshResult = assetDatabase_.Refresh();
+        if (refreshResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Saved scene '{}' but failed to refresh asset database: {}", currentScenePath_.GetString(), ToString(refreshResult));
+            return;
+        }
+
+        VE_LOG_INFO_CATEGORY("Editor", "Saved scene: {}", currentScenePath_.GetString());
+    }
+
+    bool Editor::CanSaveCurrentScene() const noexcept
+    {
+        return sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr && !currentScenePath_.IsEmpty() && assetDatabase_.IsInitialized();
+    }
+
     const std::string& Editor::GetCurrentProjectPath() const noexcept
     {
         return currentProjectPath_;
@@ -729,6 +816,11 @@ namespace ve::editor
     const std::string& Editor::GetCurrentProjectName() const noexcept
     {
         return currentProjectName_;
+    }
+
+    const Path& Editor::GetCurrentScenePath() const noexcept
+    {
+        return currentScenePath_;
     }
 
     const std::vector<std::string>& Editor::GetRecentProjects() const noexcept

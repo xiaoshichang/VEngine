@@ -9,6 +9,7 @@
 #include "Editor/Panels/InspectorPanel.h"
 #include "Editor/Panels/SceneViewPanel.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 
 #include <memory>
@@ -37,7 +38,8 @@ namespace ve::editor
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewTexture() const noexcept;
 
     private:
-        void RenderMainMenu();
+        void RenderMainMenu(Editor& editor);
+        void RenderOpenSceneDialog(Editor& editor);
         void RenderStatusBar(Editor& editor, const ImVec2& position, const ImVec2& size);
 
         HierarchyPanel hierarchyPanel_;
@@ -47,6 +49,8 @@ namespace ve::editor
         AssetsPanel assetsPanel_;
         ProjectDirectoryDialog projectDirectoryDialog_;
         EditorBuildPackageDialog buildPackageDialog_;
+        Path openSceneSelectedPath_;
+        bool openSceneDialogRequested_ = false;
         bool initialized_ = false;
     };
 } // namespace ve::editor
