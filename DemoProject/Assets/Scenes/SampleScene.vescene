@@ -158,6 +158,161 @@
             "children": []
         },
         {
+            "name": "Sphere 1",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [-4, 1.5, 0],
+                    "localRotation": [0, 0, 0, 1],
+                    "localScale": [1, 1, 1]
+                },
+                {
+                    "type": "MeshRenderComponent",
+                    "enabled": true,
+                    "mesh": {
+                        "assetID": {
+                            "guid": "11111111-1111-1111-1111-111111111112",
+                            "subID": 0
+                        }
+                    },
+                    "material": {
+                        "assetID": {
+                            "guid": "22222222-2222-2222-2222-222222222231",
+                            "subID": 0
+                        }
+                    },
+                    "boundsCenter": [0, 0, 0],
+                    "boundsExtents": [0.5, 0.5, 0.5]
+                }
+            ],
+            "children": []
+        },
+        {
+            "name": "Sphere 2",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [-2, 1.5, 0],
+                    "localRotation": [0, 0, 0, 1],
+                    "localScale": [1, 1, 1]
+                },
+                {
+                    "type": "MeshRenderComponent",
+                    "enabled": true,
+                    "mesh": {
+                        "assetID": {
+                            "guid": "11111111-1111-1111-1111-111111111112",
+                            "subID": 0
+                        }
+                    },
+                    "material": {
+                        "assetID": {
+                            "guid": "22222222-2222-2222-2222-222222222232",
+                            "subID": 0
+                        }
+                    },
+                    "boundsCenter": [0, 0, 0],
+                    "boundsExtents": [0.5, 0.5, 0.5]
+                }
+            ],
+            "children": []
+        },
+        {
+            "name": "Sphere 3",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [0, 1.5, 0],
+                    "localRotation": [0, 0, 0, 1],
+                    "localScale": [1, 1, 1]
+                },
+                {
+                    "type": "MeshRenderComponent",
+                    "enabled": true,
+                    "mesh": {
+                        "assetID": {
+                            "guid": "11111111-1111-1111-1111-111111111112",
+                            "subID": 0
+                        }
+                    },
+                    "material": {
+                        "assetID": {
+                            "guid": "22222222-2222-2222-2222-222222222233",
+                            "subID": 0
+                        }
+                    },
+                    "boundsCenter": [0, 0, 0],
+                    "boundsExtents": [0.5, 0.5, 0.5]
+                }
+            ],
+            "children": []
+        },
+        {
+            "name": "Sphere 4",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [2, 1.5, 0],
+                    "localRotation": [0, 0, 0, 1],
+                    "localScale": [1, 1, 1]
+                },
+                {
+                    "type": "MeshRenderComponent",
+                    "enabled": true,
+                    "mesh": {
+                        "assetID": {
+                            "guid": "11111111-1111-1111-1111-111111111112",
+                            "subID": 0
+                        }
+                    },
+                    "material": {
+                        "assetID": {
+                            "guid": "22222222-2222-2222-2222-222222222234",
+                            "subID": 0
+                        }
+                    },
+                    "boundsCenter": [0, 0, 0],
+                    "boundsExtents": [0.5, 0.5, 0.5]
+                }
+            ],
+            "children": []
+        },
+        {
+            "name": "Sphere 5",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [4, 1.5, 0],
+                    "localRotation": [0, 0, 0, 1],
+                    "localScale": [1, 1, 1]
+                },
+                {
+                    "type": "MeshRenderComponent",
+                    "enabled": true,
+                    "mesh": {
+                        "assetID": {
+                            "guid": "11111111-1111-1111-1111-111111111112",
+                            "subID": 0
+                        }
+                    },
+                    "material": {
+                        "assetID": {
+                            "guid": "22222222-2222-2222-2222-222222222235",
+                            "subID": 0
+                        }
+                    },
+                    "boundsCenter": [0, 0, 0],
+                    "boundsExtents": [0.5, 0.5, 0.5]
+                }
+            ],
+            "children": []
+        },
+        {
             "name": "Main Camera",
             "components": [
                 {
@@ -189,7 +344,7 @@
                     "type": "TransformComponent",
                     "enabled": true,
                     "localPosition": [0, 4, 0],
-                    "localRotation": [0.42484799, -0.1982624, 0, 0.88328716],
+                    "localRotation": [0.46309842, 0.2161126, 0, 0.85955523],
                     "localScale": [1, 1, 1]
                 },
                 {
