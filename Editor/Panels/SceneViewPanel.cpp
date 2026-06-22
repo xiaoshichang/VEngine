@@ -473,8 +473,8 @@ namespace ve::editor
             }
             else
             {
-                const float mouseDeltaX = Clamp(io.MouseDelta.x, -MaxMouseLookDelta, MaxMouseLookDelta);
-                const float mouseDeltaY = Clamp(io.MouseDelta.y, -MaxMouseLookDelta, MaxMouseLookDelta);
+                const float mouseDeltaX = Clamp(static_cast<float>(activeEditor_->GetInput().GetMouseDeltaX()), -MaxMouseLookDelta, MaxMouseLookDelta);
+                const float mouseDeltaY = Clamp(static_cast<float>(activeEditor_->GetInput().GetMouseDeltaY()), -MaxMouseLookDelta, MaxMouseLookDelta);
                 if (mouseDeltaX != 0.0f || mouseDeltaY != 0.0f)
                 {
                     camera_.targetYawRadians += mouseDeltaX * camera_.lookSensitivity;

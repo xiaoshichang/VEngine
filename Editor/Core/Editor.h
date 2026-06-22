@@ -52,6 +52,7 @@ namespace ve::editor
         [[nodiscard]] EngineRuntime& GetRuntime() noexcept;
         [[nodiscard]] const EngineRuntime& GetRuntime() const noexcept;
         [[nodiscard]] RenderSystem& GetRenderSystem() noexcept;
+        [[nodiscard]] const EditorInput& GetInput() const noexcept;
         [[nodiscard]] EditorAssetDatabase& GetAssetDatabase() noexcept;
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
         [[nodiscard]] EditorResourceLoader& GetResourceLoader() noexcept;

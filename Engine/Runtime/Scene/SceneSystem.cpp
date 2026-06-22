@@ -93,15 +93,19 @@ namespace ve
 
         void SceneThreadLoop_StartFrame(SceneSystemImpl& impl)
         {
-            if (impl.editorCallback.onStartFrame != nullptr)
-            {
-                impl.editorCallback.onStartFrame();
-            }
             if (impl.inputSystem != nullptr)
             {
                 impl.inputSystem->BeginFrame();
             }
+            if (impl.editorCallback.onBeforeOSEvents != nullptr)
+            {
+                impl.editorCallback.onBeforeOSEvents();
+            }
             ProcessOSEvents(impl);
+            if (impl.editorCallback.onStartFrame != nullptr)
+            {
+                impl.editorCallback.onStartFrame();
+            }
         }
 
         [[nodiscard]] std::shared_ptr<FrameRenderPipeline> CreatePlayerFramePipeline(SceneSystemImpl& impl)

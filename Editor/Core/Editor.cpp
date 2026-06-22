@@ -184,6 +184,7 @@ namespace ve::editor
         nativeWindowHandle_ = nativeWindowHandle;
         initialized_.store(true, std::memory_order_release);
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
+            .onBeforeOSEvents = [this]() { input_.BeginOSEventFrame(); },
             .onStartFrame = [this]() { StartFrame(); },
             .onOSEvent = [this](const OSEvent& event) { return input_.OnOSEvent(event); },
             .onRender = [this]() { return Render(); },
@@ -446,6 +447,11 @@ namespace ve::editor
     {
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::GetRenderSystem requires an initialized editor.");
         return *renderSystem_;
+    }
+
+    const EditorInput& Editor::GetInput() const noexcept
+    {
+        return input_;
     }
 
     EditorAssetDatabase& Editor::GetAssetDatabase() noexcept

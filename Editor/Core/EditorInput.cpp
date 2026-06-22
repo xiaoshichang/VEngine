@@ -247,6 +247,12 @@ namespace ve::editor
 #endif
     }
 
+    void EditorInput::BeginOSEventFrame() noexcept
+    {
+        mouseDeltaX_ = 0;
+        mouseDeltaY_ = 0;
+    }
+
     bool EditorInput::OnOSEvent(const OSEvent& event)
     {
         VE_ASSERT_SCENE_THREAD();
@@ -282,14 +288,17 @@ namespace ve::editor
             io.AddInputCharacterUTF16(static_cast<ImWchar16>(event.textCodepoint));
             return false;
         case OSEventType::MouseMoved:
+            StoreMousePosition(event);
             io.AddMousePosEvent(static_cast<float>(event.mouseX), static_cast<float>(event.mouseY));
             return false;
         case OSEventType::MouseButtonDown:
         case OSEventType::MouseButtonUp:
+            StoreMousePosition(event);
             io.AddMousePosEvent(static_cast<float>(event.mouseX), static_cast<float>(event.mouseY));
             io.AddMouseButtonEvent(MouseButtonToImGuiButton(event.mouseButton), event.type == OSEventType::MouseButtonDown);
             return false;
         case OSEventType::MouseWheel:
+            StoreMousePosition(event);
             io.AddMousePosEvent(static_cast<float>(event.mouseX), static_cast<float>(event.mouseY));
             io.AddMouseWheelEvent(event.mouseWheelX, event.mouseWheelY);
             return false;
@@ -305,6 +314,19 @@ namespace ve::editor
         return false;
     }
 
+    void EditorInput::StoreMousePosition(const OSEvent& event) noexcept
+    {
+        if (hasMousePosition_)
+        {
+            mouseDeltaX_ += event.mouseX - mouseX_;
+            mouseDeltaY_ += event.mouseY - mouseY_;
+        }
+
+        mouseX_ = event.mouseX;
+        mouseY_ = event.mouseY;
+        hasMousePosition_ = true;
+    }
+
     void EditorInput::Shutdown() noexcept
     {
         if (!initialized_)
@@ -316,10 +338,23 @@ namespace ve::editor
         ImGui_ImplWin32_Shutdown();
 #endif
         initialized_ = false;
+        hasMousePosition_ = false;
+        mouseDeltaX_ = 0;
+        mouseDeltaY_ = 0;
     }
 
     bool EditorInput::IsInitialized() const noexcept
     {
         return initialized_;
+    }
+
+    Int32 EditorInput::GetMouseDeltaX() const noexcept
+    {
+        return mouseDeltaX_;
+    }
+
+    Int32 EditorInput::GetMouseDeltaY() const noexcept
+    {
+        return mouseDeltaY_;
     }
 } // namespace ve::editor
