@@ -116,14 +116,14 @@ namespace ve
                 impl.playerSceneColorTexture = std::make_shared<RTRenderTexture>(std::move(textureDesc));
             }
 
-            ForwardRendererDesc rendererDesc = {};
-            rendererDesc.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
-            rendererDesc.target.colorTexture = impl.playerSceneColorTexture;
+            ForwardRendererInitParam rendererInitParam = {};
+            rendererInitParam.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
+            rendererInitParam.target.colorTexture = impl.playerSceneColorTexture;
 
-            PlayerRenderFramePipelineDesc pipelineDesc = {};
-            pipelineDesc.sceneRenderer = std::make_shared<ForwardRenderer>(std::move(rendererDesc));
-            pipelineDesc.sceneColorTexture = impl.playerSceneColorTexture;
-            return std::make_shared<PlayerRenderFramePipeline>(std::move(pipelineDesc));
+            PlayerRenderFramePipelineInitParam pipelineInitParam = {};
+            pipelineInitParam.sceneRenderer = std::move(rendererInitParam);
+            pipelineInitParam.sceneColorTexture = impl.playerSceneColorTexture;
+            return std::make_shared<PlayerRenderFramePipeline>(std::move(pipelineInitParam));
         }
 
         void SceneThreadLoop_Render_Editor(SceneSystemImpl& impl)

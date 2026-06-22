@@ -14,10 +14,16 @@ namespace ve
     class RTScene;
     class RTShaderResource;
 
+    struct OpaqueSceneRenderPassInitParam
+    {
+        RendererRenderTarget target;
+        rhi::RhiFillMode fillMode = rhi::RhiFillMode::Solid;
+    };
+
     class OpaqueSceneRenderPass final : public RenderPass
     {
     public:
-        OpaqueSceneRenderPass(RendererRenderTarget target, rhi::RhiFillMode fillMode);
+        explicit OpaqueSceneRenderPass(OpaqueSceneRenderPassInitParam initParam);
 
         [[nodiscard]] const char* GetName() const noexcept override;
         void Setup(RenderPassBuilder& builder) override;

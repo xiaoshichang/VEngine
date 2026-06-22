@@ -193,9 +193,9 @@ namespace ve
         }
     } // namespace
 
-    OpaqueSceneRenderPass::OpaqueSceneRenderPass(RendererRenderTarget target, rhi::RhiFillMode fillMode)
-        : target_(std::move(target))
-        , fillMode_(fillMode)
+    OpaqueSceneRenderPass::OpaqueSceneRenderPass(OpaqueSceneRenderPassInitParam initParam)
+        : target_(std::move(initParam.target))
+        , fillMode_(initParam.fillMode)
     {
     }
 
@@ -206,7 +206,7 @@ namespace ve
 
     void OpaqueSceneRenderPass::Setup(RenderPassBuilder& builder)
     {
-        const rhi::RhiColor clearColor = builder.GetRendererData().clearColor;
+        const rhi::RhiColor clearColor = builder.rendererData.clearColor;
         if (target_.colorTexture != nullptr && target_.colorTexture->GetTexture() != nullptr)
         {
             builder.AddTextureColorAttachment(*target_.colorTexture->GetTexture(), rhi::RhiLoadAction::Clear, target_.colorStoreAction, clearColor);
@@ -225,7 +225,7 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
 
-        const std::shared_ptr<RTScene> scene = context.GetRendererData().scene;
+        const std::shared_ptr<RTScene> scene = context.rendererData.scene;
         if (scene == nullptr)
         {
             return;
@@ -237,12 +237,12 @@ namespace ve
             return;
         }
 
-        rhi::RhiCommandList& commandList = context.GetCommandList();
+        rhi::RhiCommandList& commandList = context.commandList;
         commandList.SetPipeline(*pipelineState_);
 
         frameUniformBuffers_.clear();
         BindLightUniform(context, *scene);
-        const Matrix44 viewProjection = BuildViewProjectionMatrix(context.GetRendererData().camera);
+        const Matrix44 viewProjection = BuildViewProjectionMatrix(context.rendererData.camera);
         for (SizeT itemIndex = 0; itemIndex < scene->GetRenderItemCount(); ++itemIndex)
         {
             const std::shared_ptr<RTRenderItem> item = scene->GetRenderItem(itemIndex);
@@ -262,7 +262,7 @@ namespace ve
             const RTRenderItemDesc& itemDesc = item->GetDesc();
             const Matrix44 worldViewProjection = viewProjection * itemDesc.localToWorld;
             const OpaqueSceneObjectUniformData objectUniformData = BuildObjectUniformData(worldViewProjection, itemDesc.localToWorld);
-            std::unique_ptr<rhi::RhiBuffer> objectUniformBuffer = context.GetDevice().CreateBuffer(
+            std::unique_ptr<rhi::RhiBuffer> objectUniformBuffer = context.device.CreateBuffer(
                 MakeUniformBufferDesc(sizeof(OpaqueSceneObjectUniformData), &objectUniformData, "OpaqueSceneObjectUniformBuffer"));
             VE_ASSERT_MESSAGE(objectUniformBuffer != nullptr, "OpaqueScenePass failed to create object uniform buffer.");
             commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *objectUniformBuffer, 0);
@@ -288,7 +288,7 @@ namespace ve
 
     void OpaqueSceneRenderPass::EnsurePipeline(RenderPassContext& context)
     {
-        const std::shared_ptr<RTScene> scene = context.GetRendererData().scene;
+        const std::shared_ptr<RTScene> scene = context.rendererData.scene;
         VE_ASSERT_ALWAYS_MESSAGE(scene != nullptr, "OpaqueScenePass requires a render scene.");
         if (scene == nullptr)
         {
@@ -311,7 +311,7 @@ namespace ve
         }
 
         const rhi::RhiFormat targetFormat = ResolveTargetFormat(context);
-        const bool depthEnabled = context.GetRenderPassDesc().hasDepthStencilAttachment;
+        const bool depthEnabled = context.passData.renderPassDesc.hasDepthStencilAttachment;
         const bool sameResourceShader = pipelineShaderResource_.lock() == shaderResource;
         if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode_ && pipelineDepthEnabled_ == depthEnabled &&
             sameResourceShader)
@@ -319,7 +319,7 @@ namespace ve
             return;
         }
 
-        rhi::RhiDevice& device = context.GetDevice();
+        rhi::RhiDevice& device = context.device;
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
         positionAttribute.semanticName = "POSITION";
@@ -361,9 +361,9 @@ namespace ve
     {
         const OpaqueSceneLightUniformData lightUniformData = BuildLightUniformData(scene);
         std::unique_ptr<rhi::RhiBuffer> lightUniformBuffer =
-            context.GetDevice().CreateBuffer(MakeUniformBufferDesc(sizeof(OpaqueSceneLightUniformData), &lightUniformData, "OpaqueSceneLightUniformBuffer"));
+            context.device.CreateBuffer(MakeUniformBufferDesc(sizeof(OpaqueSceneLightUniformData), &lightUniformData, "OpaqueSceneLightUniformBuffer"));
         VE_ASSERT_MESSAGE(lightUniformBuffer != nullptr, "OpaqueScenePass failed to create light uniform buffer.");
-        context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment, 2, *lightUniformBuffer, 0);
+        context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 2, *lightUniformBuffer, 0);
         frameUniformBuffers_.push_back(std::move(lightUniformBuffer));
     }
 
@@ -372,7 +372,7 @@ namespace ve
         const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(itemDesc.materialResource);
         if (materialResource != nullptr && materialResource->GetUniformBuffer() != nullptr)
         {
-            context.GetCommandList().SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *materialResource->GetUniformBuffer(), 0);
+            context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *materialResource->GetUniformBuffer(), 0);
             return true;
         }
 
@@ -387,7 +387,7 @@ namespace ve
             return target_.colorTexture->GetDesc().colorFormat;
         }
 
-        VE_ASSERT(context.GetFrameData().mainSwapchain != nullptr);
-        return context.GetFrameData().mainSwapchain->GetColorFormat();
+        VE_ASSERT(context.frameData.mainSwapchain != nullptr);
+        return context.frameData.mainSwapchain->GetColorFormat();
     }
 } // namespace ve

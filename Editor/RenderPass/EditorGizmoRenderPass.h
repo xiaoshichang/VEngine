@@ -23,7 +23,7 @@ namespace ve
         std::vector<EditorGizmoVertex> vertices;
     };
 
-    struct EditorGizmoRenderPassDesc
+    struct EditorGizmoRenderPassInitParam
     {
         std::shared_ptr<RTRenderTexture> colorTexture;
         std::shared_ptr<const EditorGizmoDrawList> drawList;
@@ -32,7 +32,7 @@ namespace ve
     class EditorGizmoRenderPass final : public RenderPass
     {
     public:
-        explicit EditorGizmoRenderPass(EditorGizmoRenderPassDesc desc);
+        explicit EditorGizmoRenderPass(EditorGizmoRenderPassInitParam initParam);
 
         [[nodiscard]] const char* GetName() const noexcept override;
         void Setup(RenderPassBuilder& builder) override;
@@ -43,7 +43,7 @@ namespace ve
         void UploadFrameResources(RenderPassContext& context);
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
-        EditorGizmoRenderPassDesc desc_;
+        EditorGizmoRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiBuffer> vertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
         std::unique_ptr<rhi::RhiPipelineState> pipelineState_;

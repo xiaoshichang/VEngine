@@ -230,12 +230,12 @@ namespace ve::editor
         EditorFrameRenderViews views = CollectFrameRenderViews();
         std::shared_ptr<RTScene> renderScene = GetActiveRenderScene();
 
-        EditorRenderFramePipelineDesc pipelineDesc = {};
-        AddSceneViewRenderer(pipelineDesc, views, renderScene);
-        AddGameViewRenderer(pipelineDesc, views, renderScene);
-        pipelineDesc.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
-        pipelineDesc.overlayRenderCallback = BuildOverlayRenderCallback(std::move(frameDrawData));
-        return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineDesc));
+        EditorRenderFramePipelineInitParam pipelineInitParam = {};
+        AddSceneViewRenderer(pipelineInitParam, views, renderScene);
+        AddGameViewRenderer(pipelineInitParam, views, renderScene);
+        pipelineInitParam.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
+        pipelineInitParam.overlayRenderCallback = BuildOverlayRenderCallback(std::move(frameDrawData));
+        return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineInitParam));
     }
 
     void Editor::RenderActiveMainView()
@@ -310,7 +310,7 @@ namespace ve::editor
         };
     }
 
-    void Editor::AddSceneViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc,
+    void Editor::AddSceneViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
                                       const EditorFrameRenderViews& views,
                                       const std::shared_ptr<RTScene>& renderScene) const
     {
@@ -321,35 +321,35 @@ namespace ve::editor
 
         // Scene View is one renderer with a normal scene pass followed by editor-only visual aid passes.
         // Keeping the pass list together avoids repeating BaseRenderer setup for grid and gizmo overlays.
-        ForwardRendererDesc rendererDesc = {};
-        rendererDesc.scene = renderScene;
-        rendererDesc.camera = views.sceneViewCameraSnapshot;
-        rendererDesc.target.colorTexture = views.sceneViewTexture;
-        rendererDesc.fillMode = views.sceneViewFillMode;
-        rendererDesc.target.colorLoadAction = rhi::RhiLoadAction::Load;
-        rendererDesc.target.colorStoreAction = rhi::RhiStoreAction::Store;
+        ForwardRendererInitParam rendererInitParam = {};
+        rendererInitParam.scene = renderScene;
+        rendererInitParam.camera = views.sceneViewCameraSnapshot;
+        rendererInitParam.target.colorTexture = views.sceneViewTexture;
+        rendererInitParam.fillMode = views.sceneViewFillMode;
+        rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Load;
+        rendererInitParam.target.colorStoreAction = rhi::RhiStoreAction::Store;
 
         if (views.sceneViewGridEnabled)
         {
-            SceneGridRenderPassDesc gridPassDesc = {};
-            gridPassDesc.colorTexture = views.sceneViewTexture;
-            gridPassDesc.opacity = views.sceneViewGridOpacity;
-            gridPassDesc.unitSize = views.sceneViewGridUnitSize;
-            rendererDesc.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassDesc)));
+            SceneGridRenderPassInitParam gridPassInitParam = {};
+            gridPassInitParam.colorTexture = views.sceneViewTexture;
+            gridPassInitParam.opacity = views.sceneViewGridOpacity;
+            gridPassInitParam.unitSize = views.sceneViewGridUnitSize;
+            rendererInitParam.passes.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassInitParam)));
         }
 
         if (views.sceneViewGizmoDrawList != nullptr)
         {
-            EditorGizmoRenderPassDesc gizmoPassDesc = {};
-            gizmoPassDesc.colorTexture = views.sceneViewTexture;
-            gizmoPassDesc.drawList = views.sceneViewGizmoDrawList;
-            rendererDesc.additionalPasses.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassDesc)));
+            EditorGizmoRenderPassInitParam gizmoPassInitParam = {};
+            gizmoPassInitParam.colorTexture = views.sceneViewTexture;
+            gizmoPassInitParam.drawList = views.sceneViewGizmoDrawList;
+            rendererInitParam.passes.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassInitParam)));
         }
 
-        pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+        pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
     }
 
-    void Editor::AddGameViewRenderer(EditorRenderFramePipelineDesc& pipelineDesc,
+    void Editor::AddGameViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
                                      const EditorFrameRenderViews& views,
                                      const std::shared_ptr<RTScene>& renderScene) const
     {
@@ -359,10 +359,10 @@ namespace ve::editor
         }
 
         // Game View intentionally stays free of editor gizmo/grid passes for now.
-        ForwardRendererDesc rendererDesc = {};
-        rendererDesc.scene = renderScene;
-        rendererDesc.target.colorTexture = views.gameViewTexture;
-        pipelineDesc.sceneRenderers.push_back(std::make_shared<ForwardRenderer>(std::move(rendererDesc)));
+        ForwardRendererInitParam rendererInitParam = {};
+        rendererInitParam.scene = renderScene;
+        rendererInitParam.target.colorTexture = views.gameViewTexture;
+        pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
     }
 
     std::shared_ptr<RTScene> Editor::GetActiveRenderScene() const

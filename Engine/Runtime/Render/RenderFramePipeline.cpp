@@ -47,10 +47,10 @@ namespace ve
         }
     } // namespace
 
-    EditorRenderFramePipeline::EditorRenderFramePipeline(EditorRenderFramePipelineDesc desc)
-        : sceneRenderers_(std::move(desc.sceneRenderers))
-        , overlayColorLoadAction_(desc.overlayColorLoadAction)
-        , overlayRenderCallback_(std::move(desc.overlayRenderCallback))
+    EditorRenderFramePipeline::EditorRenderFramePipeline(EditorRenderFramePipelineInitParam initParam)
+        : sceneRenderers_(std::move(initParam.sceneRenderers))
+        , overlayColorLoadAction_(initParam.overlayColorLoadAction)
+        , overlayRenderCallback_(std::move(initParam.overlayRenderCallback))
     {
     }
 
@@ -64,14 +64,11 @@ namespace ve
             return ErrorCode::PlatformError;
         }
 
-        for (const std::shared_ptr<BaseRenderer>& renderer : sceneRenderers_)
+        for (ForwardRendererInitParam& rendererInitParam : sceneRenderers_)
         {
-            if (renderer == nullptr)
-            {
-                continue;
-            }
-
-            renderer->RenderScene(frameData);
+            rendererInitParam.frameData = &frameData;
+            ForwardRenderer renderer(std::move(rendererInitParam));
+            renderer.RenderScene();
         }
 
         const ErrorCode overlayResult = RecordOverlayPass(frameData);
@@ -113,9 +110,9 @@ namespace ve
         return ErrorCode::None;
     }
 
-    PlayerRenderFramePipeline::PlayerRenderFramePipeline(PlayerRenderFramePipelineDesc desc)
-        : sceneRenderer_(std::move(desc.sceneRenderer))
-        , sceneColorTexture_(std::move(desc.sceneColorTexture))
+    PlayerRenderFramePipeline::PlayerRenderFramePipeline(PlayerRenderFramePipelineInitParam initParam)
+        : sceneRenderer_(std::move(initParam.sceneRenderer))
+        , sceneColorTexture_(std::move(initParam.sceneColorTexture))
     {
     }
 
@@ -126,11 +123,6 @@ namespace ve
         VE_ASSERT(frameData.commandList != nullptr);
         VE_ASSERT(frameData.mainSwapchain != nullptr);
 
-        if (sceneRenderer_ == nullptr)
-        {
-            return ErrorCode::InvalidState;
-        }
-
         EnsureSceneColorTexture(*frameData.device, *frameData.mainSwapchain);
 
         if (!frameData.commandList->Begin())
@@ -138,7 +130,9 @@ namespace ve
             return ErrorCode::PlatformError;
         }
 
-        sceneRenderer_->RenderScene(frameData);
+        sceneRenderer_.frameData = &frameData;
+        ForwardRenderer sceneRenderer(std::move(sceneRenderer_));
+        sceneRenderer.RenderScene();
 
         const ErrorCode copyResult = CopySceneColorToSwapchain(*frameData.commandList, *frameData.mainSwapchain);
         if (copyResult != ErrorCode::None)
