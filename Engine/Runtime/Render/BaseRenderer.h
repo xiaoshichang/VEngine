@@ -32,7 +32,7 @@ namespace ve
     {
         const FrameRenderPipelineData* frameData = nullptr;
         std::shared_ptr<RTScene> scene;
-        std::shared_ptr<RTCamera> camera;
+        std::shared_ptr<RTCamera> externalCamera;
         std::vector<std::unique_ptr<RenderPass>> passes;
     };
 
@@ -69,7 +69,6 @@ namespace ve
     private:
         void UpdateRenderWorld();
         void BuildVisibleDrawLists();
-        void BeginSceneRender();
         void ExecutePassesInOrder();
         [[nodiscard]] RenderPassData BuildPassData(RenderPass& pass);
         [[nodiscard]] bool BeginPass(const RenderPassData& passData);

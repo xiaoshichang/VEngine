@@ -35,8 +35,7 @@ namespace ve
         [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc);
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
-        RendererRenderTarget target_;
-        rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
+        OpaqueSceneRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
         std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;

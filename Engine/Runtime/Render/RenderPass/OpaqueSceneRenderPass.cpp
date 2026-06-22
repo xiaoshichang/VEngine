@@ -205,8 +205,7 @@ namespace ve
     } // namespace
 
     OpaqueSceneRenderPass::OpaqueSceneRenderPass(OpaqueSceneRenderPassInitParam initParam)
-        : target_(std::move(initParam.target))
-        , fillMode_(initParam.fillMode)
+        : initParam_(std::move(initParam))
     {
     }
 
@@ -218,18 +217,19 @@ namespace ve
     void OpaqueSceneRenderPass::Setup(RenderPassBuilder& builder)
     {
         const rhi::RhiColor clearColor = ResolvePassClearColor(builder.rendererData);
-        if (target_.colorTexture != nullptr && target_.colorTexture->GetTexture() != nullptr)
+        if (initParam_.target.colorTexture != nullptr && initParam_.target.colorTexture->GetTexture() != nullptr)
         {
-            builder.AddTextureColorAttachment(*target_.colorTexture->GetTexture(), rhi::RhiLoadAction::Clear, target_.colorStoreAction, clearColor);
-            if (target_.colorTexture->GetDepthTexture() != nullptr)
+            builder.AddTextureColorAttachment(
+                *initParam_.target.colorTexture->GetTexture(), rhi::RhiLoadAction::Clear, initParam_.target.colorStoreAction, clearColor);
+            if (initParam_.target.colorTexture->GetDepthTexture() != nullptr)
             {
                 builder.SetDepthStencilAttachment(
-                    *target_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
+                    *initParam_.target.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
             }
             return;
         }
 
-        builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear, target_.colorStoreAction, clearColor);
+        builder.AddSwapchainColorAttachment(rhi::RhiLoadAction::Clear, initParam_.target.colorStoreAction, clearColor);
     }
 
     void OpaqueSceneRenderPass::Execute(RenderPassContext& context)
@@ -301,11 +301,6 @@ namespace ve
     {
         const std::shared_ptr<RTScene> scene = context.rendererData.scene;
         VE_ASSERT_ALWAYS_MESSAGE(scene != nullptr, "OpaqueScenePass requires a render scene.");
-        if (scene == nullptr)
-        {
-            return;
-        }
-
         std::shared_ptr<RTShaderResource> shaderResource = FindFirstShaderResource(*scene);
         VE_ASSERT_ALWAYS_MESSAGE(shaderResource != nullptr, "OpaqueScenePass requires a material shader resource.");
         if (shaderResource == nullptr)
@@ -324,8 +319,8 @@ namespace ve
         const rhi::RhiFormat targetFormat = ResolveTargetFormat(context);
         const bool depthEnabled = context.passData.renderPassDesc.hasDepthStencilAttachment;
         const bool sameResourceShader = pipelineShaderResource_.lock() == shaderResource;
-        if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode_ && pipelineDepthEnabled_ == depthEnabled &&
-            sameResourceShader)
+        if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == initParam_.fillMode &&
+            pipelineDepthEnabled_ == depthEnabled && sameResourceShader)
         {
             return;
         }
@@ -349,7 +344,7 @@ namespace ve
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
         pipelineDesc.blendState = rhi::StaticRenderStates::OpaqueBlend;
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
-        pipelineDesc.rasterizerState.fillMode = fillMode_;
+        pipelineDesc.rasterizerState.fillMode = initParam_.fillMode;
         pipelineDesc.depthStencilState = depthEnabled ? rhi::StaticRenderStates::DepthReadWriteLessEqual : rhi::StaticRenderStates::DepthDisabled;
         pipelineDesc.boundShaderState.vertexShader = vertexShader;
         pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
@@ -363,7 +358,7 @@ namespace ve
         pipelineState_ = device.CreateGraphicsPipeline(pipelineDesc);
         VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "OpaqueScenePass failed to create pipeline state.");
         pipelineColorFormat_ = targetFormat;
-        pipelineFillMode_ = fillMode_;
+        pipelineFillMode_ = initParam_.fillMode;
         pipelineDepthEnabled_ = depthEnabled;
         pipelineShaderResource_ = shaderResource;
     }
@@ -393,9 +388,9 @@ namespace ve
 
     rhi::RhiFormat OpaqueSceneRenderPass::ResolveTargetFormat(const RenderPassContext& context) const noexcept
     {
-        if (target_.colorTexture != nullptr)
+        if (initParam_.target.colorTexture != nullptr)
         {
-            return target_.colorTexture->GetDesc().colorFormat;
+            return initParam_.target.colorTexture->GetDesc().colorFormat;
         }
 
         VE_ASSERT(context.frameData.mainSwapchain != nullptr);

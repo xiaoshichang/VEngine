@@ -10,7 +10,7 @@ namespace ve
 {
     namespace
     {
-        [[nodiscard]] std::shared_ptr<RTCamera> FindFrameCamera(const RTScene& scene) noexcept
+        [[nodiscard]] std::shared_ptr<RTCamera> FindCameraFromScene(const RTScene& scene) noexcept
         {
             std::shared_ptr<RTCamera> fallback;
             for (SizeT cameraIndex = 0; cameraIndex < scene.GetCameraCount(); ++cameraIndex)
@@ -60,7 +60,7 @@ namespace ve
         BaseRendererInitParam baseInitParam = {};
         baseInitParam.frameData = frameData;
         baseInitParam.scene = std::move(scene);
-        baseInitParam.camera = std::move(camera);
+        baseInitParam.externalCamera = std::move(externalCamera);
         baseInitParam.passes = std::move(passes);
         return baseInitParam;
     }
@@ -71,17 +71,23 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer construction requires frame data.");
+        VE_ASSERT(initParam.scene != nullptr);
 
         rendererData_.scene = std::move(initParam.scene);
         rendererData_.resolvedCamera =
-            initParam.camera != nullptr || rendererData_.scene == nullptr ? std::move(initParam.camera) : FindFrameCamera(*rendererData_.scene);
+            initParam.externalCamera != nullptr ? std::move(initParam.externalCamera) : FindCameraFromScene(*rendererData_.scene);
     }
 
     void BaseRenderer::RenderScene()
     {
         VE_ASSERT_RENDER_THREAD();
-
-        BeginSceneRender();
+        VE_ASSERT(frameRenderData_ != nullptr);
+        VE_ASSERT(frameRenderData_->device != nullptr);
+        VE_ASSERT(frameRenderData_->commandList != nullptr);
+        VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
+        VE_ASSERT(frameRenderData_->shaderManager != nullptr);
+        UpdateRenderWorld();
+        BuildVisibleDrawLists();
         ExecutePassesInOrder();
     }
 
@@ -95,19 +101,6 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
         // Visibility and batching stay here so concrete renderers only choose their pass topology.
-    }
-
-    void BaseRenderer::BeginSceneRender()
-    {
-        VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT(frameRenderData_ != nullptr);
-        VE_ASSERT(frameRenderData_->device != nullptr);
-        VE_ASSERT(frameRenderData_->commandList != nullptr);
-        VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
-        VE_ASSERT(frameRenderData_->shaderManager != nullptr);
-
-        UpdateRenderWorld();
-        BuildVisibleDrawLists();
     }
 
     void BaseRenderer::ExecutePassesInOrder()

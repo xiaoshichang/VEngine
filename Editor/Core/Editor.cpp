@@ -323,7 +323,7 @@ namespace ve::editor
         // Keeping the pass list together avoids repeating BaseRenderer setup for grid and gizmo overlays.
         ForwardRendererInitParam rendererInitParam = {};
         rendererInitParam.scene = renderScene;
-        rendererInitParam.camera = views.sceneViewCameraSnapshot;
+        rendererInitParam.externalCamera = views.sceneViewCameraSnapshot;
         rendererInitParam.target.colorTexture = views.sceneViewTexture;
         rendererInitParam.fillMode = views.sceneViewFillMode;
         rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Load;
