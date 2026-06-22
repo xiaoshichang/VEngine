@@ -8,9 +8,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [-4, 0.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [-4E0, 5E-1, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -27,8 +27,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -39,9 +39,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [-2, 0.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [-2E0, 5E-1, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -58,8 +58,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -70,9 +70,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [0, 0.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [0E0, 5E-1, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -89,8 +89,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -101,9 +101,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [2, 0.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [2E0, 5E-1, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -120,8 +120,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -132,9 +132,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [4, 0.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [4E0, 5E-1, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -151,8 +151,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -163,9 +163,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [-4, 1.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [-4E0, 1.5E0, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -182,8 +182,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -194,9 +194,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [-2, 1.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [-2E0, 1.5E0, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -213,8 +213,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -225,9 +225,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [0, 1.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [0E0, 1.5E0, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -244,8 +244,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -256,9 +256,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [2, 1.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [2E0, 1.5E0, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -275,8 +275,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -287,9 +287,9 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [4, 1.5, 0],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [4E0, 1.5E0, 0E0],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "MeshRenderComponent",
@@ -306,8 +306,8 @@
                             "subID": 0
                         }
                     },
-                    "boundsCenter": [0, 0, 0],
-                    "boundsExtents": [0.5, 0.5, 0.5]
+                    "boundsCenter": [0E0, 0E0, 0E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1]
                 }
             ],
             "children": []
@@ -318,21 +318,21 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [0, 4, -10],
-                    "localRotation": [0, 0, 0, 1],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [0E0, 4E0, -1E1],
+                    "localRotation": [0E0, 0E0, 0E0, 1E0],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "CameraComponent",
                     "enabled": true,
                     "primary": true,
                     "projectionMode": "Perspective",
-                    "verticalFieldOfViewRadians": 1.0471975512,
-                    "orthographicSize": 5,
-                    "aspectRatio": 1.7777778,
-                    "nearClipPlane": 0.1,
-                    "farClipPlane": 1000,
-                    "clearColor": [0.3, 0.3, 0.3, 1]
+                    "verticalFieldOfViewRadians": 1.0471975803375244E0,
+                    "orthographicSize": 5E0,
+                    "aspectRatio": 1.7777777910232544E0,
+                    "nearClipPlane": 1.0000000149011612E-1,
+                    "farClipPlane": 1E3,
+                    "clearColor": [3.0000001192092896E-1, 3.0000001192092896E-1, 3.0000001192092896E-1, 1E0]
                 }
             ],
             "children": []
@@ -343,19 +343,19 @@
                 {
                     "type": "TransformComponent",
                     "enabled": true,
-                    "localPosition": [0, 4, 0],
-                    "localRotation": [0.46309842, 0.2161126, 0, 0.85955523],
-                    "localScale": [1, 1, 1]
+                    "localPosition": [0E0, 8.449999809265137E0, 0E0],
+                    "localRotation": [5.774016976356506E-1, 2.891317307949066E-1, 2.9011330008506775E-1, 7.062892317771912E-1],
+                    "localScale": [1E0, 1E0, 1E0]
                 },
                 {
                     "type": "LightComponent",
                     "enabled": true,
                     "lightType": "Directional",
-                    "color": [1, 1, 1],
-                    "intensity": 1,
-                    "range": 0,
-                    "innerConeAngleRadians": 0,
-                    "outerConeAngleRadians": 0,
+                    "color": [1E0, 1E0, 1E0],
+                    "intensity": 1E0,
+                    "range": 0E0,
+                    "innerConeAngleRadians": 0E0,
+                    "outerConeAngleRadians": 0E0,
                     "castShadows": false
                 }
             ],
