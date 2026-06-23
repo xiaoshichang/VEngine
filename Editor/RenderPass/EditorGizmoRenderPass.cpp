@@ -1,5 +1,6 @@
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 
+#include "Editor/Core/EditorBuiltinResources.h"
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Math.h"
@@ -16,12 +17,16 @@ namespace ve
 {
     namespace
     {
-        inline constexpr const char* EditorGizmoVertexShaderName = "EditorGizmo.Vertex";
-        inline constexpr const char* EditorGizmoFragmentShaderName = "EditorGizmo.Fragment";
-        const ShaderID EditorGizmoVertexShaderID{EditorGizmoVertexShaderName, 0};
-        const ShaderID EditorGizmoFragmentShaderID{EditorGizmoFragmentShaderName, 0};
+        inline constexpr const char* EditorGizmoLineVertexShaderName = "EditorGizmo.Line.Vertex";
+        inline constexpr const char* EditorGizmoLineFragmentShaderName = "EditorGizmo.Line.Fragment";
+        inline constexpr const char* EditorGizmoIconVertexShaderName = "EditorGizmo.Icon.Vertex";
+        inline constexpr const char* EditorGizmoIconFragmentShaderName = "EditorGizmo.Icon.Fragment";
+        const ShaderID EditorGizmoLineVertexShaderID{EditorGizmoLineVertexShaderName, 0};
+        const ShaderID EditorGizmoLineFragmentShaderID{EditorGizmoLineFragmentShaderName, 0};
+        const ShaderID EditorGizmoIconVertexShaderID{EditorGizmoIconVertexShaderName, 0};
+        const ShaderID EditorGizmoIconFragmentShaderID{EditorGizmoIconFragmentShaderName, 0};
 
-        const char* EditorGizmoShaderSource = R"(
+        const char* EditorGizmoLineShaderSource = R"(
 cbuffer EditorGizmoConstants : register(b0)
 {
     float4x4 worldViewProjection;
@@ -50,6 +55,45 @@ VSOutput VSMain(VSInput input)
 float4 PSMain(VSOutput input) : SV_TARGET
 {
     return float4(saturate(input.color), 1.0f);
+}
+)";
+
+        const char* EditorGizmoIconShaderSource = R"(
+cbuffer EditorGizmoConstants : register(b0)
+{
+    float4x4 worldViewProjection;
+};
+
+Texture2D IconAtlasTexture : register(t0);
+SamplerState IconAtlasSampler : register(s0);
+
+struct VSInput
+{
+    float3 position : POSITION;
+    float3 uv : TEXCOORD0;
+    float3 color : COLOR;
+};
+
+struct VSOutput
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float3 color : COLOR0;
+};
+
+VSOutput VSMain(VSInput input)
+{
+    VSOutput output;
+    output.position = mul(worldViewProjection, float4(input.position, 1.0f));
+    output.uv = input.uv.xy;
+    output.color = input.color;
+    return output;
+}
+
+float4 PSMain(VSOutput input) : SV_TARGET
+{
+    float4 atlas = IconAtlasTexture.Sample(IconAtlasSampler, input.uv);
+    return float4(saturate(input.color), atlas.a);
 }
 )";
 
@@ -173,25 +217,39 @@ float4 PSMain(VSOutput input) : SV_TARGET
     void EditorGizmoRenderPass::Execute(RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
-        if (initParam_.drawList == nullptr || initParam_.drawList->vertices.empty())
+        if (initParam_.drawList == nullptr || (initParam_.drawList->lines.empty() && initParam_.drawList->icons.empty()))
         {
             return;
         }
 
         EnsurePipeline(context);
+        EnsureIconResources(context);
         UploadFrameResources(context);
 
         rhi::RhiCommandList& commandList = context.commandList;
-        commandList.SetPipeline(*pipelineState_);
-        commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
-        commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(EditorGizmoVertex), 0);
-        commandList.Draw(static_cast<UInt32>(uploadedVertexCount_), 0);
+        if (uploadedIconVertexCount_ > 0)
+        {
+            commandList.SetPipeline(*iconPipelineState_);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
+            commandList.SetTexture(rhi::RhiShaderStage::Fragment, 0, *iconAtlasTexture_);
+            commandList.SetSampler(rhi::RhiShaderStage::Fragment, 0, *iconSampler_);
+            commandList.SetVertexBuffer(0, *iconVertexBuffer_, sizeof(EditorGizmoIconVertex), 0);
+            commandList.Draw(static_cast<UInt32>(uploadedIconVertexCount_), 0);
+        }
+
+        if (uploadedLineVertexCount_ > 0)
+        {
+            commandList.SetPipeline(*linePipelineState_);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
+            commandList.SetVertexBuffer(0, *lineVertexBuffer_, sizeof(EditorGizmoVertex), 0);
+            commandList.Draw(static_cast<UInt32>(uploadedLineVertexCount_), 0);
+        }
     }
 
     void EditorGizmoRenderPass::EnsurePipeline(RenderPassContext& context)
     {
         const rhi::RhiFormat targetFormat = ResolveTargetFormat(context);
-        if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat)
+        if (linePipelineState_ != nullptr && iconPipelineState_ != nullptr && pipelineColorFormat_ == targetFormat)
         {
             return;
         }
@@ -199,23 +257,41 @@ float4 PSMain(VSOutput input) : SV_TARGET
         ShaderManager* shaderManager = context.frameData.shaderManager;
         VE_ASSERT_MESSAGE(shaderManager != nullptr, "EditorGizmoRenderPass requires a ShaderManager.");
 
-        rhi::RhiShaderModuleDesc vertexShaderDesc = {};
-        vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-        vertexShaderDesc.source = EditorGizmoShaderSource;
-        vertexShaderDesc.entryPoint = "VSMain";
-        vertexShaderDesc.debugName = "EditorGizmoVertexShader";
+        rhi::RhiShaderModuleDesc lineVertexShaderDesc = {};
+        lineVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
+        lineVertexShaderDesc.source = EditorGizmoLineShaderSource;
+        lineVertexShaderDesc.entryPoint = "VSMain";
+        lineVertexShaderDesc.debugName = "EditorGizmoLineVertexShader";
 
-        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoVertexShaderID, vertexShaderDesc);
-        VE_ASSERT_MESSAGE(vertexShader != nullptr, "EditorGizmoRenderPass failed to get vertex shader.");
+        rhi::RhiShaderModule* lineVertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoLineVertexShaderID, lineVertexShaderDesc);
+        VE_ASSERT_MESSAGE(lineVertexShader != nullptr, "EditorGizmoRenderPass failed to get line vertex shader.");
 
-        rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
-        fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-        fragmentShaderDesc.source = EditorGizmoShaderSource;
-        fragmentShaderDesc.entryPoint = "PSMain";
-        fragmentShaderDesc.debugName = "EditorGizmoFragmentShader";
+        rhi::RhiShaderModuleDesc lineFragmentShaderDesc = {};
+        lineFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
+        lineFragmentShaderDesc.source = EditorGizmoLineShaderSource;
+        lineFragmentShaderDesc.entryPoint = "PSMain";
+        lineFragmentShaderDesc.debugName = "EditorGizmoLineFragmentShader";
 
-        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoFragmentShaderID, fragmentShaderDesc);
-        VE_ASSERT_MESSAGE(fragmentShader != nullptr, "EditorGizmoRenderPass failed to get fragment shader.");
+        rhi::RhiShaderModule* lineFragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoLineFragmentShaderID, lineFragmentShaderDesc);
+        VE_ASSERT_MESSAGE(lineFragmentShader != nullptr, "EditorGizmoRenderPass failed to get line fragment shader.");
+
+        rhi::RhiShaderModuleDesc iconVertexShaderDesc = {};
+        iconVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
+        iconVertexShaderDesc.source = EditorGizmoIconShaderSource;
+        iconVertexShaderDesc.entryPoint = "VSMain";
+        iconVertexShaderDesc.debugName = "EditorGizmoIconVertexShader";
+
+        rhi::RhiShaderModule* iconVertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoIconVertexShaderID, iconVertexShaderDesc);
+        VE_ASSERT_MESSAGE(iconVertexShader != nullptr, "EditorGizmoRenderPass failed to get icon vertex shader.");
+
+        rhi::RhiShaderModuleDesc iconFragmentShaderDesc = {};
+        iconFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
+        iconFragmentShaderDesc.source = EditorGizmoIconShaderSource;
+        iconFragmentShaderDesc.entryPoint = "PSMain";
+        iconFragmentShaderDesc.debugName = "EditorGizmoIconFragmentShader";
+
+        rhi::RhiShaderModule* iconFragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoIconFragmentShaderID, iconFragmentShaderDesc);
+        VE_ASSERT_MESSAGE(iconFragmentShader != nullptr, "EditorGizmoRenderPass failed to get icon fragment shader.");
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
         positionAttribute.semanticName = "POSITION";
@@ -231,34 +307,122 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         const rhi::RhiVertexAttributeDesc vertexAttributes[] = {positionAttribute, colorAttribute};
 
-        rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
-        pipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
-        pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
-        pipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
-        pipelineDesc.boundShaderState.vertexShader = vertexShader;
-        pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
-        pipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
-        pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
-        pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoVertex);
-        pipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
-        pipelineDesc.colorFormat = targetFormat;
-        pipelineDesc.debugName = "EditorGizmoPipeline";
+        rhi::RhiRasterizerStateDesc lineRasterizer = rhi::StaticRenderStates::SolidNoCullRasterizer;
+        lineRasterizer.antialiasedLineEnabled = true;
 
-        pipelineState_ = context.device.CreateGraphicsPipeline(pipelineDesc);
-        VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "EditorGizmoRenderPass failed to create pipeline state.");
+        rhi::RhiGraphicsPipelineDesc linePipelineDesc = {};
+        linePipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
+        linePipelineDesc.rasterizerState = lineRasterizer;
+        linePipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
+        linePipelineDesc.boundShaderState.vertexShader = lineVertexShader;
+        linePipelineDesc.boundShaderState.fragmentShader = lineFragmentShader;
+        linePipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
+        linePipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
+        linePipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoVertex);
+        linePipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::LineList;
+        linePipelineDesc.colorFormat = targetFormat;
+        linePipelineDesc.debugName = "EditorGizmoLinePipeline";
+
+        linePipelineState_ = context.device.CreateGraphicsPipeline(linePipelineDesc);
+        VE_ASSERT_MESSAGE(linePipelineState_ != nullptr, "EditorGizmoRenderPass failed to create line pipeline state.");
+
+        rhi::RhiVertexAttributeDesc iconPositionAttribute = {};
+        iconPositionAttribute.semanticName = "POSITION";
+        iconPositionAttribute.semanticIndex = 0;
+        iconPositionAttribute.format = rhi::RhiFormat::Rgb32Float;
+        iconPositionAttribute.offset = 0;
+
+        rhi::RhiVertexAttributeDesc iconUvAttribute = {};
+        iconUvAttribute.semanticName = "TEXCOORD";
+        iconUvAttribute.semanticIndex = 0;
+        iconUvAttribute.format = rhi::RhiFormat::Rgb32Float;
+        iconUvAttribute.offset = sizeof(Float32) * 3;
+
+        rhi::RhiVertexAttributeDesc iconColorAttribute = {};
+        iconColorAttribute.semanticName = "COLOR";
+        iconColorAttribute.semanticIndex = 0;
+        iconColorAttribute.format = rhi::RhiFormat::Rgb32Float;
+        iconColorAttribute.offset = sizeof(Float32) * 6;
+
+        const rhi::RhiVertexAttributeDesc iconVertexAttributes[] = {iconPositionAttribute, iconUvAttribute, iconColorAttribute};
+
+        rhi::RhiGraphicsPipelineDesc iconPipelineDesc = {};
+        iconPipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
+        iconPipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidNoCullRasterizer;
+        iconPipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
+        iconPipelineDesc.boundShaderState.vertexShader = iconVertexShader;
+        iconPipelineDesc.boundShaderState.fragmentShader = iconFragmentShader;
+        iconPipelineDesc.boundShaderState.vertexDeclaration.attributes = iconVertexAttributes;
+        iconPipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 3;
+        iconPipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoIconVertex);
+        iconPipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
+        iconPipelineDesc.colorFormat = targetFormat;
+        iconPipelineDesc.debugName = "EditorGizmoIconPipeline";
+
+        iconPipelineState_ = context.device.CreateGraphicsPipeline(iconPipelineDesc);
+        VE_ASSERT_MESSAGE(iconPipelineState_ != nullptr, "EditorGizmoRenderPass failed to create icon pipeline state.");
         pipelineColorFormat_ = targetFormat;
+    }
+
+    void EditorGizmoRenderPass::EnsureIconResources(RenderPassContext& context)
+    {
+        if (iconAtlasTexture_ == nullptr)
+        {
+            const editor::BuiltinGizmoIconAtlas atlas = editor::GenerateBuiltinGizmoIconAtlas();
+            rhi::RhiTextureDesc textureDesc = {};
+            textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
+            textureDesc.width = atlas.width;
+            textureDesc.height = atlas.height;
+            textureDesc.mipLevelCount = 1;
+            textureDesc.format = rhi::RhiFormat::Rgba8Unorm;
+            textureDesc.usage = rhi::RhiTextureUsage::Sampled;
+            textureDesc.initialData = atlas.pixels.data();
+            textureDesc.initialDataSize = atlas.pixels.size();
+            textureDesc.initialDataRowPitch = atlas.rowPitch;
+            textureDesc.debugName = "BuiltinGizmoIconAtlas";
+
+            iconAtlasTexture_ = context.device.CreateTexture(textureDesc);
+            VE_ASSERT_MESSAGE(iconAtlasTexture_ != nullptr, "EditorGizmoRenderPass failed to create builtin gizmo icon atlas texture.");
+        }
+
+        if (iconSampler_ == nullptr)
+        {
+            iconSampler_ = context.device.CreateSampler(rhi::StaticRenderStates::BilinearClampSampler);
+            VE_ASSERT_MESSAGE(iconSampler_ != nullptr, "EditorGizmoRenderPass failed to create builtin gizmo icon sampler.");
+        }
     }
 
     void EditorGizmoRenderPass::UploadFrameResources(RenderPassContext& context)
     {
         VE_ASSERT(initParam_.drawList != nullptr);
-        uploadedVertexCount_ = initParam_.drawList->vertices.size();
+        uploadedLineVertexCount_ = initParam_.drawList->lines.size();
+        uploadedIconVertexCount_ = initParam_.drawList->icons.size();
 
-        vertexBuffer_ = context.device.CreateBuffer(MakeBufferDesc(static_cast<UInt64>(uploadedVertexCount_ * sizeof(EditorGizmoVertex)),
-                                                                   rhi::RhiBufferUsage::Vertex,
-                                                                   initParam_.drawList->vertices.data(),
-                                                                   "EditorGizmoVertexBuffer"));
-        VE_ASSERT_MESSAGE(vertexBuffer_ != nullptr, "EditorGizmoRenderPass failed to create vertex buffer.");
+        if (uploadedLineVertexCount_ > 0)
+        {
+            lineVertexBuffer_ = context.device.CreateBuffer(MakeBufferDesc(static_cast<UInt64>(uploadedLineVertexCount_ * sizeof(EditorGizmoVertex)),
+                                                                           rhi::RhiBufferUsage::Vertex,
+                                                                           initParam_.drawList->lines.data(),
+                                                                           "EditorGizmoLineVertexBuffer"));
+            VE_ASSERT_MESSAGE(lineVertexBuffer_ != nullptr, "EditorGizmoRenderPass failed to create line vertex buffer.");
+        }
+        else
+        {
+            lineVertexBuffer_.reset();
+        }
+
+        if (uploadedIconVertexCount_ > 0)
+        {
+            iconVertexBuffer_ = context.device.CreateBuffer(MakeBufferDesc(static_cast<UInt64>(uploadedIconVertexCount_ * sizeof(EditorGizmoIconVertex)),
+                                                                           rhi::RhiBufferUsage::Vertex,
+                                                                           initParam_.drawList->icons.data(),
+                                                                           "EditorGizmoIconVertexBuffer"));
+            VE_ASSERT_MESSAGE(iconVertexBuffer_ != nullptr, "EditorGizmoRenderPass failed to create icon vertex buffer.");
+        }
+        else
+        {
+            iconVertexBuffer_.reset();
+        }
 
         const EditorGizmoUniformData uniformData = BuildUniformData(context.rendererData.resolvedCamera);
         uniformBuffer_ =

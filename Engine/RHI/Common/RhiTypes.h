@@ -27,6 +27,7 @@ namespace ve::rhi
     enum class RhiPrimitiveTopology
     {
         TriangleList,
+        LineList,
     };
 
     enum class RhiFillMode

@@ -49,9 +49,43 @@ namespace ve::rhi
         {
             switch (topology)
             {
+            case RhiPrimitiveTopology::LineList:
+                return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
             case RhiPrimitiveTopology::TriangleList:
             default:
                 return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+            }
+        }
+
+        D3D11_FILTER ToD3D11Filter(RhiSamplerFilter filter)
+        {
+            switch (filter)
+            {
+            case RhiSamplerFilter::Point:
+                return D3D11_FILTER_MIN_MAG_MIP_POINT;
+            case RhiSamplerFilter::Trilinear:
+                return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+            case RhiSamplerFilter::Anisotropic:
+                return D3D11_FILTER_ANISOTROPIC;
+            case RhiSamplerFilter::Bilinear:
+            default:
+                return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+            }
+        }
+
+        D3D11_TEXTURE_ADDRESS_MODE ToD3D11AddressMode(RhiSamplerAddressMode mode)
+        {
+            switch (mode)
+            {
+            case RhiSamplerAddressMode::Mirror:
+                return D3D11_TEXTURE_ADDRESS_MIRROR;
+            case RhiSamplerAddressMode::Clamp:
+                return D3D11_TEXTURE_ADDRESS_CLAMP;
+            case RhiSamplerAddressMode::Border:
+                return D3D11_TEXTURE_ADDRESS_BORDER;
+            case RhiSamplerAddressMode::Wrap:
+            default:
+                return D3D11_TEXTURE_ADDRESS_WRAP;
             }
         }
 
@@ -344,6 +378,30 @@ namespace ve::rhi
             ComPtr<ID3D11DepthStencilView> depthStencilView_;
             ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
             RhiTextureDesc desc_ = {};
+        };
+
+        class D3D11Sampler final : public RhiSampler
+        {
+        public:
+            D3D11Sampler(ComPtr<ID3D11SamplerState> samplerState, RhiSamplerDesc desc)
+                : samplerState_(std::move(samplerState))
+                , desc_(desc)
+            {
+            }
+
+            [[nodiscard]] RhiSamplerFilter GetFilter() const noexcept override
+            {
+                return desc_.filter;
+            }
+
+            [[nodiscard]] ID3D11SamplerState* GetNativeSamplerState() const noexcept
+            {
+                return samplerState_.Get();
+            }
+
+        private:
+            ComPtr<ID3D11SamplerState> samplerState_;
+            RhiSamplerDesc desc_ = {};
         };
 
         class D3D11Fence final : public RhiFence
@@ -751,6 +809,36 @@ namespace ve::rhi
                 }
             }
 
+            void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
+            {
+                const auto& d3dTexture = static_cast<const D3D11Texture&>(texture);
+                ID3D11ShaderResourceView* shaderResourceView = d3dTexture.GetShaderResourceView();
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    context_->VSSetShaderResources(slot, 1, &shaderResourceView);
+                    break;
+                case RhiShaderStage::Fragment:
+                    context_->PSSetShaderResources(slot, 1, &shaderResourceView);
+                    break;
+                }
+            }
+
+            void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) override
+            {
+                const auto& d3dSampler = static_cast<const D3D11Sampler&>(sampler);
+                ID3D11SamplerState* samplerState = d3dSampler.GetNativeSamplerState();
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    context_->VSSetSamplers(slot, 1, &samplerState);
+                    break;
+                case RhiShaderStage::Fragment:
+                    context_->PSSetSamplers(slot, 1, &samplerState);
+                    break;
+                }
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 context_->Draw(vertexCount, firstVertex);
@@ -1001,6 +1089,34 @@ namespace ve::rhi
                 }
 
                 return std::make_unique<D3D11Texture>(texture, std::move(renderTargetView), std::move(depthStencilView), std::move(shaderResourceView), desc);
+            }
+
+            [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override
+            {
+                D3D11_SAMPLER_DESC samplerDesc = {};
+                samplerDesc.Filter = ToD3D11Filter(desc.filter);
+                samplerDesc.AddressU = ToD3D11AddressMode(desc.addressU);
+                samplerDesc.AddressV = ToD3D11AddressMode(desc.addressV);
+                samplerDesc.AddressW = ToD3D11AddressMode(desc.addressW);
+                samplerDesc.MipLODBias = desc.mipBias;
+                samplerDesc.MaxAnisotropy = desc.maxAnisotropy;
+                samplerDesc.ComparisonFunc = ToD3D11ComparisonFunc(desc.comparisonFunction);
+                samplerDesc.BorderColor[0] = desc.borderColor.r;
+                samplerDesc.BorderColor[1] = desc.borderColor.g;
+                samplerDesc.BorderColor[2] = desc.borderColor.b;
+                samplerDesc.BorderColor[3] = desc.borderColor.a;
+                samplerDesc.MinLOD = desc.minLod;
+                samplerDesc.MaxLOD = desc.maxLod;
+
+                ComPtr<ID3D11SamplerState> samplerState;
+                HRESULT result = device_->CreateSamplerState(&samplerDesc, &samplerState);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateSamplerState", result));
+                    return nullptr;
+                }
+
+                return std::make_unique<D3D11Sampler>(samplerState, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override

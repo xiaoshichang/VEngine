@@ -12,6 +12,7 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <d3d12.h>
@@ -51,6 +52,8 @@ namespace ve::rhi
         {
             switch (topology)
             {
+            case RhiPrimitiveTopology::LineList:
+                return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
             case RhiPrimitiveTopology::TriangleList:
             default:
                 return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
@@ -61,9 +64,43 @@ namespace ve::rhi
         {
             switch (topology)
             {
+            case RhiPrimitiveTopology::LineList:
+                return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
             case RhiPrimitiveTopology::TriangleList:
             default:
                 return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+            }
+        }
+
+        D3D12_FILTER ToD3D12Filter(RhiSamplerFilter filter)
+        {
+            switch (filter)
+            {
+            case RhiSamplerFilter::Point:
+                return D3D12_FILTER_MIN_MAG_MIP_POINT;
+            case RhiSamplerFilter::Trilinear:
+                return D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+            case RhiSamplerFilter::Anisotropic:
+                return D3D12_FILTER_ANISOTROPIC;
+            case RhiSamplerFilter::Bilinear:
+            default:
+                return D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+            }
+        }
+
+        D3D12_TEXTURE_ADDRESS_MODE ToD3D12AddressMode(RhiSamplerAddressMode mode)
+        {
+            switch (mode)
+            {
+            case RhiSamplerAddressMode::Mirror:
+                return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+            case RhiSamplerAddressMode::Clamp:
+                return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+            case RhiSamplerAddressMode::Border:
+                return D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+            case RhiSamplerAddressMode::Wrap:
+            default:
+                return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
             }
         }
 
@@ -262,11 +299,15 @@ namespace ve::rhi
             D3D12Texture(ComPtr<ID3D12Resource> resource,
                          ComPtr<ID3D12DescriptorHeap> rtvHeap,
                          ComPtr<ID3D12DescriptorHeap> dsvHeap,
-                         RhiTextureDesc desc)
+                         ComPtr<ID3D12DescriptorHeap> srvHeap,
+                         RhiTextureDesc desc,
+                         D3D12_RESOURCE_STATES resourceState)
                 : resource_(std::move(resource))
                 , rtvHeap_(std::move(rtvHeap))
                 , dsvHeap_(std::move(dsvHeap))
+                , srvHeap_(std::move(srvHeap))
                 , desc_(desc)
+                , resourceState_(resourceState)
             {
             }
 
@@ -317,6 +358,22 @@ namespace ve::rhi
                 return dsvHeap_->GetCPUDescriptorHandleForHeapStart();
             }
 
+            [[nodiscard]] bool HasShaderResourceView() const noexcept
+            {
+                return srvHeap_ != nullptr;
+            }
+
+            [[nodiscard]] ID3D12DescriptorHeap* GetShaderResourceViewHeap() const noexcept
+            {
+                return srvHeap_.Get();
+            }
+
+            [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceView() const noexcept
+            {
+                VE_ASSERT(srvHeap_ != nullptr);
+                return srvHeap_->GetGPUDescriptorHandleForHeapStart();
+            }
+
             [[nodiscard]] D3D12_RESOURCE_STATES GetResourceState() const noexcept
             {
                 return resourceState_;
@@ -331,8 +388,39 @@ namespace ve::rhi
             ComPtr<ID3D12Resource> resource_;
             ComPtr<ID3D12DescriptorHeap> rtvHeap_;
             ComPtr<ID3D12DescriptorHeap> dsvHeap_;
+            ComPtr<ID3D12DescriptorHeap> srvHeap_;
             RhiTextureDesc desc_ = {};
             D3D12_RESOURCE_STATES resourceState_ = D3D12_RESOURCE_STATE_COMMON;
+        };
+
+        class D3D12Sampler final : public RhiSampler
+        {
+        public:
+            D3D12Sampler(ComPtr<ID3D12DescriptorHeap> samplerHeap, RhiSamplerDesc desc)
+                : samplerHeap_(std::move(samplerHeap))
+                , desc_(desc)
+            {
+            }
+
+            [[nodiscard]] RhiSamplerFilter GetFilter() const noexcept override
+            {
+                return desc_.filter;
+            }
+
+            [[nodiscard]] ID3D12DescriptorHeap* GetSamplerHeap() const noexcept
+            {
+                return samplerHeap_.Get();
+            }
+
+            [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetSampler() const noexcept
+            {
+                VE_ASSERT(samplerHeap_ != nullptr);
+                return samplerHeap_->GetGPUDescriptorHandleForHeapStart();
+            }
+
+        private:
+            ComPtr<ID3D12DescriptorHeap> samplerHeap_;
+            RhiSamplerDesc desc_ = {};
         };
 
         class D3D12FenceObject final : public RhiFence
@@ -747,6 +835,25 @@ namespace ve::rhi
                 commandList_->SetGraphicsRootConstantBufferView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
             }
 
+            void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
+            {
+                VE_ASSERT(stage == RhiShaderStage::Fragment && slot == 0);
+                const auto& d3dTexture = static_cast<const D3D12Texture&>(texture);
+                VE_ASSERT(d3dTexture.HasShaderResourceView());
+                activeResourceHeap_ = d3dTexture.GetShaderResourceViewHeap();
+                ApplyDescriptorHeaps();
+                commandList_->SetGraphicsRootDescriptorTable(3, d3dTexture.GetShaderResourceView());
+            }
+
+            void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) override
+            {
+                VE_ASSERT(stage == RhiShaderStage::Fragment && slot == 0);
+                const auto& d3dSampler = static_cast<const D3D12Sampler&>(sampler);
+                activeSamplerHeap_ = d3dSampler.GetSamplerHeap();
+                ApplyDescriptorHeaps();
+                commandList_->SetGraphicsRootDescriptorTable(4, d3dSampler.GetSampler());
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 commandList_->DrawInstanced(vertexCount, 1, firstVertex, 0);
@@ -791,12 +898,33 @@ namespace ve::rhi
                 return slot == 1 ? 1u : 2u;
             }
 
+            void ApplyDescriptorHeaps()
+            {
+                ID3D12DescriptorHeap* heaps[2] = {};
+                UINT heapCount = 0;
+                if (activeResourceHeap_ != nullptr)
+                {
+                    heaps[heapCount++] = activeResourceHeap_;
+                }
+                if (activeSamplerHeap_ != nullptr)
+                {
+                    heaps[heapCount++] = activeSamplerHeap_;
+                }
+
+                if (heapCount > 0)
+                {
+                    commandList_->SetDescriptorHeaps(heapCount, heaps);
+                }
+            }
+
             ComPtr<ID3D12Device> device_;
             ComPtr<ID3D12CommandAllocator> commandAllocator_;
             ComPtr<ID3D12GraphicsCommandList> commandList_;
             D3D12Swapchain* activeSwapchain_ = nullptr;
             D3D12Texture* activeTexture_ = nullptr;
             D3D12Texture* activeDepthTexture_ = nullptr;
+            ID3D12DescriptorHeap* activeResourceHeap_ = nullptr;
+            ID3D12DescriptorHeap* activeSamplerHeap_ = nullptr;
         };
 
         class D3D12Device final : public RhiDevice
@@ -1051,10 +1179,129 @@ namespace ve::rhi
                     return nullptr;
                 }
 
+                D3D12_RESOURCE_STATES resourceState = D3D12_RESOURCE_STATE_COMMON;
                 if (desc.initialData != nullptr && desc.initialDataSize > 0)
                 {
-                    SetLastError("D3D12 texture initial data upload is not implemented in the minimum RHI path.");
-                    return nullptr;
+                    if (desc.mipLevelCount != 1 || desc.initialDataRowPitch == 0)
+                    {
+                        SetLastError("D3D12 texture initial upload requires one mip level and a row pitch.");
+                        return nullptr;
+                    }
+
+                    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+                    UINT rowCount = 0;
+                    UINT64 rowSizeInBytes = 0;
+                    UINT64 uploadBufferSize = 0;
+                    device_->GetCopyableFootprints(&resourceDesc, 0, 1, 0, &footprint, &rowCount, &rowSizeInBytes, &uploadBufferSize);
+
+                    D3D12_HEAP_PROPERTIES uploadHeapProperties = {};
+                    uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+                    uploadHeapProperties.CreationNodeMask = 1;
+                    uploadHeapProperties.VisibleNodeMask = 1;
+
+                    D3D12_RESOURCE_DESC uploadResourceDesc = {};
+                    uploadResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                    uploadResourceDesc.Width = uploadBufferSize;
+                    uploadResourceDesc.Height = 1;
+                    uploadResourceDesc.DepthOrArraySize = 1;
+                    uploadResourceDesc.MipLevels = 1;
+                    uploadResourceDesc.Format = DXGI_FORMAT_UNKNOWN;
+                    uploadResourceDesc.SampleDesc.Count = 1;
+                    uploadResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+                    ComPtr<ID3D12Resource> uploadBuffer;
+                    result = device_->CreateCommittedResource(&uploadHeapProperties,
+                                                              D3D12_HEAP_FLAG_NONE,
+                                                              &uploadResourceDesc,
+                                                              D3D12_RESOURCE_STATE_GENERIC_READ,
+                                                              nullptr,
+                                                              IID_PPV_ARGS(&uploadBuffer));
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Device::CreateCommittedResource texture upload", result));
+                        return nullptr;
+                    }
+
+                    void* mappedData = nullptr;
+                    D3D12_RANGE readRange = {};
+                    result = uploadBuffer->Map(0, &readRange, &mappedData);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Resource::Map texture upload", result));
+                        return nullptr;
+                    }
+
+                    const auto* sourceBytes = static_cast<const std::byte*>(desc.initialData);
+                    auto* destinationBytes = static_cast<std::byte*>(mappedData) + footprint.Offset;
+                    const uint64_t sourceRowPitch = desc.initialDataRowPitch;
+                    const uint64_t copyRowBytes = (std::min)(rowSizeInBytes, sourceRowPitch);
+                    for (UINT row = 0; row < rowCount; ++row)
+                    {
+                        std::memcpy(destinationBytes + (static_cast<uint64_t>(row) * footprint.Footprint.RowPitch),
+                                    sourceBytes + (static_cast<uint64_t>(row) * sourceRowPitch),
+                                    static_cast<size_t>(copyRowBytes));
+                    }
+                    uploadBuffer->Unmap(0, nullptr);
+
+                    ComPtr<ID3D12CommandAllocator> uploadAllocator;
+                    result = device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&uploadAllocator));
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Device::CreateCommandAllocator texture upload", result));
+                        return nullptr;
+                    }
+
+                    ComPtr<ID3D12GraphicsCommandList> uploadCommandList;
+                    result = device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, uploadAllocator.Get(), nullptr, IID_PPV_ARGS(&uploadCommandList));
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Device::CreateCommandList texture upload", result));
+                        return nullptr;
+                    }
+
+                    D3D12_RESOURCE_BARRIER copyBarrier = {};
+                    copyBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                    copyBarrier.Transition.pResource = resource.Get();
+                    copyBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                    copyBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+                    copyBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+                    uploadCommandList->ResourceBarrier(1, &copyBarrier);
+
+                    D3D12_TEXTURE_COPY_LOCATION destinationLocation = {};
+                    destinationLocation.pResource = resource.Get();
+                    destinationLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                    destinationLocation.SubresourceIndex = 0;
+
+                    D3D12_TEXTURE_COPY_LOCATION sourceLocation = {};
+                    sourceLocation.pResource = uploadBuffer.Get();
+                    sourceLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                    sourceLocation.PlacedFootprint = footprint;
+
+                    uploadCommandList->CopyTextureRegion(&destinationLocation, 0, 0, 0, &sourceLocation, nullptr);
+
+                    D3D12_RESOURCE_BARRIER shaderResourceBarrier = {};
+                    shaderResourceBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                    shaderResourceBarrier.Transition.pResource = resource.Get();
+                    shaderResourceBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                    shaderResourceBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+                    shaderResourceBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+                    uploadCommandList->ResourceBarrier(1, &shaderResourceBarrier);
+
+                    result = uploadCommandList->Close();
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12GraphicsCommandList::Close texture upload", result));
+                        return nullptr;
+                    }
+
+                    ID3D12CommandList* nativeCommandLists[] = {uploadCommandList.Get()};
+                    queue_->ExecuteCommandLists(1, nativeCommandLists);
+                    if (!SignalAndWait())
+                    {
+                        return nullptr;
+                    }
+
+                    resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
                 }
 
                 ComPtr<ID3D12DescriptorHeap> rtvHeap;
@@ -1093,7 +1340,64 @@ namespace ve::rhi
                     device_->CreateDepthStencilView(resource.Get(), nullptr, dsvHeap->GetCPUDescriptorHandleForHeapStart());
                 }
 
-                return std::make_unique<D3D12Texture>(resource, rtvHeap, dsvHeap, desc);
+                ComPtr<ID3D12DescriptorHeap> srvHeap;
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Sampled)) != 0)
+                {
+                    D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+                    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+                    heapDesc.NumDescriptors = 1;
+                    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+                    result = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&srvHeap));
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Device::CreateDescriptorHeap texture SRV", result));
+                        return nullptr;
+                    }
+
+                    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+                    srvDesc.Format = ToDxgiFormat(desc.format);
+                    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    srvDesc.Texture2D.MipLevels = desc.mipLevelCount;
+                    device_->CreateShaderResourceView(resource.Get(), &srvDesc, srvHeap->GetCPUDescriptorHandleForHeapStart());
+                }
+
+                return std::make_unique<D3D12Texture>(resource, rtvHeap, dsvHeap, srvHeap, desc, resourceState);
+            }
+
+            [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override
+            {
+                D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+                heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+                heapDesc.NumDescriptors = 1;
+                heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+                ComPtr<ID3D12DescriptorHeap> samplerHeap;
+                HRESULT result = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&samplerHeap));
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D12Device::CreateDescriptorHeap sampler", result));
+                    return nullptr;
+                }
+
+                D3D12_SAMPLER_DESC samplerDesc = {};
+                samplerDesc.Filter = ToD3D12Filter(desc.filter);
+                samplerDesc.AddressU = ToD3D12AddressMode(desc.addressU);
+                samplerDesc.AddressV = ToD3D12AddressMode(desc.addressV);
+                samplerDesc.AddressW = ToD3D12AddressMode(desc.addressW);
+                samplerDesc.MipLODBias = desc.mipBias;
+                samplerDesc.MaxAnisotropy = desc.maxAnisotropy;
+                samplerDesc.ComparisonFunc = ToD3D12ComparisonFunc(desc.comparisonFunction);
+                samplerDesc.BorderColor[0] = desc.borderColor.r;
+                samplerDesc.BorderColor[1] = desc.borderColor.g;
+                samplerDesc.BorderColor[2] = desc.borderColor.b;
+                samplerDesc.BorderColor[3] = desc.borderColor.a;
+                samplerDesc.MinLOD = desc.minLod;
+                samplerDesc.MaxLOD = desc.maxLod;
+                device_->CreateSampler(&samplerDesc, samplerHeap->GetCPUDescriptorHandleForHeapStart());
+
+                return std::make_unique<D3D12Sampler>(samplerHeap, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
@@ -1165,7 +1469,19 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                D3D12_ROOT_PARAMETER rootParameters[3] = {};
+                D3D12_DESCRIPTOR_RANGE descriptorRanges[2] = {};
+                descriptorRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                descriptorRanges[0].NumDescriptors = 1;
+                descriptorRanges[0].BaseShaderRegister = 0;
+                descriptorRanges[0].RegisterSpace = 0;
+                descriptorRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                descriptorRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                descriptorRanges[1].NumDescriptors = 1;
+                descriptorRanges[1].BaseShaderRegister = 0;
+                descriptorRanges[1].RegisterSpace = 0;
+                descriptorRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+                D3D12_ROOT_PARAMETER rootParameters[5] = {};
                 rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
                 rootParameters[0].Descriptor.ShaderRegister = 0;
                 rootParameters[0].Descriptor.RegisterSpace = 0;
@@ -1178,9 +1494,17 @@ namespace ve::rhi
                 rootParameters[2].Descriptor.ShaderRegister = 2;
                 rootParameters[2].Descriptor.RegisterSpace = 0;
                 rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+                rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                rootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
+                rootParameters[3].DescriptorTable.pDescriptorRanges = &descriptorRanges[0];
+                rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+                rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                rootParameters[4].DescriptorTable.NumDescriptorRanges = 1;
+                rootParameters[4].DescriptorTable.pDescriptorRanges = &descriptorRanges[1];
+                rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
                 D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-                rootSignatureDesc.NumParameters = 3;
+                rootSignatureDesc.NumParameters = 5;
                 rootSignatureDesc.pParameters = rootParameters;
                 rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 

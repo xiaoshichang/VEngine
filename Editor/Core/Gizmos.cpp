@@ -14,13 +14,14 @@ namespace ve::editor
 {
     namespace
     {
-        constexpr Float32 IconRadius = 0.18f;
-        constexpr Float32 IconLineThickness = 0.025f;
-        constexpr Float32 FrustumLineThickness = 0.018f;
-        constexpr UInt32 CircleSegmentCount = 24;
+        constexpr Float32 IconWorldSize = 0.58f;
+        constexpr Float32 DirectionLightLineLength = 1.35f;
+        constexpr Float32 DirectionLightArrowLength = 0.24f;
+        constexpr Float32 DirectionLightArrowWidth = 0.16f;
         const Vector3 CameraGizmoColor(0.95f, 0.78f, 0.22f);
         const Vector3 LightGizmoColor(1.0f, 0.92f, 0.38f);
         const Vector3 CameraFrustumColor(0.35f, 0.68f, 1.0f);
+        const Vector3 DirectionalLightColor(1.0f, 0.86f, 0.24f);
 
         [[nodiscard]] Vector3 GetTranslation(const Matrix44& matrix) noexcept
         {
@@ -42,7 +43,7 @@ namespace ve::editor
             return localToWorld.TransformDirection(Vector3::UnitZ()).Normalized();
         }
 
-        void AddVertex(EditorGizmoDrawList& drawList, const Vector3& position, const Vector3& color)
+        void AddLineVertex(EditorGizmoDrawList& drawList, const Vector3& position, const Vector3& color)
         {
             EditorGizmoVertex vertex = {};
             vertex.position[0] = position.GetX();
@@ -51,92 +52,59 @@ namespace ve::editor
             vertex.color[0] = color.GetX();
             vertex.color[1] = color.GetY();
             vertex.color[2] = color.GetZ();
-            drawList.vertices.push_back(vertex);
+            drawList.lines.push_back(vertex);
         }
 
-        void AddTriangle(EditorGizmoDrawList& drawList, const Vector3& a, const Vector3& b, const Vector3& c, const Vector3& color)
+        void AddLine(EditorGizmoDrawList& drawList, const Vector3& a, const Vector3& b, const Vector3& color)
         {
-            AddVertex(drawList, a, color);
-            AddVertex(drawList, b, color);
-            AddVertex(drawList, c, color);
-        }
-
-        void AddQuad(EditorGizmoDrawList& drawList, const Vector3& a, const Vector3& b, const Vector3& c, const Vector3& d, const Vector3& color)
-        {
-            AddTriangle(drawList, a, b, c, color);
-            AddTriangle(drawList, a, c, d, color);
-            AddTriangle(drawList, c, b, a, color);
-            AddTriangle(drawList, d, c, a, color);
-        }
-
-        void AddCameraFacingLine(EditorGizmoDrawList& drawList,
-                                 const Vector3& a,
-                                 const Vector3& b,
-                                 const Vector3& color,
-                                 const Vector3& sceneViewCameraPosition,
-                                 Float32 thickness)
-        {
-            const Vector3 line = b - a;
-            if (line.LengthSquared() <= Math::DefaultEpsilon)
+            if ((b - a).LengthSquared() <= Math::DefaultEpsilon)
             {
                 return;
             }
 
-            const Vector3 lineDirection = line.Normalized();
-            Vector3 viewDirection = (sceneViewCameraPosition - ((a + b) * 0.5f)).Normalized();
-            if (viewDirection.LengthSquared() <= Math::DefaultEpsilon)
-            {
-                viewDirection = Vector3::UnitY();
-            }
-
-            Vector3 side = Vector3::Cross(lineDirection, viewDirection).Normalized();
-            if (side.LengthSquared() <= Math::DefaultEpsilon)
-            {
-                side = Vector3::Cross(lineDirection, Vector3::UnitY()).Normalized();
-            }
-            if (side.LengthSquared() <= Math::DefaultEpsilon)
-            {
-                side = Vector3::Cross(lineDirection, Vector3::UnitX()).Normalized();
-            }
-
-            const Vector3 offset = side * (thickness * 0.5f);
-            AddQuad(drawList, a - offset, a + offset, b + offset, b - offset, color);
+            AddLineVertex(drawList, a, color);
+            AddLineVertex(drawList, b, color);
         }
 
-        void AddBillboardLine(EditorGizmoDrawList& drawList,
-                              const Vector3& center,
-                              const Vector3& localA,
-                              const Vector3& localB,
-                              const Vector3& color,
-                              const Vector3& right,
-                              const Vector3& up)
+        void AddIconVertex(EditorGizmoDrawList& drawList, const Vector3& position, Float32 u, Float32 v, const Vector3& color)
         {
-            const Vector3 a = center + (right * localA.GetX()) + (up * localA.GetY());
-            const Vector3 b = center + (right * localB.GetX()) + (up * localB.GetY());
-            const Vector3 side = ((right * (localB.GetY() - localA.GetY())) - (up * (localB.GetX() - localA.GetX()))).Normalized();
-            const Vector3 offset = side * (IconLineThickness * 0.5f);
-            AddQuad(drawList, a - offset, a + offset, b + offset, b - offset, color);
+            EditorGizmoIconVertex vertex = {};
+            vertex.position[0] = position.GetX();
+            vertex.position[1] = position.GetY();
+            vertex.position[2] = position.GetZ();
+            vertex.uv[0] = u;
+            vertex.uv[1] = v;
+            vertex.uv[2] = 0.0f;
+            vertex.color[0] = color.GetX();
+            vertex.color[1] = color.GetY();
+            vertex.color[2] = color.GetZ();
+            drawList.icons.push_back(vertex);
         }
 
-        void AddBillboardCircle(EditorGizmoDrawList& drawList, const Vector3& center, const Vector3& color, const Vector3& right, const Vector3& up)
+        void AddIconQuad(EditorGizmoDrawList& drawList,
+                         const Vector3& topLeft,
+                         const Vector3& topRight,
+                         const Vector3& bottomRight,
+                         const Vector3& bottomLeft,
+                         const BuiltinGizmoIconUvRect& uv,
+                         const Vector3& color)
         {
-            for (UInt32 segmentIndex = 0; segmentIndex < CircleSegmentCount; ++segmentIndex)
-            {
-                const Float32 a = (static_cast<Float32>(segmentIndex) / static_cast<Float32>(CircleSegmentCount)) * Math::TwoPi;
-                const Float32 b = (static_cast<Float32>(segmentIndex + 1) / static_cast<Float32>(CircleSegmentCount)) * Math::TwoPi;
-                AddBillboardLine(drawList,
-                                 center,
-                                 Vector3(Cos(a) * IconRadius, Sin(a) * IconRadius, 0.0f),
-                                 Vector3(Cos(b) * IconRadius, Sin(b) * IconRadius, 0.0f),
-                                 color,
-                                 right,
-                                 up);
-            }
+            AddIconVertex(drawList, topLeft, uv.minU, uv.minV, color);
+            AddIconVertex(drawList, bottomRight, uv.maxU, uv.maxV, color);
+            AddIconVertex(drawList, topRight, uv.maxU, uv.minV, color);
+            AddIconVertex(drawList, topLeft, uv.minU, uv.minV, color);
+            AddIconVertex(drawList, bottomLeft, uv.minU, uv.maxV, color);
+            AddIconVertex(drawList, bottomRight, uv.maxU, uv.maxV, color);
         }
 
         [[nodiscard]] bool IsSelectedCamera(const GameObject* selectedGameObject, const CameraComponent& camera) noexcept
         {
             return selectedGameObject != nullptr && selectedGameObject == camera.GetOwner();
+        }
+
+        [[nodiscard]] bool IsSelectedLight(const GameObject* selectedGameObject, const LightComponent& light) noexcept
+        {
+            return selectedGameObject != nullptr && selectedGameObject == light.GetOwner();
         }
     } // namespace
 
@@ -163,7 +131,8 @@ namespace ve::editor
         }
 
         auto drawList = std::make_shared<EditorGizmoDrawList>();
-        drawList->vertices.reserve(1024);
+        drawList->lines.reserve(256);
+        drawList->icons.reserve(256);
         for (SizeT rootIndex = 0; rootIndex < desc.scene->GetRootGameObjectCount(); ++rootIndex)
         {
             const GameObject* root = desc.scene->GetRootGameObject(rootIndex);
@@ -173,7 +142,7 @@ namespace ve::editor
             }
         }
 
-        return drawList->vertices.empty() ? nullptr : drawList;
+        return drawList->lines.empty() && drawList->icons.empty() ? nullptr : drawList;
     }
 
     void Gizmos::CollectGameObjectGizmos(const GameObject& gameObject, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const
@@ -182,10 +151,13 @@ namespace ve::editor
         {
             if (const CameraComponent* camera = gameObject.GetComponent<CameraComponent>(); camera != nullptr && camera->IsEnabled())
             {
-                AddCameraIcon(*camera, desc, drawList);
                 if (IsSelectedCamera(desc.selectedGameObject, *camera))
                 {
-                    AddCameraFrustum(*camera, desc, drawList);
+                    AddCameraFrustum(*camera, drawList);
+                }
+                else
+                {
+                    AddCameraIcon(*camera, desc, drawList);
                 }
             }
         }
@@ -194,7 +166,17 @@ namespace ve::editor
         {
             if (const LightComponent* light = gameObject.GetComponent<LightComponent>(); light != nullptr && light->IsEnabled())
             {
-                AddLightIcon(*light, desc, drawList);
+                if (IsSelectedLight(desc.selectedGameObject, *light))
+                {
+                    if (light->GetLightType() == LightType::Directional)
+                    {
+                        AddDirectionalLightDirection(*light, desc, drawList);
+                    }
+                }
+                else
+                {
+                    AddLightIcon(*light, desc, drawList);
+                }
             }
         }
 
@@ -214,24 +196,27 @@ namespace ve::editor
         }
     }
 
+    void Gizmos::AddIcon(const Matrix44& world, const GizmoBuildDesc& desc, BuiltinGizmoIcon icon, const Vector3& color, EditorGizmoDrawList& drawList) const
+    {
+        const Vector3 center = GetTranslation(world);
+        const Vector3 right = GetCameraRight(desc.sceneViewCameraLocalToWorld) * (IconWorldSize * 0.5f);
+        const Vector3 up = GetCameraUp(desc.sceneViewCameraLocalToWorld) * (IconWorldSize * 0.5f);
+        const Vector3 topLeft = center - right + up;
+        const Vector3 topRight = center + right + up;
+        const Vector3 bottomRight = center + right - up;
+        const Vector3 bottomLeft = center - right - up;
+
+        AddIconQuad(drawList, topLeft, topRight, bottomRight, bottomLeft, GetBuiltinGizmoIconUvRect(icon), color);
+    }
+
     void Gizmos::AddCameraIcon(const CameraComponent& camera, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const
     {
         const TransformComponent* transform = camera.GetOwner() != nullptr ? camera.GetOwner()->GetComponent<TransformComponent>() : nullptr;
         const Matrix44 world = transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity();
-        const Vector3 center = GetTranslation(world);
-        const Vector3 right = GetCameraRight(desc.sceneViewCameraLocalToWorld);
-        const Vector3 up = GetCameraUp(desc.sceneViewCameraLocalToWorld);
-
-        AddBillboardLine(drawList, center, Vector3(-0.24f, -0.13f, 0.0f), Vector3(0.10f, -0.13f, 0.0f), CameraGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(0.10f, -0.13f, 0.0f), Vector3(0.10f, 0.13f, 0.0f), CameraGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(0.10f, 0.13f, 0.0f), Vector3(-0.24f, 0.13f, 0.0f), CameraGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(-0.24f, 0.13f, 0.0f), Vector3(-0.24f, -0.13f, 0.0f), CameraGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(0.10f, 0.08f, 0.0f), Vector3(0.28f, 0.20f, 0.0f), CameraGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(0.10f, -0.08f, 0.0f), Vector3(0.28f, -0.20f, 0.0f), CameraGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(0.28f, 0.20f, 0.0f), Vector3(0.28f, -0.20f, 0.0f), CameraGizmoColor, right, up);
+        AddIcon(world, desc, BuiltinGizmoIcon::Camera, CameraGizmoColor, drawList);
     }
 
-    void Gizmos::AddCameraFrustum(const CameraComponent& camera, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const
+    void Gizmos::AddCameraFrustum(const CameraComponent& camera, EditorGizmoDrawList& drawList) const
     {
         const TransformComponent* transform = camera.GetOwner() != nullptr ? camera.GetOwner()->GetComponent<TransformComponent>() : nullptr;
         const Matrix44 world = transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity();
@@ -239,7 +224,6 @@ namespace ve::editor
         const Vector3 right = GetCameraRight(world);
         const Vector3 up = GetCameraUp(world);
         const Vector3 forward = GetCameraForward(world);
-        const Vector3 sceneViewCameraPosition = GetTranslation(desc.sceneViewCameraLocalToWorld);
         const Float32 nearClip = std::max(camera.GetNearClipPlane(), 0.001f);
         const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
         const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
@@ -271,30 +255,39 @@ namespace ve::editor
         const Vector3 farBottomRight = farCenter - (up * farHalfHeight) + (right * farHalfWidth);
         const Vector3 farBottomLeft = farCenter - (up * farHalfHeight) - (right * farHalfWidth);
 
-        AddCameraFacingLine(drawList, nearTopLeft, nearTopRight, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, nearTopRight, nearBottomRight, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, nearBottomRight, nearBottomLeft, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, nearBottomLeft, nearTopLeft, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, farTopLeft, farTopRight, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, farTopRight, farBottomRight, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, farBottomRight, farBottomLeft, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, farBottomLeft, farTopLeft, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, nearTopLeft, farTopLeft, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, nearTopRight, farTopRight, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, nearBottomRight, farBottomRight, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
-        AddCameraFacingLine(drawList, nearBottomLeft, farBottomLeft, CameraFrustumColor, sceneViewCameraPosition, FrustumLineThickness);
+        AddLine(drawList, nearTopLeft, nearTopRight, CameraFrustumColor);
+        AddLine(drawList, nearTopRight, nearBottomRight, CameraFrustumColor);
+        AddLine(drawList, nearBottomRight, nearBottomLeft, CameraFrustumColor);
+        AddLine(drawList, nearBottomLeft, nearTopLeft, CameraFrustumColor);
+        AddLine(drawList, farTopLeft, farTopRight, CameraFrustumColor);
+        AddLine(drawList, farTopRight, farBottomRight, CameraFrustumColor);
+        AddLine(drawList, farBottomRight, farBottomLeft, CameraFrustumColor);
+        AddLine(drawList, farBottomLeft, farTopLeft, CameraFrustumColor);
+        AddLine(drawList, nearTopLeft, farTopLeft, CameraFrustumColor);
+        AddLine(drawList, nearTopRight, farTopRight, CameraFrustumColor);
+        AddLine(drawList, nearBottomRight, farBottomRight, CameraFrustumColor);
+        AddLine(drawList, nearBottomLeft, farBottomLeft, CameraFrustumColor);
     }
 
     void Gizmos::AddLightIcon(const LightComponent& light, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const
     {
         const TransformComponent* transform = light.GetOwner() != nullptr ? light.GetOwner()->GetComponent<TransformComponent>() : nullptr;
         const Matrix44 world = transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity();
-        const Vector3 center = GetTranslation(world);
-        const Vector3 right = GetCameraRight(desc.sceneViewCameraLocalToWorld);
-        const Vector3 up = GetCameraUp(desc.sceneViewCameraLocalToWorld);
+        AddIcon(world, desc, BuiltinGizmoIcon::Light, LightGizmoColor, drawList);
+    }
 
-        AddBillboardCircle(drawList, center, LightGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(-0.28f, 0.0f, 0.0f), Vector3(0.28f, 0.0f, 0.0f), LightGizmoColor, right, up);
-        AddBillboardLine(drawList, center, Vector3(0.0f, -0.28f, 0.0f), Vector3(0.0f, 0.28f, 0.0f), LightGizmoColor, right, up);
+    void Gizmos::AddDirectionalLightDirection(const LightComponent& light, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const
+    {
+        const TransformComponent* transform = light.GetOwner() != nullptr ? light.GetOwner()->GetComponent<TransformComponent>() : nullptr;
+        const Matrix44 world = transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity();
+        const Vector3 origin = GetTranslation(world);
+        const Vector3 direction = GetCameraForward(world);
+        const Vector3 end = origin + (direction * DirectionLightLineLength);
+        const Vector3 sceneViewRight = GetCameraRight(desc.sceneViewCameraLocalToWorld);
+        const Vector3 arrowBase = end - (direction * DirectionLightArrowLength);
+
+        AddLine(drawList, origin, end, DirectionalLightColor);
+        AddLine(drawList, end, arrowBase + (sceneViewRight * DirectionLightArrowWidth), DirectionalLightColor);
+        AddLine(drawList, end, arrowBase - (sceneViewRight * DirectionLightArrowWidth), DirectionalLightColor);
     }
 } // namespace ve::editor

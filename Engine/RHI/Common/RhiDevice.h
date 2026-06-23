@@ -54,6 +54,14 @@ namespace ve::rhi
         }
     };
 
+    /// Owns a backend sampler state used with sampled textures.
+    class RhiSampler : public RhiObject
+    {
+    public:
+        /// Returns the filter mode used by this sampler.
+        [[nodiscard]] virtual RhiSamplerFilter GetFilter() const noexcept = 0;
+    };
+
     /// Represents a graphics queue synchronization point.
     class RhiFence : public RhiObject
     {
@@ -138,6 +146,12 @@ namespace ve::rhi
         /// Binds a uniform/constant buffer to one shader stage.
         virtual void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) = 0;
 
+        /// Binds a sampled texture to one shader stage.
+        virtual void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) = 0;
+
+        /// Binds a sampler state to one shader stage.
+        virtual void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) = 0;
+
         /// Issues a non-indexed draw call.
         virtual void Draw(uint32_t vertexCount, uint32_t firstVertex) = 0;
 
@@ -163,6 +177,9 @@ namespace ve::rhi
 
         /// Creates a texture resource and optionally uploads initial data.
         [[nodiscard]] virtual std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) = 0;
+
+        /// Creates a sampler state.
+        [[nodiscard]] virtual std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) = 0;
 
         /// Compiles or loads a shader module for this backend.
         [[nodiscard]] virtual std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) = 0;

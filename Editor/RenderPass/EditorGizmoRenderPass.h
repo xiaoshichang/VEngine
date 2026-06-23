@@ -3,7 +3,6 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Render/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 
@@ -18,9 +17,17 @@ namespace ve
         Float32 color[3] = {};
     };
 
+    struct EditorGizmoIconVertex
+    {
+        Float32 position[3] = {};
+        Float32 uv[3] = {};
+        Float32 color[3] = {};
+    };
+
     struct EditorGizmoDrawList
     {
-        std::vector<EditorGizmoVertex> vertices;
+        std::vector<EditorGizmoVertex> lines;
+        std::vector<EditorGizmoIconVertex> icons;
     };
 
     struct EditorGizmoRenderPassInitParam
@@ -40,14 +47,20 @@ namespace ve
 
     private:
         void EnsurePipeline(RenderPassContext& context);
+        void EnsureIconResources(RenderPassContext& context);
         void UploadFrameResources(RenderPassContext& context);
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
         EditorGizmoRenderPassInitParam initParam_;
-        std::unique_ptr<rhi::RhiBuffer> vertexBuffer_;
+        std::unique_ptr<rhi::RhiBuffer> lineVertexBuffer_;
+        std::unique_ptr<rhi::RhiBuffer> iconVertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
-        std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
-        SizeT uploadedVertexCount_ = 0;
+        std::unique_ptr<rhi::RhiTexture> iconAtlasTexture_;
+        std::unique_ptr<rhi::RhiSampler> iconSampler_;
+        std::unique_ptr<rhi::RhiPipelineState> linePipelineState_;
+        std::unique_ptr<rhi::RhiPipelineState> iconPipelineState_;
+        SizeT uploadedLineVertexCount_ = 0;
+        SizeT uploadedIconVertexCount_ = 0;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
     };
 } // namespace ve

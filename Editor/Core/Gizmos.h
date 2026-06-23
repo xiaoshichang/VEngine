@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Vector3.h"
+#include "Editor/Core/EditorBuiltinResources.h"
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 
 #include <memory>
@@ -40,9 +41,11 @@ namespace ve::editor
 
     private:
         void CollectGameObjectGizmos(const GameObject& gameObject, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const;
+        void AddIcon(const Matrix44& world, const GizmoBuildDesc& desc, BuiltinGizmoIcon icon, const Vector3& color, EditorGizmoDrawList& drawList) const;
         void AddCameraIcon(const CameraComponent& camera, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const;
-        void AddCameraFrustum(const CameraComponent& camera, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const;
+        void AddCameraFrustum(const CameraComponent& camera, EditorGizmoDrawList& drawList) const;
         void AddLightIcon(const LightComponent& light, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const;
+        void AddDirectionalLightDirection(const LightComponent& light, const GizmoBuildDesc& desc, EditorGizmoDrawList& drawList) const;
 
         GizmoComponentVisibility componentVisibility_;
     };

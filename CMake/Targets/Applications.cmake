@@ -34,6 +34,8 @@ function(ve_add_windows_editor)
             Editor/Core/EditorAssetDatabase.h
             Editor/Core/EditorBuildPackageDialog.cpp
             Editor/Core/EditorBuildPackageDialog.h
+            Editor/Core/EditorBuiltinResources.cpp
+            Editor/Core/EditorBuiltinResources.h
             Editor/Core/Editor.cpp
             Editor/Core/Editor.h
             Editor/Core/EditorInput.cpp

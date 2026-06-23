@@ -72,9 +72,55 @@ namespace ve::rhi
         {
             switch (topology)
             {
+            case RhiPrimitiveTopology::LineList:
+                return MTLPrimitiveTypeLine;
             case RhiPrimitiveTopology::TriangleList:
             default:
                 return MTLPrimitiveTypeTriangle;
+            }
+        }
+
+        MTLSamplerMinMagFilter ToMetalMinMagFilter(RhiSamplerFilter filter)
+        {
+            switch (filter)
+            {
+            case RhiSamplerFilter::Point:
+                return MTLSamplerMinMagFilterNearest;
+            case RhiSamplerFilter::Bilinear:
+            case RhiSamplerFilter::Trilinear:
+            case RhiSamplerFilter::Anisotropic:
+            default:
+                return MTLSamplerMinMagFilterLinear;
+            }
+        }
+
+        MTLSamplerMipFilter ToMetalMipFilter(RhiSamplerFilter filter)
+        {
+            switch (filter)
+            {
+            case RhiSamplerFilter::Trilinear:
+            case RhiSamplerFilter::Anisotropic:
+                return MTLSamplerMipFilterLinear;
+            case RhiSamplerFilter::Point:
+            case RhiSamplerFilter::Bilinear:
+            default:
+                return MTLSamplerMipFilterNearest;
+            }
+        }
+
+        MTLSamplerAddressMode ToMetalAddressMode(RhiSamplerAddressMode mode)
+        {
+            switch (mode)
+            {
+            case RhiSamplerAddressMode::Mirror:
+                return MTLSamplerAddressModeMirrorRepeat;
+            case RhiSamplerAddressMode::Clamp:
+                return MTLSamplerAddressModeClampToEdge;
+            case RhiSamplerAddressMode::Border:
+                return MTLSamplerAddressModeClampToEdge;
+            case RhiSamplerAddressMode::Wrap:
+            default:
+                return MTLSamplerAddressModeRepeat;
             }
         }
 
@@ -315,6 +361,30 @@ namespace ve::rhi
             RhiTextureDesc desc_ = {};
         };
 
+        class MetalSampler final : public RhiSampler
+        {
+        public:
+            MetalSampler(id<MTLSamplerState> samplerState, RhiSamplerDesc desc)
+                : samplerState_(samplerState)
+                , desc_(desc)
+            {
+            }
+
+            [[nodiscard]] RhiSamplerFilter GetFilter() const noexcept override
+            {
+                return desc_.filter;
+            }
+
+            [[nodiscard]] id<MTLSamplerState> GetNativeSamplerState() const noexcept
+            {
+                return samplerState_;
+            }
+
+        private:
+            id<MTLSamplerState> samplerState_ = nil;
+            RhiSamplerDesc desc_ = {};
+        };
+
         class MetalFence final : public RhiFence
         {
         public:
@@ -539,6 +609,7 @@ namespace ve::rhi
                 [renderCommandEncoder_ setFrontFacingWinding:rasterizerState.frontCounterClockwise ? MTLWindingCounterClockwise : MTLWindingClockwise];
                 [renderCommandEncoder_ setCullMode:ToMetalCullMode(rasterizerState.cullMode)];
                 [renderCommandEncoder_ setTriangleFillMode:rasterizerState.fillMode == RhiFillMode::Wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
+                primitiveType_ = ToMetalPrimitiveType(metalPipelineState.GetTopology());
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -592,16 +663,44 @@ namespace ve::rhi
                 }
             }
 
+            void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
+            {
+                const auto& metalTexture = static_cast<const MetalTexture&>(texture);
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    [renderCommandEncoder_ setVertexTexture:metalTexture.GetNativeTexture() atIndex:slot];
+                    break;
+                case RhiShaderStage::Fragment:
+                    [renderCommandEncoder_ setFragmentTexture:metalTexture.GetNativeTexture() atIndex:slot];
+                    break;
+                }
+            }
+
+            void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) override
+            {
+                const auto& metalSampler = static_cast<const MetalSampler&>(sampler);
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    [renderCommandEncoder_ setVertexSamplerState:metalSampler.GetNativeSamplerState() atIndex:slot];
+                    break;
+                case RhiShaderStage::Fragment:
+                    [renderCommandEncoder_ setFragmentSamplerState:metalSampler.GetNativeSamplerState() atIndex:slot];
+                    break;
+                }
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
-                [renderCommandEncoder_ drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:firstVertex vertexCount:vertexCount];
+                [renderCommandEncoder_ drawPrimitives:primitiveType_ vertexStart:firstVertex vertexCount:vertexCount];
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
             {
                 (void)vertexOffset;
                 const NSUInteger indexSize = indexType_ == MTLIndexTypeUInt16 ? sizeof(uint16_t) : sizeof(uint32_t);
-                [renderCommandEncoder_ drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                [renderCommandEncoder_ drawIndexedPrimitives:primitiveType_
                                                   indexCount:indexCount
                                                    indexType:indexType_
                                                  indexBuffer:indexBuffer_
@@ -637,6 +736,7 @@ namespace ve::rhi
             id<MTLBuffer> indexBuffer_ = nil;
             uint64_t indexBufferOffset_ = 0;
             MTLIndexType indexType_ = MTLIndexTypeUInt32;
+            MTLPrimitiveType primitiveType_ = MTLPrimitiveTypeTriangle;
         };
 
         class MetalDevice final : public RhiDevice
@@ -739,7 +839,7 @@ namespace ve::rhi
                 textureDescriptor.depth = desc.depth;
                 textureDescriptor.mipmapLevelCount = desc.mipLevelCount;
                 textureDescriptor.usage = ToMetalTextureUsage(desc.usage);
-                textureDescriptor.storageMode = MTLStorageModePrivate;
+                textureDescriptor.storageMode = desc.initialData != nullptr ? MTLStorageModeShared : MTLStorageModePrivate;
 
                 id<MTLTexture> texture = [device_ newTextureWithDescriptor:textureDescriptor];
                 [textureDescriptor release];
@@ -752,11 +852,42 @@ namespace ve::rhi
 
                 if (desc.initialData != nullptr && desc.initialDataSize > 0)
                 {
-                    SetLastError("Metal texture initial data upload is not implemented in the minimum RHI path.");
-                    return nullptr;
+                    if (desc.mipLevelCount != 1 || desc.initialDataRowPitch == 0)
+                    {
+                        SetLastError("Metal texture initial upload requires one mip level and a row pitch.");
+                        return nullptr;
+                    }
+
+                    MTLRegion region = MTLRegionMake2D(0, 0, desc.width, desc.height);
+                    [texture replaceRegion:region mipmapLevel:0 withBytes:desc.initialData bytesPerRow:desc.initialDataRowPitch];
                 }
 
                 return std::make_unique<MetalTexture>(texture, desc);
+            }
+
+            [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override
+            {
+                MTLSamplerDescriptor* samplerDescriptor = [[MTLSamplerDescriptor alloc] init];
+                samplerDescriptor.minFilter = ToMetalMinMagFilter(desc.filter);
+                samplerDescriptor.magFilter = ToMetalMinMagFilter(desc.filter);
+                samplerDescriptor.mipFilter = ToMetalMipFilter(desc.filter);
+                samplerDescriptor.sAddressMode = ToMetalAddressMode(desc.addressU);
+                samplerDescriptor.tAddressMode = ToMetalAddressMode(desc.addressV);
+                samplerDescriptor.rAddressMode = ToMetalAddressMode(desc.addressW);
+                samplerDescriptor.lodMinClamp = desc.minLod;
+                samplerDescriptor.lodMaxClamp = desc.maxLod;
+                samplerDescriptor.maxAnisotropy = desc.maxAnisotropy;
+
+                id<MTLSamplerState> samplerState = [device_ newSamplerStateWithDescriptor:samplerDescriptor];
+                [samplerDescriptor release];
+
+                if (samplerState == nil)
+                {
+                    SetLastError("MTLDevice newSamplerStateWithDescriptor failed.");
+                    return nullptr;
+                }
+
+                return std::make_unique<MetalSampler>(samplerState, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
