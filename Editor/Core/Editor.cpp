@@ -271,7 +271,7 @@ namespace ve::editor
         }
 
         views.sceneViewTexture = projectEditingView_->GetSceneViewTexture();
-        views.sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraDesc());
+        views.sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraInitParam());
         views.sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
         views.sceneViewGridEnabled = projectEditingView_->IsSceneViewGridEnabled();
         views.sceneViewGridOpacity = projectEditingView_->GetSceneViewGridOpacity();

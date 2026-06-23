@@ -54,10 +54,11 @@ namespace ve
         friend class GameObject;
         friend class Scene;
 
-        [[nodiscard]] RTCameraDesc BuildCameraDesc() const;
-        [[nodiscard]] bool IsCameraTransformDirty() const noexcept;
-        void MarkCameraTransformDirty() noexcept;
-        void ClearCameraTransformDirty() noexcept;
+        [[nodiscard]] RTCameraInitParam BuildCameraInitParam() const;
+        [[nodiscard]] RTCameraUpdateParam BuildCameraUpdateParam() const;
+        [[nodiscard]] bool IsCameraDirty() const noexcept;
+        void MarkCameraDirty() noexcept;
+        void ClearCameraDirty() noexcept;
         void UnregisterTransformChangedCallback() noexcept;
         void RegisterCameraToRenderThread();
         void UnregisterCameraFromRenderThread() noexcept;
@@ -72,7 +73,7 @@ namespace ve
         Float32 nearClipPlane_ = 0.1f;
         Float32 farClipPlane_ = 1000.0f;
         rhi::RhiColor clearColor_{0.05f, 0.07f, 0.10f, 1.0f};
-        bool cameraTransformDirty_ = true;
+        bool cameraDirty_ = true;
         bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;
         std::shared_ptr<RTCamera> rtCamera_;

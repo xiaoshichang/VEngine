@@ -29,11 +29,11 @@ namespace ve
 
     LightComponent::LightComponent(Scene& scene, GameObject& owner)
         : Component(scene, owner)
-        , rtLight_(std::make_shared<RTLight>(BuildLightDesc()))
+        , rtLight_(std::make_shared<RTLight>(BuildLightInitParam()))
     {
         TransformComponent* transform = owner.GetComponent<TransformComponent>();
         VE_ASSERT(transform != nullptr);
-        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkLightTransformDirty(); });
+        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkLightDirty(); });
     }
 
     LightComponent::~LightComponent()
@@ -50,7 +50,7 @@ namespace ve
     void LightComponent::SetLightType(LightType type) noexcept
     {
         type_ = type;
-        SubmitLightUpdateToRenderThread();
+        MarkLightDirty();
     }
 
     const Vector3& LightComponent::GetColor() const noexcept
@@ -61,7 +61,7 @@ namespace ve
     void LightComponent::SetColor(const Vector3& color) noexcept
     {
         color_ = color;
-        SubmitLightUpdateToRenderThread();
+        MarkLightDirty();
     }
 
     Float32 LightComponent::GetIntensity() const noexcept
@@ -72,7 +72,7 @@ namespace ve
     void LightComponent::SetIntensity(Float32 intensity) noexcept
     {
         intensity_ = intensity;
-        SubmitLightUpdateToRenderThread();
+        MarkLightDirty();
     }
 
     Float32 LightComponent::GetRange() const noexcept
@@ -83,7 +83,7 @@ namespace ve
     void LightComponent::SetRange(Float32 range) noexcept
     {
         range_ = range;
-        SubmitLightUpdateToRenderThread();
+        MarkLightDirty();
     }
 
     Float32 LightComponent::GetInnerConeAngleRadians() const noexcept
@@ -94,7 +94,7 @@ namespace ve
     void LightComponent::SetInnerConeAngleRadians(Float32 innerConeAngleRadians) noexcept
     {
         innerConeAngleRadians_ = innerConeAngleRadians;
-        SubmitLightUpdateToRenderThread();
+        MarkLightDirty();
     }
 
     Float32 LightComponent::GetOuterConeAngleRadians() const noexcept
@@ -105,7 +105,7 @@ namespace ve
     void LightComponent::SetOuterConeAngleRadians(Float32 outerConeAngleRadians) noexcept
     {
         outerConeAngleRadians_ = outerConeAngleRadians;
-        SubmitLightUpdateToRenderThread();
+        MarkLightDirty();
     }
 
     bool LightComponent::CastShadows() const noexcept
@@ -116,7 +116,7 @@ namespace ve
     void LightComponent::SetCastShadows(bool castShadows) noexcept
     {
         castShadows_ = castShadows;
-        SubmitLightUpdateToRenderThread();
+        MarkLightDirty();
     }
 
     std::shared_ptr<RTLight> LightComponent::GetRTLight() noexcept
@@ -129,12 +129,12 @@ namespace ve
         return rtLight_;
     }
 
-    RTLightDesc LightComponent::BuildLightDesc() const
+    RTLightInitParam LightComponent::BuildLightInitParam() const
     {
         const GameObject* owner = GetOwner();
         const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
 
-        return RTLightDesc{
+        return RTLightInitParam{
             ToRTLightType(type_),
             color_,
             GetDirectionFromTransform(transform),
@@ -147,19 +147,38 @@ namespace ve
         };
     }
 
-    bool LightComponent::IsLightTransformDirty() const noexcept
+    RTLightUpdateParam LightComponent::BuildLightUpdateParam() const
     {
-        return lightTransformDirty_;
+        const GameObject* owner = GetOwner();
+        const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
+
+        return RTLightUpdateParam{
+            RTLightDirtyFlags::All,
+            ToRTLightType(type_),
+            color_,
+            GetDirectionFromTransform(transform),
+            intensity_,
+            range_,
+            innerConeAngleRadians_,
+            outerConeAngleRadians_,
+            castShadows_,
+            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+        };
     }
 
-    void LightComponent::MarkLightTransformDirty() noexcept
+    bool LightComponent::IsLightDirty() const noexcept
     {
-        lightTransformDirty_ = true;
+        return lightDirty_;
     }
 
-    void LightComponent::ClearLightTransformDirty() noexcept
+    void LightComponent::MarkLightDirty() noexcept
     {
-        lightTransformDirty_ = false;
+        lightDirty_ = true;
+    }
+
+    void LightComponent::ClearLightDirty() noexcept
+    {
+        lightDirty_ = false;
     }
 
     void LightComponent::UnregisterTransformChangedCallback() noexcept
@@ -189,9 +208,9 @@ namespace ve
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
         scene->RegisterLight(rtLight_);
-        scene->UpdateLight(rtLight_, BuildLightDesc());
+        scene->UpdateLight(rtLight_, BuildLightUpdateParam());
         renderThreadRegistered_ = true;
-        ClearLightTransformDirty();
+        ClearLightDirty();
     }
 
     void LightComponent::UnregisterLightFromRenderThread() noexcept
@@ -209,21 +228,20 @@ namespace ve
 
     void LightComponent::SubmitLightUpdateToRenderThread()
     {
-        if (!IsEnabled() || !renderThreadRegistered_)
+        if (!IsLightDirty() || !IsEnabled() || !renderThreadRegistered_)
         {
             return;
         }
 
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
-        scene->UpdateLight(rtLight_, BuildLightDesc());
-        ClearLightTransformDirty();
+        scene->UpdateLight(rtLight_, BuildLightUpdateParam());
+        ClearLightDirty();
     }
 
     void LightComponent::SubmitLightTransformUpdateToRenderThread()
     {
         SubmitLightUpdateToRenderThread();
-        ClearLightTransformDirty();
     }
 
     void LightComponent::SetEnabled(bool enabled) noexcept

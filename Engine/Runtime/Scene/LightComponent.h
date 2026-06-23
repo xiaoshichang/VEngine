@@ -53,10 +53,11 @@ namespace ve
         friend class GameObject;
         friend class Scene;
 
-        [[nodiscard]] RTLightDesc BuildLightDesc() const;
-        [[nodiscard]] bool IsLightTransformDirty() const noexcept;
-        void MarkLightTransformDirty() noexcept;
-        void ClearLightTransformDirty() noexcept;
+        [[nodiscard]] RTLightInitParam BuildLightInitParam() const;
+        [[nodiscard]] RTLightUpdateParam BuildLightUpdateParam() const;
+        [[nodiscard]] bool IsLightDirty() const noexcept;
+        void MarkLightDirty() noexcept;
+        void ClearLightDirty() noexcept;
         void UnregisterTransformChangedCallback() noexcept;
         void RegisterLightToRenderThread();
         void UnregisterLightFromRenderThread() noexcept;
@@ -70,7 +71,7 @@ namespace ve
         Float32 innerConeAngleRadians_ = 0.0f;
         Float32 outerConeAngleRadians_ = 0.0f;
         bool castShadows_ = false;
-        bool lightTransformDirty_ = true;
+        bool lightDirty_ = true;
         bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;
         std::shared_ptr<RTLight> rtLight_;

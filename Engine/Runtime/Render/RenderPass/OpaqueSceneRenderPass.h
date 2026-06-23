@@ -10,7 +10,7 @@
 
 namespace ve
 {
-    struct RTRenderItemDesc;
+    class RTRenderItem;
     class RTScene;
     class RTShaderResource;
 
@@ -32,7 +32,7 @@ namespace ve
     private:
         void EnsurePipeline(RenderPassContext& context);
         void BindLightUniform(RenderPassContext& context, const RTScene& scene);
-        [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc);
+        [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
         OpaqueSceneRenderPassInitParam initParam_;

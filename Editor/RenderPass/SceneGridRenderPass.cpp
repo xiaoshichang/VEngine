@@ -137,12 +137,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return inverse;
         }
 
-        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCameraDesc& cameraDesc) noexcept
+        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCamera& camera) noexcept
         {
-            const Float32 nearClip = std::max(cameraDesc.nearClipPlane, 0.001f);
-            const Float32 farClip = std::max(cameraDesc.farClipPlane, nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(cameraDesc.aspectRatio, 0.001f);
-            const Float32 fieldOfView = std::max(cameraDesc.verticalFieldOfViewRadians, 0.001f);
+            const Float32 nearClip = std::max(camera.GetNearClipPlane(), 0.001f);
+            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
+            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
+            const Float32 fieldOfView = std::max(camera.GetVerticalFieldOfViewRadians(), 0.001f);
             const Float32 yScale = 1.0f / std::tan(fieldOfView * 0.5f);
             const Float32 xScale = yScale / aspectRatio;
 
@@ -155,12 +155,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return projection;
         }
 
-        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCameraDesc& cameraDesc) noexcept
+        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCamera& camera) noexcept
         {
-            const Float32 nearClip = cameraDesc.nearClipPlane;
-            const Float32 farClip = std::max(cameraDesc.farClipPlane, nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(cameraDesc.aspectRatio, 0.001f);
-            const Float32 height = std::max(cameraDesc.orthographicSize, 0.001f);
+            const Float32 nearClip = camera.GetNearClipPlane();
+            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
+            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
+            const Float32 height = std::max(camera.GetOrthographicSize(), 0.001f);
             const Float32 width = height * aspectRatio;
 
             Matrix44 projection = Matrix44::Identity();
@@ -171,10 +171,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
             return projection;
         }
 
-        [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCameraDesc& cameraDesc) noexcept
+        [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCamera& camera) noexcept
         {
-            return cameraDesc.projectionMode == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(cameraDesc)
-                                                                                     : BuildPerspectiveProjection(cameraDesc);
+            return camera.GetProjectionMode() == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(camera)
+                                                                                     : BuildPerspectiveProjection(camera);
         }
 
         [[nodiscard]] Matrix44 BuildViewProjectionMatrix(const std::shared_ptr<RTCamera>& camera) noexcept
@@ -184,8 +184,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
                 return Matrix44::Identity();
             }
 
-            const RTCameraDesc& cameraDesc = camera->GetDesc();
-            return BuildProjectionMatrix(cameraDesc) * BuildRigidInverse(cameraDesc.localToWorld);
+            return BuildProjectionMatrix(*camera) * BuildRigidInverse(camera->GetLocalToWorld());
         }
 
         [[nodiscard]] SceneGridUniformData BuildUniformData(const std::shared_ptr<RTCamera>& camera, const SceneGridRenderPassInitParam& initParam) noexcept

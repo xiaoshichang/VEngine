@@ -43,10 +43,13 @@ namespace ve
         friend class GameObject;
         friend class Scene;
 
-        [[nodiscard]] RTRenderItemDesc BuildRenderItemDesc() const;
-        [[nodiscard]] bool IsRenderItemTransformDirty() const noexcept;
-        void MarkRenderItemTransformDirty() noexcept;
-        void ClearRenderItemTransformDirty() noexcept;
+        [[nodiscard]] RTRenderItemInitParam BuildRenderItemInitParam() const;
+        [[nodiscard]] RTRenderItemUpdateParam BuildRenderItemUpdateParam() const;
+        void BuildRenderItem();
+        [[nodiscard]] bool IsRenderItemDirty() const noexcept;
+        void MarkRenderItemDirty() noexcept;
+        void ClearRenderItemDirty() noexcept;
+        void RegisterTransformChangedCallback() noexcept;
         void UnregisterTransformChangedCallback() noexcept;
         void RegisterRenderItemToRenderThread();
         void UnregisterRenderItemFromRenderThread() noexcept;
@@ -57,7 +60,7 @@ namespace ve
         AssetRef<MaterialResource> material_;
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
-        bool renderItemTransformDirty_ = true;
+        bool renderItemDirty_ = true;
         bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;
         std::shared_ptr<RTRenderItem> rtRenderItem_;

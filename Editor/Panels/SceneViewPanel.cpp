@@ -94,14 +94,14 @@ namespace ve::editor
         : sceneViewTexture_(nullptr)
         , sceneViewCamera_(nullptr)
     {
-        sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraDesc());
+        sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
     }
 
     void SceneViewPanel::Init(Editor& editor)
     {
         if (sceneViewCamera_ == nullptr)
         {
-            sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraDesc());
+            sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
         }
 
         if (sceneViewTexture_ == nullptr)
@@ -133,9 +133,9 @@ namespace ve::editor
         return *sceneViewTexture_;
     }
 
-    RTCameraDesc SceneViewPanel::GetSceneViewCameraDesc() const noexcept
+    RTCameraInitParam SceneViewPanel::GetSceneViewCameraInitParam() const noexcept
     {
-        return BuildCameraDesc();
+        return BuildCameraInitParam();
     }
 
     rhi::RhiFillMode SceneViewPanel::GetFillMode() const noexcept
@@ -520,7 +520,7 @@ namespace ve::editor
     {
         if (sceneViewCamera_ != nullptr)
         {
-            sceneViewCamera_->SetDesc(BuildCameraDesc());
+            sceneViewCamera_->ApplyUpdateParam(BuildCameraUpdateParam());
         }
     }
 
@@ -533,19 +533,35 @@ namespace ve::editor
         renderTargetExtent_ = extent;
     }
 
-    RTCameraDesc SceneViewPanel::BuildCameraDesc() const noexcept
+    RTCameraInitParam SceneViewPanel::BuildCameraInitParam() const noexcept
     {
-        RTCameraDesc desc = {};
-        desc.primary = false;
-        desc.projectionMode = camera_.projectionMode;
-        desc.verticalFieldOfViewRadians = camera_.verticalFieldOfViewRadians;
-        desc.orthographicSize = camera_.orthographicSize;
-        desc.aspectRatio = (std::max)(camera_.aspectRatio, 0.001f);
-        desc.nearClipPlane = camera_.nearClipPlane;
-        desc.farClipPlane = (std::max)(camera_.farClipPlane, camera_.nearClipPlane + 0.001f);
-        desc.clearColor = camera_.clearColor;
-        desc.localToWorld = BuildCameraLocalToWorld();
-        return desc;
+        RTCameraInitParam initParam = {};
+        initParam.primary = false;
+        initParam.projectionMode = camera_.projectionMode;
+        initParam.verticalFieldOfViewRadians = camera_.verticalFieldOfViewRadians;
+        initParam.orthographicSize = camera_.orthographicSize;
+        initParam.aspectRatio = (std::max)(camera_.aspectRatio, 0.001f);
+        initParam.nearClipPlane = camera_.nearClipPlane;
+        initParam.farClipPlane = (std::max)(camera_.farClipPlane, camera_.nearClipPlane + 0.001f);
+        initParam.clearColor = camera_.clearColor;
+        initParam.localToWorld = BuildCameraLocalToWorld();
+        return initParam;
+    }
+
+    RTCameraUpdateParam SceneViewPanel::BuildCameraUpdateParam() const noexcept
+    {
+        RTCameraUpdateParam updateParam = {};
+        updateParam.dirtyFlags = RTCameraDirtyFlags::All;
+        updateParam.primary = false;
+        updateParam.projectionMode = camera_.projectionMode;
+        updateParam.verticalFieldOfViewRadians = camera_.verticalFieldOfViewRadians;
+        updateParam.orthographicSize = camera_.orthographicSize;
+        updateParam.aspectRatio = (std::max)(camera_.aspectRatio, 0.001f);
+        updateParam.nearClipPlane = camera_.nearClipPlane;
+        updateParam.farClipPlane = (std::max)(camera_.farClipPlane, camera_.nearClipPlane + 0.001f);
+        updateParam.clearColor = camera_.clearColor;
+        updateParam.localToWorld = BuildCameraLocalToWorld();
+        return updateParam;
     }
 
     Matrix44 SceneViewPanel::BuildCameraLocalToWorld() const noexcept

@@ -10,14 +10,10 @@ namespace ve
 {
     MeshRenderComponent::MeshRenderComponent(Scene& scene, GameObject& owner)
         : Component(scene, owner)
-        , rtRenderItem_(std::make_shared<RTRenderItem>(BuildRenderItemDesc()))
+        , rtRenderItem_(nullptr)
     {
-        TransformComponent* transform = owner.GetComponent<TransformComponent>();
-        VE_ASSERT(transform != nullptr);
-        if (transform != nullptr)
-        {
-            transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkRenderItemTransformDirty(); });
-        }
+        BuildRenderItem();
+        RegisterTransformChangedCallback();
     }
 
     MeshRenderComponent::~MeshRenderComponent()
@@ -34,7 +30,7 @@ namespace ve
     void MeshRenderComponent::SetMesh(AssetRef<MeshResource> mesh)
     {
         mesh_ = std::move(mesh);
-        SubmitRenderItemUpdateToRenderThread();
+        MarkRenderItemDirty();
     }
 
     const AssetID& MeshRenderComponent::GetMeshAssetID() const noexcept
@@ -45,7 +41,7 @@ namespace ve
     void MeshRenderComponent::SetMeshAssetID(AssetID meshAssetID)
     {
         mesh_.SetAssetID(std::move(meshAssetID));
-        SubmitRenderItemUpdateToRenderThread();
+        MarkRenderItemDirty();
     }
 
     const AssetRef<MaterialResource>& MeshRenderComponent::GetMaterial() const noexcept
@@ -56,7 +52,7 @@ namespace ve
     void MeshRenderComponent::SetMaterial(AssetRef<MaterialResource> material)
     {
         material_ = std::move(material);
-        SubmitRenderItemUpdateToRenderThread();
+        MarkRenderItemDirty();
     }
 
     const AssetID& MeshRenderComponent::GetMaterialAssetID() const noexcept
@@ -67,7 +63,7 @@ namespace ve
     void MeshRenderComponent::SetMaterialAssetID(AssetID materialAssetID)
     {
         material_.SetAssetID(std::move(materialAssetID));
-        SubmitRenderItemUpdateToRenderThread();
+        MarkRenderItemDirty();
     }
 
     const Vector3& MeshRenderComponent::GetBoundsCenter() const noexcept
@@ -78,7 +74,7 @@ namespace ve
     void MeshRenderComponent::SetBoundsCenter(const Vector3& boundsCenter) noexcept
     {
         boundsCenter_ = boundsCenter;
-        SubmitRenderItemUpdateToRenderThread();
+        MarkRenderItemDirty();
     }
 
     const Vector3& MeshRenderComponent::GetBoundsExtents() const noexcept
@@ -89,7 +85,7 @@ namespace ve
     void MeshRenderComponent::SetBoundsExtents(const Vector3& boundsExtents) noexcept
     {
         boundsExtents_ = boundsExtents;
-        SubmitRenderItemUpdateToRenderThread();
+        MarkRenderItemDirty();
     }
 
     std::shared_ptr<RTRenderItem> MeshRenderComponent::GetRTRenderItem() noexcept
@@ -102,20 +98,43 @@ namespace ve
         return rtRenderItem_;
     }
 
-    RTRenderItemDesc MeshRenderComponent::BuildRenderItemDesc() const
+    RTRenderItemInitParam MeshRenderComponent::BuildRenderItemInitParam() const
     {
         const GameObject* owner = GetOwner();
         const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
         const MeshResource* meshResource = mesh_.Get();
         const MaterialResource* materialResource = material_.Get();
 
-        return RTRenderItemDesc{
+        return RTRenderItemInitParam{
             meshResource != nullptr ? meshResource->GetRTMeshResource() : nullptr,
             materialResource != nullptr ? materialResource->GetRTMaterialResource() : nullptr,
             boundsCenter_,
             boundsExtents_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
         };
+    }
+
+    RTRenderItemUpdateParam MeshRenderComponent::BuildRenderItemUpdateParam() const
+    {
+        const GameObject* owner = GetOwner();
+        const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
+        const MeshResource* meshResource = mesh_.Get();
+        const MaterialResource* materialResource = material_.Get();
+
+        return RTRenderItemUpdateParam{
+            RTRenderItemDirtyFlags::All,
+            meshResource != nullptr ? meshResource->GetRTMeshResource() : nullptr,
+            materialResource != nullptr ? materialResource->GetRTMaterialResource() : nullptr,
+            boundsCenter_,
+            boundsExtents_,
+            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+        };
+    }
+
+    void MeshRenderComponent::BuildRenderItem()
+    {
+        auto initParam = BuildRenderItemInitParam();
+        rtRenderItem_ = std::make_shared<RTRenderItem>(std::move(initParam));
     }
 
     void MeshRenderComponent::RegisterRenderItemToRenderThread()
@@ -128,9 +147,9 @@ namespace ve
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
         scene->RegisterRenderItem(rtRenderItem_);
-        scene->UpdateRenderItem(rtRenderItem_, BuildRenderItemDesc());
+        scene->UpdateRenderItem(rtRenderItem_, BuildRenderItemUpdateParam());
         renderThreadRegistered_ = true;
-        ClearRenderItemTransformDirty();
+        ClearRenderItemDirty();
     }
 
     void MeshRenderComponent::UnregisterRenderItemFromRenderThread() noexcept
@@ -148,36 +167,45 @@ namespace ve
 
     void MeshRenderComponent::SubmitRenderItemUpdateToRenderThread()
     {
-        if (!IsEnabled() || !renderThreadRegistered_)
+        if (!IsRenderItemDirty() || !IsEnabled() || !renderThreadRegistered_)
         {
             return;
         }
 
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
-        scene->UpdateRenderItem(rtRenderItem_, BuildRenderItemDesc());
-        ClearRenderItemTransformDirty();
+        scene->UpdateRenderItem(rtRenderItem_, BuildRenderItemUpdateParam());
+        ClearRenderItemDirty();
     }
 
     void MeshRenderComponent::SubmitRenderItemTransformUpdateToRenderThread()
     {
         SubmitRenderItemUpdateToRenderThread();
-        ClearRenderItemTransformDirty();
     }
 
-    bool MeshRenderComponent::IsRenderItemTransformDirty() const noexcept
+    bool MeshRenderComponent::IsRenderItemDirty() const noexcept
     {
-        return renderItemTransformDirty_;
+        return renderItemDirty_;
     }
 
-    void MeshRenderComponent::MarkRenderItemTransformDirty() noexcept
+    void MeshRenderComponent::MarkRenderItemDirty() noexcept
     {
-        renderItemTransformDirty_ = true;
+        renderItemDirty_ = true;
     }
 
-    void MeshRenderComponent::ClearRenderItemTransformDirty() noexcept
+    void MeshRenderComponent::ClearRenderItemDirty() noexcept
     {
-        renderItemTransformDirty_ = false;
+        renderItemDirty_ = false;
+    }
+
+    void MeshRenderComponent::RegisterTransformChangedCallback() noexcept
+    {
+        TransformComponent* transform = owner_->GetComponent<TransformComponent>();
+        VE_ASSERT(transform != nullptr);
+        if (transform != nullptr)
+        {
+            transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkRenderItemDirty(); });
+        }
     }
 
     void MeshRenderComponent::UnregisterTransformChangedCallback() noexcept

@@ -45,13 +45,13 @@ namespace ve
 
         void RegisterRenderItem(std::shared_ptr<RTRenderItem> item);
         void UnregisterRenderItem(std::shared_ptr<RTRenderItem> item) noexcept;
-        void UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemDesc desc);
+        void UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemUpdateParam updateParam);
         void RegisterCamera(std::shared_ptr<RTCamera> camera);
         void UnregisterCamera(std::shared_ptr<RTCamera> camera) noexcept;
-        void UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraDesc desc);
+        void UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraUpdateParam updateParam);
         void RegisterLight(std::shared_ptr<RTLight> light);
         void UnregisterLight(std::shared_ptr<RTLight> light) noexcept;
-        void UpdateLight(std::shared_ptr<RTLight> light, RTLightDesc desc);
+        void UpdateLight(std::shared_ptr<RTLight> light, RTLightUpdateParam updateParam);
         [[nodiscard]] Result<GameObject*> CreateRootGameObjectWithoutRenderRegistration(std::string name = {});
 
         void Update(Float32 deltaSeconds);

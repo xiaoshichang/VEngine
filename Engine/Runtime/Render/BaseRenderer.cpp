@@ -26,7 +26,7 @@ namespace ve
                     fallback = camera;
                 }
 
-                if (camera->GetDesc().primary)
+                if (camera->IsPrimary())
                 {
                     return camera;
                 }

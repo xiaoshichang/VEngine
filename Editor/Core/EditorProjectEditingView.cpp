@@ -91,9 +91,9 @@ namespace ve::editor
         return sceneViewPanel_.GetSceneViewTexture().GetRTRenderTexture();
     }
 
-    RTCameraDesc ProjectEditingView::GetSceneViewCameraDesc() const noexcept
+    RTCameraInitParam ProjectEditingView::GetSceneViewCameraInitParam() const noexcept
     {
-        return sceneViewPanel_.GetSceneViewCameraDesc();
+        return sceneViewPanel_.GetSceneViewCameraInitParam();
     }
 
     rhi::RhiFillMode ProjectEditingView::GetSceneViewFillMode() const noexcept

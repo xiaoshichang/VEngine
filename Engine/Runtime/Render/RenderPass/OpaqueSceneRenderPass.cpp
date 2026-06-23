@@ -67,12 +67,12 @@ namespace ve
             return inverse;
         }
 
-        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCameraDesc& cameraDesc) noexcept
+        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCamera& camera) noexcept
         {
-            const Float32 nearClip = std::max(cameraDesc.nearClipPlane, 0.001f);
-            const Float32 farClip = std::max(cameraDesc.farClipPlane, nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(cameraDesc.aspectRatio, 0.001f);
-            const Float32 fieldOfView = std::max(cameraDesc.verticalFieldOfViewRadians, 0.001f);
+            const Float32 nearClip = std::max(camera.GetNearClipPlane(), 0.001f);
+            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
+            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
+            const Float32 fieldOfView = std::max(camera.GetVerticalFieldOfViewRadians(), 0.001f);
             const Float32 yScale = 1.0f / std::tan(fieldOfView * 0.5f);
             const Float32 xScale = yScale / aspectRatio;
 
@@ -85,12 +85,12 @@ namespace ve
             return projection;
         }
 
-        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCameraDesc& cameraDesc) noexcept
+        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCamera& camera) noexcept
         {
-            const Float32 nearClip = cameraDesc.nearClipPlane;
-            const Float32 farClip = std::max(cameraDesc.farClipPlane, nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(cameraDesc.aspectRatio, 0.001f);
-            const Float32 height = std::max(cameraDesc.orthographicSize, 0.001f);
+            const Float32 nearClip = camera.GetNearClipPlane();
+            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
+            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
+            const Float32 height = std::max(camera.GetOrthographicSize(), 0.001f);
             const Float32 width = height * aspectRatio;
 
             Matrix44 projection = Matrix44::Identity();
@@ -101,10 +101,9 @@ namespace ve
             return projection;
         }
 
-        [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCameraDesc& cameraDesc) noexcept
+        [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCamera& camera) noexcept
         {
-            return cameraDesc.projectionMode == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(cameraDesc)
-                                                                                     : BuildPerspectiveProjection(cameraDesc);
+            return camera.GetProjectionMode() == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(camera) : BuildPerspectiveProjection(camera);
         }
 
         [[nodiscard]] Matrix44 BuildViewProjectionMatrix(const std::shared_ptr<RTCamera>& camera) noexcept
@@ -114,8 +113,7 @@ namespace ve
                 return Matrix44::Identity();
             }
 
-            const RTCameraDesc& cameraDesc = camera->GetDesc();
-            return BuildProjectionMatrix(cameraDesc) * BuildRigidInverse(cameraDesc.localToWorld);
+            return BuildProjectionMatrix(*camera) * BuildRigidInverse(camera->GetLocalToWorld());
         }
 
         [[nodiscard]] OpaqueSceneObjectUniformData BuildObjectUniformData(const Matrix44& worldViewProjection, const Matrix44& localToWorld) noexcept
@@ -135,7 +133,7 @@ namespace ve
             for (SizeT lightIndex = 0; lightIndex < scene.GetLightCount(); ++lightIndex)
             {
                 std::shared_ptr<RTLight> light = scene.GetLight(lightIndex);
-                if (light != nullptr && light->GetDesc().type == RTLightType::Directional)
+                if (light != nullptr && light->GetType() == RTLightType::Directional)
                 {
                     return light;
                 }
@@ -153,15 +151,15 @@ namespace ve
                 return data;
             }
 
-            const RTLightDesc& lightDesc = light->GetDesc();
-            const Vector3 direction = lightDesc.direction.Normalized();
+            
+            const Vector3 direction = light->GetDirection().Normalized();
             data.lightDirectionAndIntensity[0] = direction.GetX();
             data.lightDirectionAndIntensity[1] = direction.GetY();
             data.lightDirectionAndIntensity[2] = direction.GetZ();
-            data.lightDirectionAndIntensity[3] = std::max(lightDesc.intensity, 0.0f);
-            data.lightColorAndAmbient[0] = std::max(lightDesc.color.GetX(), 0.0f);
-            data.lightColorAndAmbient[1] = std::max(lightDesc.color.GetY(), 0.0f);
-            data.lightColorAndAmbient[2] = std::max(lightDesc.color.GetZ(), 0.0f);
+            data.lightDirectionAndIntensity[3] = std::max(light->GetIntensity(), 0.0f);
+            data.lightColorAndAmbient[0] = std::max(light->GetColor().GetX(), 0.0f);
+            data.lightColorAndAmbient[1] = std::max(light->GetColor().GetY(), 0.0f);
+            data.lightColorAndAmbient[2] = std::max(light->GetColor().GetZ(), 0.0f);
             data.lightColorAndAmbient[3] = 0.35f;
             return data;
         }
@@ -176,7 +174,7 @@ namespace ve
                     continue;
                 }
 
-                const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item->GetDesc().materialResource);
+                const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item->GetMaterialResource());
                 if (materialResource == nullptr)
                 {
                     continue;
@@ -200,7 +198,7 @@ namespace ve
                 return rhi::RhiColor{};
             }
 
-            return rendererData.resolvedCamera->GetDesc().clearColor;
+            return rendererData.resolvedCamera->GetClearColor();
         }
     } // namespace
 
@@ -270,16 +268,16 @@ namespace ve
                 continue;
             }
 
-            const RTRenderItemDesc& itemDesc = item->GetDesc();
-            const Matrix44 worldViewProjection = viewProjection * itemDesc.localToWorld;
-            const OpaqueSceneObjectUniformData objectUniformData = BuildObjectUniformData(worldViewProjection, itemDesc.localToWorld);
+            const Matrix44& localToWorld = item->GetLocalToWorld();
+            const Matrix44 worldViewProjection = viewProjection * localToWorld;
+            const OpaqueSceneObjectUniformData objectUniformData = BuildObjectUniformData(worldViewProjection, localToWorld);
             std::unique_ptr<rhi::RhiBuffer> objectUniformBuffer = context.device.CreateBuffer(
                 MakeUniformBufferDesc(sizeof(OpaqueSceneObjectUniformData), &objectUniformData, "OpaqueSceneObjectUniformBuffer"));
             VE_ASSERT_MESSAGE(objectUniformBuffer != nullptr, "OpaqueScenePass failed to create object uniform buffer.");
             commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *objectUniformBuffer, 0);
             frameUniformBuffers_.push_back(std::move(objectUniformBuffer));
 
-            if (!BindMaterialUniform(context, itemDesc))
+            if (!BindMaterialUniform(context, *item))
             {
                 continue;
             }
@@ -373,9 +371,9 @@ namespace ve
         frameUniformBuffers_.push_back(std::move(lightUniformBuffer));
     }
 
-    bool OpaqueSceneRenderPass::BindMaterialUniform(RenderPassContext& context, const RTRenderItemDesc& itemDesc)
+    bool OpaqueSceneRenderPass::BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item)
     {
-        const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(itemDesc.materialResource);
+        const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item.GetMaterialResource());
         if (materialResource != nullptr && materialResource->GetUniformBuffer() != nullptr)
         {
             context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *materialResource->GetUniformBuffer(), 0);

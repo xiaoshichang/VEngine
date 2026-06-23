@@ -24,11 +24,11 @@ namespace ve
 
     CameraComponent::CameraComponent(Scene& scene, GameObject& owner)
         : Component(scene, owner)
-        , rtCamera_(std::make_shared<RTCamera>(BuildCameraDesc()))
+        , rtCamera_(std::make_shared<RTCamera>(BuildCameraInitParam()))
     {
         TransformComponent* transform = owner.GetComponent<TransformComponent>();
         VE_ASSERT(transform != nullptr);
-        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkCameraTransformDirty(); });
+        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkCameraDirty(); });
     }
 
     CameraComponent::~CameraComponent()
@@ -45,7 +45,7 @@ namespace ve
     void CameraComponent::SetPrimary(bool primary) noexcept
     {
         primary_ = primary;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     CameraComponent::ProjectionMode CameraComponent::GetProjectionMode() const noexcept
@@ -56,7 +56,7 @@ namespace ve
     void CameraComponent::SetProjectionMode(ProjectionMode mode) noexcept
     {
         projectionMode_ = mode;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     Float32 CameraComponent::GetVerticalFieldOfViewRadians() const noexcept
@@ -67,7 +67,7 @@ namespace ve
     void CameraComponent::SetVerticalFieldOfViewRadians(Float32 fieldOfViewRadians) noexcept
     {
         verticalFieldOfViewRadians_ = fieldOfViewRadians;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     Float32 CameraComponent::GetOrthographicSize() const noexcept
@@ -78,7 +78,7 @@ namespace ve
     void CameraComponent::SetOrthographicSize(Float32 orthographicSize) noexcept
     {
         orthographicSize_ = orthographicSize;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     Float32 CameraComponent::GetAspectRatio() const noexcept
@@ -89,7 +89,7 @@ namespace ve
     void CameraComponent::SetAspectRatio(Float32 aspectRatio) noexcept
     {
         aspectRatio_ = aspectRatio;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     Float32 CameraComponent::GetNearClipPlane() const noexcept
@@ -100,7 +100,7 @@ namespace ve
     void CameraComponent::SetNearClipPlane(Float32 nearClipPlane) noexcept
     {
         nearClipPlane_ = nearClipPlane;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     Float32 CameraComponent::GetFarClipPlane() const noexcept
@@ -111,7 +111,7 @@ namespace ve
     void CameraComponent::SetFarClipPlane(Float32 farClipPlane) noexcept
     {
         farClipPlane_ = farClipPlane;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     const rhi::RhiColor& CameraComponent::GetClearColor() const noexcept
@@ -122,7 +122,7 @@ namespace ve
     void CameraComponent::SetClearColor(const rhi::RhiColor& clearColor) noexcept
     {
         clearColor_ = clearColor;
-        SubmitCameraUpdateToRenderThread();
+        MarkCameraDirty();
     }
 
     std::shared_ptr<RTCamera> CameraComponent::GetRTCamera() noexcept
@@ -135,12 +135,12 @@ namespace ve
         return rtCamera_;
     }
 
-    RTCameraDesc CameraComponent::BuildCameraDesc() const
+    RTCameraInitParam CameraComponent::BuildCameraInitParam() const
     {
         const GameObject* owner = GetOwner();
         const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
 
-        return RTCameraDesc{
+        return RTCameraInitParam{
             primary_,
             ToRTCameraProjectionMode(projectionMode_),
             verticalFieldOfViewRadians_,
@@ -153,19 +153,38 @@ namespace ve
         };
     }
 
-    bool CameraComponent::IsCameraTransformDirty() const noexcept
+    RTCameraUpdateParam CameraComponent::BuildCameraUpdateParam() const
     {
-        return cameraTransformDirty_;
+        const GameObject* owner = GetOwner();
+        const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
+
+        return RTCameraUpdateParam{
+            RTCameraDirtyFlags::All,
+            primary_,
+            ToRTCameraProjectionMode(projectionMode_),
+            verticalFieldOfViewRadians_,
+            orthographicSize_,
+            aspectRatio_,
+            nearClipPlane_,
+            farClipPlane_,
+            clearColor_,
+            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+        };
     }
 
-    void CameraComponent::MarkCameraTransformDirty() noexcept
+    bool CameraComponent::IsCameraDirty() const noexcept
     {
-        cameraTransformDirty_ = true;
+        return cameraDirty_;
     }
 
-    void CameraComponent::ClearCameraTransformDirty() noexcept
+    void CameraComponent::MarkCameraDirty() noexcept
     {
-        cameraTransformDirty_ = false;
+        cameraDirty_ = true;
+    }
+
+    void CameraComponent::ClearCameraDirty() noexcept
+    {
+        cameraDirty_ = false;
     }
 
     void CameraComponent::UnregisterTransformChangedCallback() noexcept
@@ -195,9 +214,9 @@ namespace ve
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
         scene->RegisterCamera(rtCamera_);
-        scene->UpdateCamera(rtCamera_, BuildCameraDesc());
+        scene->UpdateCamera(rtCamera_, BuildCameraUpdateParam());
         renderThreadRegistered_ = true;
-        ClearCameraTransformDirty();
+        ClearCameraDirty();
     }
 
     void CameraComponent::UnregisterCameraFromRenderThread() noexcept
@@ -215,21 +234,20 @@ namespace ve
 
     void CameraComponent::SubmitCameraUpdateToRenderThread()
     {
-        if (!IsEnabled() || !renderThreadRegistered_)
+        if (!IsCameraDirty() || !IsEnabled() || !renderThreadRegistered_)
         {
             return;
         }
 
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
-        scene->UpdateCamera(rtCamera_, BuildCameraDesc());
-        ClearCameraTransformDirty();
+        scene->UpdateCamera(rtCamera_, BuildCameraUpdateParam());
+        ClearCameraDirty();
     }
 
     void CameraComponent::SubmitCameraTransformUpdateToRenderThread()
     {
         SubmitCameraUpdateToRenderThread();
-        ClearCameraTransformDirty();
     }
 
     void CameraComponent::SetEnabled(bool enabled) noexcept

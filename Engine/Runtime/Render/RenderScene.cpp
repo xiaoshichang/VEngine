@@ -5,54 +5,158 @@
 
 namespace ve
 {
-    RTRenderItem::RTRenderItem(RTRenderItemDesc desc)
-        : desc_(std::move(desc))
+    RTRenderItem::RTRenderItem(RTRenderItemInitParam initParam)
+        : meshResource_(std::move(initParam.meshResource))
+        , materialResource_(std::move(initParam.materialResource))
+        , boundsCenter_(initParam.boundsCenter)
+        , boundsExtents_(initParam.boundsExtents)
+        , localToWorld_(initParam.localToWorld)
     {
     }
 
-    const RTRenderItemDesc& RTRenderItem::GetDesc() const noexcept
+    void RTRenderItem::ApplyUpdateParam(RTRenderItemUpdateParam updateParam)
     {
-        return desc_;
-    }
+        if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::MeshResource))
+        {
+            meshResource_ = std::move(updateParam.meshResource);
+        }
 
-    void RTRenderItem::SetDesc(RTRenderItemDesc desc)
-    {
-        desc_ = std::move(desc);
+        if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::MaterialResource))
+        {
+            materialResource_ = std::move(updateParam.materialResource);
+        }
+
+        if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Bounds))
+        {
+            boundsCenter_ = updateParam.boundsCenter;
+            boundsExtents_ = updateParam.boundsExtents;
+        }
+
+        if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Transform))
+        {
+            localToWorld_ = updateParam.localToWorld;
+        }
     }
 
     const std::shared_ptr<RHIResource>& RTRenderItem::GetMeshResource() const noexcept
     {
-        return desc_.meshResource;
+        return meshResource_;
     }
 
     void RTRenderItem::SetMeshResource(std::shared_ptr<RHIResource> resource) noexcept
     {
-        desc_.meshResource = std::move(resource);
+        meshResource_ = std::move(resource);
     }
 
     const std::shared_ptr<RHIResource>& RTRenderItem::GetMaterialResource() const noexcept
     {
-        return desc_.materialResource;
+        return materialResource_;
     }
 
     void RTRenderItem::SetMaterialResource(std::shared_ptr<RHIResource> resource) noexcept
     {
-        desc_.materialResource = std::move(resource);
+        materialResource_ = std::move(resource);
     }
 
-    RTCamera::RTCamera(RTCameraDesc desc)
-        : desc_(std::move(desc))
+    const Vector3& RTRenderItem::GetBoundsCenter() const noexcept
+    {
+        return boundsCenter_;
+    }
+
+    const Vector3& RTRenderItem::GetBoundsExtents() const noexcept
+    {
+        return boundsExtents_;
+    }
+
+    const Matrix44& RTRenderItem::GetLocalToWorld() const noexcept
+    {
+        return localToWorld_;
+    }
+
+    RTCamera::RTCamera(RTCameraInitParam initParam)
+        : primary_(initParam.primary)
+        , projectionMode_(initParam.projectionMode)
+        , verticalFieldOfViewRadians_(initParam.verticalFieldOfViewRadians)
+        , orthographicSize_(initParam.orthographicSize)
+        , aspectRatio_(initParam.aspectRatio)
+        , nearClipPlane_(initParam.nearClipPlane)
+        , farClipPlane_(initParam.farClipPlane)
+        , clearColor_(initParam.clearColor)
+        , localToWorld_(initParam.localToWorld)
     {
     }
 
-    const RTCameraDesc& RTCamera::GetDesc() const noexcept
+    void RTCamera::ApplyUpdateParam(RTCameraUpdateParam updateParam)
     {
-        return desc_;
+        if (HasRTCameraDirtyFlag(updateParam.dirtyFlags, RTCameraDirtyFlags::Primary))
+        {
+            primary_ = updateParam.primary;
+        }
+
+        if (HasRTCameraDirtyFlag(updateParam.dirtyFlags, RTCameraDirtyFlags::Projection))
+        {
+            projectionMode_ = updateParam.projectionMode;
+            verticalFieldOfViewRadians_ = updateParam.verticalFieldOfViewRadians;
+            orthographicSize_ = updateParam.orthographicSize;
+            aspectRatio_ = updateParam.aspectRatio;
+            nearClipPlane_ = updateParam.nearClipPlane;
+            farClipPlane_ = updateParam.farClipPlane;
+        }
+
+        if (HasRTCameraDirtyFlag(updateParam.dirtyFlags, RTCameraDirtyFlags::ClearColor))
+        {
+            clearColor_ = updateParam.clearColor;
+        }
+
+        if (HasRTCameraDirtyFlag(updateParam.dirtyFlags, RTCameraDirtyFlags::Transform))
+        {
+            localToWorld_ = updateParam.localToWorld;
+        }
     }
 
-    void RTCamera::SetDesc(RTCameraDesc desc)
+    bool RTCamera::IsPrimary() const noexcept
     {
-        desc_ = std::move(desc);
+        return primary_;
+    }
+
+    RTCameraProjectionMode RTCamera::GetProjectionMode() const noexcept
+    {
+        return projectionMode_;
+    }
+
+    Float32 RTCamera::GetVerticalFieldOfViewRadians() const noexcept
+    {
+        return verticalFieldOfViewRadians_;
+    }
+
+    Float32 RTCamera::GetOrthographicSize() const noexcept
+    {
+        return orthographicSize_;
+    }
+
+    Float32 RTCamera::GetAspectRatio() const noexcept
+    {
+        return aspectRatio_;
+    }
+
+    Float32 RTCamera::GetNearClipPlane() const noexcept
+    {
+        return nearClipPlane_;
+    }
+
+    Float32 RTCamera::GetFarClipPlane() const noexcept
+    {
+        return farClipPlane_;
+    }
+
+    const rhi::RhiColor& RTCamera::GetClearColor() const noexcept
+    {
+        return clearColor_;
+    }
+
+    const Matrix44& RTCamera::GetLocalToWorld() const noexcept
+    {
+        return localToWorld_;
     }
 
     const std::shared_ptr<RHIResource>& RTCamera::GetUniformBufferResource() const noexcept
@@ -65,19 +169,102 @@ namespace ve
         uniformBufferResource_ = std::move(resource);
     }
 
-    RTLight::RTLight(RTLightDesc desc)
-        : desc_(std::move(desc))
+    RTLight::RTLight(RTLightInitParam initParam)
+        : type_(initParam.type)
+        , color_(initParam.color)
+        , direction_(initParam.direction)
+        , intensity_(initParam.intensity)
+        , range_(initParam.range)
+        , innerConeAngleRadians_(initParam.innerConeAngleRadians)
+        , outerConeAngleRadians_(initParam.outerConeAngleRadians)
+        , castShadows_(initParam.castShadows)
+        , localToWorld_(initParam.localToWorld)
     {
     }
 
-    const RTLightDesc& RTLight::GetDesc() const noexcept
+    void RTLight::ApplyUpdateParam(RTLightUpdateParam updateParam)
     {
-        return desc_;
+        if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Type))
+        {
+            type_ = updateParam.type;
+        }
+
+        if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Color))
+        {
+            color_ = updateParam.color;
+        }
+
+        if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Intensity))
+        {
+            intensity_ = updateParam.intensity;
+        }
+
+        if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Range))
+        {
+            range_ = updateParam.range;
+        }
+
+        if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Cone))
+        {
+            innerConeAngleRadians_ = updateParam.innerConeAngleRadians;
+            outerConeAngleRadians_ = updateParam.outerConeAngleRadians;
+        }
+
+        if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Shadows))
+        {
+            castShadows_ = updateParam.castShadows;
+        }
+
+        if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Transform))
+        {
+            direction_ = updateParam.direction;
+            localToWorld_ = updateParam.localToWorld;
+        }
     }
 
-    void RTLight::SetDesc(RTLightDesc desc)
+    RTLightType RTLight::GetType() const noexcept
     {
-        desc_ = std::move(desc);
+        return type_;
+    }
+
+    const Vector3& RTLight::GetColor() const noexcept
+    {
+        return color_;
+    }
+
+    const Vector3& RTLight::GetDirection() const noexcept
+    {
+        return direction_;
+    }
+
+    Float32 RTLight::GetIntensity() const noexcept
+    {
+        return intensity_;
+    }
+
+    Float32 RTLight::GetRange() const noexcept
+    {
+        return range_;
+    }
+
+    Float32 RTLight::GetInnerConeAngleRadians() const noexcept
+    {
+        return innerConeAngleRadians_;
+    }
+
+    Float32 RTLight::GetOuterConeAngleRadians() const noexcept
+    {
+        return outerConeAngleRadians_;
+    }
+
+    bool RTLight::CastShadows() const noexcept
+    {
+        return castShadows_;
+    }
+
+    const Matrix44& RTLight::GetLocalToWorld() const noexcept
+    {
+        return localToWorld_;
     }
 
     const std::shared_ptr<RHIResource>& RTLight::GetUniformBufferResource() const noexcept

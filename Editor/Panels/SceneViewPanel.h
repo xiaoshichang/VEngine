@@ -23,7 +23,7 @@ namespace ve::editor
 
         [[nodiscard]] const RenderTexture& GetSceneViewTexture() const noexcept;
         [[nodiscard]] RenderTexture& GetSceneViewTexture() noexcept;
-        [[nodiscard]] RTCameraDesc GetSceneViewCameraDesc() const noexcept;
+        [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetFillMode() const noexcept;
         [[nodiscard]] bool IsGridEnabled() const noexcept;
         [[nodiscard]] Float32 GetGridOpacity() const noexcept;
@@ -78,7 +78,8 @@ namespace ve::editor
         [[nodiscard]] bool ApplyCameraLookSmoothing(Float32 deltaSeconds) noexcept;
         void UpdateSceneViewCamera();
         void RebuildSceneViewTexture(Editor& editor, WindowExtent extent);
-        [[nodiscard]] RTCameraDesc BuildCameraDesc() const noexcept;
+        [[nodiscard]] RTCameraInitParam BuildCameraInitParam() const noexcept;
+        [[nodiscard]] RTCameraUpdateParam BuildCameraUpdateParam() const noexcept;
         [[nodiscard]] Matrix44 BuildCameraLocalToWorld() const noexcept;
         [[nodiscard]] Vector3 GetForwardDirection() const noexcept;
         [[nodiscard]] Vector3 GetRightDirection() const noexcept;
