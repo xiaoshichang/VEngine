@@ -15,8 +15,9 @@ Canonical docs:
 - Use C++20 for engine code.
 - Use CMake as the project build system.
 - Build core runtime logic as the `VEngine` static library.
-- Windows x64 outputs are `VEnginePlayer`, `VEngineEditor`, and `VEngineTests`.
-- iOS output is `VEngineIOSPlayer`; the first iOS target is an iOS Simulator demo.
+- Windows x64 application outputs are `VEnginePlayer` and `VEngineEditor`; Windows tests are registered as individual
+  CTest executables.
+- iOS outputs include `VEngineIOSPlayer` and the first iOS Simulator Metal demo target.
 - Use namespace `ve` for engine code.
 
 ## Build Commands

@@ -96,6 +96,11 @@ VE_LOG_INFO
 
 ## 3. Development Roadmap
 
+Current status: Milestones 0-2 are broadly implemented. Milestones 3-7 are partially implemented through the common
+RHI, D3D11/D3D12/Metal backend slices, RenderSystem, ShaderTool, Scene/Resource systems, Editor asset database, Editor
+viewport/panels, and Windows packaging flow. Milestones 8-9 remain future work. Milestone 10 has an early iOS player
+target and a separate Metal triangle demo, but not a complete iOS Player engine loop.
+
 ### Milestone 0: Project Skeleton
 
 - Create CMake root project.
@@ -255,21 +260,24 @@ The most important first-stage deliverable is a working engine loop that can ope
 `EngineRuntime` is the shared runtime service layer used by Player, Editor, tools, and future platform backends. It owns
 the lifecycle of long-lived engine services and provides explicit access to them without requiring global singletons.
 
-Initial services:
+Current services:
 
 - Job System.
 - IOSystem.
+- InputSystem.
 - TimeSystem.
 - SceneSystem.
 - RenderSystem.
+- ResourceSystem.
 
 Later services should connect through this layer as their modules land:
 
-- ResourceManager and asset loading.
-- Input, scripting, runtime UI, and lightweight physics.
+- Scripting.
+- Runtime UI.
+- Lightweight physics.
 
-Later RenderSystem work should attach RHI device, swapchain, render resource, and viewport state to the existing runtime
-service boundary.
+RenderSystem now owns the Render Thread and the RHI device/swapchain lifecycle through this service boundary. Future
+rendering work should continue to attach render-resource and viewport state through the same model.
 
 `Application` remains responsible for platform startup, logging setup, the main window, and the main loop. Runtime
 modules should be initialized and shut down through `EngineRuntime`, so Player and Editor share the same service

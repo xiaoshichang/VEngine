@@ -332,11 +332,12 @@ Rules:
 - `IOSystem` does not expose raw platform file handles or `std::filesystem::path`.
 - Text conversion, resource format parsing, and import work are outside IOSystem.
 
-## 12. Interaction With JobSystem And Future ResourceSystem
+## 12. Interaction With JobSystem And ResourceSystem
 
 `IOSystem` and `JobSystem` are sibling services. `IOSystem` does not directly schedule jobs in the first version.
 
-Future runtime flow:
+The current `ResourceSystem` is present, but its resource load path still performs direct synchronous `FileSystem` reads.
+The intended async loading flow remains:
 
 ```text
 ResourceSystem submits read through IOSystem.

@@ -49,8 +49,8 @@ namespace ve
     ///
     /// EngineRuntime sits below Application's platform loop and above individual runtime modules. It initializes and
     /// shuts down long-lived services in a deterministic order, and exposes references to those services without using
-    /// a global singleton. The first version owns JobSystem, IOSystem, TimeSystem, SceneSystem, and RenderSystem;
-    /// Resource, Input, Script, UI, and Physics can connect through this layer as those modules land.
+    /// a global singleton. The current version owns JobSystem, IOSystem, InputSystem, TimeSystem, SceneSystem,
+    /// RenderSystem, and ResourceSystem; Script, UI, and Physics can connect through this layer as those modules land.
     class EngineRuntime : public NonMovable
     {
     public:

@@ -459,7 +459,7 @@ The first `Core` implementation should do the following:
 6. Add `NonCopyable.h`, `ScopeExit.h`, and `EnumFlags.h`.
 7. Keep the skeleton `Application` class outside `Engine/Runtime/Core`.
 8. Update CMake target sources for `VEngine`.
-9. Extend `VEngineTests` with CTest-registered coverage for the new Core APIs.
+9. Add CTest-registered Windows test coverage for the new Core APIs.
 
 The first implementation should not add:
 

@@ -638,7 +638,7 @@ cbuffer CameraConstants : register(b0)
 Before committing code changes:
 
 - Run clang-format on changed C++ and Objective-C++ files.
-- Run `VEngineTests` when Windows tests are available.
+- Run the relevant CTest-registered Windows tests when they are available.
 - Reconfigure CMake after changing CMake files.
 - Run relevant smoke tests after changing shader, asset import, scripting, or RHI code.
 

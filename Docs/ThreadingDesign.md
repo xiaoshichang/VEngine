@@ -5,9 +5,9 @@
 The `Threading` module provides VEngine-owned cross-platform wrappers for threads, synchronization primitives, and a
 small set of lock-free utilities.
 
-The first-stage goal is not to build a full task runtime. The goal is to establish a clear, documented foundation that
-the later JobSystem, IOSystem, Render Thread, Resource system, and tests can use without exposing platform APIs or
-standard-library threading types throughout engine code.
+The first-stage goal is not to build a full task runtime inside the Threading module. The goal is to provide a clear,
+documented foundation that JobSystem, IOSystem, SceneSystem, RenderSystem, ResourceSystem, and tests can use without
+exposing platform APIs or standard-library threading types throughout engine code.
 
 ## 2. Design Decisions
 
@@ -62,10 +62,8 @@ The first-stage implementation does not include:
 - MPSC or MPMC lock-free queues.
 - Lock-free stacks or intrusive lock-free lists.
 - Hazard pointers, epochs, or custom lock-free memory reclamation.
-- A JobSystem implementation.
-- An IOSystem implementation.
 
-JobSystem and IOSystem work should build on this module later.
+JobSystem and IOSystem remain separate modules that build on this module rather than being implemented inside it.
 
 ## 5. Module Boundaries
 
@@ -448,8 +446,8 @@ Producer test thread -> Consumer test thread
 It is not an MPSC or MPMC queue. Using multiple producer threads or multiple consumer threads is invalid.
 
 The current IOSystem first version exposes a global completion queue that is polled by whichever thread owns result
-handling. A dedicated Game Thread completion pipe is a future ResourceSystem or scheduling-layer policy, not a guarantee
-made by low-level Threading or IOSystem.
+handling. A dedicated Game Thread completion pipe belongs to a later async loading policy in ResourceSystem or to a
+scheduling-layer policy, not to low-level Threading or IOSystem.
 
 ### 10.2 Required Behavior
 
@@ -598,8 +596,6 @@ Future extensions may include:
 - MPSC queues.
 - MPMC queues.
 - Boost.Lockfree-backed wrappers where appropriate.
-- JobSystem.
-- IOSystem.
 - Thread profiling integration.
 
 Priority and affinity should be added through `ThreadDesc` and hidden platform helpers. They should not require normal

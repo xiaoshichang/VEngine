@@ -151,10 +151,12 @@ VEngineEditor
   Windows editor executable.
 
 VEngineIOSPlayer
-  Planned iOS player app target for Milestone 10.
+  iOS player app target. The current implementation is an early UIKit shell that initializes the shared runtime path
+  but does not yet provide a complete iOS window/application backend.
 
 VEngineAssetTool
-  Planned command line asset import and cook tool. The current target may exist as a placeholder before Milestone 6.
+  Command line asset import and cook tool target. The current executable is a lightweight placeholder while the Editor
+  owns the implemented project asset database and package flow.
 
 VEngineShaderTool
   Command line shader compile, reflection, and cross-compile tool.
@@ -177,10 +179,12 @@ Planned iOS first-stage outputs:
 
 ```text
 VEngineIOSPlayer.app
+VEngineRhiMetalTriangleDemo.app
 ```
 
-The current application backend is Windows-only. The iOS player target and simulator demo are tracked as Milestone 10
-work.
+The cross-platform `Application` window backend is still Windows-only because `Window::Create()` only has a Win32
+implementation. The repository now includes an iOS player target and a separate iOS Metal triangle RHI demo; a complete
+iOS application/window backend remains future work.
 
 ## 6. Recommended Directory Layout
 
@@ -323,9 +327,9 @@ The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar frame
 this application-level flow instead of duplicating service initialization in each executable entry point.
 
 `EngineRuntime` owns long-lived runtime services used by Player, Editor, tools, and future platform backends. It provides
-explicit service access without introducing global singletons. The first runtime services are JobSystem, IOSystem,
-InputSystem, TimeSystem, SceneSystem, and RenderSystem; Resource, Script, UI, and Physics should connect through this
-layer as their modules land.
+explicit service access without introducing global singletons. The current runtime services are JobSystem, IOSystem,
+InputSystem, TimeSystem, SceneSystem, RenderSystem, and ResourceSystem; Script, UI, and Physics should connect through
+this layer as their modules land.
 
 ### 7.4 FileSystem
 
@@ -955,12 +959,13 @@ Source Asset
   -> ResourceSystem
 ```
 
-`assimp` is used for importing common model formats:
+The current Editor asset database includes a project-owned OBJ mesh import path that writes first-stage `.vemesh`
+descriptors. `assimp` remains the planned route for broader source model import support:
 
 - `fbx`.
-- `obj`.
 - `gltf`.
 - `glb`.
+- More complete `obj` coverage than the current lightweight importer.
 
 Resource files should be as text-friendly as practical:
 
@@ -1149,26 +1154,32 @@ Windows platform layer:
 
 ### 17.2 iOS
 
-Milestone 10 iOS platform layer:
+Current iOS platform status:
 
 - Uses Objective-C++ for native bridge files.
-- Owns UIKit lifecycle integration.
-- Creates an iOS view backed by `CAMetalLayer` or `MTKView`.
-- Forwards touch events to Input.
-- Coordinates pause and resume.
-- Provides Metal drawable and surface access to `MetalRHI`.
+- Provides an early UIKit player shell in `VEngineIOSPlayer`.
+- Provides a separate `VEngineRhiMetalTriangleDemo` that creates a Metal-backed view and exercises the Metal RHI.
 
-The first iOS goal is an iOS Simulator demo. The current Milestone 1 runtime does not yet provide an iOS
-`Application::Run()` backend.
+Remaining iOS platform work:
+
+- Route `Application` and `Window` creation through an iOS backend instead of the current Win32-only `Window::Create()`.
+- Integrate `CAMetalLayer` or `MTKView` surface ownership into the normal Player path.
+- Forward touch events to Input.
+- Coordinate pause and resume.
+- Provide Metal drawable and surface access to `MetalRHI` through the shared RenderSystem path.
+
+The first iOS Simulator proof is present as the Metal triangle demo. The normal iOS Player path is still an early shell,
+not a complete engine loop with scene rendering and input.
 
 ## 18. Testing Strategy
 
 Windows unit and smoke tests are registered through CMake/CTest.
 
-Current Milestone 1 coverage includes Core, Logging, Time, and FileSystem tests. Additional test areas are added as
-their owning modules land.
+Current Windows CTest targets include Memory, Math, Viewport, Scene Serialization, and Resource/Render resource tests.
+Core, Logging, Time, FileSystem, Threading, JobSystem, IOSystem, RHI, ShaderTool, and packaging coverage should be added
+or reintroduced as focused test executables as those surfaces stabilize.
 
-Planned unit test areas:
+Planned or incomplete unit test areas:
 
 ```text
 Core

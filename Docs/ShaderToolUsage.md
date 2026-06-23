@@ -198,12 +198,12 @@ Bindable shader resource on line 8 must declare an explicit register.
 
 实际文件中会同时包含 Vertex 和 Pixel 两个 stage。
 
-## 7. 示例一：编译仓库自带 BasicTriangle
+## 7. 示例一：编译仓库自带 BasicMesh
 
-仓库已有一个标准测试 shader：
+仓库当前带有 DemoProject 使用的基础 mesh shader：
 
 ```text
-Tests\Shaders\HLSL\BasicTriangle.hlsl
+DemoProject\Assets\Engine\Shaders\BasicMesh.hlsl
 ```
 
 从仓库根目录运行：
@@ -212,9 +212,9 @@ Tests\Shaders\HLSL\BasicTriangle.hlsl
 cmd /c CMake\Scripts\WithMsvc.bat ^
   Build\windows-msvc-release\Release\VEngineShaderTool.exe ^
   compile ^
-  --source Tests\Shaders\HLSL\BasicTriangle.hlsl ^
-  --output Build\Generated\ShaderExamples\BasicTriangle ^
-  --name BasicTriangle ^
+  --source DemoProject\Assets\Engine\Shaders\BasicMesh.hlsl ^
+  --output Build\Generated\ShaderExamples\BasicMesh ^
+  --name BasicMesh ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
   --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
@@ -223,20 +223,20 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
 成功时最后会输出：
 
 ```text
-Shader flow complete: BasicTriangle
+Shader flow complete: BasicMesh
 ```
 
 查看输出目录：
 
 ```bat
-dir Build\Generated\ShaderExamples\BasicTriangle
+dir Build\Generated\ShaderExamples\BasicMesh
 ```
 
 可以重点检查：
 
 ```bat
-type Build\Generated\ShaderExamples\BasicTriangle\BasicTriangle.veshader.json
-type Build\Generated\ShaderExamples\BasicTriangle\BasicTriangle.PS.metal
+type Build\Generated\ShaderExamples\BasicMesh\BasicMesh.veshader.json
+type Build\Generated\ShaderExamples\BasicMesh\BasicMesh.PS.metal
 ```
 
 ## 8. 示例二：最小带常量缓冲的颜色 Shader
@@ -307,10 +307,23 @@ SolidColor.veshader.json
 
 ## 9. 示例三：验证绑定错误
 
-仓库中有一个故意缺少 `register` 的 shader：
+新建一份故意缺少 `register` 的临时 shader，例如 `Build\Generated\ShaderExamples\MissingRegister.hlsl`：
 
-```text
-Tests\Shaders\HLSL\MissingRegister.hlsl
+```hlsl
+cbuffer CameraConstants
+{
+    float4x4 viewProjection;
+};
+
+float4 VSMain(float3 position : POSITION) : SV_Position
+{
+    return mul(viewProjection, float4(position, 1.0));
+}
+
+float4 PSMain() : SV_Target
+{
+    return float4(1.0, 0.0, 1.0, 1.0);
+}
 ```
 
 运行：
@@ -319,7 +332,7 @@ Tests\Shaders\HLSL\MissingRegister.hlsl
 cmd /c CMake\Scripts\WithMsvc.bat ^
   Build\windows-msvc-release\Release\VEngineShaderTool.exe ^
   compile ^
-  --source Tests\Shaders\HLSL\MissingRegister.hlsl ^
+  --source Build\Generated\ShaderExamples\MissingRegister.hlsl ^
   --output Build\Generated\ShaderExamples\MissingRegister ^
   --name MissingRegister ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
@@ -329,29 +342,26 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
 
 预期结果是失败。这个测试用于确认工具会拒绝没有显式绑定信息的资源声明。
 
-## 10. 通过 CTest 运行现有 ShaderTool 测试
+## 10. 当前测试状态
 
-配置并构建测试 preset：
+当前 `windows-msvc-tests` preset 注册的 CTest 目标还不包含 ShaderTool 专用测试。可以先构建测试 preset，确认
+现有 CTest 目标通过：
 
 ```bat
 cmd /c CMake\Scripts\WithMsvc.bat cmake --preset windows-msvc-tests
 cmd /c CMake\Scripts\WithMsvc.bat cmake --build --preset windows-msvc-tests
+cmd /c CMake\Scripts\WithMsvc.bat ctest --preset windows-msvc-tests
 ```
 
-只运行 ShaderTool 相关测试：
-
-```bat
-cmd /c CMake\Scripts\WithMsvc.bat ctest --preset windows-msvc-tests -R VEngineShaderTool
-```
-
-当前测试包括：
+ShaderTool 变更当前应通过本教程中的 `--help`、成功编译 `BasicMesh`、以及缺少显式绑定的失败示例做手动 smoke
+验证。后续接入自动化测试时，建议补上这些 CTest 用例：
 
 - `VEngineShaderToolHelp`
-- `VEngineShaderToolCompileBasicTriangle`
-- `VEngineShaderToolValidateBasicTriangle`
+- `VEngineShaderToolCompileBasicMesh`
+- `VEngineShaderToolValidateBasicMesh`
 - `VEngineShaderToolRejectsMissingRegister`
 
-测试产物默认生成到：
+建议测试产物生成到：
 
 ```text
 Build\windows-msvc-tests\Generated\ShaderTests\Debug
