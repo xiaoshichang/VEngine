@@ -74,6 +74,7 @@ if (-not $SkipBoost)
 }
 
 & (Join-Path $Root "DirectXShaderCompiler\Setup_Windows64.ps1")
+& (Join-Path $Root "DotNet\Setup_Windows64.ps1")
 & (Join-Path $Root "WindowsSdkTools\Setup_Windows64.ps1")
 & (Join-Path $Root "SPIRV-Cross\Setup_Windows64.ps1")
 
