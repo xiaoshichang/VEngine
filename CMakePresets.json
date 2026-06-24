@@ -23,7 +23,7 @@
             "cacheVariables": {
                 "VE_BUILD_PLAYER": "ON",
                 "VE_BUILD_EDITOR": "ON",
-                "VE_BUILD_TESTS": "ON",
+                "VE_BUILD_TESTS": "OFF",
                 "VE_BUILD_TOOLS": "ON",
                 "VE_BUILD_IOS_PLAYER": "OFF",
                 "VE_ENABLE_D3D11": "ON",

@@ -13,6 +13,7 @@ include(CMake/SetupBoostLibrary.cmake)
 include(CMake/SetupDirectXShaderCompiler.cmake)
 include(CMake/SetupSpirvCross.cmake)
 include(CMake/SetupImGui.cmake)
+include(CMake/SetupJolt.cmake)
 
 include(CMake/Targets/Engine.cmake)
 include(CMake/Targets/Applications.cmake)

@@ -94,6 +94,10 @@ Dear ImGui
 FreeType
   - Runtime UI font rasterization
 
+Jolt Physics
+  - Future runtime physics backend
+  - Rigid body simulation and collision detection
+
 DirectXShaderCompiler
   - HLSL compilation
   - DXIL generation
@@ -691,6 +695,8 @@ Supported features:
 - Simple overlap tests.
 
 Full rigid body simulation can be added later, either through a dedicated physics library or a custom lightweight physics layer.
+Jolt Physics is prepared as the first project-owned third-party candidate for that later full rigid body backend, but
+the engine-facing Physics facade, scene synchronization, and component model remain separate future work.
 
 ## 8. Multithreaded Runtime Model
 

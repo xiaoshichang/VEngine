@@ -22,6 +22,7 @@ The script prepares:
 - Windows SDK `fxc.exe` under `WindowsSdkTools/Tools/x64`.
 - SPIRV-Cross under `SPIRV-Cross/Source` and `SPIRV-Cross/Build/Windows64`.
 - Dear ImGui is vendored under `ImGui/imgui-1.92.8`.
+- Jolt Physics source under `Jolt/Source`.
 
 Generated source checkouts, archives, build directories, and binaries are ignored by git. Vendored source libraries and
 small builtin tools such as Dear ImGui and `WindowsSdkTools/Tools/x64/fxc.exe` are tracked in this directory with their

@@ -90,4 +90,21 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineResourceRenderTests>
     )
 
+    add_executable(VEngineJoltIntegrationTests
+        Tests/Unit/JoltIntegrationTests.cpp
+    )
+
+    target_link_libraries(VEngineJoltIntegrationTests
+        PRIVATE
+            VEngine
+            VEngine::Jolt
+    )
+
+    ve_configure_target(VEngineJoltIntegrationTests)
+
+    add_test(
+        NAME VEngineJoltIntegrationTests
+        COMMAND $<TARGET_FILE:VEngineJoltIntegrationTests>
+    )
+
 endfunction()

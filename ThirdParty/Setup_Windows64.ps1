@@ -77,5 +77,6 @@ if (-not $SkipBoost)
 & (Join-Path $Root "DotNet\Setup_Windows64.ps1")
 & (Join-Path $Root "WindowsSdkTools\Setup_Windows64.ps1")
 & (Join-Path $Root "SPIRV-Cross\Setup_Windows64.ps1")
+& (Join-Path $Root "Jolt\Setup_Windows64.ps1")
 
 Write-Host "ThirdParty Windows64 setup complete."

@@ -182,6 +182,7 @@ function(ve_add_engine)
     endif()
 
     ve_setup_boost_library(VEngine)
+    ve_setup_jolt_library(VEngine)
 
     if(WIN32)
         target_sources(VEngine

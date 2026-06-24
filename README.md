@@ -79,7 +79,8 @@ cmd /c CMake\Scripts\WithMsvc.bat ctest --preset windows-msvc-tests
 ```
 
 The Windows test target uses CMake/CTest registration. The project does not require a third-party C++ test framework in
-the current stage.
+the current stage. Unit tests are built only by the dedicated `windows-msvc-tests` preset; the regular Debug and Release
+presets build the application and tool targets without test executables.
 
 ## Main Windows Targets
 
