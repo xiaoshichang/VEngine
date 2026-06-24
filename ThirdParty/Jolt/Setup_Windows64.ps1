@@ -1,5 +1,6 @@
 param(
     [string]$Tag = "v5.5.0",
+    [string]$Archive = "JoltPhysics-5.5.0.zip",
     [string]$Configuration = "Debug",
     [switch]$BuildTestsAndDemos,
     [switch]$IncludeViewer,
@@ -11,6 +12,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SourceDir = Join-Path $Root "Source"
 $BuildDir = Join-Path $Root "Build\Windows64\$Tag"
+$ArchivePath = Join-Path $Root $Archive
 
 function Invoke-NativeCommand
 {
@@ -41,6 +43,56 @@ function Require-Command
     }
 }
 
+function Test-JoltSource
+{
+    param([string]$Path)
+
+    return Test-Path (Join-Path $Path "Build\CMakeLists.txt")
+}
+
+function Expand-JoltArchive
+{
+    if (-not (Test-Path $ArchivePath))
+    {
+        throw "Jolt Physics archive was not found: $ArchivePath"
+    }
+
+    $TempDir = Join-Path $Root "Source.extracting"
+
+    if (Test-Path $TempDir)
+    {
+        Remove-Item -Recurse -Force $TempDir
+    }
+
+    New-Item -ItemType Directory -Force $TempDir | Out-Null
+
+    try
+    {
+        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $TempDir -Force
+
+        $ExtractedRoots = @(Get-ChildItem -LiteralPath $TempDir -Directory)
+
+        if ($ExtractedRoots.Count -ne 1)
+        {
+            throw "Expected archive to contain one root directory, found $($ExtractedRoots.Count)."
+        }
+
+        if (-not (Test-JoltSource $ExtractedRoots[0].FullName))
+        {
+            throw "Archive does not contain a valid Jolt Physics source tree."
+        }
+
+        Move-Item -LiteralPath $ExtractedRoots[0].FullName -Destination $SourceDir
+    }
+    finally
+    {
+        if (Test-Path $TempDir)
+        {
+            Remove-Item -Recurse -Force $TempDir
+        }
+    }
+}
+
 function Normalize-TargetList
 {
     param([string[]]$RawTargets)
@@ -63,22 +115,17 @@ function Normalize-TargetList
     return $NormalizedTargets.ToArray()
 }
 
-Require-Command git
 Require-Command cmake
 
 if (-not (Test-Path $SourceDir))
 {
     New-Item -ItemType Directory -Force $Root | Out-Null
-    Invoke-NativeCommand git @("clone", "--depth", "1", "--branch", $Tag, "https://github.com/jrouwe/JoltPhysics.git", $SourceDir)
+    Expand-JoltArchive
 }
-elseif (Test-Path (Join-Path $SourceDir ".git"))
+
+if (-not (Test-JoltSource $SourceDir))
 {
-    Invoke-NativeCommand git @("-C", $SourceDir, "fetch", "--depth", "1", "origin", "refs/tags/$Tag`:refs/tags/$Tag")
-    Invoke-NativeCommand git @("-C", $SourceDir, "checkout", "--force", $Tag)
-}
-else
-{
-    throw "Jolt Physics Source exists but is not a git checkout: $SourceDir"
+    throw "Jolt Physics Source exists but is not a valid source tree: $SourceDir"
 }
 
 if (-not $BuildTestsAndDemos)

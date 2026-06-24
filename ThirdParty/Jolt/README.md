@@ -1,11 +1,11 @@
 # Jolt Physics
 
-VEngine uses Jolt Physics as the project-owned third-party physics backend source. The engine-level Physics facade is
-not implemented by this dependency wrapper; this directory only prepares and builds the upstream library.
+VEngine uses Jolt Physics as the project-owned third-party physics backend source. The engine-level Physics facade is not
+implemented by this dependency wrapper; this directory only prepares and builds the upstream library.
 
-The pinned upstream tag is `v5.5.0`.
+The pinned upstream version is `5.5.0`, stored as the version-controlled `JoltPhysics-5.5.0.zip` archive.
 
-To prepare source after cloning the repository:
+To prepare source after cloning the repository, extract the bundled archive into `Source/`:
 
 ```bat
 ThirdParty\Jolt\Setup_Windows64.ps1
