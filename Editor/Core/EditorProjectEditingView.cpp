@@ -51,8 +51,11 @@ namespace ve::editor
             return;
         }
 
+        hierarchyPanel_.Init(editor);
         sceneViewPanel_.Init(editor);
         gameViewPanel_.Init(editor);
+        assetsPanel_.Init(editor);
+        inspectorPanel_.Init(editor);
         initialized_ = true;
     }
 
@@ -74,14 +77,14 @@ namespace ve::editor
         const float centerHeight = (std::max)(240.0F, available.y - AssetsHeight - PanelGap);
         const float splitCenterWidth = (std::max)(160.0F, (centerWidth - PanelGap) * 0.5F);
 
-        hierarchyPanel_.Render(editor, origin, ImVec2(HierarchyWidth, available.y));
+        hierarchyPanel_.Render(origin, ImVec2(HierarchyWidth, available.y));
 
         const float centerX = origin.x + HierarchyWidth + PanelGap;
-        sceneViewPanel_.Render(editor, ImVec2(centerX, origin.y), ImVec2(splitCenterWidth, centerHeight));
-        gameViewPanel_.Render(editor, ImVec2(centerX + splitCenterWidth + PanelGap, origin.y), ImVec2(splitCenterWidth, centerHeight));
-        assetsPanel_.Render(editor, ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
+        sceneViewPanel_.Render(ImVec2(centerX, origin.y), ImVec2(splitCenterWidth, centerHeight));
+        gameViewPanel_.Render(ImVec2(centerX + splitCenterWidth + PanelGap, origin.y), ImVec2(splitCenterWidth, centerHeight));
+        assetsPanel_.Render(ImVec2(centerX, origin.y + centerHeight + PanelGap), ImVec2(centerWidth, AssetsHeight));
 
-        inspectorPanel_.Render(editor, ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
+        inspectorPanel_.Render(ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
 
         RenderStatusBar(editor, ImVec2(viewport->WorkPos.x, statusBarY), ImVec2(viewport->WorkSize.x, StatusBarHeight));
     }
@@ -237,8 +240,8 @@ namespace ve::editor
     void ProjectEditingView::RenderStatusBar(Editor& editor, const ImVec2& position, const ImVec2& size)
     {
         constexpr ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                                ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
-                                                ImGuiWindowFlags_NoScrollWithMouse;
+                                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
+                                                 ImGuiWindowFlags_NoScrollWithMouse;
 
         ImGui::SetNextWindowPos(position);
         ImGui::SetNextWindowSize(size);

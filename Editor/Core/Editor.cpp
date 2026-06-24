@@ -3,12 +3,12 @@
 #include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectEditingView.h"
 #include "Editor/Core/EditorProjectSelectionView.h"
+#include "Editor/RenderPass/EditorGizmoRenderPass.h"
+#include "Editor/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Editor/RenderPass/EditorGizmoRenderPass.h"
-#include "Editor/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
@@ -474,12 +474,23 @@ namespace ve::editor
         return resourceLoader_;
     }
 
+    EditorEventDispatcher& Editor::GetEventDispatcher() noexcept
+    {
+        return eventDispatcher_;
+    }
+
+    const EditorEventDispatcher& Editor::GetEventDispatcher() const noexcept
+    {
+        return eventDispatcher_;
+    }
+
     void Editor::SetSelectedGameObject(ve::GameObject* gameObject)
     {
         selectionType_ = gameObject != nullptr ? EditorSelectionType::GameObject : EditorSelectionType::None;
         selectedGameObject_ = gameObject;
         selectedAssetPath_ = Path();
         CollectUnusedResources();
+        DispatchSelectionChanged();
     }
 
     void Editor::SetSelectedAsset(Path assetPath)
@@ -488,6 +499,7 @@ namespace ve::editor
         selectedGameObject_ = nullptr;
         selectedAssetPath_ = std::move(assetPath);
         CollectUnusedResources();
+        DispatchSelectionChanged();
     }
 
     void Editor::ClearSelection()
@@ -496,11 +508,21 @@ namespace ve::editor
         selectedGameObject_ = nullptr;
         selectedAssetPath_ = Path();
         CollectUnusedResources();
+        DispatchSelectionChanged();
     }
 
     EditorSelectionType Editor::GetSelectionType() const noexcept
     {
         return selectionType_;
+    }
+
+    EditorSelectionChangedEvent Editor::GetSelection() const
+    {
+        return EditorSelectionChangedEvent{
+            .selectionType = selectionType_,
+            .gameObject = selectionType_ == EditorSelectionType::GameObject ? selectedGameObject_ : nullptr,
+            .assetPath = selectedAssetPath_,
+        };
     }
 
     ve::GameObject* Editor::GetSelectedGameObject() noexcept
@@ -866,6 +888,11 @@ namespace ve::editor
     {
         currentProjectPath_ = std::move(projectPath);
         currentProjectName_ = GetProjectDisplayName(currentProjectPath_);
+    }
+
+    void Editor::DispatchSelectionChanged()
+    {
+        eventDispatcher_.Dispatch(GetSelection());
     }
 
     void Editor::EnqueueMainWindowTitleUpdate()

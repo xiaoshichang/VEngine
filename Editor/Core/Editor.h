@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Editor/Core/EditorAssetDatabase.h"
+#include "Editor/Core/EditorEventDispatcher.h"
+#include "Editor/Core/EditorEvents.h"
 #include "Editor/Core/EditorInput.h"
 #include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectRegistry.h"
@@ -28,13 +30,6 @@ namespace ve::editor
     class ProjectEditingView;
     class ProjectSelectionView;
 
-    enum class EditorSelectionType
-    {
-        None,
-        GameObject,
-        Asset,
-    };
-
     /// Owns editor-level lifecycle and scene callbacks.
     class Editor : public NonMovable
     {
@@ -57,10 +52,13 @@ namespace ve::editor
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
         [[nodiscard]] EditorResourceLoader& GetResourceLoader() noexcept;
         [[nodiscard]] const EditorResourceLoader& GetResourceLoader() const noexcept;
+        [[nodiscard]] EditorEventDispatcher& GetEventDispatcher() noexcept;
+        [[nodiscard]] const EditorEventDispatcher& GetEventDispatcher() const noexcept;
         void SetSelectedGameObject(ve::GameObject* gameObject);
         void SetSelectedAsset(Path assetPath);
         void ClearSelection();
         [[nodiscard]] EditorSelectionType GetSelectionType() const noexcept;
+        [[nodiscard]] EditorSelectionChangedEvent GetSelection() const;
         [[nodiscard]] ve::GameObject* GetSelectedGameObject() noexcept;
         [[nodiscard]] const ve::GameObject* GetSelectedGameObject() const noexcept;
         [[nodiscard]] const Path& GetSelectedAssetPath() const noexcept;
@@ -107,6 +105,7 @@ namespace ve::editor
         void EnterProjectEditingView();
         void AddRecentProject(const std::string& projectPath);
         void SetCurrentProject(std::string projectPath);
+        void DispatchSelectionChanged();
         void EnqueueMainWindowTitleUpdate();
         static void ApplyMainWindowTitle(void* nativeWindowHandle, const std::string& title);
         [[nodiscard]] std::string BuildMainWindowTitle() const;
@@ -123,6 +122,7 @@ namespace ve::editor
         RenderBackend renderBackend_ = RenderBackend::D3D12;
         EditorAssetDatabase assetDatabase_;
         EditorResourceLoader resourceLoader_;
+        EditorEventDispatcher eventDispatcher_;
         EditorSelectionType selectionType_ = EditorSelectionType::None;
         ve::GameObject* selectedGameObject_ = nullptr;
         Path selectedAssetPath_;

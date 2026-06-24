@@ -17,8 +17,7 @@ namespace ve::editor
     public:
         GameViewPanel();
 
-        void Init(Editor& editor);
-        void Render(Editor& editor, const ImVec2& position, const ImVec2& size);
+        void Init(Editor& editor) override;
 
         [[nodiscard]] const RenderTexture& GetGameViewTexture() const noexcept;
         [[nodiscard]] RenderTexture& GetGameViewTexture() noexcept;
@@ -33,6 +32,6 @@ namespace ve::editor
 
         std::shared_ptr<RenderTexture> gameViewTexture_;
         WindowExtent renderTargetExtent_ = {};
-        Editor* activeEditor_ = nullptr;
+        Editor* editor_ = nullptr;
     };
 } // namespace ve::editor

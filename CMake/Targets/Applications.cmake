@@ -38,6 +38,8 @@ function(ve_add_windows_editor)
             Editor/Core/EditorBuiltinResources.h
             Editor/Core/Editor.cpp
             Editor/Core/Editor.h
+            Editor/Core/EditorEventDispatcher.h
+            Editor/Core/EditorEvents.h
             Editor/Core/EditorInput.cpp
             Editor/Core/EditorInput.h
             Editor/Core/EditorProject.cpp

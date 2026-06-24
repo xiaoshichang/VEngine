@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Editor/Core/EditorEventDispatcher.h"
+#include "Editor/Core/EditorEvents.h"
 #include "Editor/Panels/BasePanel.h"
 
 namespace ve
@@ -19,11 +21,12 @@ namespace ve::editor
     class InspectorPanel final : public BasePanel
     {
     public:
-        void Render(Editor& editor, const ImVec2& position, const ImVec2& size);
+        void Init(Editor& editor) override;
 
     private:
         [[nodiscard]] const char* GetName() const noexcept override;
         void RenderContent() override;
+        void OnSelectionChanged(const EditorSelectionChangedEvent& event);
         void RenderGameObject(GameObject& gameObject);
         void RenderTransformComponent(TransformComponent& transform);
         void RenderMeshRenderComponent(MeshRenderComponent& mesh);
@@ -33,5 +36,7 @@ namespace ve::editor
         void RenderMaterialAsset(const EditorAssetRecord& asset);
 
         Editor* editor_ = nullptr;
+        EditorSelectionChangedEvent selection_;
+        EditorEventSubscription selectionSubscription_;
     };
 } // namespace ve::editor

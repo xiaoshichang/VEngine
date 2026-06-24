@@ -61,11 +61,9 @@ namespace ve::editor
         }
     } // namespace
 
-    void AssetsPanel::Render(Editor& editor, const ImVec2& position, const ImVec2& size)
+    void AssetsPanel::Init(Editor& editor)
     {
         editor_ = &editor;
-        BasePanel::Render(position, size);
-        editor_ = nullptr;
     }
 
     const char* AssetsPanel::GetName() const noexcept

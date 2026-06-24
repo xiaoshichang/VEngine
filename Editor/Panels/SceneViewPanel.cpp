@@ -75,7 +75,8 @@ namespace ve::editor
 
         [[nodiscard]] ImVec2 ProjectAxisDirection(const Vector3& direction, const ImVec2& origin) noexcept
         {
-            return ImVec2(origin.x + (direction.GetX() * AxisOverlayRadius), origin.y - (direction.GetY() * AxisOverlayRadius) + (direction.GetZ() * AxisOverlayRadius * AxisOverlayDepthScale));
+            return ImVec2(origin.x + (direction.GetX() * AxisOverlayRadius),
+                          origin.y - (direction.GetY() * AxisOverlayRadius) + (direction.GetZ() * AxisOverlayRadius * AxisOverlayDepthScale));
         }
 
         [[nodiscard]] bool AxisDepthLess(const AxisOverlayEntry& left, const AxisOverlayEntry& right) noexcept
@@ -99,6 +100,7 @@ namespace ve::editor
 
     void SceneViewPanel::Init(Editor& editor)
     {
+        editor_ = &editor;
         if (sceneViewCamera_ == nullptr)
         {
             sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
@@ -114,13 +116,6 @@ namespace ve::editor
         }
 
         UpdateSceneViewCamera();
-    }
-
-    void SceneViewPanel::Render(Editor& editor, const ImVec2& position, const ImVec2& size)
-    {
-        activeEditor_ = &editor;
-        BasePanel::Render(position, size);
-        activeEditor_ = nullptr;
     }
 
     const RenderTexture& SceneViewPanel::GetSceneViewTexture() const noexcept
@@ -180,7 +175,7 @@ namespace ve::editor
 
     void SceneViewPanel::RenderContent()
     {
-        VE_ASSERT_MESSAGE(activeEditor_ != nullptr, "SceneViewPanel::RenderContent requires SceneViewPanel::Render.");
+        VE_ASSERT_MESSAGE(editor_ != nullptr, "SceneViewPanel requires Init before Render.");
         VE_ASSERT_MESSAGE(sceneViewTexture_ != nullptr, "SceneViewPanel requires Init before Render.");
 
         RenderControlBar();
@@ -191,7 +186,7 @@ namespace ve::editor
         bool textureRebuilt = false;
         if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !sceneViewTexture_->IsValid())
         {
-            RebuildSceneViewTexture(*activeEditor_, desiredExtent);
+            RebuildSceneViewTexture(*editor_, desiredExtent);
             textureRebuilt = true;
         }
 
@@ -397,9 +392,21 @@ namespace ve::editor
         const Vector3 cameraForward = cameraLocalToWorld.TransformDirection(Vector3::UnitZ()).Normalized();
 
         AxisOverlayEntry axes[] = {
-            AxisOverlayEntry{"X", Vector3(Vector3::Dot(Vector3::UnitX(), cameraRight), Vector3::Dot(Vector3::UnitX(), cameraUp), Vector3::Dot(Vector3::UnitX(), cameraForward)), IM_COL32(225, 72, 72, 255), 0.0f},
-            AxisOverlayEntry{"Y", Vector3(Vector3::Dot(Vector3::UnitY(), cameraRight), Vector3::Dot(Vector3::UnitY(), cameraUp), Vector3::Dot(Vector3::UnitY(), cameraForward)), IM_COL32(92, 190, 92, 255), 0.0f},
-            AxisOverlayEntry{"Z", Vector3(Vector3::Dot(Vector3::UnitZ(), cameraRight), Vector3::Dot(Vector3::UnitZ(), cameraUp), Vector3::Dot(Vector3::UnitZ(), cameraForward)), IM_COL32(86, 132, 235, 255), 0.0f},
+            AxisOverlayEntry{
+                "X",
+                Vector3(Vector3::Dot(Vector3::UnitX(), cameraRight), Vector3::Dot(Vector3::UnitX(), cameraUp), Vector3::Dot(Vector3::UnitX(), cameraForward)),
+                IM_COL32(225, 72, 72, 255),
+                0.0f},
+            AxisOverlayEntry{
+                "Y",
+                Vector3(Vector3::Dot(Vector3::UnitY(), cameraRight), Vector3::Dot(Vector3::UnitY(), cameraUp), Vector3::Dot(Vector3::UnitY(), cameraForward)),
+                IM_COL32(92, 190, 92, 255),
+                0.0f},
+            AxisOverlayEntry{
+                "Z",
+                Vector3(Vector3::Dot(Vector3::UnitZ(), cameraRight), Vector3::Dot(Vector3::UnitZ(), cameraUp), Vector3::Dot(Vector3::UnitZ(), cameraForward)),
+                IM_COL32(86, 132, 235, 255),
+                0.0f},
         };
 
         for (AxisOverlayEntry& axis : axes)
@@ -408,7 +415,8 @@ namespace ve::editor
         }
         std::sort(std::begin(axes), std::end(axes), AxisDepthLess);
 
-        const ImVec2 origin(imageMin.x + imageSize.x - AxisOverlayPadding - (AxisOverlaySize * 0.5f), imageMin.y + AxisOverlayPadding + (AxisOverlaySize * 0.5f));
+        const ImVec2 origin(imageMin.x + imageSize.x - AxisOverlayPadding - (AxisOverlaySize * 0.5f),
+                            imageMin.y + AxisOverlayPadding + (AxisOverlaySize * 0.5f));
         const ImU32 panelColor = IM_COL32(24, 28, 34, 150);
         const ImU32 borderColor = IM_COL32(255, 255, 255, 36);
         const ImVec2 panelMin(origin.x - (AxisOverlaySize * 0.5f), origin.y - (AxisOverlaySize * 0.5f));
@@ -431,8 +439,8 @@ namespace ve::editor
     void SceneViewPanel::UpdateCameraFromInput(bool viewportHovered, bool viewportClicked, bool viewportRightClicked)
     {
         const bool popupOpen = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
-        const bool mouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
-                                  ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
+        const bool mouseClicked =
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle);
         if (popupOpen || !ImGui::IsWindowFocused() || (!viewportHovered && mouseClicked))
         {
             sceneViewFocused_ = false;
@@ -473,8 +481,8 @@ namespace ve::editor
             }
             else
             {
-                const float mouseDeltaX = Clamp(static_cast<float>(activeEditor_->GetInput().GetMouseDeltaX()), -MaxMouseLookDelta, MaxMouseLookDelta);
-                const float mouseDeltaY = Clamp(static_cast<float>(activeEditor_->GetInput().GetMouseDeltaY()), -MaxMouseLookDelta, MaxMouseLookDelta);
+                const float mouseDeltaX = Clamp(static_cast<float>(editor_->GetInput().GetMouseDeltaX()), -MaxMouseLookDelta, MaxMouseLookDelta);
+                const float mouseDeltaY = Clamp(static_cast<float>(editor_->GetInput().GetMouseDeltaY()), -MaxMouseLookDelta, MaxMouseLookDelta);
                 if (mouseDeltaX != 0.0f || mouseDeltaY != 0.0f)
                 {
                     camera_.targetYawRadians += mouseDeltaX * camera_.lookSensitivity;

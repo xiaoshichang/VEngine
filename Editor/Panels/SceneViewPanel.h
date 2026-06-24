@@ -18,8 +18,7 @@ namespace ve::editor
     public:
         SceneViewPanel();
 
-        void Init(Editor& editor);
-        void Render(Editor& editor, const ImVec2& position, const ImVec2& size);
+        void Init(Editor& editor) override;
 
         [[nodiscard]] const RenderTexture& GetSceneViewTexture() const noexcept;
         [[nodiscard]] RenderTexture& GetSceneViewTexture() noexcept;
@@ -88,7 +87,7 @@ namespace ve::editor
         std::shared_ptr<RenderTexture> sceneViewTexture_;
         std::shared_ptr<RTCamera> sceneViewCamera_;
         WindowExtent renderTargetExtent_ = {};
-        Editor* activeEditor_ = nullptr;
+        Editor* editor_ = nullptr;
         SceneViewCameraState camera_;
         SceneViewOverlayState overlays_;
         SceneViewGridState grid_;

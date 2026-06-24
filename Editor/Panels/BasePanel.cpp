@@ -12,6 +12,11 @@ namespace ve::editor
         }
     } // namespace
 
+    void BasePanel::Init(Editor& editor)
+    {
+        (void)editor;
+    }
+
     void BasePanel::Render(const ImVec2& position, const ImVec2& size)
     {
         ImGui::SetNextWindowPos(position, ImGuiCond_Always);

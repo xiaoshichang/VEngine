@@ -10,11 +10,9 @@
 
 namespace ve::editor
 {
-    void HierarchyPanel::Render(Editor& editor, const ImVec2& position, const ImVec2& size)
+    void HierarchyPanel::Init(Editor& editor)
     {
         editor_ = &editor;
-        BasePanel::Render(position, size);
-        editor_ = nullptr;
     }
 
     const char* HierarchyPanel::GetName() const noexcept

@@ -1107,6 +1107,7 @@ Editor principles:
 - Editor imports assets through AssetDatabase and AssetImporter.
 - Editor Viewport renders through the engine Render and RHI layers.
 - Editor Console receives logs through the VEngine logging facade callback path.
+- Editor panels receive their editor context during initialization; panel rendering should not take the whole `Editor`, and cross-panel communication should flow through editor-owned events.
 
 First-stage Editor workflow:
 

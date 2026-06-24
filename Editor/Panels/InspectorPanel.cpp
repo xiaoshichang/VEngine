@@ -218,11 +218,15 @@ namespace ve::editor
         }
     } // namespace
 
-    void InspectorPanel::Render(Editor& editor, const ImVec2& position, const ImVec2& size)
+    void InspectorPanel::Init(Editor& editor)
     {
         editor_ = &editor;
-        BasePanel::Render(position, size);
-        editor_ = nullptr;
+        selection_ = editor.GetSelection();
+        if (!selectionSubscription_.IsValid())
+        {
+            selectionSubscription_ = editor.GetEventDispatcher().Subscribe<EditorSelectionChangedEvent>([this](const EditorSelectionChangedEvent& event)
+                                                                                                        { OnSelectionChanged(event); });
+        }
     }
 
     const char* InspectorPanel::GetName() const noexcept
@@ -237,11 +241,11 @@ namespace ve::editor
             return;
         }
 
-        switch (editor_->GetSelectionType())
+        switch (selection_.selectionType)
         {
         case EditorSelectionType::GameObject:
         {
-            GameObject* selectedGameObject = editor_->GetSelectedGameObject();
+            GameObject* selectedGameObject = selection_.gameObject;
             if (selectedGameObject != nullptr)
             {
                 RenderGameObject(*selectedGameObject);
@@ -250,7 +254,7 @@ namespace ve::editor
         }
         case EditorSelectionType::Asset:
         {
-            const EditorAssetRecord* asset = editor_->GetAssetDatabase().FindAsset(editor_->GetSelectedAssetPath());
+            const EditorAssetRecord* asset = editor_->GetAssetDatabase().FindAsset(selection_.assetPath);
             if (asset != nullptr)
             {
                 RenderAsset(*asset);
@@ -266,6 +270,11 @@ namespace ve::editor
         }
 
         ImGui::TextDisabled("Nothing selected.");
+    }
+
+    void InspectorPanel::OnSelectionChanged(const EditorSelectionChangedEvent& event)
+    {
+        selection_ = event;
     }
 
     void InspectorPanel::RenderGameObject(GameObject& gameObject)

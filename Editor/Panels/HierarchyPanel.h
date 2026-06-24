@@ -14,7 +14,7 @@ namespace ve::editor
     class HierarchyPanel final : public BasePanel
     {
     public:
-        void Render(Editor& editor, const ImVec2& position, const ImVec2& size);
+        void Init(Editor& editor) override;
 
     private:
         [[nodiscard]] const char* GetName() const noexcept override;

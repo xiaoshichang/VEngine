@@ -33,7 +33,7 @@ namespace ve::editor
 
             return (std::max)(camera->GetAspectRatio(), 0.001f);
         }
-    }
+    } // namespace
 
     GameViewPanel::GameViewPanel()
         : gameViewTexture_(nullptr)
@@ -42,6 +42,7 @@ namespace ve::editor
 
     void GameViewPanel::Init(Editor& editor)
     {
+        editor_ = &editor;
         auto desc = RenderTextureDesc{
             .name = "EditorGameViewTexture",
             .extent = {},
@@ -49,13 +50,6 @@ namespace ve::editor
         };
         gameViewTexture_ = std::make_shared<RenderTexture>(desc);
         editor.KeepImGuiTextureAlive(gameViewTexture_);
-    }
-
-    void GameViewPanel::Render(Editor& editor, const ImVec2& position, const ImVec2& size)
-    {
-        activeEditor_ = &editor;
-        BasePanel::Render(position, size);
-        activeEditor_ = nullptr;
     }
 
     const RenderTexture& GameViewPanel::GetGameViewTexture() const noexcept
@@ -75,16 +69,16 @@ namespace ve::editor
 
     void GameViewPanel::RenderContent()
     {
-        VE_ASSERT_MESSAGE(activeEditor_ != nullptr, "GameViewPanel::RenderContent requires GameViewPanel::Render.");
+        VE_ASSERT_MESSAGE(editor_ != nullptr, "GameViewPanel requires Init before Render.");
 
         const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-        const float aspectRatio = GetGameViewAspectRatio(*activeEditor_);
+        const float aspectRatio = GetGameViewAspectRatio(*editor_);
         const ImVec2 fittedImageSize = CalculateFittedImageSize(canvasSize, aspectRatio);
         const WindowExtent desiredExtent = ToRenderTargetExtent(fittedImageSize);
         bool textureRebuilt = false;
         if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !gameViewTexture_->IsValid())
         {
-            RebuildGameViewTexture(*activeEditor_, desiredExtent);
+            RebuildGameViewTexture(*editor_, desiredExtent);
             textureRebuilt = true;
         }
 

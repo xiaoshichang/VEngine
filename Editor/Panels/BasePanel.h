@@ -6,12 +6,15 @@ struct ImVec2;
 
 namespace ve::editor
 {
+    class Editor;
+
     class BasePanel : public NonMovable
     {
     public:
         BasePanel() = default;
         virtual ~BasePanel() = default;
 
+        virtual void Init(Editor& editor);
         void Render(const ImVec2& position, const ImVec2& size);
 
     protected:
