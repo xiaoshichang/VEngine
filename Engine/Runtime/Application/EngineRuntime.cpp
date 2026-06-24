@@ -92,6 +92,13 @@ namespace ve
         }
         VE_LOG_INFO("ResourceSystem initialized.");
 
+        ErrorCode scriptingSystemResult = scriptingSystem_.Initialize(desc.scriptingSystem);
+        if (scriptingSystemResult != ErrorCode::None)
+        {
+            TerminateRuntimeInitialization("ScriptingSystem", scriptingSystemResult);
+        }
+        VE_LOG_INFO("ScriptingSystem initialized.");
+
         state_ = EngineRuntimeState::Initialized;
         VE_LOG_INFO("all systems initialized.");
         return ErrorCode::None;
@@ -105,6 +112,7 @@ namespace ve
         }
 
         sceneSystem_.Shutdown();
+        scriptingSystem_.Shutdown();
         resourceSystem_.Shutdown();
         timeSystem_.Shutdown();
         renderSystem_.Shutdown();
@@ -206,5 +214,17 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetResourceSystem requires an initialized runtime.");
         return resourceSystem_;
+    }
+
+    ScriptingSystem& EngineRuntime::GetScriptingSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetScriptingSystem requires an initialized runtime.");
+        return scriptingSystem_;
+    }
+
+    const ScriptingSystem& EngineRuntime::GetScriptingSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetScriptingSystem requires an initialized runtime.");
+        return scriptingSystem_;
     }
 } // namespace ve

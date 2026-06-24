@@ -25,7 +25,28 @@ namespace ve
 
     void Component::SetEnabled(bool enabled) noexcept
     {
+        if (enabled_ == enabled)
+        {
+            return;
+        }
+
         enabled_ = enabled;
+        if (enabled_)
+        {
+            OnEnable();
+        }
+        else
+        {
+            OnDisable();
+        }
+    }
+
+    void Component::OnCreate()
+    {
+    }
+
+    void Component::OnDestroy()
+    {
     }
 
     void Component::OnUpdate(Float32 deltaSeconds)
@@ -36,6 +57,14 @@ namespace ve
     void Component::OnLateUpdate(Float32 deltaSeconds)
     {
         static_cast<void>(deltaSeconds);
+    }
+
+    void Component::OnEnable()
+    {
+    }
+
+    void Component::OnDisable()
+    {
     }
 
     void Component::ClearOwner() noexcept

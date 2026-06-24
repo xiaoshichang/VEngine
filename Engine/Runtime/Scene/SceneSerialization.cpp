@@ -10,6 +10,7 @@
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/ScriptableComponent.h"
 
 #include <boost/json.hpp>
 #include <string>
@@ -362,6 +363,15 @@ namespace ve
             return object;
         }
 
+        [[nodiscard]] boost::json::object WriteScriptableComponent(const ScriptableComponent& script)
+        {
+            boost::json::object object;
+            object["type"] = "ScriptableComponent";
+            object["enabled"] = script.IsEnabled();
+            object["scriptTypeName"] = script.GetScriptTypeName();
+            return object;
+        }
+
         [[nodiscard]] boost::json::object WriteGameObject(const GameObject& gameObject)
         {
             boost::json::object object;
@@ -386,6 +396,11 @@ namespace ve
             if (const LightComponent* light = gameObject.GetComponent<LightComponent>(); light != nullptr)
             {
                 components.push_back(WriteLightComponent(*light));
+            }
+
+            if (const ScriptableComponent* script = gameObject.GetComponent<ScriptableComponent>(); script != nullptr)
+            {
+                components.push_back(WriteScriptableComponent(*script));
             }
             object["components"] = std::move(components);
 
@@ -573,6 +588,24 @@ namespace ve
             return ErrorCode::None;
         }
 
+        [[nodiscard]] ErrorCode ApplyScriptableComponent(GameObject& gameObject, const boost::json::object& object)
+        {
+            ScriptableComponent* script = gameObject.GetComponent<ScriptableComponent>();
+            if (script == nullptr)
+            {
+                Result<ScriptableComponent*> result = gameObject.AddComponentWithoutRenderRegistration<ScriptableComponent>();
+                if (!result)
+                {
+                    return result.GetError().GetCode();
+                }
+                script = result.GetValue();
+            }
+
+            script->SetScriptTypeName(ReadString(object, "scriptTypeName", script->GetScriptTypeName()));
+            script->SetEnabled(ReadBool(object, "enabled", script->IsEnabled()));
+            return ErrorCode::None;
+        }
+
         [[nodiscard]] ErrorCode ApplyComponents(GameObject& gameObject, const boost::json::array& components)
         {
             if (const boost::json::object* transform = FindComponent(components, "TransformComponent"); transform != nullptr)
@@ -605,6 +638,15 @@ namespace ve
             if (const boost::json::object* light = FindComponent(components, "LightComponent"); light != nullptr)
             {
                 const ErrorCode result = ApplyLightComponent(gameObject, *light);
+                if (result != ErrorCode::None)
+                {
+                    return result;
+                }
+            }
+
+            if (const boost::json::object* script = FindComponent(components, "ScriptableComponent"); script != nullptr)
+            {
+                const ErrorCode result = ApplyScriptableComponent(gameObject, *script);
                 if (result != ErrorCode::None)
                 {
                     return result;

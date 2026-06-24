@@ -670,8 +670,8 @@ First-stage Windows scope:
 - Load a managed script assembly.
 - Expose core native APIs through a C ABI bridge.
 - Provide a handwritten `VEngine.ScriptAPI` layer in C#.
-- Support `ScriptComponent`.
-- Dispatch lifecycle methods such as `OnCreate`, `OnUpdate`, and `OnDestroy`.
+- Support `ScriptableComponent`.
+- Dispatch lifecycle methods such as `OnCreate`, `OnDestroy`, `OnUpdate`, `OnLateUpdate`, `OnEnable`, and `OnDisable`.
 - Support reloading after stopping the scene in Editor.
 
 First-stage iOS scope:
@@ -1019,7 +1019,7 @@ Recommended built-in first-stage components:
 - `CameraComponent`.
 - `MeshRenderComponent`.
 - `LightComponent`.
-- `ScriptComponent`.
+- `ScriptableComponent`.
 - `CanvasComponent`.
 - `ColliderComponent`.
 
@@ -1065,7 +1065,7 @@ First-stage API binding approach:
 - Keep API shape stable and small.
 - Expose only necessary GameObject, Component, Transform, Input, Time, and Logging APIs.
 
-Script lifecycle:
+ScriptableComponent lifecycle:
 
 ```text
 OnCreate
@@ -1073,6 +1073,7 @@ OnDestroy
 OnEnable
 OnDisable
 OnUpdate
+OnLateUpdate
 ```
 
 Editor reload policy:

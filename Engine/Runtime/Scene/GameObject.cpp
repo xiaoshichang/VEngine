@@ -17,23 +17,53 @@ namespace ve
 
     GameObject::~GameObject()
     {
+        if (scriptableCmpt_ != nullptr)
+        {
+            if (scriptableCmpt_->IsEnabled())
+            {
+                scriptableCmpt_->SetEnabled(false);
+            }
+            scriptableCmpt_->OnDestroy();
+            scriptableCmpt_->ClearOwner();
+        }
+
         if (lightCmpt_ != nullptr)
         {
+            if (lightCmpt_->IsEnabled())
+            {
+                lightCmpt_->SetEnabled(false);
+            }
+            lightCmpt_->OnDestroy();
             lightCmpt_->ClearOwner();
         }
 
         if (cameraCmpt_ != nullptr)
         {
+            if (cameraCmpt_->IsEnabled())
+            {
+                cameraCmpt_->SetEnabled(false);
+            }
+            cameraCmpt_->OnDestroy();
             cameraCmpt_->ClearOwner();
         }
 
         if (meshRenderCmpt_ != nullptr)
         {
+            if (meshRenderCmpt_->IsEnabled())
+            {
+                meshRenderCmpt_->SetEnabled(false);
+            }
+            meshRenderCmpt_->OnDestroy();
             meshRenderCmpt_->ClearOwner();
         }
 
         if (transformCmpt_ != nullptr)
         {
+            if (transformCmpt_->IsEnabled())
+            {
+                transformCmpt_->SetEnabled(false);
+            }
+            transformCmpt_->OnDestroy();
             transformCmpt_->ClearOwner();
         }
     }
@@ -72,6 +102,11 @@ namespace ve
             ++count;
         }
 
+        if (scriptableCmpt_ != nullptr)
+        {
+            ++count;
+        }
+
         return count;
     }
 
@@ -83,6 +118,7 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            scriptableCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -110,6 +146,7 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            scriptableCmpt_.get(),
         };
 
         for (const Component* component : componentSlots)
@@ -137,6 +174,7 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            scriptableCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -168,6 +206,7 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            scriptableCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -195,5 +234,10 @@ namespace ve
     void GameObject::InitializeRequiredComponents()
     {
         transformCmpt_ = std::make_unique<TransformComponent>(*scene_, *this);
+        transformCmpt_->OnCreate();
+        if (transformCmpt_->IsEnabled())
+        {
+            transformCmpt_->OnEnable();
+        }
     }
 } // namespace ve

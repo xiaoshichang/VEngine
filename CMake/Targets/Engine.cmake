@@ -53,6 +53,11 @@ function(ve_add_engine)
             Engine/Runtime/Scene/SceneSerialization.cpp
             Engine/Runtime/Scene/SceneSystem.cpp
             Engine/Runtime/Scene/TransformComponent.cpp
+            Engine/Runtime/Scripting/DotNetScriptingBackend.cpp
+            Engine/Runtime/Scripting/IOSAOTScriptingBackend.cpp
+            Engine/Runtime/Scripting/ScriptableComponent.cpp
+            Engine/Runtime/Scripting/ScriptingSystem.cpp
+            Engine/Runtime/Scripting/WindowsJITScriptingBackend.cpp
             Engine/Runtime/Threading/Synchronization.cpp
             Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
@@ -121,6 +126,13 @@ function(ve_add_engine)
             Engine/Runtime/Scene/SceneSerialization.h
             Engine/Runtime/Scene/SceneSystem.h
             Engine/Runtime/Scene/TransformComponent.h
+            Engine/Runtime/Scripting/DotNetScriptingBackend.h
+            Engine/Runtime/Scripting/IOSAOTScriptingBackend.h
+            Engine/Runtime/Scripting/ScriptableComponent.h
+            Engine/Runtime/Scripting/ScriptingSystem.h
+            Engine/Runtime/Scripting/ScriptingSystemBackend.h
+            Engine/Runtime/Scripting/ScriptingTypes.h
+            Engine/Runtime/Scripting/WindowsJITScriptingBackend.h
             Engine/Runtime/Threading/Atomic.h
             Engine/Runtime/Threading/LockFreeMpscQueue.h
             Engine/Runtime/Threading/LockFreeSpscQueue.h

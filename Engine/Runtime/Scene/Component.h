@@ -29,11 +29,23 @@ namespace ve
         /// Enables or disables Scene update for this component.
         virtual void SetEnabled(bool enabled) noexcept;
 
+        /// Called after this component is attached to a GameObject.
+        virtual void OnCreate();
+
+        /// Called before this component is detached from a GameObject or destroyed with its owner.
+        virtual void OnDestroy();
+
         /// Called by Scene update while this component and its owner are enabled.
         virtual void OnUpdate(Float32 deltaSeconds);
 
         /// Called after all Scene update work for the frame has completed.
         virtual void OnLateUpdate(Float32 deltaSeconds);
+
+        /// Called when this component becomes enabled.
+        virtual void OnEnable();
+
+        /// Called when this component becomes disabled.
+        virtual void OnDisable();
 
     private:
         friend class GameObject;

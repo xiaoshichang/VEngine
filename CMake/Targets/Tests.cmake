@@ -74,6 +74,22 @@ function(ve_add_tests)
         COMMAND $<TARGET_FILE:VEngineSceneSerializationTests>
     )
 
+    add_executable(VEngineScriptingTests
+        Tests/Unit/ScriptingTests.cpp
+    )
+
+    target_link_libraries(VEngineScriptingTests
+        PRIVATE
+            VEngine
+    )
+
+    ve_configure_target(VEngineScriptingTests)
+
+    add_test(
+        NAME VEngineScriptingTests
+        COMMAND $<TARGET_FILE:VEngineScriptingTests>
+    )
+
     add_executable(VEngineResourceRenderTests
         Tests/Unit/ResourceRenderTests.cpp
     )

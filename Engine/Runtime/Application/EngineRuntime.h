@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/ResourceSystem.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
+#include "Engine/Runtime/Scripting/ScriptingSystem.h"
 #include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Time/Time.h"
 
@@ -43,6 +44,9 @@ namespace ve
 
         /// Configuration for the Render Thread and render command queue service.
         RenderSystemInitParam renderSystem;
+
+        /// Configuration for the managed scripting service.
+        ScriptingSystemInitParam scriptingSystem;
     };
 
     /// Owns the shared runtime service lifecycle for Player, Editor, and tools.
@@ -131,6 +135,9 @@ namespace ve
         [[nodiscard]] ResourceSystem& GetResourceSystem() noexcept;
         [[nodiscard]] const ResourceSystem& GetResourceSystem() const noexcept;
 
+        [[nodiscard]] ScriptingSystem& GetScriptingSystem() noexcept;
+        [[nodiscard]] const ScriptingSystem& GetScriptingSystem() const noexcept;
+
         /// Returns the runtime-owned Scene System.
         ///
         /// The runtime must be initialized before callers use the returned service.
@@ -149,6 +156,7 @@ namespace ve
         SceneSystem sceneSystem_;
         RenderSystem renderSystem_;
         ResourceSystem resourceSystem_;
+        ScriptingSystem scriptingSystem_;
         MainThreadSceneThreadFrameEndSync mainThreadSceneThreadFrameEndSync_;
         SceneThreadRenderThreadFrameEndSync sceneThreadRenderThreadFrameEndSync_;
         EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;

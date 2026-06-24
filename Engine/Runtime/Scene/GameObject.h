@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Scene/LightComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/ScriptableComponent.h"
 
 #include <memory>
 #include <new>
@@ -44,7 +45,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent.");
+                          "LightComponent, or ScriptableComponent.");
 
             std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
             VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
@@ -74,7 +75,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent.");
+                          "LightComponent, or ScriptableComponent.");
 
             std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
             VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
@@ -87,7 +88,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent.");
+                          "LightComponent, or ScriptableComponent.");
 
             const std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
             VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
@@ -100,7 +101,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent.");
+                          "LightComponent, or ScriptableComponent.");
 
             // Transform drives hierarchy and cannot be removed from a live GameObject.
             if constexpr (std::is_same_v<TComponent, TransformComponent>)
@@ -114,6 +115,12 @@ namespace ve
             {
                 return false;
             }
+
+            if ((*componentSlot)->IsEnabled())
+            {
+                (*componentSlot)->SetEnabled(false);
+            }
+            (*componentSlot)->OnDestroy();
 
             if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
             {
@@ -141,7 +148,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent.");
+                          "LightComponent, or ScriptableComponent.");
 
             return AddComponentInternal<TComponent>(false, std::forward<TArgs>(args)...);
         }
@@ -152,7 +159,8 @@ namespace ve
 
         template<typename TComponent>
         static constexpr bool IsSupportedComponentTypeV = std::is_same_v<TComponent, TransformComponent> || std::is_same_v<TComponent, MeshRenderComponent> ||
-                                                          std::is_same_v<TComponent, CameraComponent> || std::is_same_v<TComponent, LightComponent>;
+                                                          std::is_same_v<TComponent, CameraComponent> || std::is_same_v<TComponent, LightComponent> ||
+                                                          std::is_same_v<TComponent, ScriptableComponent>;
 
         template<typename TComponent>
         [[nodiscard]] std::unique_ptr<TComponent>* ResolveComponentSlot() noexcept
@@ -172,6 +180,10 @@ namespace ve
             else if constexpr (std::is_same_v<TComponent, LightComponent>)
             {
                 return &lightCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
+            {
+                return &scriptableCmpt_;
             }
             else
             {
@@ -197,6 +209,10 @@ namespace ve
             else if constexpr (std::is_same_v<TComponent, LightComponent>)
             {
                 return &lightCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
+            {
+                return &scriptableCmpt_;
             }
             else
             {
@@ -226,6 +242,11 @@ namespace ve
                 std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
                 TComponent* componentPointer = component.get();
                 *componentSlot = std::move(component);
+                componentPointer->OnCreate();
+                if (componentPointer->IsEnabled())
+                {
+                    componentPointer->OnEnable();
+                }
                 if (registerRenderThread)
                 {
                     if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
@@ -255,5 +276,6 @@ namespace ve
         std::unique_ptr<MeshRenderComponent> meshRenderCmpt_;
         std::unique_ptr<CameraComponent> cameraCmpt_;
         std::unique_ptr<LightComponent> lightCmpt_;
+        std::unique_ptr<ScriptableComponent> scriptableCmpt_;
     };
 } // namespace ve
