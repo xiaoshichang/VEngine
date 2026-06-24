@@ -19,6 +19,7 @@ function(ve_configure_target targetName)
         target_compile_options(${targetName}
             PRIVATE
                 /W4
+                /FS
                 /permissive-
         )
     else()

@@ -16,7 +16,7 @@ function(ve_prepare_jolt_source)
     set(requiredJoltFiles
         "${VE_JOLT_SOURCE_DIR}/Build/CMakeLists.txt"
         "${VE_JOLT_SOURCE_DIR}/Jolt/Jolt.h"
-        "${VE_JOLT_SOURCE_DIR}/Jolt/Jolt.cmake"
+        "${VE_JOLT_SOURCE_DIR}/Jolt/Core/Core.h"
     )
 
     set(joltSourceReady ON)

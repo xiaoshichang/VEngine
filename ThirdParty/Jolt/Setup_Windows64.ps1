@@ -47,7 +47,21 @@ function Test-JoltSource
 {
     param([string]$Path)
 
-    return Test-Path (Join-Path $Path "Build\CMakeLists.txt")
+    $RequiredFiles = @(
+        "Build\CMakeLists.txt",
+        "Jolt\Jolt.h",
+        "Jolt\Core\Core.h"
+    )
+
+    foreach ($RequiredFile in $RequiredFiles)
+    {
+        if (-not (Test-Path (Join-Path $Path $RequiredFile)))
+        {
+            return $false
+        }
+    }
+
+    return $true
 }
 
 function Expand-JoltArchive
@@ -120,6 +134,12 @@ Require-Command cmake
 if (-not (Test-Path $SourceDir))
 {
     New-Item -ItemType Directory -Force $Root | Out-Null
+    Expand-JoltArchive
+}
+elseif (-not (Test-JoltSource $SourceDir))
+{
+    Write-Host "Jolt Physics source is incomplete, recreating from archive: $SourceDir"
+    Remove-Item -Recurse -Force $SourceDir
     Expand-JoltArchive
 }
 
