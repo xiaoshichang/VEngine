@@ -1,5 +1,8 @@
 #include "Engine/Runtime/Scene/Component.h"
 
+#include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scene/SceneSystem.h"
+
 namespace ve
 {
     Component::Component(Scene& scene, GameObject& owner) noexcept
@@ -31,6 +34,12 @@ namespace ve
         }
 
         enabled_ = enabled;
+        const SceneSystem* sceneSystem = scene_ != nullptr ? scene_->GetSceneSystem() : nullptr;
+        if (sceneSystem == nullptr || !sceneSystem->ShouldDispatchLifecycleCallbacks())
+        {
+            return;
+        }
+
         if (enabled_)
         {
             OnEnable();
@@ -41,13 +50,9 @@ namespace ve
         }
     }
 
-    void Component::OnCreate()
-    {
-    }
+    void Component::OnCreate() {}
 
-    void Component::OnDestroy()
-    {
-    }
+    void Component::OnDestroy() {}
 
     void Component::OnUpdate(Float32 deltaSeconds)
     {
@@ -59,13 +64,9 @@ namespace ve
         static_cast<void>(deltaSeconds);
     }
 
-    void Component::OnEnable()
-    {
-    }
+    void Component::OnEnable() {}
 
-    void Component::OnDisable()
-    {
-    }
+    void Component::OnDisable() {}
 
     void Component::ClearOwner() noexcept
     {

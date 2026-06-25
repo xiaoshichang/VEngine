@@ -21,6 +21,7 @@
 namespace ve
 {
     class Scene;
+    class SceneSystem;
 
     /// Node in a Scene-owned hierarchy.
     ///
@@ -152,11 +153,7 @@ namespace ve
                     }
                 }
 
-                if (scriptableCmpt_->IsEnabled())
-                {
-                    scriptableCmpt_->SetEnabled(false);
-                }
-                scriptableCmpt_->OnDestroy();
+                DispatchComponentDestroyCallbacks(*scriptableCmpt_);
                 scriptableCmpt_->ClearOwner();
                 scriptableCmpt_.reset();
                 return true;
@@ -170,11 +167,7 @@ namespace ve
                     return false;
                 }
 
-                if ((*componentSlot)->IsEnabled())
-                {
-                    (*componentSlot)->SetEnabled(false);
-                }
-                (*componentSlot)->OnDestroy();
+                DispatchComponentDestroyCallbacks(**componentSlot);
 
                 if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
                 {
@@ -211,12 +204,14 @@ namespace ve
 
     private:
         friend class Scene;
+        friend class SceneSystem;
         friend class TransformComponent;
 
         template<typename TComponent>
-        static constexpr bool IsSupportedComponentTypeV = std::is_same_v<TComponent, TransformComponent> || std::is_same_v<TComponent, MeshRenderComponent> ||
-                                                          std::is_same_v<TComponent, CameraComponent> || std::is_same_v<TComponent, LightComponent> ||
-                                                          std::is_same_v<TComponent, ScriptableComponent> || std::is_same_v<TComponent, DotnetScriptableComponent>;
+        static constexpr bool IsSupportedComponentTypeV =
+            std::is_same_v<TComponent, TransformComponent> || std::is_same_v<TComponent, MeshRenderComponent> || std::is_same_v<TComponent, CameraComponent> ||
+            std::is_same_v<TComponent, LightComponent> || std::is_same_v<TComponent, ScriptableComponent> ||
+            std::is_same_v<TComponent, DotnetScriptableComponent>;
 
         template<typename TComponent>
         [[nodiscard]] std::unique_ptr<TComponent>* ResolveComponentSlot() noexcept
@@ -269,6 +264,10 @@ namespace ve
         }
 
         void InitializeRequiredComponents();
+        [[nodiscard]] bool ShouldDispatchLifecycleCallbacks() const noexcept;
+        void DispatchComponentCreateCallbacks(Component& component);
+        void DispatchComponentDestroyCallbacks(Component& component) noexcept;
+        void DispatchLifecycleCreateCallbacksRecursive();
 
         template<typename TComponent, typename... TArgs>
         [[nodiscard]] Result<TComponent*> AddComponentInternal(bool registerRenderThread, TArgs&&... args)
@@ -286,11 +285,7 @@ namespace ve
                     std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
                     TComponent* componentPointer = component.get();
                     scriptableCmpt_ = std::move(component);
-                    componentPointer->OnCreate();
-                    if (componentPointer->IsEnabled())
-                    {
-                        componentPointer->OnEnable();
-                    }
+                    DispatchComponentCreateCallbacks(*componentPointer);
                     return Result<TComponent*>::Success(componentPointer);
                 }
                 catch (const std::bad_alloc&)
@@ -317,11 +312,7 @@ namespace ve
                     std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
                     TComponent* componentPointer = component.get();
                     *componentSlot = std::move(component);
-                    componentPointer->OnCreate();
-                    if (componentPointer->IsEnabled())
-                    {
-                        componentPointer->OnEnable();
-                    }
+                    DispatchComponentCreateCallbacks(*componentPointer);
                     if (registerRenderThread)
                     {
                         if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)

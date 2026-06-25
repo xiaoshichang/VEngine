@@ -17,6 +17,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace ve
 {
@@ -49,10 +50,17 @@ namespace ve
         Additive,
     };
 
+    enum class SceneExecutionMode
+    {
+        Editing,
+        Runtime,
+    };
+
     struct SceneLoadDesc
     {
         AssetID scene;
         SceneLoadMode mode = SceneLoadMode::Single;
+        SceneExecutionMode executionMode = SceneExecutionMode::Runtime;
     };
 
     /// Owns the active Scene and its update thread.
@@ -89,11 +97,21 @@ namespace ve
 
         /// Returns the active Scene. The returned pointer remains owned by SceneSystem.
         [[nodiscard]] const Scene* GetScene() const noexcept;
-        [[nodiscard]] Result<Scene*> LoadScene(const SceneLoadDesc& desc,
-                                               const IAssetRecordProvider& provider,
-                                               ResourceSystem& resourceSystem,
-                                               ScriptingSystem& scriptingSystem);
+        void SetSceneExecutionMode(SceneExecutionMode mode) noexcept;
+        [[nodiscard]] SceneExecutionMode GetSceneExecutionMode() const noexcept;
+        [[nodiscard]] bool ShouldDispatchLifecycleCallbacks() const noexcept;
+        void AfterLoadScene(Scene& scene);
+        void AfterCreateGameObject(GameObject& gameObject);
+        [[nodiscard]] Result<Scene*>
+        LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, ScriptingSystem& scriptingSystem);
+        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromString(std::string_view sceneText,
+                                                                           const IAssetRecordProvider& provider,
+                                                                           ResourceSystem& resourceSystem,
+                                                                           ScriptingSystem& scriptingSystem);
+        [[nodiscard]] Result<Scene*> ReplaceActiveScene(std::unique_ptr<Scene> scene, SceneExecutionMode executionMode);
         void UnloadActiveScene() noexcept;
+        void SetSceneUpdateEnabled(bool enabled) noexcept;
+        [[nodiscard]] bool IsSceneUpdateEnabled() const noexcept;
 
         /// Queues one OS event for Scene Thread processing.
         void EnqueueOSEvent(const OSEvent& event);

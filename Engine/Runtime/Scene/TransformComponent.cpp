@@ -2,6 +2,8 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Scene/GameObject.h"
+#include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scene/SceneSystem.h"
 
 #include <algorithm>
 #include <new>
@@ -137,6 +139,12 @@ namespace ve
 
             childTransform->SetParent(this);
             children_.push_back(std::move(child));
+            Scene* scene = GetScene();
+            SceneSystem* sceneSystem = scene != nullptr ? scene->GetSceneSystem() : nullptr;
+            if (sceneSystem != nullptr)
+            {
+                sceneSystem->AfterCreateGameObject(*childPointer);
+            }
             return Result<GameObject*>::Success(childPointer);
         }
         catch (const std::bad_alloc&)

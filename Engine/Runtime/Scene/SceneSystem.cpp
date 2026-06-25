@@ -13,6 +13,7 @@
 
 #include <exception>
 #include <new>
+#include <string_view>
 #include <utility>
 
 namespace ve
@@ -38,10 +39,17 @@ namespace ve
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
+        AtomicBool sceneUpdateEnabled{true};
+        Atomic<SceneExecutionMode> sceneExecutionMode{SceneExecutionMode::Runtime};
     };
 
     namespace
     {
+        [[nodiscard]] bool ShouldDispatchSceneLifecycleCallbacks(const SceneSystemImpl& impl) noexcept
+        {
+            return impl.sceneExecutionMode.load(std::memory_order_acquire) == SceneExecutionMode::Runtime;
+        }
+
         void ProcessOSEvents(SceneSystemImpl& impl)
         {
             const auto runtimeOnOSEvent = impl.runtimeOSEventCallback;
@@ -78,7 +86,7 @@ namespace ve
 
         void UpdateScene(SceneSystemImpl& impl, Float32 deltaSeconds)
         {
-            if (impl.scene != nullptr)
+            if (impl.scene != nullptr && impl.sceneUpdateEnabled.load(std::memory_order_acquire) && ShouldDispatchSceneLifecycleCallbacks(impl))
             {
                 impl.scene->Update(deltaSeconds);
                 impl.scene->LateUpdate(deltaSeconds);
@@ -349,10 +357,10 @@ namespace ve
             return resourceSystem.Request<SceneResource>(desc.scene, provider);
         }
 
-        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromResource(const SceneResource& sceneResource, ScriptingSystem& scriptingSystem)
+        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromText(std::string_view sceneText, ScriptingSystem& scriptingSystem)
         {
             auto scene = std::make_unique<Scene>();
-            const ErrorCode deserializeResult = SceneSerialization::LoadFromString(*scene, sceneResource.GetText(), scriptingSystem);
+            const ErrorCode deserializeResult = SceneSerialization::LoadFromString(*scene, sceneText, scriptingSystem);
             if (deserializeResult != ErrorCode::None)
             {
                 return Result<std::unique_ptr<Scene>>::Failure(Error(deserializeResult, "Failed to deserialize scene resource."));
@@ -361,13 +369,13 @@ namespace ve
             return Result<std::unique_ptr<Scene>>::Success(std::move(scene));
         }
 
-        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromResource(const SceneResource& sceneResource,
-                                                                            const IAssetRecordProvider& provider,
-                                                                            ResourceSystem& resourceSystem,
-                                                                            RenderSystem* renderSystem,
-                                                                            ScriptingSystem& scriptingSystem)
+        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromText(std::string_view sceneText,
+                                                                        const IAssetRecordProvider& provider,
+                                                                        ResourceSystem& resourceSystem,
+                                                                        RenderSystem* renderSystem,
+                                                                        ScriptingSystem& scriptingSystem)
         {
-            Result<std::unique_ptr<Scene>> scene = CreateSceneFromResource(sceneResource, scriptingSystem);
+            Result<std::unique_ptr<Scene>> scene = CreateSceneFromText(sceneText, scriptingSystem);
             if (!scene)
             {
                 return scene;
@@ -382,7 +390,17 @@ namespace ve
             return scene;
         }
 
-        [[nodiscard]] Scene* CommitLoadedScene(SceneSystemImpl& impl, SceneSystem& owner, SceneLoadMode mode, std::unique_ptr<Scene> scene)
+        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromResource(const SceneResource& sceneResource,
+                                                                            const IAssetRecordProvider& provider,
+                                                                            ResourceSystem& resourceSystem,
+                                                                            RenderSystem* renderSystem,
+                                                                            ScriptingSystem& scriptingSystem)
+        {
+            return BuildSceneFromText(sceneResource.GetText(), provider, resourceSystem, renderSystem, scriptingSystem);
+        }
+
+        [[nodiscard]] Scene*
+        CommitLoadedScene(SceneSystemImpl& impl, SceneSystem& owner, SceneLoadMode mode, std::unique_ptr<Scene> scene, SceneExecutionMode executionMode)
         {
             if (mode == SceneLoadMode::Single && impl.scene != nullptr)
             {
@@ -392,7 +410,9 @@ namespace ve
 
             Scene* loadedScene = scene.get();
             impl.scene = std::move(scene);
+            impl.sceneExecutionMode.store(executionMode, std::memory_order_release);
             impl.scene->SetSceneSystem(&owner);
+            owner.AfterLoadScene(*impl.scene);
             return loadedScene;
         }
     } // namespace
@@ -490,10 +510,51 @@ namespace ve
         return impl_->scene.get();
     }
 
-    Result<Scene*> SceneSystem::LoadScene(const SceneLoadDesc& desc,
-                                          const IAssetRecordProvider& provider,
-                                          ResourceSystem& resourceSystem,
-                                          ScriptingSystem& scriptingSystem)
+    void SceneSystem::SetSceneExecutionMode(SceneExecutionMode mode) noexcept
+    {
+        impl_->sceneExecutionMode.store(mode, std::memory_order_release);
+    }
+
+    SceneExecutionMode SceneSystem::GetSceneExecutionMode() const noexcept
+    {
+        return impl_->sceneExecutionMode.load(std::memory_order_acquire);
+    }
+
+    bool SceneSystem::ShouldDispatchLifecycleCallbacks() const noexcept
+    {
+        return ShouldDispatchSceneLifecycleCallbacks(*impl_);
+    }
+
+    void SceneSystem::AfterLoadScene(Scene& scene)
+    {
+        if (!ShouldDispatchLifecycleCallbacks())
+        {
+            return;
+        }
+
+        const SizeT rootCount = scene.GetRootGameObjectCount();
+        for (SizeT rootIndex = 0; rootIndex < rootCount; ++rootIndex)
+        {
+            GameObject* root = scene.GetRootGameObject(rootIndex);
+            if (root != nullptr)
+            {
+                root->DispatchLifecycleCreateCallbacksRecursive();
+            }
+        }
+    }
+
+    void SceneSystem::AfterCreateGameObject(GameObject& gameObject)
+    {
+        if (!ShouldDispatchLifecycleCallbacks())
+        {
+            return;
+        }
+
+        gameObject.DispatchLifecycleCreateCallbacksRecursive();
+    }
+
+    Result<Scene*>
+    SceneSystem::LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, ScriptingSystem& scriptingSystem)
     {
         // 1. Validate the requested mode before touching resource state. SceneSystem currently owns a single active
         // Scene, so additive loading is rejected until multiple live Scene ownership is introduced.
@@ -522,7 +583,26 @@ namespace ve
 
         // 4. Commit is the only phase that mutates the active scene pointer. SetSceneSystem() rebuilds render-thread
         // scene state after the new GameObject hierarchy and AssetRefs are complete.
-        Scene* loadedScene = CommitLoadedScene(*impl_, *this, desc.mode, scene.MoveValue());
+        Scene* loadedScene = CommitLoadedScene(*impl_, *this, desc.mode, scene.MoveValue(), desc.executionMode);
+        return Result<Scene*>::Success(loadedScene);
+    }
+
+    Result<std::unique_ptr<Scene>> SceneSystem::CreateSceneFromString(std::string_view sceneText,
+                                                                      const IAssetRecordProvider& provider,
+                                                                      ResourceSystem& resourceSystem,
+                                                                      ScriptingSystem& scriptingSystem)
+    {
+        return BuildSceneFromText(sceneText, provider, resourceSystem, impl_->renderSystem, scriptingSystem);
+    }
+
+    Result<Scene*> SceneSystem::ReplaceActiveScene(std::unique_ptr<Scene> scene, SceneExecutionMode executionMode)
+    {
+        if (scene == nullptr)
+        {
+            return Result<Scene*>::Failure(Error(ErrorCode::InvalidArgument, "SceneSystem::ReplaceActiveScene requires a scene."));
+        }
+
+        Scene* loadedScene = CommitLoadedScene(*impl_, *this, SceneLoadMode::Single, std::move(scene), executionMode);
         return Result<Scene*>::Success(loadedScene);
     }
 
@@ -534,6 +614,16 @@ namespace ve
         }
 
         impl_->scene->Clear();
+    }
+
+    void SceneSystem::SetSceneUpdateEnabled(bool enabled) noexcept
+    {
+        impl_->sceneUpdateEnabled.store(enabled, std::memory_order_release);
+    }
+
+    bool SceneSystem::IsSceneUpdateEnabled() const noexcept
+    {
+        return impl_->sceneUpdateEnabled.load(std::memory_order_acquire);
     }
 
     void SceneSystem::EnqueueOSEvent(const OSEvent& event)

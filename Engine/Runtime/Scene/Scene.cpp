@@ -116,6 +116,10 @@ namespace ve
             std::unique_ptr<GameObject> gameObject = std::make_unique<GameObject>(*this, std::move(name));
             GameObject* gameObjectPointer = gameObject.get();
             rootGameObjects_.push_back(std::move(gameObject));
+            if (sceneSystem_ != nullptr)
+            {
+                sceneSystem_->AfterCreateGameObject(*gameObjectPointer);
+            }
             return Result<GameObject*>::Success(gameObjectPointer);
         }
         catch (const std::bad_alloc&)
@@ -167,6 +171,16 @@ namespace ve
         }
     }
 
+    SceneSystem* Scene::GetSceneSystem() noexcept
+    {
+        return sceneSystem_;
+    }
+
+    const SceneSystem* Scene::GetSceneSystem() const noexcept
+    {
+        return sceneSystem_;
+    }
+
     std::shared_ptr<RTScene> Scene::GetRTScene() noexcept
     {
         return rtScene_;
@@ -206,8 +220,8 @@ namespace ve
             return;
         }
 
-        SubmitRTSceneCommand(
-            "RTSceneUpdateRenderItem", [item = std::move(item), updateParam = std::move(updateParam)]() mutable { item->ApplyUpdateParam(std::move(updateParam)); });
+        SubmitRTSceneCommand("RTSceneUpdateRenderItem",
+                             [item = std::move(item), updateParam = std::move(updateParam)]() mutable { item->ApplyUpdateParam(std::move(updateParam)); });
     }
 
     void Scene::RegisterCamera(std::shared_ptr<RTCamera> camera)
@@ -239,8 +253,9 @@ namespace ve
             return;
         }
 
-        SubmitRTSceneCommand(
-            "RTSceneUpdateCamera", [camera = std::move(camera), updateParam = std::move(updateParam)]() mutable { camera->ApplyUpdateParam(std::move(updateParam)); });
+        SubmitRTSceneCommand("RTSceneUpdateCamera",
+                             [camera = std::move(camera), updateParam = std::move(updateParam)]() mutable
+                             { camera->ApplyUpdateParam(std::move(updateParam)); });
     }
 
     void Scene::RegisterLight(std::shared_ptr<RTLight> light)
@@ -272,8 +287,8 @@ namespace ve
             return;
         }
 
-        SubmitRTSceneCommand(
-            "RTSceneUpdateLight", [light = std::move(light), updateParam = std::move(updateParam)]() mutable { light->ApplyUpdateParam(std::move(updateParam)); });
+        SubmitRTSceneCommand("RTSceneUpdateLight",
+                             [light = std::move(light), updateParam = std::move(updateParam)]() mutable { light->ApplyUpdateParam(std::move(updateParam)); });
     }
 
     void Scene::Update(Float32 deltaSeconds)
@@ -286,6 +301,7 @@ namespace ve
 
     Result<GameObject*> Scene::CreateRootGameObjectWithoutRenderRegistration(std::string name)
     {
+        VE_ASSERT(sceneSystem_ == nullptr);
         try
         {
             std::unique_ptr<GameObject> gameObject = std::make_unique<GameObject>(*this, std::move(name));

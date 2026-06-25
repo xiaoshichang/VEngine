@@ -13,7 +13,6 @@ namespace ve
         , scriptingSystem_(&scriptingSystem)
         , scriptTypeName_(std::move(scriptTypeName))
     {
-        CreateScriptInstance();
     }
 
     DotnetScriptableComponent::~DotnetScriptableComponent()
@@ -43,10 +42,12 @@ namespace ve
 
     void DotnetScriptableComponent::OnCreate()
     {
+        CreateScriptInstance();
     }
 
     void DotnetScriptableComponent::OnDestroy()
     {
+        ReleaseScriptInstance();
     }
 
     void DotnetScriptableComponent::OnUpdate(Float32 deltaSeconds)

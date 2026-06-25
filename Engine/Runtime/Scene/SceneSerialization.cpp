@@ -595,7 +595,8 @@ namespace ve
             const std::string scriptTypeName = ReadString(object, "scriptTypeName", script != nullptr ? script->GetScriptTypeName() : std::string());
             if (script == nullptr)
             {
-                Result<DotnetScriptableComponent*> result = gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptTypeName, scriptingSystem);
+                Result<DotnetScriptableComponent*> result =
+                    gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptTypeName, scriptingSystem);
                 if (!result)
                 {
                     return result.GetError().GetCode();
@@ -666,7 +667,8 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode ReadGameObjectRecursive(Scene& scene, TransformComponent* parent, const boost::json::object& object, ScriptingSystem& scriptingSystem)
+        [[nodiscard]] ErrorCode
+        ReadGameObjectRecursive(Scene& scene, TransformComponent* parent, const boost::json::object& object, ScriptingSystem& scriptingSystem)
         {
             const std::string name = ReadString(object, "name");
 

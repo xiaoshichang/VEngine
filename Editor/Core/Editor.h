@@ -65,6 +65,11 @@ namespace ve::editor
         void KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture);
         [[nodiscard]] std::vector<AssetID> CollectActiveResourceRoots() const;
         void CollectUnusedResources();
+        [[nodiscard]] bool IsPlaying() const noexcept;
+        [[nodiscard]] bool CanStartPlay() const noexcept;
+        [[nodiscard]] bool CanStopPlay() const noexcept;
+        void StartPlay();
+        void StopPlay();
 
         void OpenProject(std::string projectPath);
         void ShowProjectSelection();
@@ -82,6 +87,12 @@ namespace ve::editor
         {
             ProjectSelection,
             ProjectEditing,
+        };
+
+        enum class EditorPlayState
+        {
+            Editing,
+            Playing,
         };
 
         [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
@@ -128,6 +139,8 @@ namespace ve::editor
         Path selectedAssetPath_;
         std::atomic_bool initialized_{false};
         MainView mainView_ = MainView::ProjectSelection;
+        EditorPlayState playState_ = EditorPlayState::Editing;
+        UInt64 playSessionID_ = 0;
 
         // ImGui consumes native texture handles as raw IDs. Keep the owning RenderTexture objects alive at editor
         // scope, and let panels register those textures once when their editor-side view is initialized.
@@ -136,5 +149,6 @@ namespace ve::editor
         std::string currentProjectPath_;
         std::string currentProjectName_;
         Path currentScenePath_;
+        std::string editingSceneSnapshot_;
     };
 } // namespace ve::editor

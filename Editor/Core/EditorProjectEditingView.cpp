@@ -17,6 +17,7 @@ namespace ve::editor
         constexpr float InspectorWidth = 310.0F;
         constexpr float AssetsHeight = 230.0F;
         constexpr float StatusBarHeight = 24.0F;
+        constexpr float ToolbarHeight = 32.0F;
         constexpr float OpenSceneDialogWidth = 560.0F;
         constexpr float OpenSceneDialogHeight = 420.0F;
 
@@ -63,12 +64,13 @@ namespace ve::editor
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         RenderMainMenu(editor);
+        const float menuBarHeight = ImGui::GetFrameHeight();
+        RenderToolbar(editor, ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + menuBarHeight), ImVec2(viewport->WorkSize.x, ToolbarHeight));
         RenderOpenSceneDialog(editor);
         projectDirectoryDialog_.Render(editor);
         buildPackageDialog_.Render(editor);
 
-        const float menuBarHeight = ImGui::GetFrameHeight();
-        const float contentTop = viewport->WorkPos.y + menuBarHeight + PanelGap;
+        const float contentTop = viewport->WorkPos.y + menuBarHeight + ToolbarHeight + PanelGap;
         const float statusBarY = viewport->WorkPos.y + viewport->WorkSize.y - StatusBarHeight;
         const float contentHeight = (std::max)(0.0F, statusBarY - contentTop - PanelGap);
         const ImVec2 origin(viewport->WorkPos.x, contentTop);
@@ -143,7 +145,7 @@ namespace ve::editor
 
         if (ImGui::BeginMenu("Project"))
         {
-            if (ImGui::MenuItem("Open Scene..."))
+            if (ImGui::MenuItem("Open Scene...", nullptr, false, !editor.IsPlaying()))
             {
                 openSceneDialogRequested_ = true;
             }
@@ -155,7 +157,7 @@ namespace ve::editor
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Open Project..."))
+            if (ImGui::MenuItem("Open Project...", nullptr, false, !editor.IsPlaying()))
             {
                 projectDirectoryDialog_.RequestOpen();
             }
@@ -165,7 +167,7 @@ namespace ve::editor
 
         if (ImGui::BeginMenu("Build"))
         {
-            if (ImGui::MenuItem("Package Windows..."))
+            if (ImGui::MenuItem("Package Windows...", nullptr, false, !editor.IsPlaying()))
             {
                 buildPackageDialog_.RequestOpen();
             }
@@ -174,6 +176,56 @@ namespace ve::editor
         }
 
         ImGui::EndMainMenuBar();
+    }
+
+    void ProjectEditingView::RenderToolbar(Editor& editor, const ImVec2& position, const ImVec2& size)
+    {
+        constexpr ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
+                                                 ImGuiWindowFlags_NoScrollWithMouse;
+        constexpr float ButtonWidth = 72.0F;
+
+        ImGui::SetNextWindowPos(position);
+        ImGui::SetNextWindowSize(size);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0F, 4.0F));
+        if (!ImGui::Begin("EditorToolbar", nullptr, WindowFlags))
+        {
+            ImGui::End();
+            ImGui::PopStyleVar();
+            return;
+        }
+
+        const float buttonX = (std::max)(0.0F, (ImGui::GetContentRegionAvail().x - ButtonWidth) * 0.5F);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + buttonX);
+
+        if (editor.IsPlaying())
+        {
+            if (ImGui::Button("Stop", ImVec2(ButtonWidth, 0.0F)))
+            {
+                editor.StopPlay();
+            }
+        }
+        else
+        {
+            const bool canStartPlay = editor.CanStartPlay();
+            if (!canStartPlay)
+            {
+                ImGui::BeginDisabled();
+            }
+
+            if (ImGui::Button("Play", ImVec2(ButtonWidth, 0.0F)))
+            {
+                editor.StartPlay();
+            }
+
+            if (!canStartPlay)
+            {
+                ImGui::EndDisabled();
+            }
+        }
+
+        ImGui::End();
+        ImGui::PopStyleVar();
     }
 
     void ProjectEditingView::RenderOpenSceneDialog(Editor& editor)

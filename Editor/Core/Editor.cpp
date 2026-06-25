@@ -182,6 +182,8 @@ namespace ve::editor
 
         sceneSystem_ = &runtime.GetSceneSystem();
         nativeWindowHandle_ = nativeWindowHandle;
+        sceneSystem_->SetSceneExecutionMode(SceneExecutionMode::Editing);
+        sceneSystem_->SetSceneUpdateEnabled(false);
         initialized_.store(true, std::memory_order_release);
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
             .onBeforeOSEvents = [this]() { input_.BeginOSEventFrame(); },
@@ -383,6 +385,7 @@ namespace ve::editor
         if (sceneSystem_ != nullptr)
         {
             sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{});
+            sceneSystem_->SetSceneUpdateEnabled(true);
             sceneSystem_ = nullptr;
         }
 
@@ -590,12 +593,112 @@ namespace ve::editor
         }
     }
 
+    bool Editor::IsPlaying() const noexcept
+    {
+        return playState_ == EditorPlayState::Playing;
+    }
+
+    bool Editor::CanStartPlay() const noexcept
+    {
+        return playState_ == EditorPlayState::Editing && mainView_ == MainView::ProjectEditing && sceneSystem_ != nullptr &&
+               sceneSystem_->GetScene() != nullptr && assetDatabase_.IsInitialized() && runtime_ != nullptr;
+    }
+
+    bool Editor::CanStopPlay() const noexcept
+    {
+        return playState_ == EditorPlayState::Playing && sceneSystem_ != nullptr && runtime_ != nullptr && !editingSceneSnapshot_.empty();
+    }
+
+    void Editor::StartPlay()
+    {
+        if (!CanStartPlay())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped Play because no editable scene is active.");
+            return;
+        }
+
+        VE_ASSERT(sceneSystem_ != nullptr);
+        VE_ASSERT(runtime_ != nullptr);
+
+        Scene* editingScene = sceneSystem_->GetScene();
+        VE_ASSERT(editingScene != nullptr);
+
+        Result<std::string> snapshot = SceneSerialization::SaveToString(*editingScene);
+        if (!snapshot)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to snapshot editing scene for Play: {}", snapshot.GetError().GetMessage());
+            return;
+        }
+
+        Result<std::unique_ptr<Scene>> playScene =
+            sceneSystem_->CreateSceneFromString(snapshot.GetValue(), assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
+        if (!playScene)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to create play scene: {}", playScene.GetError().GetMessage());
+            return;
+        }
+
+        ClearSelection();
+        Result<Scene*> replaceResult = sceneSystem_->ReplaceActiveScene(playScene.MoveValue(), SceneExecutionMode::Runtime);
+        if (!replaceResult)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to activate play scene: {}", replaceResult.GetError().GetMessage());
+            return;
+        }
+
+        editingSceneSnapshot_ = snapshot.MoveValue();
+        playState_ = EditorPlayState::Playing;
+        ++playSessionID_;
+        sceneSystem_->SetSceneUpdateEnabled(true);
+        CollectUnusedResources();
+        VE_LOG_INFO_CATEGORY("Editor", "Entered Play mode.");
+    }
+
+    void Editor::StopPlay()
+    {
+        if (!CanStopPlay())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped Stop because Play mode is not active.");
+            return;
+        }
+
+        VE_ASSERT(sceneSystem_ != nullptr);
+        VE_ASSERT(runtime_ != nullptr);
+
+        Result<std::unique_ptr<Scene>> editingScene =
+            sceneSystem_->CreateSceneFromString(editingSceneSnapshot_, assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
+        if (!editingScene)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to restore editing scene after Play: {}", editingScene.GetError().GetMessage());
+            return;
+        }
+
+        ClearSelection();
+        Result<Scene*> replaceResult = sceneSystem_->ReplaceActiveScene(editingScene.MoveValue(), SceneExecutionMode::Editing);
+        if (!replaceResult)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to reactivate editing scene after Play: {}", replaceResult.GetError().GetMessage());
+            return;
+        }
+
+        editingSceneSnapshot_.clear();
+        playState_ = EditorPlayState::Editing;
+        ++playSessionID_;
+        sceneSystem_->SetSceneUpdateEnabled(false);
+        CollectUnusedResources();
+        VE_LOG_INFO_CATEGORY("Editor", "Exited Play mode.");
+    }
+
     void Editor::ShutdownOpenProjectState() noexcept
     {
+        editingSceneSnapshot_.clear();
+        playState_ = EditorPlayState::Editing;
+
         ClearSelection();
 
         if (sceneSystem_ != nullptr)
         {
+            sceneSystem_->SetSceneUpdateEnabled(false);
             sceneSystem_->UnloadActiveScene();
         }
 
@@ -688,8 +791,10 @@ namespace ve::editor
             return;
         }
 
-        Result<Scene*> sceneResult = sceneSystem_->LoadScene(
-            SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
+        Result<Scene*> sceneResult = sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single, SceneExecutionMode::Editing},
+                                                             assetDatabase_,
+                                                             runtime_->GetResourceSystem(),
+                                                             runtime_->GetScriptingSystem());
         if (!sceneResult)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to construct project start scene '{}': {}", descriptor.startScene, sceneResult.GetError().GetMessage());
@@ -715,6 +820,12 @@ namespace ve::editor
     {
         if (projectPath.empty())
         {
+            return;
+        }
+
+        if (IsPlaying())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Stop Play mode before opening another project.");
             return;
         }
 
@@ -762,6 +873,12 @@ namespace ve::editor
             return;
         }
 
+        if (IsPlaying())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Stop Play mode before opening another scene.");
+            return;
+        }
+
         if (sceneSystem_ == nullptr || runtime_ == nullptr)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Skipped opening scene '{}' because runtime scene services are not ready.", scenePath.GetString());
@@ -781,8 +898,10 @@ namespace ve::editor
             return;
         }
 
-        Result<Scene*> sceneResult = sceneSystem_->LoadScene(
-            SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
+        Result<Scene*> sceneResult = sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single, SceneExecutionMode::Editing},
+                                                             assetDatabase_,
+                                                             runtime_->GetResourceSystem(),
+                                                             runtime_->GetScriptingSystem());
         if (!sceneResult)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to open scene '{}': {}", scenePath.GetString(), sceneResult.GetError().GetMessage());
@@ -833,7 +952,8 @@ namespace ve::editor
 
     bool Editor::CanSaveCurrentScene() const noexcept
     {
-        return sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr && !currentScenePath_.IsEmpty() && assetDatabase_.IsInitialized();
+        return playState_ == EditorPlayState::Editing && sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr && !currentScenePath_.IsEmpty() &&
+               assetDatabase_.IsInitialized();
     }
 
     const std::string& Editor::GetCurrentProjectPath() const noexcept

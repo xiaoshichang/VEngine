@@ -40,6 +40,8 @@ namespace ve
         void Clear() noexcept;
 
         void SetSceneSystem(SceneSystem* sceneSystem) noexcept;
+        [[nodiscard]] SceneSystem* GetSceneSystem() noexcept;
+        [[nodiscard]] const SceneSystem* GetSceneSystem() const noexcept;
         [[nodiscard]] std::shared_ptr<RTScene> GetRTScene() noexcept;
         [[nodiscard]] std::shared_ptr<const RTScene> GetRTScene() const noexcept;
 

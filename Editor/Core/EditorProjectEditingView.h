@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Editor/Core/Gizmos.h"
 #include "Editor/Core/EditorBuildPackageDialog.h"
 #include "Editor/Core/EditorProjectDirectoryDialog.h"
+#include "Editor/Core/Gizmos.h"
 #include "Editor/Panels/AssetsPanel.h"
 #include "Editor/Panels/GameViewPanel.h"
 #include "Editor/Panels/HierarchyPanel.h"
@@ -39,6 +39,7 @@ namespace ve::editor
 
     private:
         void RenderMainMenu(Editor& editor);
+        void RenderToolbar(Editor& editor, const ImVec2& position, const ImVec2& size);
         void RenderOpenSceneDialog(Editor& editor);
         void RenderStatusBar(Editor& editor, const ImVec2& position, const ImVec2& size);
 

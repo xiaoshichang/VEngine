@@ -1,5 +1,8 @@
 #include "Engine/Runtime/Scene/GameObject.h"
 
+#include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scene/SceneSystem.h"
+
 namespace ve
 {
     GameObject::GameObject(Scene& scene)
@@ -19,51 +22,31 @@ namespace ve
     {
         if (scriptableCmpt_ != nullptr)
         {
-            if (scriptableCmpt_->IsEnabled())
-            {
-                scriptableCmpt_->SetEnabled(false);
-            }
-            scriptableCmpt_->OnDestroy();
+            DispatchComponentDestroyCallbacks(*scriptableCmpt_);
             scriptableCmpt_->ClearOwner();
         }
 
         if (lightCmpt_ != nullptr)
         {
-            if (lightCmpt_->IsEnabled())
-            {
-                lightCmpt_->SetEnabled(false);
-            }
-            lightCmpt_->OnDestroy();
+            DispatchComponentDestroyCallbacks(*lightCmpt_);
             lightCmpt_->ClearOwner();
         }
 
         if (cameraCmpt_ != nullptr)
         {
-            if (cameraCmpt_->IsEnabled())
-            {
-                cameraCmpt_->SetEnabled(false);
-            }
-            cameraCmpt_->OnDestroy();
+            DispatchComponentDestroyCallbacks(*cameraCmpt_);
             cameraCmpt_->ClearOwner();
         }
 
         if (meshRenderCmpt_ != nullptr)
         {
-            if (meshRenderCmpt_->IsEnabled())
-            {
-                meshRenderCmpt_->SetEnabled(false);
-            }
-            meshRenderCmpt_->OnDestroy();
+            DispatchComponentDestroyCallbacks(*meshRenderCmpt_);
             meshRenderCmpt_->ClearOwner();
         }
 
         if (transformCmpt_ != nullptr)
         {
-            if (transformCmpt_->IsEnabled())
-            {
-                transformCmpt_->SetEnabled(false);
-            }
-            transformCmpt_->OnDestroy();
+            DispatchComponentDestroyCallbacks(*transformCmpt_);
             transformCmpt_->ClearOwner();
         }
     }
@@ -234,10 +217,76 @@ namespace ve
     void GameObject::InitializeRequiredComponents()
     {
         transformCmpt_ = std::make_unique<TransformComponent>(*scene_, *this);
-        transformCmpt_->OnCreate();
-        if (transformCmpt_->IsEnabled())
+    }
+
+    bool GameObject::ShouldDispatchLifecycleCallbacks() const noexcept
+    {
+        const SceneSystem* sceneSystem = scene_ != nullptr ? scene_->GetSceneSystem() : nullptr;
+        return sceneSystem != nullptr && sceneSystem->ShouldDispatchLifecycleCallbacks();
+    }
+
+    void GameObject::DispatchComponentCreateCallbacks(Component& component)
+    {
+        if (!ShouldDispatchLifecycleCallbacks())
         {
-            transformCmpt_->OnEnable();
+            return;
+        }
+
+        component.OnCreate();
+        if (component.IsEnabled())
+        {
+            component.OnEnable();
+        }
+    }
+
+    void GameObject::DispatchComponentDestroyCallbacks(Component& component) noexcept
+    {
+        if (!ShouldDispatchLifecycleCallbacks())
+        {
+            return;
+        }
+
+        if (component.IsEnabled())
+        {
+            component.SetEnabled(false);
+        }
+        component.OnDestroy();
+    }
+
+    void GameObject::DispatchLifecycleCreateCallbacksRecursive()
+    {
+        const SizeT childCount = transformCmpt_ != nullptr ? transformCmpt_->GetChildCount() : 0;
+        Component* componentSlots[] = {
+            transformCmpt_.get(),
+            meshRenderCmpt_.get(),
+            cameraCmpt_.get(),
+            lightCmpt_.get(),
+            scriptableCmpt_.get(),
+        };
+        for (Component* component : componentSlots)
+        {
+            if (component != nullptr)
+            {
+                component->OnCreate();
+                if (component->IsEnabled())
+                {
+                    component->OnEnable();
+                }
+            }
+        }
+
+        if (transformCmpt_ == nullptr)
+        {
+            return;
+        }
+
+        for (SizeT childIndex = 0; childIndex < childCount; ++childIndex)
+        {
+            GameObject* child = transformCmpt_->GetChildGameObject(childIndex);
+            if (child != nullptr)
+            {
+                child->DispatchLifecycleCreateCallbacksRecursive();
+            }
         }
     }
 } // namespace ve

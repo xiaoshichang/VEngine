@@ -516,6 +516,12 @@ namespace ve::editor
             return;
         }
 
+        if (editor_->IsPlaying())
+        {
+            ImGui::TextDisabled("Stop Play mode to edit material assets.");
+            return;
+        }
+
         const EditorAssetDatabase& assetDatabase = editor_->GetAssetDatabase();
         const Path materialPhysicalPath = assetDatabase.GetProjectRoot() / asset.path;
         Result<boost::json::object> materialJson = ReadJsonObjectFile(materialPhysicalPath);
