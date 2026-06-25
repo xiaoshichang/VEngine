@@ -39,17 +39,10 @@ namespace ve
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
-        AtomicBool sceneUpdateEnabled{true};
-        Atomic<SceneExecutionMode> sceneExecutionMode{SceneExecutionMode::Runtime};
     };
 
     namespace
     {
-        [[nodiscard]] bool ShouldDispatchSceneLifecycleCallbacks(const SceneSystemImpl& impl) noexcept
-        {
-            return impl.sceneExecutionMode.load(std::memory_order_acquire) == SceneExecutionMode::Runtime;
-        }
-
         void ProcessOSEvents(SceneSystemImpl& impl)
         {
             const auto runtimeOnOSEvent = impl.runtimeOSEventCallback;
@@ -86,7 +79,7 @@ namespace ve
 
         void UpdateScene(SceneSystemImpl& impl, Float32 deltaSeconds)
         {
-            if (impl.scene != nullptr && impl.sceneUpdateEnabled.load(std::memory_order_acquire) && ShouldDispatchSceneLifecycleCallbacks(impl))
+            if (impl.scene != nullptr && impl.scene->GetExecutionMode() == SceneExecutionMode::Runtime)
             {
                 impl.scene->Update(deltaSeconds);
                 impl.scene->LateUpdate(deltaSeconds);
@@ -212,48 +205,12 @@ namespace ve
                 }
             }
 
+            impl.scene->Clear();
+            impl.scene = nullptr;
+            impl.renderSystem->Flush();
+
             impl.sceneThreadIdValue.store(0, std::memory_order_release);
             SetExpectedSceneThreadId(ThreadId{});
-        }
-
-        void StopAndJoinSceneThread(SceneSystemImpl& impl) noexcept
-        {
-            impl.stopRequested.store(true, std::memory_order_release);
-            impl.startLoopEvent.Set();
-            if (impl.mainThreadSceneThreadFrameEndSync != nullptr)
-            {
-                impl.mainThreadSceneThreadFrameEndSync->UnblockAllWaiters();
-            }
-
-            if (impl.sceneThreadRenderThreadFrameEndSync != nullptr)
-            {
-                impl.sceneThreadRenderThreadFrameEndSync->UnblockAllWaiters();
-            }
-
-            if (impl.thread.IsJoinable())
-            {
-                const bool joined = impl.thread.Join();
-                VE_ASSERT_MESSAGE(joined, "SceneSystem failed to join its Scene Thread during shutdown.");
-            }
-
-            impl.initialized.store(false, std::memory_order_release);
-            impl.stopRequested.store(false, std::memory_order_release);
-            impl.timeSystem = nullptr;
-            impl.inputSystem = nullptr;
-            if (impl.scene != nullptr)
-            {
-                impl.scene->Clear();
-                if (impl.renderSystem != nullptr)
-                {
-                    impl.renderSystem->Flush();
-                }
-                impl.scene->SetSceneSystem(nullptr);
-            }
-            impl.renderSystem = nullptr;
-            impl.runtimeStartFrameCallback = nullptr;
-            impl.runtimeOSEventCallback = nullptr;
-            impl.playerSceneColorTexture.reset();
-            impl.osEventQueue.ClearForConsumer();
         }
 
         [[nodiscard]] ErrorCode
@@ -341,9 +298,9 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode ValidateSceneLoadDesc(const SceneLoadDesc& desc)
+        [[nodiscard]] ErrorCode ValidateSceneLoadMode(SceneLoadMode mode)
         {
-            if (desc.mode == SceneLoadMode::Additive)
+            if (mode == SceneLoadMode::Additive)
             {
                 return ErrorCode::Unsupported;
             }
@@ -351,15 +308,31 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] Result<AssetRef<SceneResource>>
-        RequestSceneResource(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem)
+        [[nodiscard]] ErrorCode ValidateSceneLoadRequest(const SceneLoadRequest& request)
         {
-            return resourceSystem.Request<SceneResource>(desc.scene, provider);
+            const ErrorCode modeResult = ValidateSceneLoadMode(request.mode);
+            if (modeResult != ErrorCode::None)
+            {
+                return modeResult;
+            }
+
+            if (request.provider == nullptr || request.resourceSystem == nullptr || request.scriptingSystem == nullptr)
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            return ErrorCode::None;
         }
 
-        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromText(std::string_view sceneText, ScriptingSystem& scriptingSystem)
+        [[nodiscard]] Result<AssetRef<SceneResource>> RequestSceneResource(const SceneLoadRequest& request)
         {
-            auto scene = std::make_unique<Scene>();
+            return request.resourceSystem->Request<SceneResource>(request.scene, *request.provider);
+        }
+
+        [[nodiscard]] Result<std::unique_ptr<Scene>>
+        CreateSceneFromText(SceneSystem& sceneSystem, SceneExecutionMode executionMode, std::string_view sceneText, ScriptingSystem& scriptingSystem)
+        {
+            auto scene = std::make_unique<Scene>(sceneSystem, executionMode);
             const ErrorCode deserializeResult = SceneSerialization::LoadFromString(*scene, sceneText, scriptingSystem);
             if (deserializeResult != ErrorCode::None)
             {
@@ -369,13 +342,15 @@ namespace ve
             return Result<std::unique_ptr<Scene>>::Success(std::move(scene));
         }
 
-        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromText(std::string_view sceneText,
+        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromText(SceneSystem& sceneSystem,
+                                                                        SceneExecutionMode executionMode,
+                                                                        std::string_view sceneText,
                                                                         const IAssetRecordProvider& provider,
                                                                         ResourceSystem& resourceSystem,
                                                                         RenderSystem* renderSystem,
                                                                         ScriptingSystem& scriptingSystem)
         {
-            Result<std::unique_ptr<Scene>> scene = CreateSceneFromText(sceneText, scriptingSystem);
+            Result<std::unique_ptr<Scene>> scene = CreateSceneFromText(sceneSystem, executionMode, sceneText, scriptingSystem);
             if (!scene)
             {
                 return scene;
@@ -390,31 +365,17 @@ namespace ve
             return scene;
         }
 
-        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromResource(const SceneResource& sceneResource,
+        [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromResource(SceneSystem& sceneSystem,
+                                                                            SceneExecutionMode executionMode,
+                                                                            const SceneResource& sceneResource,
                                                                             const IAssetRecordProvider& provider,
                                                                             ResourceSystem& resourceSystem,
                                                                             RenderSystem* renderSystem,
                                                                             ScriptingSystem& scriptingSystem)
         {
-            return BuildSceneFromText(sceneResource.GetText(), provider, resourceSystem, renderSystem, scriptingSystem);
+            return BuildSceneFromText(sceneSystem, executionMode, sceneResource.GetText(), provider, resourceSystem, renderSystem, scriptingSystem);
         }
 
-        [[nodiscard]] Scene*
-        CommitLoadedScene(SceneSystemImpl& impl, SceneSystem& owner, SceneLoadMode mode, std::unique_ptr<Scene> scene, SceneExecutionMode executionMode)
-        {
-            if (mode == SceneLoadMode::Single && impl.scene != nullptr)
-            {
-                impl.scene->Clear();
-                impl.scene->SetSceneSystem(nullptr);
-            }
-
-            Scene* loadedScene = scene.get();
-            impl.scene = std::move(scene);
-            impl.sceneExecutionMode.store(executionMode, std::memory_order_release);
-            impl.scene->SetSceneSystem(&owner);
-            owner.AfterLoadScene(*impl.scene);
-            return loadedScene;
-        }
     } // namespace
 
     SceneSystem::SceneSystem()
@@ -454,11 +415,6 @@ namespace ve
         impl_->renderSystem = &renderSystem;
         impl_->stopRequested.store(false, std::memory_order_release);
         impl_->startLoopEvent.Reset();
-        if (impl_->scene == nullptr)
-        {
-            impl_->scene = std::make_unique<Scene>();
-        }
-        impl_->scene->SetSceneSystem(this);
 
         if (impl_->mainThreadSceneThreadFrameEndSync != nullptr)
         {
@@ -487,7 +443,7 @@ namespace ve
             return;
         }
 
-        StopAndJoinSceneThread(*impl_);
+        StopAndJoinSceneThread();
     }
 
     bool SceneSystem::IsInitialized() const noexcept
@@ -510,100 +466,93 @@ namespace ve
         return impl_->scene.get();
     }
 
-    void SceneSystem::SetSceneExecutionMode(SceneExecutionMode mode) noexcept
+    void SceneSystem::StopAndJoinSceneThread() noexcept
     {
-        impl_->sceneExecutionMode.store(mode, std::memory_order_release);
-    }
-
-    SceneExecutionMode SceneSystem::GetSceneExecutionMode() const noexcept
-    {
-        return impl_->sceneExecutionMode.load(std::memory_order_acquire);
-    }
-
-    bool SceneSystem::ShouldDispatchLifecycleCallbacks() const noexcept
-    {
-        return ShouldDispatchSceneLifecycleCallbacks(*impl_);
-    }
-
-    void SceneSystem::AfterLoadScene(Scene& scene)
-    {
-        if (!ShouldDispatchLifecycleCallbacks())
+        impl_->stopRequested.store(true, std::memory_order_release);
+        impl_->startLoopEvent.Set();
+        if (impl_->mainThreadSceneThreadFrameEndSync != nullptr)
         {
-            return;
+            impl_->mainThreadSceneThreadFrameEndSync->UnblockAllWaiters();
         }
 
-        const SizeT rootCount = scene.GetRootGameObjectCount();
-        for (SizeT rootIndex = 0; rootIndex < rootCount; ++rootIndex)
+        if (impl_->sceneThreadRenderThreadFrameEndSync != nullptr)
         {
-            GameObject* root = scene.GetRootGameObject(rootIndex);
-            if (root != nullptr)
+            impl_->sceneThreadRenderThreadFrameEndSync->UnblockAllWaiters();
+        }
+
+        if (impl_->thread.IsJoinable())
+        {
+            const bool joined = impl_->thread.Join();
+            VE_ASSERT_MESSAGE(joined, "SceneSystem failed to join its Scene Thread during shutdown.");
+        }
+
+        impl_->initialized.store(false, std::memory_order_release);
+        impl_->stopRequested.store(false, std::memory_order_release);
+        impl_->timeSystem = nullptr;
+        impl_->inputSystem = nullptr;
+        VE_ASSERT(impl_->scene == nullptr);
+        impl_->renderSystem = nullptr;
+        impl_->runtimeStartFrameCallback = nullptr;
+        impl_->runtimeOSEventCallback = nullptr;
+        impl_->playerSceneColorTexture.reset();
+        impl_->osEventQueue.ClearForConsumer();
+    }
+
+
+    Result<std::unique_ptr<Scene>> SceneSystem::BuildSceneFromRequest(const SceneLoadRequest& request)
+    {
+        switch (request.source)
+        {
+        case SceneLoadSource::Asset:
+        {
+            Result<AssetRef<SceneResource>> sceneResource = RequestSceneResource(request);
+            if (!sceneResource)
             {
-                root->DispatchLifecycleCreateCallbacksRecursive();
+                return Result<std::unique_ptr<Scene>>::Failure(sceneResource.GetError());
             }
-        }
-    }
 
-    void SceneSystem::AfterCreateGameObject(GameObject& gameObject)
-    {
-        if (!ShouldDispatchLifecycleCallbacks())
+            auto scene = BuildSceneFromResource(*this,
+                                                request.executionMode,
+                                                *sceneResource.GetValue().Get(),
+                                                *request.provider,
+                                                *request.resourceSystem,
+                                                impl_->renderSystem,
+                                                *request.scriptingSystem);
+            return scene;
+        }
+        case SceneLoadSource::Text:
         {
-            return;
+            auto scene = BuildSceneFromText(
+                *this, request.executionMode, request.sceneText, *request.provider, *request.resourceSystem, impl_->renderSystem, *request.scriptingSystem);
+            return scene;
         }
-
-        gameObject.DispatchLifecycleCreateCallbacksRecursive();
+        default:
+            return Result<std::unique_ptr<Scene>>::Failure(Error(ErrorCode::InvalidArgument, "Unsupported scene load source."));
+        }
     }
 
-    Result<Scene*>
-    SceneSystem::LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, ScriptingSystem& scriptingSystem)
-    {
+     void SceneSystem::LoadScene(const SceneLoadRequest& request)
+     {
+        // 0. clear the current scene if the request is a single load. This is done before validation to ensure that the
+        if (request.mode == SceneLoadMode::Single && impl_->scene != nullptr)
+        {
+            impl_->scene->Clear();
+            impl_->scene = nullptr;
+        }
+
         // 1. Validate the requested mode before touching resource state. SceneSystem currently owns a single active
         // Scene, so additive loading is rejected until multiple live Scene ownership is introduced.
-        const ErrorCode validateResult = ValidateSceneLoadDesc(desc);
+        const ErrorCode validateResult = ValidateSceneLoadRequest(request);
         if (validateResult != ErrorCode::None)
         {
-            return Result<Scene*>::Failure(Error(validateResult, "Unsupported scene load mode."));
+            return;
         }
 
-        // 2. Request the serialized SceneResource first. A failure here leaves the current active scene untouched.
-        Result<AssetRef<SceneResource>> sceneResource = RequestSceneResource(desc, provider, resourceSystem);
-        if (!sceneResource)
-        {
-            return Result<Scene*>::Failure(sceneResource.GetError());
-        }
+        // 2. Build the new Scene from the request. This may involve deserializing a SceneResource or text, and binding
+        impl_->scene = std::move(BuildSceneFromRequest(request).GetValue());
 
-        // 3. Build a detached Scene and bind all component AssetRefs before committing it as the active scene. Render
-        // resources are submitted here too, while the new scene is still detached, so scene deserialization or asset
-        // binding failures leave the old scene untouched.
-        Result<std::unique_ptr<Scene>> scene =
-            BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem, impl_->renderSystem, scriptingSystem);
-        if (!scene)
-        {
-            return Result<Scene*>::Failure(scene.GetError());
-        }
-
-        // 4. Commit is the only phase that mutates the active scene pointer. SetSceneSystem() rebuilds render-thread
-        // scene state after the new GameObject hierarchy and AssetRefs are complete.
-        Scene* loadedScene = CommitLoadedScene(*impl_, *this, desc.mode, scene.MoveValue(), desc.executionMode);
-        return Result<Scene*>::Success(loadedScene);
-    }
-
-    Result<std::unique_ptr<Scene>> SceneSystem::CreateSceneFromString(std::string_view sceneText,
-                                                                      const IAssetRecordProvider& provider,
-                                                                      ResourceSystem& resourceSystem,
-                                                                      ScriptingSystem& scriptingSystem)
-    {
-        return BuildSceneFromText(sceneText, provider, resourceSystem, impl_->renderSystem, scriptingSystem);
-    }
-
-    Result<Scene*> SceneSystem::ReplaceActiveScene(std::unique_ptr<Scene> scene, SceneExecutionMode executionMode)
-    {
-        if (scene == nullptr)
-        {
-            return Result<Scene*>::Failure(Error(ErrorCode::InvalidArgument, "SceneSystem::ReplaceActiveScene requires a scene."));
-        }
-
-        Scene* loadedScene = CommitLoadedScene(*impl_, *this, SceneLoadMode::Single, std::move(scene), executionMode);
-        return Result<Scene*>::Success(loadedScene);
+        // 3. If the Scene was successfully built, set it as the active Scene and call its OnLoad() callback.
+        impl_->scene->OnLoad();
     }
 
     void SceneSystem::UnloadActiveScene() noexcept
@@ -616,16 +565,6 @@ namespace ve
         impl_->scene->Clear();
     }
 
-    void SceneSystem::SetSceneUpdateEnabled(bool enabled) noexcept
-    {
-        impl_->sceneUpdateEnabled.store(enabled, std::memory_order_release);
-    }
-
-    bool SceneSystem::IsSceneUpdateEnabled() const noexcept
-    {
-        return impl_->sceneUpdateEnabled.load(std::memory_order_acquire);
-    }
-
     void SceneSystem::EnqueueOSEvent(const OSEvent& event)
     {
         const ErrorCode pushResult = impl_->osEventQueue.Push(event);
@@ -634,15 +573,10 @@ namespace ve
 
     void SceneSystem::EnqueueRenderCommand(RenderCommand command)
     {
-        VE_ASSERT_MESSAGE(HasRenderSystem(), "SceneSystem::EnqueueRenderCommand requires an initialized RenderSystem.");
-
+        VE_ASSERT(impl_->renderSystem != nullptr && impl_->renderSystem->IsInitialized());
         impl_->renderSystem->EnqueueCommand(std::move(command));
     }
 
-    bool SceneSystem::HasRenderSystem() const noexcept
-    {
-        return impl_->renderSystem != nullptr && impl_->renderSystem->IsInitialized();
-    }
 
     void SceneSystem::NotifyMainThreadFrameEnd()
     {

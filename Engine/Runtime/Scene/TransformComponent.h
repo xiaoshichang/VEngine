@@ -15,6 +15,8 @@
 namespace ve
 {
     class GameObject;
+    class Scene;
+    class SceneSerialization;
 
     /// Local transform data attached to a GameObject.
     class TransformComponent final : public Component
@@ -45,7 +47,6 @@ namespace ve
         [[nodiscard]] GameObject* GetChildGameObject(SizeT index) noexcept;
         [[nodiscard]] const GameObject* GetChildGameObject(SizeT index) const noexcept;
 
-        [[nodiscard]] Result<GameObject*> CreateChild(std::string name = {});
         [[nodiscard]] bool DestroyChild(GameObject& child) noexcept;
         void ClearChildren() noexcept;
 
@@ -56,7 +57,10 @@ namespace ve
 
     private:
         friend class GameObject;
+        friend class Scene;
+        friend class SceneSerialization;
 
+        [[nodiscard]] Result<GameObject*> CreateChild(std::string name = {});
         void SetParent(TransformComponent* parent) noexcept;
         void MarkHierarchyDirty() noexcept;
         void NotifyTransformChanged() noexcept;

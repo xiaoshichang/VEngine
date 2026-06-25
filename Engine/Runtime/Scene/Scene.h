@@ -16,14 +16,21 @@
 namespace ve
 {
     class SceneSystem;
+    class SceneSerialization;
     class CameraComponent;
+
+    enum class SceneExecutionMode
+    {
+        Editing,
+        Runtime,
+    };
 
     /// Owns a tree of root GameObjects and updates that hierarchy.
     class Scene final : public NonMovable
     {
     public:
-        Scene();
-        explicit Scene(std::string name);
+        Scene(SceneSystem& sceneSystem, SceneExecutionMode executionMode);
+        Scene(SceneSystem& sceneSystem, SceneExecutionMode executionMode, std::string name);
         ~Scene();
 
         [[nodiscard]] const std::string& GetName() const noexcept;
@@ -35,15 +42,14 @@ namespace ve
         [[nodiscard]] CameraComponent* GetMainCamera() noexcept;
         [[nodiscard]] const CameraComponent* GetMainCamera() const noexcept;
 
-        [[nodiscard]] Result<GameObject*> CreateRootGameObject(std::string name = {});
         [[nodiscard]] bool DestroyRootGameObject(GameObject& gameObject) noexcept;
         void Clear() noexcept;
 
-        void SetSceneSystem(SceneSystem* sceneSystem) noexcept;
         [[nodiscard]] SceneSystem* GetSceneSystem() noexcept;
         [[nodiscard]] const SceneSystem* GetSceneSystem() const noexcept;
         [[nodiscard]] std::shared_ptr<RTScene> GetRTScene() noexcept;
         [[nodiscard]] std::shared_ptr<const RTScene> GetRTScene() const noexcept;
+        [[nodiscard]] SceneExecutionMode GetExecutionMode() const noexcept;
 
         void RegisterRenderItem(std::shared_ptr<RTRenderItem> item);
         void UnregisterRenderItem(std::shared_ptr<RTRenderItem> item) noexcept;
@@ -54,14 +60,23 @@ namespace ve
         void RegisterLight(std::shared_ptr<RTLight> light);
         void UnregisterLight(std::shared_ptr<RTLight> light) noexcept;
         void UpdateLight(std::shared_ptr<RTLight> light, RTLightUpdateParam updateParam);
-        [[nodiscard]] Result<GameObject*> CreateRootGameObjectWithoutRenderRegistration(std::string name = {});
 
         void Update(Float32 deltaSeconds);
         void LateUpdate(Float32 deltaSeconds);
         void BeforeRender();
-        void RebuildRenderThreadScene();
+        void OnLoad();
+
+        [[nodiscard]] Result<GameObject*> CreateGameObject(std::string name = {}, GameObject* parent = nullptr);
 
     private:
+        friend class SceneSystem;
+        friend class SceneSerialization;
+        friend class Component;
+        friend class GameObject;
+
+        [[nodiscard]] bool ShouldDispatchLifecycleCallbacks() const noexcept;
+        [[nodiscard]] Result<GameObject*> CreateRootGameObject(std::string name = {});
+        void RebuildRenderThreadScene();
         void RegisterRenderItemsRecursive(GameObject& gameObject);
         void SyncRenderItemsBeforeRenderRecursive(GameObject& gameObject);
         void SubmitRTSceneCommand(std::string debugName, std::function<void()> function) const;
@@ -69,7 +84,9 @@ namespace ve
         [[nodiscard]] static const CameraComponent* FindMainCameraRecursive(const GameObject& gameObject) noexcept;
 
         std::string name_;
-        SceneSystem* sceneSystem_ = nullptr;
+        SceneSystem& sceneSystem_;
+        SceneExecutionMode executionMode_ = SceneExecutionMode::Runtime;
+        bool loaded_ = false;
         std::shared_ptr<RTScene> rtScene_;
         std::vector<std::unique_ptr<GameObject>> rootGameObjects_;
     };

@@ -1,7 +1,6 @@
 #include "Engine/Runtime/Scene/Component.h"
 
 #include "Engine/Runtime/Scene/Scene.h"
-#include "Engine/Runtime/Scene/SceneSystem.h"
 
 namespace ve
 {
@@ -34,8 +33,7 @@ namespace ve
         }
 
         enabled_ = enabled;
-        const SceneSystem* sceneSystem = scene_ != nullptr ? scene_->GetSceneSystem() : nullptr;
-        if (sceneSystem == nullptr || !sceneSystem->ShouldDispatchLifecycleCallbacks())
+        if (scene_ == nullptr || !scene_->ShouldDispatchLifecycleCallbacks())
         {
             return;
         }

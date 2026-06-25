@@ -1,7 +1,6 @@
 #include "Engine/Runtime/Scene/GameObject.h"
 
 #include "Engine/Runtime/Scene/Scene.h"
-#include "Engine/Runtime/Scene/SceneSystem.h"
 
 namespace ve
 {
@@ -221,8 +220,7 @@ namespace ve
 
     bool GameObject::ShouldDispatchLifecycleCallbacks() const noexcept
     {
-        const SceneSystem* sceneSystem = scene_ != nullptr ? scene_->GetSceneSystem() : nullptr;
-        return sceneSystem != nullptr && sceneSystem->ShouldDispatchLifecycleCallbacks();
+        return scene_ != nullptr && scene_->ShouldDispatchLifecycleCallbacks();
     }
 
     void GameObject::DispatchComponentCreateCallbacks(Component& component)

@@ -182,8 +182,6 @@ namespace ve::editor
 
         sceneSystem_ = &runtime.GetSceneSystem();
         nativeWindowHandle_ = nativeWindowHandle;
-        sceneSystem_->SetSceneExecutionMode(SceneExecutionMode::Editing);
-        sceneSystem_->SetSceneUpdateEnabled(false);
         initialized_.store(true, std::memory_order_release);
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
             .onBeforeOSEvents = [this]() { input_.BeginOSEventFrame(); },
@@ -385,7 +383,6 @@ namespace ve::editor
         if (sceneSystem_ != nullptr)
         {
             sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{});
-            sceneSystem_->SetSceneUpdateEnabled(true);
             sceneSystem_ = nullptr;
         }
 
@@ -630,26 +627,18 @@ namespace ve::editor
             return;
         }
 
-        Result<std::unique_ptr<Scene>> playScene =
-            sceneSystem_->CreateSceneFromString(snapshot.GetValue(), assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
-        if (!playScene)
-        {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to create play scene: {}", playScene.GetError().GetMessage());
-            return;
-        }
-
         ClearSelection();
-        Result<Scene*> replaceResult = sceneSystem_->ReplaceActiveScene(playScene.MoveValue(), SceneExecutionMode::Runtime);
-        if (!replaceResult)
-        {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to activate play scene: {}", replaceResult.GetError().GetMessage());
-            return;
-        }
-
+        SceneLoadRequest loadRequest;
+        loadRequest.source = SceneLoadSource::Text;
+        loadRequest.sceneText = snapshot.GetValue();
+        loadRequest.executionMode = SceneExecutionMode::Runtime;
+        loadRequest.provider = &assetDatabase_;
+        loadRequest.resourceSystem = &runtime_->GetResourceSystem();
+        loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
+        sceneSystem_->LoadScene(loadRequest);
         editingSceneSnapshot_ = snapshot.MoveValue();
         playState_ = EditorPlayState::Playing;
         ++playSessionID_;
-        sceneSystem_->SetSceneUpdateEnabled(true);
         CollectUnusedResources();
         VE_LOG_INFO_CATEGORY("Editor", "Entered Play mode.");
     }
@@ -665,26 +654,19 @@ namespace ve::editor
         VE_ASSERT(sceneSystem_ != nullptr);
         VE_ASSERT(runtime_ != nullptr);
 
-        Result<std::unique_ptr<Scene>> editingScene =
-            sceneSystem_->CreateSceneFromString(editingSceneSnapshot_, assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
-        if (!editingScene)
-        {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to restore editing scene after Play: {}", editingScene.GetError().GetMessage());
-            return;
-        }
-
         ClearSelection();
-        Result<Scene*> replaceResult = sceneSystem_->ReplaceActiveScene(editingScene.MoveValue(), SceneExecutionMode::Editing);
-        if (!replaceResult)
-        {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to reactivate editing scene after Play: {}", replaceResult.GetError().GetMessage());
-            return;
-        }
+        SceneLoadRequest loadRequest;
+        loadRequest.source = SceneLoadSource::Text;
+        loadRequest.sceneText = editingSceneSnapshot_;
+        loadRequest.executionMode = SceneExecutionMode::Editing;
+        loadRequest.provider = &assetDatabase_;
+        loadRequest.resourceSystem = &runtime_->GetResourceSystem();
+        loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
+        sceneSystem_->LoadScene(loadRequest);
 
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
         ++playSessionID_;
-        sceneSystem_->SetSceneUpdateEnabled(false);
         CollectUnusedResources();
         VE_LOG_INFO_CATEGORY("Editor", "Exited Play mode.");
     }
@@ -698,7 +680,6 @@ namespace ve::editor
 
         if (sceneSystem_ != nullptr)
         {
-            sceneSystem_->SetSceneUpdateEnabled(false);
             sceneSystem_->UnloadActiveScene();
         }
 
@@ -791,17 +772,14 @@ namespace ve::editor
             return;
         }
 
-        Result<Scene*> sceneResult = sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single, SceneExecutionMode::Editing},
-                                                             assetDatabase_,
-                                                             runtime_->GetResourceSystem(),
-                                                             runtime_->GetScriptingSystem());
-        if (!sceneResult)
-        {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to construct project start scene '{}': {}", descriptor.startScene, sceneResult.GetError().GetMessage());
-            currentScenePath_ = Path();
-            return;
-        }
-
+        SceneLoadRequest loadRequest;
+        loadRequest.source = SceneLoadSource::Asset;
+        loadRequest.scene = sceneAsset->asset.id;
+        loadRequest.executionMode = SceneExecutionMode::Editing;
+        loadRequest.provider = &assetDatabase_;
+        loadRequest.resourceSystem = &runtime_->GetResourceSystem();
+        loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
+        sceneSystem_->LoadScene(loadRequest);
         currentScenePath_ = sceneAsset->path;
     }
 
@@ -898,16 +876,14 @@ namespace ve::editor
             return;
         }
 
-        Result<Scene*> sceneResult = sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single, SceneExecutionMode::Editing},
-                                                             assetDatabase_,
-                                                             runtime_->GetResourceSystem(),
-                                                             runtime_->GetScriptingSystem());
-        if (!sceneResult)
-        {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to open scene '{}': {}", scenePath.GetString(), sceneResult.GetError().GetMessage());
-            return;
-        }
-
+        SceneLoadRequest loadRequest;
+        loadRequest.source = SceneLoadSource::Asset;
+        loadRequest.scene = sceneAsset->asset.id;
+        loadRequest.executionMode = SceneExecutionMode::Editing;
+        loadRequest.provider = &assetDatabase_;
+        loadRequest.resourceSystem = &runtime_->GetResourceSystem();
+        loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
+        sceneSystem_->LoadScene(loadRequest);
         currentScenePath_ = sceneAsset->path;
         ClearSelection();
         CollectUnusedResources();

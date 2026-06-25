@@ -666,116 +666,117 @@ namespace ve
 
             return ErrorCode::None;
         }
+    } // namespace
 
-        [[nodiscard]] ErrorCode
-        ReadGameObjectRecursive(Scene& scene, TransformComponent* parent, const boost::json::object& object, ScriptingSystem& scriptingSystem)
+    ErrorCode SceneSerialization::ReadGameObjectRecursive(Scene& scene,
+                                                          TransformComponent* parent,
+                                                          const boost::json::object& object,
+                                                          ScriptingSystem& scriptingSystem)
+    {
+        const std::string name = ReadString(object, "name");
+
+        GameObject* gameObject = nullptr;
+        if (parent == nullptr)
         {
-            const std::string name = ReadString(object, "name");
-
-            GameObject* gameObject = nullptr;
-            if (parent == nullptr)
+            Result<GameObject*> result = scene.CreateRootGameObject(name);
+            if (!result)
             {
-                Result<GameObject*> result = scene.CreateRootGameObjectWithoutRenderRegistration(name);
-                if (!result)
-                {
-                    return result.GetError().GetCode();
-                }
-                gameObject = result.GetValue();
+                return result.GetError().GetCode();
             }
-            else
+            gameObject = result.GetValue();
+        }
+        else
+        {
+            Result<GameObject*> result = parent->CreateChild(name);
+            if (!result)
             {
-                Result<GameObject*> result = parent->CreateChild(name);
-                if (!result)
-                {
-                    return result.GetError().GetCode();
-                }
-                gameObject = result.GetValue();
+                return result.GetError().GetCode();
             }
-
-            if (gameObject == nullptr)
-            {
-                return ErrorCode::InvalidState;
-            }
-
-            if (const boost::json::value* componentsValue = object.if_contains("components"); componentsValue != nullptr)
-            {
-                if (!componentsValue->is_array())
-                {
-                    return ErrorCode::InvalidArgument;
-                }
-
-                const ErrorCode result = ApplyComponents(*gameObject, componentsValue->as_array(), scriptingSystem);
-                if (result != ErrorCode::None)
-                {
-                    return result;
-                }
-            }
-
-            if (const boost::json::value* childrenValue = object.if_contains("children"); childrenValue != nullptr)
-            {
-                if (!childrenValue->is_array())
-                {
-                    return ErrorCode::InvalidArgument;
-                }
-
-                TransformComponent* transform = gameObject->GetComponent<TransformComponent>();
-                if (transform == nullptr)
-                {
-                    return ErrorCode::InvalidState;
-                }
-
-                for (const boost::json::value& childValue : childrenValue->as_array())
-                {
-                    if (!childValue.is_object())
-                    {
-                        return ErrorCode::InvalidArgument;
-                    }
-
-                    const ErrorCode result = ReadGameObjectRecursive(scene, transform, childValue.as_object(), scriptingSystem);
-                    if (result != ErrorCode::None)
-                    {
-                        return result;
-                    }
-                }
-            }
-
-            return ErrorCode::None;
+            gameObject = result.GetValue();
         }
 
-        [[nodiscard]] ErrorCode ReadScene(Scene& scene, const boost::json::object& object, ScriptingSystem& scriptingSystem)
+        if (gameObject == nullptr)
         {
-            scene.Clear();
-            scene.SetName(ReadString(object, "name"));
+            return ErrorCode::InvalidState;
+        }
 
-            const boost::json::value* rootsValue = object.if_contains("rootGameObjects");
-            if (rootsValue == nullptr)
-            {
-                return ErrorCode::None;
-            }
-
-            if (!rootsValue->is_array())
+        if (const boost::json::value* componentsValue = object.if_contains("components"); componentsValue != nullptr)
+        {
+            if (!componentsValue->is_array())
             {
                 return ErrorCode::InvalidArgument;
             }
 
-            for (const boost::json::value& rootValue : rootsValue->as_array())
+            const ErrorCode result = ApplyComponents(*gameObject, componentsValue->as_array(), scriptingSystem);
+            if (result != ErrorCode::None)
             {
-                if (!rootValue.is_object())
+                return result;
+            }
+        }
+
+        if (const boost::json::value* childrenValue = object.if_contains("children"); childrenValue != nullptr)
+        {
+            if (!childrenValue->is_array())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            TransformComponent* transform = gameObject->GetComponent<TransformComponent>();
+            if (transform == nullptr)
+            {
+                return ErrorCode::InvalidState;
+            }
+
+            for (const boost::json::value& childValue : childrenValue->as_array())
+            {
+                if (!childValue.is_object())
                 {
                     return ErrorCode::InvalidArgument;
                 }
 
-                const ErrorCode result = ReadGameObjectRecursive(scene, nullptr, rootValue.as_object(), scriptingSystem);
+                const ErrorCode result = ReadGameObjectRecursive(scene, transform, childValue.as_object(), scriptingSystem);
                 if (result != ErrorCode::None)
                 {
                     return result;
                 }
             }
+        }
 
-            scene.RebuildRenderThreadScene();
+        return ErrorCode::None;
+    }
+
+    ErrorCode SceneSerialization::ReadScene(Scene& scene, const boost::json::object& object, ScriptingSystem& scriptingSystem)
+    {
+        scene.Clear();
+        scene.SetName(ReadString(object, "name"));
+
+        const boost::json::value* rootsValue = object.if_contains("rootGameObjects");
+        if (rootsValue == nullptr)
+        {
             return ErrorCode::None;
         }
-    } // namespace
+
+        if (!rootsValue->is_array())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        for (const boost::json::value& rootValue : rootsValue->as_array())
+        {
+            if (!rootValue.is_object())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            const ErrorCode result = ReadGameObjectRecursive(scene, nullptr, rootValue.as_object(), scriptingSystem);
+            if (result != ErrorCode::None)
+            {
+                return result;
+            }
+        }
+
+        return ErrorCode::None;
+    }
 
     Result<std::string> SceneSerialization::SaveToString(const Scene& scene)
     {

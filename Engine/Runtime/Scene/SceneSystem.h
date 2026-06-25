@@ -50,17 +50,22 @@ namespace ve
         Additive,
     };
 
-    enum class SceneExecutionMode
+    enum class SceneLoadSource
     {
-        Editing,
-        Runtime,
+        Asset,
+        Text,
     };
 
-    struct SceneLoadDesc
+    struct SceneLoadRequest
     {
+        SceneLoadSource source = SceneLoadSource::Asset;
         AssetID scene;
+        std::string_view sceneText;
         SceneLoadMode mode = SceneLoadMode::Single;
         SceneExecutionMode executionMode = SceneExecutionMode::Runtime;
+        const IAssetRecordProvider* provider = nullptr;
+        ResourceSystem* resourceSystem = nullptr;
+        ScriptingSystem* scriptingSystem = nullptr;
     };
 
     /// Owns the active Scene and its update thread.
@@ -82,7 +87,7 @@ namespace ve
         /// Stops Scene updates and joins the Scene Thread.
         ///
         /// Shutdown is a no-op when the system is not initialized. The active Scene is preserved until the SceneSystem
-        /// is destroyed or ReplaceScene() is called, so callers can inspect or explicitly clear it after stopping
+        /// is destroyed or LoadScene() is called, so callers can inspect or explicitly clear it after stopping
         /// updates.
         void Shutdown() noexcept;
 
@@ -97,30 +102,12 @@ namespace ve
 
         /// Returns the active Scene. The returned pointer remains owned by SceneSystem.
         [[nodiscard]] const Scene* GetScene() const noexcept;
-        void SetSceneExecutionMode(SceneExecutionMode mode) noexcept;
-        [[nodiscard]] SceneExecutionMode GetSceneExecutionMode() const noexcept;
-        [[nodiscard]] bool ShouldDispatchLifecycleCallbacks() const noexcept;
-        void AfterLoadScene(Scene& scene);
-        void AfterCreateGameObject(GameObject& gameObject);
-        [[nodiscard]] Result<Scene*>
-        LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, ScriptingSystem& scriptingSystem);
-        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromString(std::string_view sceneText,
-                                                                           const IAssetRecordProvider& provider,
-                                                                           ResourceSystem& resourceSystem,
-                                                                           ScriptingSystem& scriptingSystem);
-        [[nodiscard]] Result<Scene*> ReplaceActiveScene(std::unique_ptr<Scene> scene, SceneExecutionMode executionMode);
+
+        void LoadScene(const SceneLoadRequest& request);
         void UnloadActiveScene() noexcept;
-        void SetSceneUpdateEnabled(bool enabled) noexcept;
-        [[nodiscard]] bool IsSceneUpdateEnabled() const noexcept;
 
         /// Queues one OS event for Scene Thread processing.
         void EnqueueOSEvent(const OSEvent& event);
-
-        /// Queues one render command through the RenderSystem bound to this SceneSystem.
-        void EnqueueRenderCommand(RenderCommand command);
-
-        /// Returns true when this SceneSystem has an initialized RenderSystem binding.
-        [[nodiscard]] bool HasRenderSystem() const noexcept;
 
         /// Marks one Main Thread frame end and blocks when Main Thread is ahead by more than one frame.
         void NotifyMainThreadFrameEnd();
@@ -151,6 +138,12 @@ namespace ve
         void StartLoop() noexcept;
 
     private:
+        friend class Scene;
+
+        Result<std::unique_ptr<Scene>> BuildSceneFromRequest(const SceneLoadRequest& request);
+        void StopAndJoinSceneThread() noexcept;
+        void EnqueueRenderCommand(RenderCommand command);
+
         std::unique_ptr<SceneSystemImpl> impl_;
     };
 } // namespace ve

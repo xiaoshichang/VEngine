@@ -8,13 +8,17 @@
 
 namespace ve
 {
-    Scene::Scene()
-        : rtScene_(std::make_shared<RTScene>())
+    Scene::Scene(SceneSystem& sceneSystem, SceneExecutionMode executionMode)
+        : sceneSystem_(sceneSystem)
+        , executionMode_(executionMode)
+        , rtScene_(std::make_shared<RTScene>())
     {
     }
 
-    Scene::Scene(std::string name)
+    Scene::Scene(SceneSystem& sceneSystem, SceneExecutionMode executionMode, std::string name)
         : name_(std::move(name))
+        , sceneSystem_(sceneSystem)
+        , executionMode_(executionMode)
         , rtScene_(std::make_shared<RTScene>())
     {
     }
@@ -41,6 +45,7 @@ namespace ve
 
     GameObject* Scene::GetRootGameObject(SizeT index) noexcept
     {
+        VE_ASSERT_SCENE_THREAD();
         if (index >= rootGameObjects_.size())
         {
             return nullptr;
@@ -61,6 +66,7 @@ namespace ve
 
     CameraComponent* Scene::GetMainCamera() noexcept
     {
+        VE_ASSERT_SCENE_THREAD();
         CameraComponent* fallbackCamera = nullptr;
         for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
         {
@@ -86,6 +92,7 @@ namespace ve
 
     const CameraComponent* Scene::GetMainCamera() const noexcept
     {
+        VE_ASSERT_SCENE_THREAD();
         const CameraComponent* fallbackCamera = nullptr;
         for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
         {
@@ -111,15 +118,12 @@ namespace ve
 
     Result<GameObject*> Scene::CreateRootGameObject(std::string name)
     {
+        VE_ASSERT_SCENE_THREAD();
         try
         {
             std::unique_ptr<GameObject> gameObject = std::make_unique<GameObject>(*this, std::move(name));
             GameObject* gameObjectPointer = gameObject.get();
             rootGameObjects_.push_back(std::move(gameObject));
-            if (sceneSystem_ != nullptr)
-            {
-                sceneSystem_->AfterCreateGameObject(*gameObjectPointer);
-            }
             return Result<GameObject*>::Success(gameObjectPointer);
         }
         catch (const std::bad_alloc&)
@@ -128,8 +132,41 @@ namespace ve
         }
     }
 
+    Result<GameObject*> Scene::CreateGameObject(std::string name, GameObject* parent)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        Result<GameObject*> gameObject = Result<GameObject*>::Failure(Error(ErrorCode::InvalidState, "Scene::CreateGameObject failed."));
+        if (parent == nullptr)
+        {
+            gameObject = CreateRootGameObject(std::move(name));
+        }
+        else
+        {
+            if (parent->scene_ != this)
+            {
+                return Result<GameObject*>::Failure(Error(ErrorCode::InvalidArgument, "Parent GameObject does not belong to this scene."));
+            }
+
+            TransformComponent* parentTransform = parent->GetComponent<TransformComponent>();
+            if (parentTransform == nullptr)
+            {
+                return Result<GameObject*>::Failure(Error(ErrorCode::InvalidArgument, "Parent GameObject is missing TransformComponent."));
+            }
+
+            gameObject = parentTransform->CreateChild(std::move(name));
+        }
+
+        if (gameObject && ShouldDispatchLifecycleCallbacks())
+        {
+            gameObject.GetValue()->DispatchLifecycleCreateCallbacksRecursive();
+        }
+
+        return gameObject;
+    }
+
     bool Scene::DestroyRootGameObject(GameObject& gameObject) noexcept
     {
+        VE_ASSERT_SCENE_THREAD();
         auto it = std::find_if(rootGameObjects_.begin(),
                                rootGameObjects_.end(),
                                [&gameObject](const std::unique_ptr<GameObject>& candidate) { return candidate.get() == &gameObject; });
@@ -148,11 +185,6 @@ namespace ve
         const bool hadRootGameObjects = !rootGameObjects_.empty();
         rootGameObjects_.clear();
 
-        if (sceneSystem_ == nullptr)
-        {
-            return;
-        }
-
         if (!hadRootGameObjects)
         {
             return;
@@ -162,23 +194,14 @@ namespace ve
         SubmitRTSceneCommand("RTSceneClear", [rtScene]() { rtScene->Clear(); });
     }
 
-    void Scene::SetSceneSystem(SceneSystem* sceneSystem) noexcept
-    {
-        sceneSystem_ = sceneSystem;
-        if (sceneSystem_ != nullptr)
-        {
-            RebuildRenderThreadScene();
-        }
-    }
-
     SceneSystem* Scene::GetSceneSystem() noexcept
     {
-        return sceneSystem_;
+        return &sceneSystem_;
     }
 
     const SceneSystem* Scene::GetSceneSystem() const noexcept
     {
-        return sceneSystem_;
+        return &sceneSystem_;
     }
 
     std::shared_ptr<RTScene> Scene::GetRTScene() noexcept
@@ -191,8 +214,14 @@ namespace ve
         return rtScene_;
     }
 
+    SceneExecutionMode Scene::GetExecutionMode() const noexcept
+    {
+        return executionMode_;
+    }
+
     void Scene::RegisterRenderItem(std::shared_ptr<RTRenderItem> item)
     {
+        VE_ASSERT_SCENE_THREAD();
         if (item == nullptr)
         {
             return;
@@ -204,6 +233,7 @@ namespace ve
 
     void Scene::UnregisterRenderItem(std::shared_ptr<RTRenderItem> item) noexcept
     {
+        VE_ASSERT_SCENE_THREAD();
         if (item == nullptr)
         {
             return;
@@ -215,6 +245,7 @@ namespace ve
 
     void Scene::UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemUpdateParam updateParam)
     {
+        VE_ASSERT_SCENE_THREAD();
         if (item == nullptr)
         {
             return;
@@ -226,6 +257,7 @@ namespace ve
 
     void Scene::RegisterCamera(std::shared_ptr<RTCamera> camera)
     {
+        VE_ASSERT_SCENE_THREAD();
         if (camera == nullptr)
         {
             return;
@@ -237,6 +269,7 @@ namespace ve
 
     void Scene::UnregisterCamera(std::shared_ptr<RTCamera> camera) noexcept
     {
+        VE_ASSERT_SCENE_THREAD();
         if (camera == nullptr)
         {
             return;
@@ -248,6 +281,7 @@ namespace ve
 
     void Scene::UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraUpdateParam updateParam)
     {
+        VE_ASSERT_SCENE_THREAD();
         if (camera == nullptr)
         {
             return;
@@ -260,6 +294,7 @@ namespace ve
 
     void Scene::RegisterLight(std::shared_ptr<RTLight> light)
     {
+        VE_ASSERT_SCENE_THREAD();
         if (light == nullptr)
         {
             return;
@@ -271,6 +306,7 @@ namespace ve
 
     void Scene::UnregisterLight(std::shared_ptr<RTLight> light) noexcept
     {
+        VE_ASSERT_SCENE_THREAD();
         if (light == nullptr)
         {
             return;
@@ -293,30 +329,16 @@ namespace ve
 
     void Scene::Update(Float32 deltaSeconds)
     {
+        VE_ASSERT_SCENE_THREAD();
         for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
         {
             gameObject->Update(deltaSeconds);
         }
     }
 
-    Result<GameObject*> Scene::CreateRootGameObjectWithoutRenderRegistration(std::string name)
-    {
-        VE_ASSERT(sceneSystem_ == nullptr);
-        try
-        {
-            std::unique_ptr<GameObject> gameObject = std::make_unique<GameObject>(*this, std::move(name));
-            GameObject* gameObjectPointer = gameObject.get();
-            rootGameObjects_.push_back(std::move(gameObject));
-            return Result<GameObject*>::Success(gameObjectPointer);
-        }
-        catch (const std::bad_alloc&)
-        {
-            return Result<GameObject*>::Failure(Error(ErrorCode::OutOfMemory, "Scene GameObject allocation failed."));
-        }
-    }
-
     void Scene::LateUpdate(Float32 deltaSeconds)
     {
+        VE_ASSERT_SCENE_THREAD();
         for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
         {
             gameObject->LateUpdate(deltaSeconds);
@@ -325,19 +347,37 @@ namespace ve
 
     void Scene::BeforeRender()
     {
+        VE_ASSERT_SCENE_THREAD();
         for (std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
         {
             SyncRenderItemsBeforeRenderRecursive(*gameObject);
         }
     }
 
-    void Scene::RebuildRenderThreadScene()
+    void Scene::OnLoad()
     {
-        if (sceneSystem_ == nullptr)
+        VE_ASSERT_SCENE_THREAD();
+        loaded_ = true;
+        RebuildRenderThreadScene();
+
+        if (!ShouldDispatchLifecycleCallbacks())
         {
             return;
         }
 
+        const SizeT rootCount = GetRootGameObjectCount();
+        for (SizeT rootIndex = 0; rootIndex < rootCount; ++rootIndex)
+        {
+            GameObject* root = GetRootGameObject(rootIndex);
+            if (root != nullptr)
+            {
+                root->DispatchLifecycleCreateCallbacksRecursive();
+            }
+        }
+    }
+
+    void Scene::RebuildRenderThreadScene()
+    {
         std::shared_ptr<RTScene> rtScene = rtScene_;
         SubmitRTSceneCommand("RTSceneClear", [rtScene]() { rtScene->Clear(); });
 
@@ -347,8 +387,14 @@ namespace ve
         }
     }
 
+    bool Scene::ShouldDispatchLifecycleCallbacks() const noexcept
+    {
+        return loaded_ && executionMode_ == SceneExecutionMode::Runtime;
+    }
+
     void Scene::RegisterRenderItemsRecursive(GameObject& gameObject)
     {
+        VE_ASSERT_SCENE_THREAD();
         if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
         {
             mesh->RegisterRenderItemToRenderThread();
@@ -382,6 +428,7 @@ namespace ve
 
     void Scene::SyncRenderItemsBeforeRenderRecursive(GameObject& gameObject)
     {
+        VE_ASSERT_SCENE_THREAD();
         if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
         {
             mesh->SubmitRenderItemTransformUpdateToRenderThread();
@@ -413,18 +460,12 @@ namespace ve
 
     void Scene::SubmitRTSceneCommand(std::string debugName, std::function<void()> function) const
     {
+        VE_ASSERT_SCENE_THREAD();
         if (!function)
         {
             return;
         }
-
-        if (sceneSystem_ == nullptr || !sceneSystem_->HasRenderSystem())
-        {
-            VE_ASSERT_ALWAYS_MESSAGE(false, "Scene RTScene commands require a SceneSystem with an initialized RenderSystem.");
-            return;
-        }
-
-        sceneSystem_->EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
+        sceneSystem_.EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
     }
 
     CameraComponent* Scene::FindMainCameraRecursive(GameObject& gameObject) noexcept

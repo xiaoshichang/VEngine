@@ -249,14 +249,14 @@ namespace ve
             return;
         }
 
-        Result<Scene*> sceneResult = GetRuntime().GetSceneSystem().LoadScene(
-            SceneLoadDesc{sceneAssetID.GetValue(), SceneLoadMode::Single}, runtimeAssetLoader_, GetRuntime().GetResourceSystem(), GetRuntime().GetScriptingSystem());
-        if (!sceneResult)
-        {
-            VE_LOG_ERROR_CATEGORY("Player", "Failed to load packaged start scene '{}': {}", packagedStartScene_, sceneResult.GetError().GetMessage());
-            return;
-        }
-
+        SceneLoadRequest loadRequest;
+        loadRequest.source = SceneLoadSource::Asset;
+        loadRequest.scene = sceneAssetID.GetValue();
+        loadRequest.executionMode = SceneExecutionMode::Runtime;
+        loadRequest.provider = &runtimeAssetLoader_;
+        loadRequest.resourceSystem = &GetRuntime().GetResourceSystem();
+        loadRequest.scriptingSystem = &GetRuntime().GetScriptingSystem();
+        GetRuntime().GetSceneSystem().LoadScene(loadRequest);
         VE_LOG_INFO_CATEGORY("Player", "Loaded packaged start scene '{}'.", packagedStartScene_);
     }
 } // namespace ve

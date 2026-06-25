@@ -21,7 +21,6 @@
 namespace ve
 {
     class Scene;
-    class SceneSystem;
 
     /// Node in a Scene-owned hierarchy.
     ///
@@ -204,7 +203,6 @@ namespace ve
 
     private:
         friend class Scene;
-        friend class SceneSystem;
         friend class TransformComponent;
 
         template<typename TComponent>
