@@ -31,6 +31,7 @@ namespace ve
         MainThreadSceneThreadFrameEndSync* mainThreadSceneThreadFrameEndSync = nullptr;
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
         SceneSystemEditorCallback editorCallback;
+        std::function<void()> runtimeStartFrameCallback;
         std::function<void(const OSEvent& event)> runtimeOSEventCallback;
         std::shared_ptr<RTRenderTexture> playerSceneColorTexture;
 
@@ -102,6 +103,10 @@ namespace ve
                 impl.editorCallback.onBeforeOSEvents();
             }
             ProcessOSEvents(impl);
+            if (impl.runtimeStartFrameCallback != nullptr)
+            {
+                impl.runtimeStartFrameCallback();
+            }
             if (impl.editorCallback.onStartFrame != nullptr)
             {
                 impl.editorCallback.onStartFrame();
@@ -236,6 +241,7 @@ namespace ve
                 impl.scene->SetSceneSystem(nullptr);
             }
             impl.renderSystem = nullptr;
+            impl.runtimeStartFrameCallback = nullptr;
             impl.runtimeOSEventCallback = nullptr;
             impl.playerSceneColorTexture.reset();
             impl.osEventQueue.ClearForConsumer();
@@ -572,6 +578,11 @@ namespace ve
     void SceneSystem::SetEditorCallback(SceneSystemEditorCallback callback) noexcept
     {
         impl_->editorCallback = std::move(callback);
+    }
+
+    void SceneSystem::SetRuntimeStartFrameCallback(std::function<void()> callback) noexcept
+    {
+        impl_->runtimeStartFrameCallback = std::move(callback);
     }
 
     void SceneSystem::SetRuntimeOSEventCallback(std::function<void(const OSEvent& event)> callback) noexcept

@@ -118,23 +118,29 @@ namespace ve
 
     ErrorCode WindowsPlayer::InitializeRendering(Window& mainWindow)
     {
+        // 1. Mirror the initial window surface into the Player viewport before render resources bind to it.
         viewportClient_.SyncFromWindow(mainWindow);
 
+        // 2. Let the shared Application path create the RHI device and main swapchain.
         const ErrorCode renderResult = Application::InitializeRendering(mainWindow);
         if (renderResult != ErrorCode::None)
         {
             return renderResult;
         }
 
-        RegisterSceneThreadViewportCallback();
+        // 3. Register Scene Thread hooks before the loop starts so viewport and startup-scene work stay off the Main Thread.
+        RegisterSceneThreadCallbacks();
+
+        // 4. Probe for packaged data beside the executable and schedule the package start scene when present.
         InitializePackagedProject();
         return ErrorCode::None;
     }
 
-    void WindowsPlayer::RegisterSceneThreadViewportCallback()
+    void WindowsPlayer::RegisterSceneThreadCallbacks()
     {
         SceneSystem& sceneSystem = GetRuntime().GetSceneSystem();
         sceneSystem.SetRuntimeOSEventCallback([this](const OSEvent& event) { HandleSceneThreadOSEvent(event); });
+        sceneSystem.SetRuntimeStartFrameCallback([this]() { LoadPendingPackagedStartupScene(); });
     }
 
     void WindowsPlayer::HandleSceneThreadOSEvent(const OSEvent& event)
@@ -160,6 +166,7 @@ namespace ve
 
     void WindowsPlayer::InitializePackagedProject()
     {
+        // 1. A loose developer run has no packaged Data directory, so it simply starts with the empty runtime scene.
         const Path dataRoot = FindPackagedDataRoot();
         if (dataRoot.IsEmpty())
         {
@@ -167,9 +174,10 @@ namespace ve
             return;
         }
 
-        FileSystem::SetProjectRoot(dataRoot);
-        GetRuntime().GetResourceSystem().SetProjectRoot(dataRoot);
+        // 2. Point global file/resource lookups at the packaged Data directory before reading package-owned assets.
+        ActivatePackagedProjectRoot(dataRoot);
 
+        // 3. Read the project descriptor first. If this fails, leave the Player alive with the empty scene.
         Result<PackagedProjectDescriptor> descriptor = LoadPackagedProjectDescriptor(dataRoot);
         if (!descriptor)
         {
@@ -177,20 +185,14 @@ namespace ve
             return;
         }
 
-        const Path manifestPath = dataRoot / PackageManifestFilename;
-        const ErrorCode loaderResult = runtimeAssetLoader_.Initialize(RuntimeAssetLoaderInitParam{manifestPath});
-        if (loaderResult != ErrorCode::None)
+        // 4. Load the runtime manifest. Scene construction is deferred to the Scene Thread on its first frame.
+        if (!InitializePackagedAssetLoader(dataRoot))
         {
-            VE_LOG_ERROR_CATEGORY("Player", "Failed to initialize runtime asset loader '{}': {}", manifestPath.GetString(), ToString(loaderResult));
             return;
         }
 
-        packagedStartScene_ = descriptor.GetValue().startScene.empty() ? DefaultStartScene : descriptor.GetValue().startScene;
-        pendingPackagedStartupSceneLoad_ = true;
-
-        GetRuntime().GetSceneSystem().SetEditorCallback(SceneSystemEditorCallback{
-            .onStartFrame = [this]() { LoadPendingPackagedStartupScene(); },
-        });
+        // 5. Record the start scene for a one-shot Scene Thread load once the main loop starts.
+        SchedulePackagedStartupSceneLoad(descriptor.GetValue().startScene);
 
         VE_LOG_INFO_CATEGORY("Player",
                              "Packaged project data root initialized: '{}', project '{}', start scene '{}', manifest asset count {}.",
@@ -198,6 +200,31 @@ namespace ve
                              descriptor.GetValue().name,
                              packagedStartScene_,
                              runtimeAssetLoader_.GetAssetManifest().GetAssetCount());
+    }
+
+    void WindowsPlayer::ActivatePackagedProjectRoot(const Path& dataRoot)
+    {
+        FileSystem::SetProjectRoot(dataRoot);
+        GetRuntime().GetResourceSystem().SetProjectRoot(dataRoot);
+    }
+
+    bool WindowsPlayer::InitializePackagedAssetLoader(const Path& dataRoot)
+    {
+        const Path manifestPath = dataRoot / PackageManifestFilename;
+        const ErrorCode loaderResult = runtimeAssetLoader_.Initialize(RuntimeAssetLoaderInitParam{manifestPath});
+        if (loaderResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to initialize runtime asset loader '{}': {}", manifestPath.GetString(), ToString(loaderResult));
+            return false;
+        }
+
+        return true;
+    }
+
+    void WindowsPlayer::SchedulePackagedStartupSceneLoad(std::string startScene)
+    {
+        packagedStartScene_ = startScene.empty() ? DefaultStartScene : std::move(startScene);
+        pendingPackagedStartupSceneLoad_ = true;
     }
 
     void WindowsPlayer::LoadPendingPackagedStartupScene()

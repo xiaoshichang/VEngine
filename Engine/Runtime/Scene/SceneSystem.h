@@ -112,6 +112,12 @@ namespace ve
         /// Assigns callbacks executed on the Scene Thread for Editor integration.
         void SetEditorCallback(SceneSystemEditorCallback callback) noexcept;
 
+        /// Assigns the runtime hook executed on the Scene Thread after OS events and before Scene update.
+        ///
+        /// Player and future runtime shells use this for frame-start work that must happen on the Scene Thread without
+        /// depending on Editor-only callbacks.
+        void SetRuntimeStartFrameCallback(std::function<void()> callback) noexcept;
+
         /// Assigns the runtime OS-event hook executed on the Scene Thread before editor/input dispatch.
         ///
         /// Player and future runtime views use this to keep render-facing scene state, such as ViewportClient size,

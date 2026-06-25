@@ -21,9 +21,12 @@ namespace ve
         [[nodiscard]] ErrorCode InitializeRendering(Window& mainWindow) override;
 
     private:
-        void RegisterSceneThreadViewportCallback();
+        void RegisterSceneThreadCallbacks();
         void HandleSceneThreadOSEvent(const OSEvent& event);
         void InitializePackagedProject();
+        void ActivatePackagedProjectRoot(const Path& dataRoot);
+        [[nodiscard]] bool InitializePackagedAssetLoader(const Path& dataRoot);
+        void SchedulePackagedStartupSceneLoad(std::string startScene);
         void LoadPendingPackagedStartupScene();
 
         ViewportClient viewportClient_;
