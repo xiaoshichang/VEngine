@@ -917,12 +917,21 @@ projects keep an empty `Library/.gitkeep` only so the directory shape is visible
 Project creation, descriptor editing, and workspace policy belong to the Editor layer; runtime systems only consume
 explicit paths and project-root resolution supplied by higher-level code.
 
+Repository-level engine assets are intentionally separate from project-owned assets:
+
+- `EditorOnlyAsset/`: engine-owned Editor-only resources. These are copied next to `VEngineEditor.exe` when the Editor is
+  built and are not included in Player packages.
+- `BuiltinAsset/`: engine-owned runtime builtin resources. These are copied next to `VEngineEditor.exe` for Editor use;
+  when referenced by the runtime manifest, they are also copied into Player packages next to `VEnginePlayer.exe`.
+- `ProjectRoot/Assets/`: project-authored resources. These stay under the project root during editing and are copied into
+  Player packages when referenced by the runtime manifest.
+
 The resource pipeline has three explicit responsibility layers:
 
 ```text
   Editor:
   EditorAssetDatabase
-    -> scans Assets/ when a project opens
+    -> scans Assets/ and runtime builtin BuiltinAsset/Engine/ when a project opens
     -> keeps asset path -> AssetID and AssetID -> asset-record indexes current
     -> tracks imported artifact path and direct dependencies
     -> updates records as editor operations create, delete, move, reimport, or save assets
@@ -950,8 +959,9 @@ Shared low-level loading:
     -> supports root-reachability collection
 ```
 
-The Editor AssetDatabase scans the `Assets/` tree, tracks native source assets and imported descriptors, and generates
-first-stage `.vemesh` descriptors from `.obj` sources without copying mesh payload data. Player builds export a runtime
+The Editor AssetDatabase scans the project `Assets/` tree plus runtime builtin `BuiltinAsset/Engine/` content, tracks
+native source assets and imported descriptors, and generates first-stage `.vemesh` descriptors from `.obj` sources
+without copying mesh payload data. `EditorOnlyAsset/` is outside this runtime asset scan. Player builds export a runtime
 asset manifest and resource payload set from the editor/tooling asset records.
 
 Recommended asset pipeline:

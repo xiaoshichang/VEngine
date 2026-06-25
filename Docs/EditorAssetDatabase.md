@@ -2,9 +2,9 @@
 
 ## Purpose
 
-`EditorAssetDatabase` is an Editor-layer service that scans the open project's `Assets/` directory and records editable
-project assets. It owns project workspace policy, `.meta` file creation, importer metadata, path lookup, and live editor
-updates.
+`EditorAssetDatabase` is an Editor-layer service that scans the open project's `Assets/` directory plus the repository
+level `BuiltinAsset/Engine/` directory and records editable project assets and engine-owned runtime builtin assets. It
+owns project workspace policy, `.meta` file creation, importer metadata, path lookup, and live editor updates.
 
 It does not own loaded resource objects. Editor resource objects are requested from `ResourceSystem` using
 `EditorAssetDatabase` as an `IAssetRecordProvider`.
@@ -24,7 +24,7 @@ EditorAssetRecord
     runtimePath
     dependencies
     contentHash
-  asset path under Assets/
+  asset path under Assets/ or BuiltinAsset/
   meta path
   editor asset type
   imported artifact path
@@ -55,6 +55,14 @@ Library/
   Imported/
     11111111-1111-1111-1111-111111111111/
       Cube.vemesh
+BuiltinAsset/
+  Engine/
+    Shaders/
+      BasicMesh.veshader
+      BasicMesh.veshader.meta
+EditorOnlyAsset/
+  Textures/
+    BuiltinGizmoIcons.png
 ```
 
 ## Meta Files
@@ -101,7 +109,8 @@ VEngine-native assets rather than original source files.
 
 ## Refresh Flow
 
-`EditorAssetDatabase::Refresh()` recursively scans `Assets/` and:
+`EditorAssetDatabase::Refresh()` recursively scans `Assets/` and, when present, `BuiltinAsset/Engine/` beside the
+project root. The scan:
 
 1. Creates missing `.meta` files for supported native assets.
 2. Reads GUIDs from existing `.meta` files.
@@ -109,8 +118,14 @@ VEngine-native assets rather than original source files.
 4. Builds editor asset records with `AssetID`, source path, meta path, type, runtime path, and imported path where
    applicable.
 
-`ReimportAll()` forces all OBJ imports to be regenerated. `ReimportAsset()` currently forces regeneration for a selected
-`.obj`; `.vematerial` and `.vescene` only refresh their records because they do not have importers yet.
+`ReimportAll()` forces all OBJ and shader imports to be regenerated. `ReimportAsset()` currently forces regeneration for
+a selected `.obj` or `.veshader`; `.vematerial` and `.vescene` only refresh their records because they do not have
+importers yet.
+
+Engine builtin runtime references use the `BuiltinAsset/...` logical path prefix. Editor-only engine resources live under
+`EditorOnlyAsset/...`; they are copied with the Editor build but are not scanned into the runtime manifest or exported
+into Player packages. Legacy references without a known root still resolve under `Assets/`, so project-authored assets
+keep the existing short-reference behavior.
 
 ## Editor Loading And Lifetime
 

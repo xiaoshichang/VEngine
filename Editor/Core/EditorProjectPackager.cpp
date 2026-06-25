@@ -2,6 +2,7 @@
 
 #include "Editor/Core/Editor.h"
 #include "Editor/Core/EditorAssetDatabase.h"
+#include "Editor/Core/EditorAssetPath.h"
 #include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
@@ -373,7 +374,7 @@ namespace ve::editor
                 continue;
             }
 
-            const Path sourcePath = projectRoot_ / runtimePath;
+            const Path sourcePath = ResolveEditorContentPath(projectRoot_, runtimePath);
             const Path destinationPath = packageDataRoot_ / runtimePath;
             std::error_code errorCode;
             if (!CopyFileWithDirectories(sourcePath, destinationPath, errorCode))
@@ -405,7 +406,7 @@ namespace ve::editor
                     return ErrorCode::InvalidArgument;
                 }
 
-                const Path artifactSourcePath = projectRoot_ / artifactRuntimePath;
+                const Path artifactSourcePath = ResolveEditorContentPath(projectRoot_, artifactRuntimePath);
                 const Path artifactDestinationPath = packageDataRoot_ / artifactRuntimePath;
                 if (!CopyFileWithDirectories(artifactSourcePath, artifactDestinationPath, errorCode))
                 {

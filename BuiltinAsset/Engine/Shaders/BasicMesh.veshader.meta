@@ -2,7 +2,7 @@
     "version": 1,
     "guid": "99999999-9999-9999-9999-999999999991",
     "assetType": "Shader",
-    "sourcePath": "Assets/Engine/Shaders/BasicMesh.veshader",
+    "sourcePath": "BuiltinAsset/Engine/Shaders/BasicMesh.veshader",
     "importer": "ShaderImporter",
     "importSettings": {}
 }

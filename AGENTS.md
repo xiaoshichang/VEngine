@@ -198,6 +198,9 @@ iOS C# scripting is not a first-stage requirement. Treat iOS scripting as a futu
 Use CMake/CTest for Windows unit and smoke tests. Test executables may use simple project-owned assertions until a
 dedicated test framework is justified.
 
+Do not add unit tests by default. Only add or modify unit tests when the user request, milestone requirements, or a
+repository instruction explicitly asks for tests. When tests are requested, keep them focused on the requested behavior.
+
 Prioritize tests for:
 
 - Core

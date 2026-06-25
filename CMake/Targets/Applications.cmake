@@ -32,6 +32,8 @@ function(ve_add_windows_editor)
         add_executable(VEngineEditor WIN32
             Editor/Core/EditorAssetDatabase.cpp
             Editor/Core/EditorAssetDatabase.h
+            Editor/Core/EditorAssetPath.cpp
+            Editor/Core/EditorAssetPath.h
             Editor/Core/EditorBuildPackageDialog.cpp
             Editor/Core/EditorBuildPackageDialog.h
             Editor/Core/EditorBuiltinResources.cpp
@@ -88,6 +90,16 @@ function(ve_add_windows_editor)
         add_dependencies(VEngineEditor VEngineShaderTool)
 
         ve_setup_imgui(VEngineEditor)
+
+        add_custom_command(TARGET VEngineEditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${PROJECT_SOURCE_DIR}/BuiltinAsset"
+                "$<TARGET_FILE_DIR:VEngineEditor>/BuiltinAsset"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${PROJECT_SOURCE_DIR}/EditorOnlyAsset"
+                "$<TARGET_FILE_DIR:VEngineEditor>/EditorOnlyAsset"
+            COMMENT "Copying VEngine editor asset roots"
+        )
 
         ve_configure_target(VEngineEditor)
     else()

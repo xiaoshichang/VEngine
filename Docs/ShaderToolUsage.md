@@ -203,7 +203,7 @@ Bindable shader resource on line 8 must declare an explicit register.
 仓库当前带有 DemoProject 使用的基础 mesh shader：
 
 ```text
-DemoProject\Assets\Engine\Shaders\BasicMesh.hlsl
+BuiltinAsset\Engine\Shaders\BasicMesh.hlsl
 ```
 
 从仓库根目录运行：
@@ -212,7 +212,7 @@ DemoProject\Assets\Engine\Shaders\BasicMesh.hlsl
 cmd /c CMake\Scripts\WithMsvc.bat ^
   Build\windows-msvc-release\Release\VEngineShaderTool.exe ^
   compile ^
-  --source DemoProject\Assets\Engine\Shaders\BasicMesh.hlsl ^
+  --source BuiltinAsset\Engine\Shaders\BasicMesh.hlsl ^
   --output Build\Generated\ShaderExamples\BasicMesh ^
   --name BasicMesh ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^

@@ -47,6 +47,7 @@ namespace ve::editor
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] const Path& GetProjectRoot() const noexcept;
         [[nodiscard]] Path GetAssetsRootPath() const;
+        [[nodiscard]] Path GetBuiltinAssetsRootPath() const;
 
         [[nodiscard]] ErrorCode Refresh();
         [[nodiscard]] ErrorCode ReimportAll();

@@ -1,5 +1,6 @@
 #include "Editor/Core/EditorAssetDatabase.h"
 
+#include "Editor/Core/EditorAssetPath.h"
 #include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
@@ -288,28 +289,7 @@ namespace ve::editor
 #endif
         }
 
-        [[nodiscard]] Path ResolveProjectRelativeReference(std::string_view reference, std::string_view fallbackExtension)
-        {
-            if (reference.empty())
-            {
-                return Path();
-            }
-
-            std::string path(reference);
-            if (!path.starts_with("Assets/"))
-            {
-                path = "Assets/" + path;
-            }
-
-            if (Path(path).GetExtension().empty() && !fallbackExtension.empty())
-            {
-                path += fallbackExtension;
-            }
-
-            return Path(path);
-        }
-
-        [[nodiscard]] Path ResolveSourcePath(const Path& projectRoot, const Path& descriptorProjectPath, std::string_view source)
+        [[nodiscard]] Path ResolveSourcePath(const Path& projectRoot, const Path& descriptorPhysicalPath, std::string_view source)
         {
             if (source.empty())
             {
@@ -322,12 +302,12 @@ namespace ve::editor
                 return sourcePath;
             }
 
-            if (sourcePath.GetString().starts_with("Assets/") || sourcePath.GetString().starts_with("Library/"))
+            if (IsEditorContentPath(sourcePath))
             {
-                return projectRoot / sourcePath;
+                return ResolveEditorContentPath(projectRoot, sourcePath);
             }
 
-            return projectRoot / descriptorProjectPath.GetParentPath() / sourcePath;
+            return descriptorPhysicalPath.GetParentPath() / sourcePath;
         }
 
         [[nodiscard]] Path GetBuiltinFxcPath(const Path& repositoryRoot)
@@ -641,6 +621,11 @@ namespace ve::editor
         {
             if (!path.IsAbsolute())
             {
+                if (IsEditorContentPath(path))
+                {
+                    return path;
+                }
+
                 const Path relativeToProject = projectRoot / path;
                 if (FileSystem::IsFile(relativeToProject))
                 {
@@ -659,15 +644,7 @@ namespace ve::editor
                 return path;
             }
 
-            const std::string& root = projectRoot.GetString();
-            const std::string& pathText = path.GetString();
-            const std::string prefix = root.ends_with('/') ? root : root + "/";
-            if (pathText.starts_with(prefix))
-            {
-                return Path(pathText.substr(prefix.size()));
-            }
-
-            return path;
+            return ToEditorContentPath(projectRoot, path);
         }
 
         [[nodiscard]] ErrorCode RewriteShaderArtifactPaths(const Path& projectRoot, const Path& shaderRuntimePhysicalPath)
@@ -873,6 +850,11 @@ namespace ve::editor
         return EditorProject::GetAssetsPath(projectRoot_);
     }
 
+    Path EditorAssetDatabase::GetBuiltinAssetsRootPath() const
+    {
+        return ::ve::editor::GetBuiltinAssetsRootPath(projectRoot_);
+    }
+
     ErrorCode EditorAssetDatabase::Refresh()
     {
         if (!initialized_)
@@ -892,6 +874,16 @@ namespace ve::editor
         if (result != ErrorCode::None)
         {
             return result;
+        }
+
+        const Path builtinEngineAssetsRoot = GetBuiltinAssetsRootPath() / "Engine";
+        if (FileSystem::IsDirectory(builtinEngineAssetsRoot))
+        {
+            const ErrorCode builtinResult = ScanAndImportDirectory(builtinEngineAssetsRoot, false);
+            if (builtinResult != ErrorCode::None)
+            {
+                return builtinResult;
+            }
         }
         return ResolveAssetDependencies();
     }
@@ -915,6 +907,16 @@ namespace ve::editor
         if (result != ErrorCode::None)
         {
             return result;
+        }
+
+        const Path builtinEngineAssetsRoot = GetBuiltinAssetsRootPath() / "Engine";
+        if (FileSystem::IsDirectory(builtinEngineAssetsRoot))
+        {
+            const ErrorCode builtinResult = ScanAndImportDirectory(builtinEngineAssetsRoot, true);
+            if (builtinResult != ErrorCode::None)
+            {
+                return builtinResult;
+            }
         }
         return ResolveAssetDependencies();
     }
@@ -1111,7 +1113,7 @@ namespace ve::editor
             return ErrorCode::None;
         }
 
-        Result<ObjMeshData> meshData = ParseObjMesh(projectRoot_ / objProjectPath, objProjectPath);
+        Result<ObjMeshData> meshData = ParseObjMesh(ResolveEditorContentPath(projectRoot_, objProjectPath), objProjectPath);
         if (!meshData)
         {
             return meshData.GetError().GetCode();
@@ -1137,7 +1139,7 @@ namespace ve::editor
         const std::string shaderName = shaderNameResult.GetValue();
         const Path shaderRuntimePath = GetImportedShaderPath(guid, shaderName);
         const Path shaderRuntimePhysicalPath = projectRoot_ / shaderRuntimePath;
-        const Path shaderDescriptorPhysicalPath = projectRoot_ / shaderProjectPath;
+        const Path shaderDescriptorPhysicalPath = ResolveEditorContentPath(projectRoot_, shaderProjectPath);
         Result<std::string> descriptorText = FileSystem::ReadTextFile(shaderDescriptorPhysicalPath);
         if (!descriptorText)
         {
@@ -1151,7 +1153,7 @@ namespace ve::editor
         }
 
         const boost::json::object& descriptor = descriptorJson.GetValue().as_object();
-        const Path sourcePath = ResolveSourcePath(projectRoot_, shaderProjectPath, ReadString(descriptor, "source"));
+        const Path sourcePath = ResolveSourcePath(projectRoot_, shaderDescriptorPhysicalPath, ReadString(descriptor, "source"));
         if (shaderName.empty() || sourcePath.IsEmpty() || !FileSystem::IsFile(sourcePath))
         {
             return ErrorCode::NotFound;
@@ -1244,7 +1246,7 @@ namespace ve::editor
                 continue;
             }
 
-            Result<std::string> materialText = FileSystem::ReadTextFile(projectRoot_ / record.path);
+            Result<std::string> materialText = FileSystem::ReadTextFile(ResolveEditorContentPath(projectRoot_, record.path));
             if (!materialText)
             {
                 return materialText.GetError().GetCode();
@@ -1256,7 +1258,7 @@ namespace ve::editor
                 continue;
             }
 
-            const Path shaderProjectPath = ResolveProjectRelativeReference(ReadString(materialJson.GetValue().as_object(), "shader"), ".veshader");
+            const Path shaderProjectPath = ResolveEditorAssetReference(ReadString(materialJson.GetValue().as_object(), "shader"), ".veshader");
             if (shaderProjectPath.IsEmpty())
             {
                 continue;
@@ -1272,7 +1274,7 @@ namespace ve::editor
             }
             else
             {
-                shaderDependencyID = ReadDependencyIDFromMeta(projectRoot_ / GetMetaPath(shaderProjectPath));
+                shaderDependencyID = ReadDependencyIDFromMeta(ResolveEditorContentPath(projectRoot_, GetMetaPath(shaderProjectPath)));
                 shaderAsset = FindAssetByID(shaderDependencyID);
             }
 
@@ -1283,7 +1285,7 @@ namespace ve::editor
 
             AddDependencyIfValid(record.asset.dependencies, shaderDependencyID);
 
-            Result<std::string> shaderText = FileSystem::ReadTextFile(projectRoot_ / shaderAsset->asset.runtimePath);
+            Result<std::string> shaderText = FileSystem::ReadTextFile(ResolveEditorContentPath(projectRoot_, shaderAsset->asset.runtimePath));
             if (!shaderText)
             {
                 return shaderText.GetError().GetCode();
@@ -1315,7 +1317,7 @@ namespace ve::editor
 
     Result<Guid> EditorAssetDatabase::EnsureMeta(const EditorAssetRecord& record) const
     {
-        const Path metaPhysicalPath = projectRoot_ / record.metaPath;
+        const Path metaPhysicalPath = ResolveEditorContentPath(projectRoot_, record.metaPath);
         if (FileSystem::IsFile(metaPhysicalPath))
         {
             Result<Guid> guidResult = ReadMetaGuid(metaPhysicalPath);
@@ -1383,7 +1385,7 @@ namespace ve::editor
 
     Result<std::string> EditorAssetDatabase::ReadShaderName(const Path& shaderProjectPath) const
     {
-        Result<std::string> descriptorText = FileSystem::ReadTextFile(projectRoot_ / shaderProjectPath);
+        Result<std::string> descriptorText = FileSystem::ReadTextFile(ResolveEditorContentPath(projectRoot_, shaderProjectPath));
         if (!descriptorText)
         {
             return descriptorText;
@@ -1411,25 +1413,7 @@ namespace ve::editor
 
     Path EditorAssetDatabase::ToProjectRelativePath(const Path& physicalPath) const
     {
-        const std::string& root = projectRoot_.GetString();
-        const std::string& path = physicalPath.GetString();
-        if (root.empty())
-        {
-            return physicalPath;
-        }
-
-        if (path == root)
-        {
-            return Path();
-        }
-
-        const std::string prefix = root.ends_with('/') ? root : root + "/";
-        if (path.starts_with(prefix))
-        {
-            return Path(path.substr(prefix.size()));
-        }
-
-        return physicalPath;
+        return ToEditorContentPath(projectRoot_, physicalPath);
     }
 
     void EditorAssetDatabase::AddAssetRecord(EditorAssetRecord record)

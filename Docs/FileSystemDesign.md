@@ -244,9 +244,18 @@ not repeat those paths. All JSON emitted by these helpers is pretty-printed with
 `Assets/` stores project-visible content. `Library/` stores generated local content and import/cache products. `Library/`
 is part of the directory convention, but future production projects should usually ignore its generated contents.
 
-The Editor AssetDatabase currently scans `Assets/` for `.obj`, `.vemesh`, `.vematerial`, and `.vescene` files. `.obj`
-files are native source assets; missing `.vemesh` descriptors are generated beside them and reference the source OBJ
-rather than copying actual mesh data.
+Repository-level engine assets are separate from the project root:
+
+- `EditorOnlyAsset/` stores engine-owned Editor-only resources. The Editor build copies this directory next to
+  `VEngineEditor.exe`; Player packages do not include it.
+- `BuiltinAsset/` stores engine-owned runtime builtin resources. The Editor build copies this directory next to
+  `VEngineEditor.exe`; Player packages include referenced runtime builtin files.
+- `ProjectRoot/Assets/` stores project-authored resources. Player packages include referenced project runtime files.
+
+The Editor AssetDatabase currently scans `Assets/` and `BuiltinAsset/Engine/` for `.obj`, `.vematerial`, `.veshader`,
+and `.vescene` files. `.obj` files are native source assets; missing `.vemesh` descriptors are generated into `Library/`
+and reference the source OBJ rather than copying actual mesh data. `EditorOnlyAsset/` is not scanned into runtime asset
+metadata.
 
 ## 11. Platform Notes
 
