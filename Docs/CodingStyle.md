@@ -526,7 +526,7 @@ Test file names use `PascalCase` with a `Tests` suffix.
 ```text
 Vector3Tests.cpp
 ResourceGuidTests.cpp
-SceneSerializationTests.cpp
+ViewportTests.cpp
 ```
 
 Test case names use `PascalCase`.
