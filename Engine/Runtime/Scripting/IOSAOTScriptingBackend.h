@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Engine/Runtime/Scripting/ScriptingSystemBackend.h"
+#include "Engine/Runtime/Scripting/DotNetScriptingBackend.h"
 
 namespace ve
 {
-    class IOSAOTScriptingBackend final : public ScriptingSystemBackend
+    class IOSAOTScriptingBackend final : public DotNetScriptingBackend
     {
     public:
         [[nodiscard]] ErrorCode Initialize(const ScriptingSystemInitParam& initParam) override;

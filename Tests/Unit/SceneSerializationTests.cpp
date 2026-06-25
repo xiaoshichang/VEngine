@@ -10,6 +10,7 @@
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/ScriptingSystem.h"
 
 #include <iostream>
 #include <string>
@@ -40,6 +41,9 @@ namespace
     bool TestSceneRoundTrip()
     {
         bool passed = true;
+
+        ve::ScriptingSystem scriptingSystem;
+        passed &= ExpectOk(scriptingSystem.Initialize(ve::ScriptingSystemInitParam{ve::ScriptingBackendType::IOSAOT}), "ScriptingSystem should initialize");
 
         ve::Scene sourceScene("Serialization Smoke");
         ve::Result<ve::GameObject*> rootResult = sourceScene.CreateRootGameObject("Root");
@@ -89,7 +93,7 @@ namespace
         passed &= Expect(serialized.GetValue().find("\"localPosition\": [1E0, 2E0, 3E0]") != std::string::npos, "Scene vector JSON should stay on one line");
 
         ve::Scene loadedScene;
-        passed &= ExpectOk(ve::SceneSerialization::LoadFromString(loadedScene, serialized.GetValue()), "Scene should deserialize from JSON text");
+        passed &= ExpectOk(ve::SceneSerialization::LoadFromString(loadedScene, serialized.GetValue(), scriptingSystem), "Scene should deserialize from JSON text");
         passed &= Expect(loadedScene.GetName() == "Serialization Smoke", "Scene name should round-trip");
         passed &= Expect(loadedScene.GetRootGameObjectCount() == 2, "Root object count should round-trip");
 
@@ -117,6 +121,7 @@ namespace
         passed &= Expect(loadedLight->GetLightType() == ve::LightType::Point, "Light type should round-trip");
         passed &= Expect(ve::NearlyEqual(loadedLight->GetIntensity(), 3.0f), "Light intensity should round-trip");
 
+        scriptingSystem.Shutdown();
         return passed;
     }
 

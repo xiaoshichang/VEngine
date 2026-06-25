@@ -21,6 +21,7 @@
 namespace ve
 {
     struct SceneSystemImpl;
+    class ScriptingSystem;
 
     /// SceneThread callbacks supplied by Editor for per-frame event and render hooks.
     struct SceneSystemEditorCallback
@@ -88,7 +89,10 @@ namespace ve
 
         /// Returns the active Scene. The returned pointer remains owned by SceneSystem.
         [[nodiscard]] const Scene* GetScene() const noexcept;
-        [[nodiscard]] Result<Scene*> LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem);
+        [[nodiscard]] Result<Scene*> LoadScene(const SceneLoadDesc& desc,
+                                               const IAssetRecordProvider& provider,
+                                               ResourceSystem& resourceSystem,
+                                               ScriptingSystem& scriptingSystem);
         void UnloadActiveScene() noexcept;
 
         /// Queues one OS event for Scene Thread processing.

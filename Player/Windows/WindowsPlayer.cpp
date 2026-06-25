@@ -249,8 +249,8 @@ namespace ve
             return;
         }
 
-        Result<Scene*> sceneResult =
-            GetRuntime().GetSceneSystem().LoadScene(SceneLoadDesc{sceneAssetID.GetValue(), SceneLoadMode::Single}, runtimeAssetLoader_, GetRuntime().GetResourceSystem());
+        Result<Scene*> sceneResult = GetRuntime().GetSceneSystem().LoadScene(
+            SceneLoadDesc{sceneAssetID.GetValue(), SceneLoadMode::Single}, runtimeAssetLoader_, GetRuntime().GetResourceSystem(), GetRuntime().GetScriptingSystem());
         if (!sceneResult)
         {
             VE_LOG_ERROR_CATEGORY("Player", "Failed to load packaged start scene '{}': {}", packagedStartScene_, sceneResult.GetError().GetMessage());

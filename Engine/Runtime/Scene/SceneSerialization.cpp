@@ -10,6 +10,7 @@
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/DotnetScriptableComponent.h"
 #include "Engine/Runtime/Scripting/ScriptableComponent.h"
 
 #include <boost/json.hpp>
@@ -363,10 +364,10 @@ namespace ve
             return object;
         }
 
-        [[nodiscard]] boost::json::object WriteScriptableComponent(const ScriptableComponent& script)
+        [[nodiscard]] boost::json::object WriteDotnetScriptableComponent(const DotnetScriptableComponent& script)
         {
             boost::json::object object;
-            object["type"] = "ScriptableComponent";
+            object["type"] = "DotnetScriptableComponent";
             object["enabled"] = script.IsEnabled();
             object["scriptTypeName"] = script.GetScriptTypeName();
             return object;
@@ -398,9 +399,9 @@ namespace ve
                 components.push_back(WriteLightComponent(*light));
             }
 
-            if (const ScriptableComponent* script = gameObject.GetComponent<ScriptableComponent>(); script != nullptr)
+            if (const DotnetScriptableComponent* script = gameObject.GetComponent<DotnetScriptableComponent>(); script != nullptr)
             {
-                components.push_back(WriteScriptableComponent(*script));
+                components.push_back(WriteDotnetScriptableComponent(*script));
             }
             object["components"] = std::move(components);
 
@@ -588,25 +589,29 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode ApplyScriptableComponent(GameObject& gameObject, const boost::json::object& object)
+        [[nodiscard]] ErrorCode ApplyDotnetScriptableComponent(GameObject& gameObject, const boost::json::object& object, ScriptingSystem& scriptingSystem)
         {
-            ScriptableComponent* script = gameObject.GetComponent<ScriptableComponent>();
+            DotnetScriptableComponent* script = gameObject.GetComponent<DotnetScriptableComponent>();
+            const std::string scriptTypeName = ReadString(object, "scriptTypeName", script != nullptr ? script->GetScriptTypeName() : std::string());
             if (script == nullptr)
             {
-                Result<ScriptableComponent*> result = gameObject.AddComponentWithoutRenderRegistration<ScriptableComponent>();
+                Result<DotnetScriptableComponent*> result = gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptTypeName, scriptingSystem);
                 if (!result)
                 {
                     return result.GetError().GetCode();
                 }
                 script = result.GetValue();
             }
+            else if (script->GetScriptTypeName() != scriptTypeName)
+            {
+                return ErrorCode::InvalidState;
+            }
 
-            script->SetScriptTypeName(ReadString(object, "scriptTypeName", script->GetScriptTypeName()));
             script->SetEnabled(ReadBool(object, "enabled", script->IsEnabled()));
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode ApplyComponents(GameObject& gameObject, const boost::json::array& components)
+        [[nodiscard]] ErrorCode ApplyComponents(GameObject& gameObject, const boost::json::array& components, ScriptingSystem& scriptingSystem)
         {
             if (const boost::json::object* transform = FindComponent(components, "TransformComponent"); transform != nullptr)
             {
@@ -644,9 +649,14 @@ namespace ve
                 }
             }
 
-            if (const boost::json::object* script = FindComponent(components, "ScriptableComponent"); script != nullptr)
+            const boost::json::object* script = FindComponent(components, "DotnetScriptableComponent");
+            if (script == nullptr)
             {
-                const ErrorCode result = ApplyScriptableComponent(gameObject, *script);
+                script = FindComponent(components, "ScriptableComponent");
+            }
+            if (script != nullptr)
+            {
+                const ErrorCode result = ApplyDotnetScriptableComponent(gameObject, *script, scriptingSystem);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -656,7 +666,7 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode ReadGameObjectRecursive(Scene& scene, TransformComponent* parent, const boost::json::object& object)
+        [[nodiscard]] ErrorCode ReadGameObjectRecursive(Scene& scene, TransformComponent* parent, const boost::json::object& object, ScriptingSystem& scriptingSystem)
         {
             const std::string name = ReadString(object, "name");
 
@@ -692,7 +702,7 @@ namespace ve
                     return ErrorCode::InvalidArgument;
                 }
 
-                const ErrorCode result = ApplyComponents(*gameObject, componentsValue->as_array());
+                const ErrorCode result = ApplyComponents(*gameObject, componentsValue->as_array(), scriptingSystem);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -719,7 +729,7 @@ namespace ve
                         return ErrorCode::InvalidArgument;
                     }
 
-                    const ErrorCode result = ReadGameObjectRecursive(scene, transform, childValue.as_object());
+                    const ErrorCode result = ReadGameObjectRecursive(scene, transform, childValue.as_object(), scriptingSystem);
                     if (result != ErrorCode::None)
                     {
                         return result;
@@ -730,7 +740,7 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode ReadScene(Scene& scene, const boost::json::object& object)
+        [[nodiscard]] ErrorCode ReadScene(Scene& scene, const boost::json::object& object, ScriptingSystem& scriptingSystem)
         {
             scene.Clear();
             scene.SetName(ReadString(object, "name"));
@@ -753,7 +763,7 @@ namespace ve
                     return ErrorCode::InvalidArgument;
                 }
 
-                const ErrorCode result = ReadGameObjectRecursive(scene, nullptr, rootValue.as_object());
+                const ErrorCode result = ReadGameObjectRecursive(scene, nullptr, rootValue.as_object(), scriptingSystem);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -776,7 +786,7 @@ namespace ve
         return Result<std::string>::Success(JsonUtils::SerializePretty(boost::json::value(objectResult.MoveValue())));
     }
 
-    ErrorCode SceneSerialization::LoadFromString(Scene& scene, std::string_view text)
+    ErrorCode SceneSerialization::LoadFromString(Scene& scene, std::string_view text, ScriptingSystem& scriptingSystem)
     {
         Result<boost::json::value> jsonResult = JsonUtils::Parse(text);
         if (!jsonResult)
@@ -790,6 +800,6 @@ namespace ve
             return ErrorCode::InvalidArgument;
         }
 
-        return ReadScene(scene, value.as_object());
+        return ReadScene(scene, value.as_object(), scriptingSystem);
     }
 } // namespace ve

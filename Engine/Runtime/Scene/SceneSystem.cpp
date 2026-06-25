@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/ScriptingSystem.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -348,10 +349,10 @@ namespace ve
             return resourceSystem.Request<SceneResource>(desc.scene, provider);
         }
 
-        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromResource(const SceneResource& sceneResource)
+        [[nodiscard]] Result<std::unique_ptr<Scene>> CreateSceneFromResource(const SceneResource& sceneResource, ScriptingSystem& scriptingSystem)
         {
             auto scene = std::make_unique<Scene>();
-            const ErrorCode deserializeResult = SceneSerialization::LoadFromString(*scene, sceneResource.GetText());
+            const ErrorCode deserializeResult = SceneSerialization::LoadFromString(*scene, sceneResource.GetText(), scriptingSystem);
             if (deserializeResult != ErrorCode::None)
             {
                 return Result<std::unique_ptr<Scene>>::Failure(Error(deserializeResult, "Failed to deserialize scene resource."));
@@ -363,9 +364,10 @@ namespace ve
         [[nodiscard]] Result<std::unique_ptr<Scene>> BuildSceneFromResource(const SceneResource& sceneResource,
                                                                             const IAssetRecordProvider& provider,
                                                                             ResourceSystem& resourceSystem,
-                                                                            RenderSystem* renderSystem)
+                                                                            RenderSystem* renderSystem,
+                                                                            ScriptingSystem& scriptingSystem)
         {
-            Result<std::unique_ptr<Scene>> scene = CreateSceneFromResource(sceneResource);
+            Result<std::unique_ptr<Scene>> scene = CreateSceneFromResource(sceneResource, scriptingSystem);
             if (!scene)
             {
                 return scene;
@@ -488,7 +490,10 @@ namespace ve
         return impl_->scene.get();
     }
 
-    Result<Scene*> SceneSystem::LoadScene(const SceneLoadDesc& desc, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem)
+    Result<Scene*> SceneSystem::LoadScene(const SceneLoadDesc& desc,
+                                          const IAssetRecordProvider& provider,
+                                          ResourceSystem& resourceSystem,
+                                          ScriptingSystem& scriptingSystem)
     {
         // 1. Validate the requested mode before touching resource state. SceneSystem currently owns a single active
         // Scene, so additive loading is rejected until multiple live Scene ownership is introduced.
@@ -508,7 +513,8 @@ namespace ve
         // 3. Build a detached Scene and bind all component AssetRefs before committing it as the active scene. Render
         // resources are submitted here too, while the new scene is still detached, so scene deserialization or asset
         // binding failures leave the old scene untouched.
-        Result<std::unique_ptr<Scene>> scene = BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem, impl_->renderSystem);
+        Result<std::unique_ptr<Scene>> scene =
+            BuildSceneFromResource(*sceneResource.GetValue().Get(), provider, resourceSystem, impl_->renderSystem, scriptingSystem);
         if (!scene)
         {
             return Result<Scene*>::Failure(scene.GetError());

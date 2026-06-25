@@ -670,7 +670,7 @@ First-stage Windows scope:
 - Load a managed script assembly.
 - Expose core native APIs through a C ABI bridge.
 - Provide a handwritten `VEngine.ScriptAPI` layer in C#.
-- Support `ScriptableComponent`.
+- Support a `ScriptableComponent` interface with `DotnetScriptableComponent` as the first concrete script component.
 - Dispatch lifecycle methods such as `OnCreate`, `OnDestroy`, `OnUpdate`, `OnLateUpdate`, `OnEnable`, and `OnDisable`.
 - Support reloading after stopping the scene in Editor.
 
@@ -1019,7 +1019,8 @@ Recommended built-in first-stage components:
 - `CameraComponent`.
 - `MeshRenderComponent`.
 - `LightComponent`.
-- `ScriptableComponent`.
+- `ScriptableComponent` interface.
+- `DotnetScriptableComponent`.
 - `CanvasComponent`.
 - `ColliderComponent`.
 
@@ -1065,7 +1066,10 @@ First-stage API binding approach:
 - Keep API shape stable and small.
 - Expose only necessary GameObject, Component, Transform, Input, Time, and Logging APIs.
 
-ScriptableComponent lifecycle:
+`ScriptableComponent` is the engine-facing script component interface. `DotnetScriptableComponent` is the first concrete
+implementation and represents scripts authored for the .NET scripting backend.
+
+Scriptable component lifecycle:
 
 ```text
 OnCreate

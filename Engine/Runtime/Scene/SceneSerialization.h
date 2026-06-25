@@ -9,11 +9,12 @@
 namespace ve
 {
     class Scene;
+    class ScriptingSystem;
 
     class SceneSerialization
     {
     public:
         [[nodiscard]] static Result<std::string> SaveToString(const Scene& scene);
-        [[nodiscard]] static ErrorCode LoadFromString(Scene& scene, std::string_view text);
+        [[nodiscard]] static ErrorCode LoadFromString(Scene& scene, std::string_view text, ScriptingSystem& scriptingSystem);
     };
 } // namespace ve

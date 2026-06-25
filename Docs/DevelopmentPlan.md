@@ -203,7 +203,7 @@ target and a separate Metal triangle demo, but not a complete iOS Player engine 
 - Load managed script assembly.
 - Add C ABI native bridge.
 - Handwrite core `VEngine.ScriptAPI`.
-- Implement ScriptableComponent.
+- Implement the `ScriptableComponent` interface and first `DotnetScriptableComponent`.
 - Dispatch `OnCreate`, `OnUpdate`, and `OnDestroy`.
 - Support reload after stopping scene in Editor.
 - Add script host smoke test.

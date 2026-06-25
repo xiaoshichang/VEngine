@@ -688,8 +688,8 @@ namespace ve::editor
             return;
         }
 
-        Result<Scene*> sceneResult =
-            sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem());
+        Result<Scene*> sceneResult = sceneSystem_->LoadScene(
+            SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
         if (!sceneResult)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to construct project start scene '{}': {}", descriptor.startScene, sceneResult.GetError().GetMessage());
@@ -781,8 +781,8 @@ namespace ve::editor
             return;
         }
 
-        Result<Scene*> sceneResult =
-            sceneSystem_->LoadScene(SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem());
+        Result<Scene*> sceneResult = sceneSystem_->LoadScene(
+            SceneLoadDesc{sceneAsset->asset.id, SceneLoadMode::Single}, assetDatabase_, runtime_->GetResourceSystem(), runtime_->GetScriptingSystem());
         if (!sceneResult)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to open scene '{}': {}", scenePath.GetString(), sceneResult.GetError().GetMessage());

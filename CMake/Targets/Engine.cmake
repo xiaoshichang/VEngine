@@ -53,7 +53,7 @@ function(ve_add_engine)
             Engine/Runtime/Scene/SceneSerialization.cpp
             Engine/Runtime/Scene/SceneSystem.cpp
             Engine/Runtime/Scene/TransformComponent.cpp
-            Engine/Runtime/Scripting/DotNetScriptingBackend.cpp
+            Engine/Runtime/Scripting/DotnetScriptableComponent.cpp
             Engine/Runtime/Scripting/IOSAOTScriptingBackend.cpp
             Engine/Runtime/Scripting/ScriptableComponent.cpp
             Engine/Runtime/Scripting/ScriptingSystem.cpp
@@ -127,6 +127,7 @@ function(ve_add_engine)
             Engine/Runtime/Scene/SceneSystem.h
             Engine/Runtime/Scene/TransformComponent.h
             Engine/Runtime/Scripting/DotNetScriptingBackend.h
+            Engine/Runtime/Scripting/DotnetScriptableComponent.h
             Engine/Runtime/Scripting/IOSAOTScriptingBackend.h
             Engine/Runtime/Scripting/ScriptableComponent.h
             Engine/Runtime/Scripting/ScriptingSystem.h

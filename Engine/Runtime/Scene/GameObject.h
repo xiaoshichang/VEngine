@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Scene/LightComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/DotnetScriptableComponent.h"
 #include "Engine/Runtime/Scripting/ScriptableComponent.h"
 
 #include <memory>
@@ -45,7 +46,13 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, or ScriptableComponent.");
+                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
+            static_assert(!std::is_same_v<TComponent, ScriptableComponent>, "Add a concrete script component such as DotnetScriptableComponent.");
+
+            if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
+            {
+                return AddComponentInternal<TComponent>(true, std::forward<TArgs>(args)...);
+            }
 
             std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
             VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
@@ -75,11 +82,22 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, or ScriptableComponent.");
+                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
 
-            std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
-            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
-            return componentSlot != nullptr ? componentSlot->get() : nullptr;
+            if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
+            {
+                return scriptableCmpt_.get();
+            }
+            else if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
+            {
+                return dynamic_cast<DotnetScriptableComponent*>(scriptableCmpt_.get());
+            }
+            else
+            {
+                std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+                VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+                return componentSlot != nullptr ? componentSlot->get() : nullptr;
+            }
         }
 
         template<typename TComponent>
@@ -88,11 +106,22 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, or ScriptableComponent.");
+                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
 
-            const std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
-            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
-            return componentSlot != nullptr ? componentSlot->get() : nullptr;
+            if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
+            {
+                return scriptableCmpt_.get();
+            }
+            else if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
+            {
+                return dynamic_cast<const DotnetScriptableComponent*>(scriptableCmpt_.get());
+            }
+            else
+            {
+                const std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+                VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+                return componentSlot != nullptr ? componentSlot->get() : nullptr;
+            }
         }
 
         template<typename TComponent>
@@ -101,42 +130,68 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, or ScriptableComponent.");
+                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
 
             // Transform drives hierarchy and cannot be removed from a live GameObject.
             if constexpr (std::is_same_v<TComponent, TransformComponent>)
             {
                 return false;
             }
+            else if constexpr (std::is_same_v<TComponent, ScriptableComponent> || std::is_same_v<TComponent, DotnetScriptableComponent>)
+            {
+                if (scriptableCmpt_ == nullptr)
+                {
+                    return false;
+                }
 
-            std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
-            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
-            if (componentSlot == nullptr || *componentSlot == nullptr)
-            {
-                return false;
-            }
+                if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
+                {
+                    if (dynamic_cast<DotnetScriptableComponent*>(scriptableCmpt_.get()) == nullptr)
+                    {
+                        return false;
+                    }
+                }
 
-            if ((*componentSlot)->IsEnabled())
-            {
-                (*componentSlot)->SetEnabled(false);
+                if (scriptableCmpt_->IsEnabled())
+                {
+                    scriptableCmpt_->SetEnabled(false);
+                }
+                scriptableCmpt_->OnDestroy();
+                scriptableCmpt_->ClearOwner();
+                scriptableCmpt_.reset();
+                return true;
             }
-            (*componentSlot)->OnDestroy();
+            else
+            {
+                std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+                VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+                if (componentSlot == nullptr || *componentSlot == nullptr)
+                {
+                    return false;
+                }
 
-            if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
-            {
-                (*componentSlot)->UnregisterTransformChangedCallback();
+                if ((*componentSlot)->IsEnabled())
+                {
+                    (*componentSlot)->SetEnabled(false);
+                }
+                (*componentSlot)->OnDestroy();
+
+                if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+                {
+                    (*componentSlot)->UnregisterTransformChangedCallback();
+                }
+                else if constexpr (std::is_same_v<TComponent, CameraComponent>)
+                {
+                    (*componentSlot)->UnregisterTransformChangedCallback();
+                }
+                else if constexpr (std::is_same_v<TComponent, LightComponent>)
+                {
+                    (*componentSlot)->UnregisterTransformChangedCallback();
+                }
+                (*componentSlot)->ClearOwner();
+                componentSlot->reset();
+                return true;
             }
-            else if constexpr (std::is_same_v<TComponent, CameraComponent>)
-            {
-                (*componentSlot)->UnregisterTransformChangedCallback();
-            }
-            else if constexpr (std::is_same_v<TComponent, LightComponent>)
-            {
-                (*componentSlot)->UnregisterTransformChangedCallback();
-            }
-            (*componentSlot)->ClearOwner();
-            componentSlot->reset();
-            return true;
         }
 
         void Update(Float32 deltaSeconds);
@@ -148,7 +203,8 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, or ScriptableComponent.");
+                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
+            static_assert(!std::is_same_v<TComponent, ScriptableComponent>, "Add a concrete script component such as DotnetScriptableComponent.");
 
             return AddComponentInternal<TComponent>(false, std::forward<TArgs>(args)...);
         }
@@ -160,7 +216,7 @@ namespace ve
         template<typename TComponent>
         static constexpr bool IsSupportedComponentTypeV = std::is_same_v<TComponent, TransformComponent> || std::is_same_v<TComponent, MeshRenderComponent> ||
                                                           std::is_same_v<TComponent, CameraComponent> || std::is_same_v<TComponent, LightComponent> ||
-                                                          std::is_same_v<TComponent, ScriptableComponent>;
+                                                          std::is_same_v<TComponent, ScriptableComponent> || std::is_same_v<TComponent, DotnetScriptableComponent>;
 
         template<typename TComponent>
         [[nodiscard]] std::unique_ptr<TComponent>* ResolveComponentSlot() noexcept
@@ -180,10 +236,6 @@ namespace ve
             else if constexpr (std::is_same_v<TComponent, LightComponent>)
             {
                 return &lightCmpt_;
-            }
-            else if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
-            {
-                return &scriptableCmpt_;
             }
             else
             {
@@ -210,10 +262,6 @@ namespace ve
             {
                 return &lightCmpt_;
             }
-            else if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
-            {
-                return &scriptableCmpt_;
-            }
             else
             {
                 return nullptr;
@@ -225,48 +273,76 @@ namespace ve
         template<typename TComponent, typename... TArgs>
         [[nodiscard]] Result<TComponent*> AddComponentInternal(bool registerRenderThread, TArgs&&... args)
         {
-            std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
-            VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
-            if (componentSlot == nullptr)
+            if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
             {
-                return Result<TComponent*>::Failure(Error(ErrorCode::InvalidArgument, "GameObject component slot lookup failed."));
-            }
-
-            if (*componentSlot != nullptr)
-            {
-                return Result<TComponent*>::Failure(Error(ErrorCode::InvalidState, "GameObject already owns this component type."));
-            }
-
-            try
-            {
-                std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
-                TComponent* componentPointer = component.get();
-                *componentSlot = std::move(component);
-                componentPointer->OnCreate();
-                if (componentPointer->IsEnabled())
+                static_cast<void>(registerRenderThread);
+                if (scriptableCmpt_ != nullptr)
                 {
-                    componentPointer->OnEnable();
+                    return Result<TComponent*>::Failure(Error(ErrorCode::InvalidState, "GameObject already owns a scriptable component."));
                 }
-                if (registerRenderThread)
+
+                try
                 {
-                    if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+                    std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
+                    TComponent* componentPointer = component.get();
+                    scriptableCmpt_ = std::move(component);
+                    componentPointer->OnCreate();
+                    if (componentPointer->IsEnabled())
                     {
-                        componentPointer->RegisterRenderItemToRenderThread();
+                        componentPointer->OnEnable();
                     }
-                    else if constexpr (std::is_same_v<TComponent, CameraComponent>)
-                    {
-                        componentPointer->RegisterCameraToRenderThread();
-                    }
-                    else if constexpr (std::is_same_v<TComponent, LightComponent>)
-                    {
-                        componentPointer->RegisterLightToRenderThread();
-                    }
+                    return Result<TComponent*>::Success(componentPointer);
                 }
-                return Result<TComponent*>::Success(componentPointer);
+                catch (const std::bad_alloc&)
+                {
+                    return Result<TComponent*>::Failure(Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
+                }
             }
-            catch (const std::bad_alloc&)
+            else
             {
-                return Result<TComponent*>::Failure(Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
+                std::unique_ptr<TComponent>* componentSlot = ResolveComponentSlot<TComponent>();
+                VE_ASSERT_MESSAGE(componentSlot != nullptr, "componentSlot should not be nullptr");
+                if (componentSlot == nullptr)
+                {
+                    return Result<TComponent*>::Failure(Error(ErrorCode::InvalidArgument, "GameObject component slot lookup failed."));
+                }
+
+                if (*componentSlot != nullptr)
+                {
+                    return Result<TComponent*>::Failure(Error(ErrorCode::InvalidState, "GameObject already owns this component type."));
+                }
+
+                try
+                {
+                    std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
+                    TComponent* componentPointer = component.get();
+                    *componentSlot = std::move(component);
+                    componentPointer->OnCreate();
+                    if (componentPointer->IsEnabled())
+                    {
+                        componentPointer->OnEnable();
+                    }
+                    if (registerRenderThread)
+                    {
+                        if constexpr (std::is_same_v<TComponent, MeshRenderComponent>)
+                        {
+                            componentPointer->RegisterRenderItemToRenderThread();
+                        }
+                        else if constexpr (std::is_same_v<TComponent, CameraComponent>)
+                        {
+                            componentPointer->RegisterCameraToRenderThread();
+                        }
+                        else if constexpr (std::is_same_v<TComponent, LightComponent>)
+                        {
+                            componentPointer->RegisterLightToRenderThread();
+                        }
+                    }
+                    return Result<TComponent*>::Success(componentPointer);
+                }
+                catch (const std::bad_alloc&)
+                {
+                    return Result<TComponent*>::Failure(Error(ErrorCode::OutOfMemory, "GameObject component allocation failed."));
+                }
             }
         }
 
