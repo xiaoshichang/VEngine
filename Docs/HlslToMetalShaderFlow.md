@@ -505,9 +505,9 @@ Host behavior:
 
 Minimum shader tests:
 
-1. Compile `BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D11 DXBC.
-2. Compile `BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D12 DXIL.
-3. Compile `BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to SPIR-V.
+1. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D11 DXBC.
+2. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D12 DXIL.
+3. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to SPIR-V.
 4. Convert SPIR-V to MSL.
 5. Generate reflection JSON.
 6. Validate that `CameraConstants : register(b0, space0)` maps to the expected binding metadata.

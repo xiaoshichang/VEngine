@@ -49,26 +49,26 @@ namespace ve::editor
 
             return Path(std::string(logicalRoot) + "/" + path.substr(prefix.size()));
         }
+
+        [[nodiscard]] Path GetEngineAssetsRootPath(const Path& projectRoot)
+        {
+            if (projectRoot.IsEmpty())
+            {
+                return Path(EditorProject::AssetsDirectoryName);
+            }
+
+            return projectRoot.GetParentPath() / EditorProject::AssetsDirectoryName;
+        }
     } // namespace
 
     Path GetBuiltinAssetsRootPath(const Path& projectRoot)
     {
-        if (projectRoot.IsEmpty())
-        {
-            return Path(BuiltinAssetDirectoryName);
-        }
-
-        return projectRoot.GetParentPath() / BuiltinAssetDirectoryName;
+        return GetEngineAssetsRootPath(projectRoot) / BuiltinAssetDirectoryName;
     }
 
     Path GetEditorOnlyAssetsRootPath(const Path& projectRoot)
     {
-        if (projectRoot.IsEmpty())
-        {
-            return Path(EditorOnlyAssetDirectoryName);
-        }
-
-        return projectRoot.GetParentPath() / EditorOnlyAssetDirectoryName;
+        return GetEngineAssetsRootPath(projectRoot) / EditorOnlyAssetDirectoryName;
     }
 
     bool IsEditorContentPath(const Path& path) noexcept
@@ -102,12 +102,12 @@ namespace ve::editor
 
         if (StartsWithPathRoot(contentPath, BuiltinAssetDirectoryName))
         {
-            return projectRoot.GetParentPath() / contentPath;
+            return GetEngineAssetsRootPath(projectRoot) / contentPath;
         }
 
         if (StartsWithPathRoot(contentPath, EditorOnlyAssetDirectoryName))
         {
-            return projectRoot.GetParentPath() / contentPath;
+            return GetEngineAssetsRootPath(projectRoot) / contentPath;
         }
 
         return projectRoot / contentPath;
@@ -115,25 +115,25 @@ namespace ve::editor
 
     Path ToEditorContentPath(const Path& projectRoot, const Path& physicalPath)
     {
-        Path contentPath = TryToRootRelativePath(physicalPath, projectRoot / EditorProject::AssetsDirectoryName, EditorProject::AssetsDirectoryName);
-        if (!contentPath.IsEmpty())
-        {
-            return contentPath;
-        }
-
-        contentPath = TryToRootRelativePath(physicalPath, projectRoot / EditorProject::LibraryDirectoryName, EditorProject::LibraryDirectoryName);
-        if (!contentPath.IsEmpty())
-        {
-            return contentPath;
-        }
-
-        contentPath = TryToRootRelativePath(physicalPath, GetBuiltinAssetsRootPath(projectRoot), BuiltinAssetDirectoryName);
+        Path contentPath = TryToRootRelativePath(physicalPath, GetBuiltinAssetsRootPath(projectRoot), BuiltinAssetDirectoryName);
         if (!contentPath.IsEmpty())
         {
             return contentPath;
         }
 
         contentPath = TryToRootRelativePath(physicalPath, GetEditorOnlyAssetsRootPath(projectRoot), EditorOnlyAssetDirectoryName);
+        if (!contentPath.IsEmpty())
+        {
+            return contentPath;
+        }
+
+        contentPath = TryToRootRelativePath(physicalPath, projectRoot / EditorProject::AssetsDirectoryName, EditorProject::AssetsDirectoryName);
+        if (!contentPath.IsEmpty())
+        {
+            return contentPath;
+        }
+
+        contentPath = TryToRootRelativePath(physicalPath, projectRoot / EditorProject::LibraryDirectoryName, EditorProject::LibraryDirectoryName);
         if (!contentPath.IsEmpty())
         {
             return contentPath;

@@ -10,7 +10,7 @@ Current scope:
 - Platform: Windows x64 only.
 - Player binary: existing `VEnginePlayer.exe` built next to the running `VEngineEditor.exe`.
 - Assets: runtime asset files referenced by the Editor asset database, including required runtime files imported from
-  repository-level `BuiltinAsset/Engine/` sources.
+  repository-level `Assets/BuiltinAsset/Engine/` sources.
 - Asset metadata: exported `AssetManifest.json`.
 - Shader cross-platform handling: out of scope for this slice.
 - Build execution: one packaging step is advanced from the Editor modal each frame. A background build worker can be
@@ -19,9 +19,9 @@ Current scope:
 ## 2. Project Build Root
 
 Packages are written under the project root, next to `Assets/`, `Library/`, and `VEProject.json`.
-Repository-level builtin runtime assets live beside the project root in `BuiltinAsset/`; `BuiltinAsset/Engine/` may feed
-runtime imports and packages. Editor-only engine assets live beside it in `EditorOnlyAsset/`; they are copied with
-Editor builds but are not copied into Player packages.
+Repository-level engine assets live beside the project root under `Assets/BuiltinAsset/` and
+`Assets/EditorOnlyAsset/`. `Assets/BuiltinAsset/Engine/` may feed runtime imports and packages. Editor-only engine
+assets are copied with Editor builds but are not copied into Player packages.
 
 ```text
 ProjectRoot/

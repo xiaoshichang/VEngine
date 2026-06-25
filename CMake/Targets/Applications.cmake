@@ -93,11 +93,8 @@ function(ve_add_windows_editor)
 
         add_custom_command(TARGET VEngineEditor POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${PROJECT_SOURCE_DIR}/BuiltinAsset"
-                "$<TARGET_FILE_DIR:VEngineEditor>/BuiltinAsset"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${PROJECT_SOURCE_DIR}/EditorOnlyAsset"
-                "$<TARGET_FILE_DIR:VEngineEditor>/EditorOnlyAsset"
+                "${PROJECT_SOURCE_DIR}/Assets"
+                "$<TARGET_FILE_DIR:VEngineEditor>/Assets"
             COMMENT "Copying VEngine editor asset roots"
         )
 
