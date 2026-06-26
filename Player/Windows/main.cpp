@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 #include "Player/Windows/WindowsPlayer.h"
 
@@ -38,6 +39,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
     initParam.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
     initParam.runtime.renderSystem.device.backend = ve::RenderBackend::D3D11;
+    initParam.runtime.scriptingSystem.runtimeConfigPath =
+        ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost" / "VEngine.ScriptHost.runtimeconfig.json";
+    const ve::Path playerLocalDotNetRoot = ve::FileSystem::GetExecutableDirectory() / "DotNet" / "win-x64" / "10.0.9";
+    if (ve::FileSystem::IsFile(playerLocalDotNetRoot / "dotnet.exe"))
+    {
+        initParam.runtime.scriptingSystem.dotNetRuntimeRoot = playerLocalDotNetRoot;
+    }
 
     ve::WindowsPlayer application(std::move(initParam));
     int exitCode = application.Init();

@@ -23,6 +23,7 @@ namespace ve::editor
         Material,
         Shader,
         Scene,
+        Script,
     };
 
     struct EditorAssetRecord
@@ -66,6 +67,7 @@ namespace ve::editor
         [[nodiscard]] ErrorCode ImportObjAsMesh(const Path& objProjectPath, const Guid& guid, bool force);
         [[nodiscard]] ErrorCode ImportShader(const Path& shaderProjectPath, const Guid& guid, bool force);
         [[nodiscard]] ErrorCode ResolveAssetDependencies();
+        [[nodiscard]] ErrorCode RegenerateScriptProject() const;
         [[nodiscard]] Result<Guid> EnsureMeta(const EditorAssetRecord& record) const;
         [[nodiscard]] Result<Guid> ReadMetaGuid(const Path& metaPhysicalPath) const;
         [[nodiscard]] Path GetImportedMeshPath(const Guid& guid, const Path& objProjectPath) const;

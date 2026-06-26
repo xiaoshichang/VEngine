@@ -21,6 +21,9 @@ namespace ve
         [[nodiscard]] ScriptingBackendType GetBackendType() const noexcept;
 
         [[nodiscard]] ErrorCode LoadAssembly(const ScriptingAssemblyLoadDesc& desc);
+        [[nodiscard]] ErrorCode LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc);
+        void UnloadProjectAssembly() noexcept;
+        [[nodiscard]] std::vector<ScriptTypeInfo> GetAvailableScriptTypes();
         [[nodiscard]] Result<ScriptInstanceHandle> CreateScriptInstance(const ScriptInstanceDesc& desc);
         void DestroyScriptInstance(ScriptInstanceHandle script) noexcept;
         void InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds = 0.0f) noexcept;

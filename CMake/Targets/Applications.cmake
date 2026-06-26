@@ -17,6 +17,16 @@ function(ve_add_windows_player)
                 VEngine
         )
 
+        ve_add_managed_script_host()
+        add_dependencies(VEnginePlayer VEngineScriptHostManaged)
+
+        add_custom_command(TARGET VEnginePlayer POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+                "$<TARGET_FILE_DIR:VEnginePlayer>/Managed/VEngine.ScriptHost"
+            COMMENT "Copying VEngine.ScriptHost managed assembly"
+        )
+
         ve_configure_target(VEnginePlayer)
     else()
         message(STATUS "VEnginePlayer is only built on Windows.")
@@ -58,6 +68,12 @@ function(ve_add_windows_editor)
             Editor/Core/EditorProjectSelectionView.h
             "../../Editor/Core/EditorResourceLoader.cpp"
             "../../Editor/Core/EditorResourceLoader.h"
+            Editor/Core/EditorScriptCompiler.cpp
+            Editor/Core/EditorScriptCompiler.h
+            Editor/Core/EditorScriptDatabase.cpp
+            Editor/Core/EditorScriptDatabase.h
+            Editor/Core/EditorScriptProjectGenerator.cpp
+            Editor/Core/EditorScriptProjectGenerator.h
             Editor/Core/Gizmos.cpp
             Editor/Core/Gizmos.h
             Editor/RenderPass/EditorGizmoRenderPass.cpp
@@ -87,7 +103,8 @@ function(ve_add_windows_editor)
         )
 
         ve_add_shader_tool()
-        add_dependencies(VEngineEditor VEngineShaderTool)
+        ve_add_managed_script_host()
+        add_dependencies(VEngineEditor VEngineShaderTool VEngineScriptHostManaged)
 
         ve_setup_imgui(VEngineEditor)
 
@@ -96,6 +113,13 @@ function(ve_add_windows_editor)
                 "${PROJECT_SOURCE_DIR}/Assets"
                 "$<TARGET_FILE_DIR:VEngineEditor>/Assets"
             COMMENT "Copying VEngine editor asset roots"
+        )
+
+        add_custom_command(TARGET VEngineEditor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+                "$<TARGET_FILE_DIR:VEngineEditor>/Managed/VEngine.ScriptHost"
+            COMMENT "Copying VEngine.ScriptHost managed assembly"
         )
 
         ve_configure_target(VEngineEditor)

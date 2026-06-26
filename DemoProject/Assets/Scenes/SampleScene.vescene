@@ -29,6 +29,11 @@
                     },
                     "boundsCenter": [0E0, 0E0, 0E0],
                     "boundsExtents": [5E-1, 5E-1, 5E-1]
+                },
+                {
+                    "type": "DotnetScriptableComponent",
+                    "enabled": true,
+                    "scriptTypeName": "Game.PlayerController"
                 }
             ],
             "children": []

@@ -2,6 +2,8 @@
 
 #include "Engine/Runtime/Scene/Scene.h"
 
+#include <algorithm>
+
 namespace ve
 {
     GameObject::GameObject(Scene& scene)
@@ -19,11 +21,15 @@ namespace ve
 
     GameObject::~GameObject()
     {
-        if (scriptableCmpt_ != nullptr)
+        for (std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
         {
-            DispatchComponentDestroyCallbacks(*scriptableCmpt_);
-            scriptableCmpt_->ClearOwner();
+            if (script != nullptr)
+            {
+                DispatchComponentDestroyCallbacks(*script);
+                script->ClearOwner();
+            }
         }
+        scriptableComponents_.clear();
 
         if (lightCmpt_ != nullptr)
         {
@@ -84,12 +90,7 @@ namespace ve
             ++count;
         }
 
-        if (scriptableCmpt_ != nullptr)
-        {
-            ++count;
-        }
-
-        return count;
+        return count + scriptableComponents_.size();
     }
 
     Component* GameObject::GetComponent(SizeT index) noexcept
@@ -100,7 +101,6 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
-            scriptableCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -117,6 +117,12 @@ namespace ve
             ++visibleIndex;
         }
 
+        const SizeT scriptIndex = index - visibleIndex;
+        if (scriptIndex < scriptableComponents_.size())
+        {
+            return scriptableComponents_[scriptIndex].get();
+        }
+
         return nullptr;
     }
 
@@ -128,7 +134,6 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
-            scriptableCmpt_.get(),
         };
 
         for (const Component* component : componentSlots)
@@ -146,7 +151,45 @@ namespace ve
             ++visibleIndex;
         }
 
+        const SizeT scriptIndex = index - visibleIndex;
+        if (scriptIndex < scriptableComponents_.size())
+        {
+            return scriptableComponents_[scriptIndex].get();
+        }
+
         return nullptr;
+    }
+
+    SizeT GameObject::GetScriptableComponentCount() const noexcept
+    {
+        return scriptableComponents_.size();
+    }
+
+    ScriptableComponent* GameObject::GetScriptableComponent(SizeT index) noexcept
+    {
+        return index < scriptableComponents_.size() ? scriptableComponents_[index].get() : nullptr;
+    }
+
+    const ScriptableComponent* GameObject::GetScriptableComponent(SizeT index) const noexcept
+    {
+        return index < scriptableComponents_.size() ? scriptableComponents_[index].get() : nullptr;
+    }
+
+    bool GameObject::RemoveScriptableComponent(const ScriptableComponent& component) noexcept
+    {
+        const auto componentIt = std::find_if(scriptableComponents_.begin(),
+                                             scriptableComponents_.end(),
+                                             [&component](const std::unique_ptr<ScriptableComponent>& candidate)
+                                             { return candidate.get() == &component; });
+        if (componentIt == scriptableComponents_.end() || *componentIt == nullptr)
+        {
+            return false;
+        }
+
+        DispatchComponentDestroyCallbacks(**componentIt);
+        (*componentIt)->ClearOwner();
+        scriptableComponents_.erase(componentIt);
+        return true;
     }
 
     void GameObject::Update(Float32 deltaSeconds)
@@ -156,13 +199,19 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
-            scriptableCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
             if (component != nullptr && component->IsEnabled())
             {
                 component->OnUpdate(deltaSeconds);
+            }
+        }
+        for (std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
+        {
+            if (script != nullptr && script->IsEnabled())
+            {
+                script->OnUpdate(deltaSeconds);
             }
         }
 
@@ -188,13 +237,19 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
-            scriptableCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
             if (component != nullptr && component->IsEnabled())
             {
                 component->OnLateUpdate(deltaSeconds);
+            }
+        }
+        for (std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
+        {
+            if (script != nullptr && script->IsEnabled())
+            {
+                script->OnLateUpdate(deltaSeconds);
             }
         }
 
@@ -259,7 +314,6 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
-            scriptableCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -269,6 +323,17 @@ namespace ve
                 if (component->IsEnabled())
                 {
                     component->OnEnable();
+                }
+            }
+        }
+        for (std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
+        {
+            if (script != nullptr)
+            {
+                script->OnCreate();
+                if (script->IsEnabled())
+                {
+                    script->OnEnable();
                 }
             }
         }

@@ -17,6 +17,9 @@ namespace ve
         [[nodiscard]] virtual ScriptingBackendType GetBackendType() const noexcept = 0;
 
         [[nodiscard]] virtual ErrorCode LoadAssembly(const ScriptingAssemblyLoadDesc& desc) = 0;
+        [[nodiscard]] virtual ErrorCode LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc) = 0;
+        virtual void UnloadProjectAssembly() noexcept = 0;
+        [[nodiscard]] virtual std::vector<ScriptTypeInfo> GetAvailableScriptTypes() = 0;
         [[nodiscard]] virtual Result<ScriptInstanceHandle> CreateScriptInstance(const ScriptInstanceDesc& desc) = 0;
         virtual void DestroyScriptInstance(ScriptInstanceHandle script) noexcept = 0;
         virtual void InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds = 0.0f) noexcept = 0;

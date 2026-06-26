@@ -474,6 +474,16 @@ namespace ve::editor
         return resourceLoader_;
     }
 
+    EditorScriptDatabase& Editor::GetScriptDatabase() noexcept
+    {
+        return scriptDatabase_;
+    }
+
+    const EditorScriptDatabase& Editor::GetScriptDatabase() const noexcept
+    {
+        return scriptDatabase_;
+    }
+
     EditorEventDispatcher& Editor::GetEventDispatcher() noexcept
     {
         return eventDispatcher_;
@@ -685,6 +695,7 @@ namespace ve::editor
 
         resourceLoader_.Shutdown();
         assetDatabase_.Shutdown();
+        scriptDatabase_.Clear();
         currentProjectPath_.clear();
         currentProjectName_.clear();
         currentScenePath_ = Path();
@@ -744,6 +755,99 @@ namespace ve::editor
 
         SetCurrentProject(std::move(projectPath));
         currentProjectName_ = descriptor.name.empty() ? currentProjectName_ : descriptor.name;
+    }
+
+    ErrorCode Editor::LoadScriptHostAssembly()
+    {
+        if (runtime_ == nullptr)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        const Path hostRoot = FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
+        const Path hostAssemblyPath = hostRoot / "VEngine.ScriptHost.dll";
+        if (!FileSystem::IsFile(hostAssemblyPath))
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "VEngine.ScriptHost.dll was not found: {}", hostAssemblyPath.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        const ErrorCode result = runtime_->GetScriptingSystem().LoadAssembly(
+            ScriptingAssemblyLoadDesc{hostAssemblyPath, "VEngine.Scripting.NativeScriptBridge, VEngine.ScriptHost"});
+        if (result != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to load VEngine.ScriptHost '{}': {}", hostAssemblyPath.GetString(), ToString(result));
+            return result;
+        }
+
+        return ErrorCode::None;
+    }
+
+    void Editor::RecompileScripts()
+    {
+        if (IsPlaying())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Stop Play mode before recompiling scripts.");
+            return;
+        }
+
+        if (currentProjectPath_.empty() || runtime_ == nullptr)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Open a project before recompiling scripts.");
+            return;
+        }
+
+        if (assetDatabase_.IsInitialized())
+        {
+            const ErrorCode refreshResult = assetDatabase_.Refresh();
+            if (refreshResult != ErrorCode::None)
+            {
+                VE_LOG_WARN_CATEGORY("Editor", "Failed to refresh assets before script compilation: {}", ToString(refreshResult));
+                return;
+            }
+        }
+
+        const ErrorCode hostResult = LoadScriptHostAssembly();
+        if (hostResult != ErrorCode::None)
+        {
+            return;
+        }
+
+        const Path scriptHostAssemblyPath = FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost" / "VEngine.ScriptHost.dll";
+        Result<EditorScriptCompileResult> compileResult = scriptCompiler_.CompileProjectScripts(EditorScriptCompileDesc{
+            .projectRoot = Path(currentProjectPath_),
+            .projectName = currentProjectName_,
+            .scriptHostAssemblyPath = scriptHostAssemblyPath,
+        });
+        if (!compileResult)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Script compilation failed: {}", compileResult.GetError().GetMessage());
+            return;
+        }
+
+        const ErrorCode loadResult = runtime_->GetScriptingSystem().LoadProjectAssembly(ScriptingProjectAssemblyLoadDesc{compileResult.GetValue().assemblyPath});
+        if (loadResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to load project script assembly '{}': {}", compileResult.GetValue().assemblyPath.GetString(), ToString(loadResult));
+            return;
+        }
+
+        const ErrorCode refreshResult = scriptDatabase_.RefreshFromScriptingSystem(runtime_->GetScriptingSystem());
+        if (refreshResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to refresh script type database: {}", ToString(refreshResult));
+            return;
+        }
+
+        const Path manifestPath = compileResult.GetValue().outputDirectory / "ScriptAssembly.json";
+        const ErrorCode saveManifestResult = scriptDatabase_.SaveManifest(manifestPath, compileResult.GetValue().assemblyPath);
+        if (saveManifestResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to write script assembly manifest '{}': {}", manifestPath.GetString(), ToString(saveManifestResult));
+            return;
+        }
+
+        VE_LOG_INFO_CATEGORY("Editor", "Recompiled scripts. Script type count: {}", scriptDatabase_.GetScriptTypes().size());
     }
 
     void Editor::LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor)
@@ -831,10 +935,13 @@ namespace ve::editor
         // 4. Activate project roots after asset services are valid and before ResourceSystem reads scene payloads.
         ActivateOpenProjectContext(std::move(projectPath), projectRoot, descriptorResult.GetValue());
 
-        // 5. Construct the live scene through SceneSystem so serialized AssetRefs are requested and bound.
+        // 5. Compile and load C# scripts before scene construction so DotnetScriptableComponent can bind instances.
+        RecompileScripts();
+
+        // 6. Construct the live scene through SceneSystem so serialized AssetRefs are requested and bound.
         LoadOpenProjectStartScene(descriptorResult.GetValue());
 
-        // 6. Only enter the editing UI after project services and the optional start scene have settled.
+        // 7. Only enter the editing UI after project services and the optional start scene have settled.
         EnterProjectEditingView();
     }
 

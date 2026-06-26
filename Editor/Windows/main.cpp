@@ -1,4 +1,5 @@
 #include "Editor/Windows/WindowsEditorApplication.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
 
@@ -38,6 +39,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.ioSystem.threadName = "VEngineEditorIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineEditorRenderThread";
     initParam.runtime.renderSystem.device.backend = ve::RenderBackend::D3D11;
+    initParam.runtime.scriptingSystem.runtimeConfigPath =
+        ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost" / "VEngine.ScriptHost.runtimeconfig.json";
+    const ve::Path editorLocalDotNetRoot = ve::FileSystem::GetExecutableDirectory() / "DotNet" / "win-x64" / "10.0.9";
+    if (ve::FileSystem::IsFile(editorLocalDotNetRoot / "dotnet.exe"))
+    {
+        initParam.runtime.scriptingSystem.dotNetRuntimeRoot = editorLocalDotNetRoot;
+    }
 
     ve::editor::WindowsEditorApplication application(std::move(initParam));
     int exitCode = application.Init();

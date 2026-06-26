@@ -16,6 +16,7 @@ include(CMake/SetupImGui.cmake)
 include(CMake/SetupJolt.cmake)
 
 include(CMake/Targets/Engine.cmake)
+include(CMake/Targets/ManagedScripting.cmake)
 include(CMake/Targets/Applications.cmake)
 include(CMake/Targets/Tools.cmake)
 include(CMake/Targets/Tests.cmake)

@@ -7,6 +7,8 @@
 #include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectRegistry.h"
 #include "Editor/Core/EditorResourceLoader.h"
+#include "Editor/Core/EditorScriptCompiler.h"
+#include "Editor/Core/EditorScriptDatabase.h"
 #include "Engine/Runtime/Application/ApplicationCommandQueue.h"
 #include "Engine/Runtime/Application/EngineRuntime.h"
 #include "Engine/Runtime/Core/Error.h"
@@ -52,6 +54,8 @@ namespace ve::editor
         [[nodiscard]] const EditorAssetDatabase& GetAssetDatabase() const noexcept;
         [[nodiscard]] EditorResourceLoader& GetResourceLoader() noexcept;
         [[nodiscard]] const EditorResourceLoader& GetResourceLoader() const noexcept;
+        [[nodiscard]] EditorScriptDatabase& GetScriptDatabase() noexcept;
+        [[nodiscard]] const EditorScriptDatabase& GetScriptDatabase() const noexcept;
         [[nodiscard]] EditorEventDispatcher& GetEventDispatcher() noexcept;
         [[nodiscard]] const EditorEventDispatcher& GetEventDispatcher() const noexcept;
         void SetSelectedGameObject(ve::GameObject* gameObject);
@@ -75,6 +79,7 @@ namespace ve::editor
         void ShowProjectSelection();
         void OpenScene(Path scenePath);
         void SaveCurrentScene();
+        void RecompileScripts();
         [[nodiscard]] bool CanSaveCurrentScene() const noexcept;
         [[nodiscard]] const std::string& GetCurrentProjectPath() const noexcept;
         [[nodiscard]] const std::string& GetCurrentProjectName() const noexcept;
@@ -113,6 +118,7 @@ namespace ve::editor
         [[nodiscard]] ErrorCode InitializeOpenProjectAssetServices(const Path& projectRoot, const std::string& projectPath);
         void ActivateOpenProjectContext(std::string projectPath, const Path& projectRoot, const EditorProjectDescriptor& descriptor);
         void LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor);
+        [[nodiscard]] ErrorCode LoadScriptHostAssembly();
         void EnterProjectEditingView();
         void AddRecentProject(const std::string& projectPath);
         void SetCurrentProject(std::string projectPath);
@@ -133,6 +139,8 @@ namespace ve::editor
         RenderBackend renderBackend_ = RenderBackend::D3D12;
         EditorAssetDatabase assetDatabase_;
         EditorResourceLoader resourceLoader_;
+        EditorScriptCompiler scriptCompiler_;
+        EditorScriptDatabase scriptDatabase_;
         EditorEventDispatcher eventDispatcher_;
         EditorSelectionType selectionType_ = EditorSelectionType::None;
         ve::GameObject* selectedGameObject_ = nullptr;

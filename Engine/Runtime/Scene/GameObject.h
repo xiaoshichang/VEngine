@@ -17,6 +17,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace ve
 {
@@ -39,6 +40,10 @@ namespace ve
         [[nodiscard]] SizeT GetComponentCount() const noexcept;
         [[nodiscard]] Component* GetComponent(SizeT index) noexcept;
         [[nodiscard]] const Component* GetComponent(SizeT index) const noexcept;
+        [[nodiscard]] SizeT GetScriptableComponentCount() const noexcept;
+        [[nodiscard]] ScriptableComponent* GetScriptableComponent(SizeT index) noexcept;
+        [[nodiscard]] const ScriptableComponent* GetScriptableComponent(SizeT index) const noexcept;
+        [[nodiscard]] bool RemoveScriptableComponent(const ScriptableComponent& component) noexcept;
 
         template<typename TComponent, typename... TArgs>
         [[nodiscard]] Result<TComponent*> AddComponent(TArgs&&... args)
@@ -86,11 +91,19 @@ namespace ve
 
             if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
             {
-                return scriptableCmpt_.get();
+                return scriptableComponents_.empty() ? nullptr : scriptableComponents_.front().get();
             }
             else if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
             {
-                return dynamic_cast<DotnetScriptableComponent*>(scriptableCmpt_.get());
+                for (const std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
+                {
+                    if (DotnetScriptableComponent* dotnetScript = dynamic_cast<DotnetScriptableComponent*>(script.get()); dotnetScript != nullptr)
+                    {
+                        return dotnetScript;
+                    }
+                }
+
+                return nullptr;
             }
             else
             {
@@ -110,11 +123,19 @@ namespace ve
 
             if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
             {
-                return scriptableCmpt_.get();
+                return scriptableComponents_.empty() ? nullptr : scriptableComponents_.front().get();
             }
             else if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
             {
-                return dynamic_cast<const DotnetScriptableComponent*>(scriptableCmpt_.get());
+                for (const std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
+                {
+                    if (const DotnetScriptableComponent* dotnetScript = dynamic_cast<const DotnetScriptableComponent*>(script.get()); dotnetScript != nullptr)
+                    {
+                        return dotnetScript;
+                    }
+                }
+
+                return nullptr;
             }
             else
             {
@@ -139,23 +160,20 @@ namespace ve
             }
             else if constexpr (std::is_same_v<TComponent, ScriptableComponent> || std::is_same_v<TComponent, DotnetScriptableComponent>)
             {
-                if (scriptableCmpt_ == nullptr)
+                for (const std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
                 {
-                    return false;
-                }
-
-                if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
-                {
-                    if (dynamic_cast<DotnetScriptableComponent*>(scriptableCmpt_.get()) == nullptr)
+                    if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
                     {
-                        return false;
+                        if (dynamic_cast<DotnetScriptableComponent*>(script.get()) == nullptr)
+                        {
+                            continue;
+                        }
                     }
+
+                    return RemoveScriptableComponent(*script);
                 }
 
-                DispatchComponentDestroyCallbacks(*scriptableCmpt_);
-                scriptableCmpt_->ClearOwner();
-                scriptableCmpt_.reset();
-                return true;
+                return false;
             }
             else
             {
@@ -273,16 +291,11 @@ namespace ve
             if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
             {
                 static_cast<void>(registerRenderThread);
-                if (scriptableCmpt_ != nullptr)
-                {
-                    return Result<TComponent*>::Failure(Error(ErrorCode::InvalidState, "GameObject already owns a scriptable component."));
-                }
-
                 try
                 {
                     std::unique_ptr<TComponent> component = std::make_unique<TComponent>(*scene_, *this, std::forward<TArgs>(args)...);
                     TComponent* componentPointer = component.get();
-                    scriptableCmpt_ = std::move(component);
+                    scriptableComponents_.push_back(std::move(component));
                     DispatchComponentCreateCallbacks(*componentPointer);
                     return Result<TComponent*>::Success(componentPointer);
                 }
@@ -341,6 +354,6 @@ namespace ve
         std::unique_ptr<MeshRenderComponent> meshRenderCmpt_;
         std::unique_ptr<CameraComponent> cameraCmpt_;
         std::unique_ptr<LightComponent> lightCmpt_;
-        std::unique_ptr<ScriptableComponent> scriptableCmpt_;
+        std::vector<std::unique_ptr<ScriptableComponent>> scriptableComponents_;
     };
 } // namespace ve

@@ -4,6 +4,7 @@
 #include "Engine/Runtime/FileSystem/Path.h"
 
 #include <string>
+#include <vector>
 
 namespace ve
 {
@@ -36,7 +37,18 @@ namespace ve
     struct ScriptingAssemblyLoadDesc
     {
         Path assemblyPath;
-        std::string bridgeTypeName = "VEngine.Scripting.NativeScriptBridge, VEngine.ScriptAPI";
+        std::string bridgeTypeName = "VEngine.Scripting.NativeScriptBridge, VEngine.ScriptHost";
+    };
+
+    struct ScriptingProjectAssemblyLoadDesc
+    {
+        Path assemblyPath;
+    };
+
+    struct ScriptTypeInfo
+    {
+        std::string typeName;
+        std::string displayName;
     };
 
     using ScriptInstanceHandle = UInt64;
@@ -53,7 +65,17 @@ namespace ve
         using DestroyFn = void (*)(ScriptInstanceHandle script);
         using UpdateFn = void (*)(ScriptInstanceHandle script, Float32 deltaSeconds);
         using EventFn = void (*)(ScriptInstanceHandle script);
+        using RegisterNativeApiFn = void (*)(void* getTransformLocalPosition, void* setTransformLocalPosition, void* logInfo);
+        using LoadProjectAssemblyFn = int (*)(const char* assemblyPath);
+        using UnloadProjectAssemblyFn = void (*)();
+        using GetScriptTypesJsonFn = const char* (*)();
+        using FreeStringFn = void (*)(const char* text);
 
+        RegisterNativeApiFn registerNativeApi = nullptr;
+        LoadProjectAssemblyFn loadProjectAssembly = nullptr;
+        UnloadProjectAssemblyFn unloadProjectAssembly = nullptr;
+        GetScriptTypesJsonFn getScriptTypesJson = nullptr;
+        FreeStringFn freeString = nullptr;
         CreateFn create = nullptr;
         DestroyFn destroy = nullptr;
         UpdateFn update = nullptr;

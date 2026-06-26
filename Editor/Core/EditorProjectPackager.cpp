@@ -27,6 +27,8 @@ namespace ve::editor
         constexpr const char* PlayerExecutableName = "VEnginePlayer.exe";
         constexpr const char* PackageManifestFilename = "AssetManifest.json";
         constexpr const char* PackageInfoFilename = "PackageInfo.json";
+        constexpr const char* ScriptAssemblyManifestFilename = "ScriptAssembly.json";
+        constexpr const char* DotNetRuntimeRelativePath = "DotNet/win-x64/10.0.9";
 
         [[nodiscard]] std::filesystem::path ToNativePath(const Path& path)
         {
@@ -44,6 +46,23 @@ namespace ve::editor
             }
 
             std::filesystem::copy_file(nativeSource, nativeDestination, std::filesystem::copy_options::overwrite_existing, errorCode);
+            return !errorCode;
+        }
+
+        [[nodiscard]] bool CopyDirectory(const Path& sourcePath, const Path& destinationPath, std::error_code& errorCode)
+        {
+            const std::filesystem::path nativeSource = ToNativePath(sourcePath);
+            const std::filesystem::path nativeDestination = ToNativePath(destinationPath);
+            std::filesystem::create_directories(nativeDestination, errorCode);
+            if (errorCode)
+            {
+                return false;
+            }
+
+            std::filesystem::copy(nativeSource,
+                                  nativeDestination,
+                                  std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing,
+                                  errorCode);
             return !errorCode;
         }
 
@@ -204,9 +223,15 @@ namespace ve::editor
                 result = CopyRuntimeAssets(editor);
                 break;
             case 4:
-                result = CopyWindowsPlayerExecutable();
+                result = CopyManagedScripts();
                 break;
             case 5:
+                result = CopyWindowsPlayerExecutable();
+                break;
+            case 6:
+                result = CopyWindowsPlayerManagedRuntime();
+                break;
+            case 7:
                 result = WritePackageInfo();
                 break;
             default:
@@ -423,6 +448,88 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
+    ErrorCode EditorProjectPackager::CopyManagedScripts()
+    {
+        const Path sourceRoot = projectRoot_ / "Library" / "Scripting" / "output";
+        if (!FileSystem::IsDirectory(sourceRoot))
+        {
+            LogLine("No compiled script output found. Skipping managed script copy: " + sourceRoot.GetString());
+            return ErrorCode::None;
+        }
+
+        const Path sourceAssembly = sourceRoot / (projectName_ + ".Scripts.dll");
+        if (!FileSystem::IsFile(sourceAssembly))
+        {
+            LogLine("No compiled project script assembly found. Skipping managed script copy: " + sourceAssembly.GetString());
+            return ErrorCode::None;
+        }
+
+        const Path destinationRoot = packageDataRoot_ / "Scripts";
+        std::error_code errorCode;
+        std::filesystem::create_directories(ToNativePath(destinationRoot), errorCode);
+        if (errorCode)
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", destinationRoot, errorCode));
+            return ErrorCode::IOError;
+        }
+
+        size_t copiedFileCount = 0;
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(ToNativePath(sourceRoot), errorCode))
+        {
+            if (errorCode)
+            {
+                LogError(ErrorCode::IOError, MakeErrorMessage("List directory", sourceRoot, errorCode));
+                return ErrorCode::IOError;
+            }
+
+            if (!entry.is_regular_file(errorCode))
+            {
+                errorCode.clear();
+                continue;
+            }
+
+            const Path sourceFile(entry.path().generic_string());
+            const Path destinationFile = destinationRoot / entry.path().filename().generic_string();
+            if (!CopyFileWithDirectories(sourceFile, destinationFile, errorCode))
+            {
+                LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", sourceFile, errorCode));
+                return ErrorCode::IOError;
+            }
+
+            ++copiedFileCount;
+        }
+
+        const Path sourceManifest = sourceRoot / ScriptAssemblyManifestFilename;
+        if (FileSystem::IsFile(sourceManifest))
+        {
+            Result<std::string> text = FileSystem::ReadTextFile(sourceManifest);
+            if (!text)
+            {
+                LogError(text.GetError().GetCode(), "Failed to read script manifest: " + sourceManifest.GetString());
+                return text.GetError().GetCode();
+            }
+
+            Result<boost::json::value> json = JsonUtils::Parse(text.GetValue());
+            if (!json || !json.GetValue().is_object())
+            {
+                LogError(ErrorCode::InvalidArgument, "Script manifest root must be a JSON object: " + sourceManifest.GetString());
+                return ErrorCode::InvalidArgument;
+            }
+
+            boost::json::object manifest = json.GetValue().as_object();
+            manifest["assemblyPath"] = std::string("Scripts/") + projectName_ + ".Scripts.dll";
+            const ErrorCode writeResult = FileSystem::WriteTextFile(destinationRoot / ScriptAssemblyManifestFilename, JsonUtils::SerializePretty(manifest));
+            if (writeResult != ErrorCode::None)
+            {
+                LogError(writeResult, "Failed to write packaged script manifest.");
+                return writeResult;
+            }
+        }
+
+        LogLine("Copied managed scripts: " + sourceRoot.GetString() + " -> " + destinationRoot.GetString() + ". File count: " + std::to_string(copiedFileCount));
+        return ErrorCode::None;
+    }
+
     ErrorCode EditorProjectPackager::CopyWindowsPlayerExecutable()
     {
         const Path playerSourcePath = FileSystem::GetExecutableDirectory() / PlayerExecutableName;
@@ -442,6 +549,39 @@ namespace ve::editor
         }
 
         LogLine("Copied Windows player: " + playerSourcePath.GetString() + " -> " + playerDestinationPath.GetString());
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectPackager::CopyWindowsPlayerManagedRuntime()
+    {
+        const Path executableDirectory = FileSystem::GetExecutableDirectory();
+        const Path scriptHostSource = executableDirectory / "Managed" / "VEngine.ScriptHost";
+        const Path scriptHostDestination = packageBinRoot_ / "Managed" / "VEngine.ScriptHost";
+
+        std::error_code errorCode;
+        if (!CopyDirectory(scriptHostSource, scriptHostDestination, errorCode))
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", scriptHostSource, errorCode));
+            return ErrorCode::IOError;
+        }
+
+        const Path dotNetSource = executableDirectory.GetParentPath().GetParentPath().GetParentPath() / "ThirdParty" / DotNetRuntimeRelativePath;
+        const Path dotNetDestination = packageBinRoot_ / DotNetRuntimeRelativePath;
+        if (FileSystem::IsDirectory(dotNetSource))
+        {
+            if (!CopyDirectory(dotNetSource, dotNetDestination, errorCode))
+            {
+                LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", dotNetSource, errorCode));
+                return ErrorCode::IOError;
+            }
+            LogLine("Copied app-local .NET runtime: " + dotNetSource.GetString() + " -> " + dotNetDestination.GetString());
+        }
+        else
+        {
+            LogLine("App-local .NET runtime source was not found. Packaged player may require repository-local runtime discovery: " + dotNetSource.GetString());
+        }
+
+        LogLine("Copied Windows player managed runtime files.");
         return ErrorCode::None;
     }
 
@@ -478,7 +618,9 @@ namespace ve::editor
             PackageStepState{.name = "Refresh asset database"},
             PackageStepState{.name = "Export asset manifest"},
             PackageStepState{.name = "Copy runtime assets"},
+            PackageStepState{.name = "Copy managed scripts"},
             PackageStepState{.name = "Copy Windows player"},
+            PackageStepState{.name = "Copy Windows managed runtime"},
             PackageStepState{.name = "Write package info"},
         };
     }

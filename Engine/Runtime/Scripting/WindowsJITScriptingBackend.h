@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Scripting/DotNetScriptingBackend.h"
 
 #include <filesystem>
+#include <vector>
 
 namespace ve
 {
@@ -16,6 +17,9 @@ namespace ve
         [[nodiscard]] ScriptingBackendType GetBackendType() const noexcept override;
 
         [[nodiscard]] ErrorCode LoadAssembly(const ScriptingAssemblyLoadDesc& desc) override;
+        [[nodiscard]] ErrorCode LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc) override;
+        void UnloadProjectAssembly() noexcept override;
+        [[nodiscard]] std::vector<ScriptTypeInfo> GetAvailableScriptTypes() override;
         [[nodiscard]] Result<ScriptInstanceHandle> CreateScriptInstance(const ScriptInstanceDesc& desc) override;
         void DestroyScriptInstance(ScriptInstanceHandle script) noexcept override;
         void InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds = 0.0f) noexcept override;

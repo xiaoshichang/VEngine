@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Resource/MaterialProperty.h"
@@ -15,12 +16,16 @@
 #include "Engine/Runtime/Scene/LightComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+#include "Engine/Runtime/Scripting/DotnetScriptableComponent.h"
+#include "Engine/Runtime/Scripting/ScriptableComponent.h"
+#include "Engine/Runtime/Scripting/ScriptingSystem.h"
 
 #include <algorithm>
 #include <array>
 #include <boost/json.hpp>
 #include <imgui.h>
 #include <string>
+#include <vector>
 
 namespace ve::editor
 {
@@ -307,6 +312,26 @@ namespace ve::editor
         {
             RenderLightComponent(*light);
         }
+
+        for (SizeT scriptIndex = 0; scriptIndex < gameObject.GetScriptableComponentCount();)
+        {
+            ScriptableComponent* script = gameObject.GetScriptableComponent(scriptIndex);
+            DotnetScriptableComponent* dotnetScript = dynamic_cast<DotnetScriptableComponent*>(script);
+            if (dotnetScript == nullptr)
+            {
+                ++scriptIndex;
+                continue;
+            }
+
+            if (RenderScriptComponent(gameObject, *dotnetScript))
+            {
+                continue;
+            }
+
+            ++scriptIndex;
+        }
+
+        RenderAddComponent(gameObject);
     }
 
     void InspectorPanel::RenderTransformComponent(TransformComponent& transform)
@@ -476,6 +501,80 @@ namespace ve::editor
             }
         }
         ImGui::PopID();
+    }
+
+    bool InspectorPanel::RenderScriptComponent(GameObject& gameObject, DotnetScriptableComponent& script)
+    {
+        ImGui::PushID(&script);
+        const bool open = ImGui::CollapsingHeader("Script", ImGuiTreeNodeFlags_DefaultOpen);
+        if (ImGui::BeginPopupContextItem("ScriptComponentContext"))
+        {
+            if (ImGui::MenuItem("Remove"))
+            {
+                const bool removed = gameObject.RemoveScriptableComponent(script);
+                ImGui::EndPopup();
+                ImGui::PopID();
+                return removed;
+            }
+            ImGui::EndPopup();
+        }
+
+        if (open)
+        {
+            RenderEnabledCheckbox(script);
+
+            const ScriptTypeInfo* scriptType = editor_ != nullptr ? editor_->GetScriptDatabase().FindScriptType(script.GetScriptTypeName()) : nullptr;
+            if (scriptType == nullptr)
+            {
+                ImGui::TextDisabled("Missing Script: %s", script.GetScriptTypeName().c_str());
+            }
+            else
+            {
+                ImGui::Text("Type: %s", scriptType->typeName.c_str());
+            }
+
+            ImGui::Text("Managed Instance: %s", script.HasScriptInstance() ? "Yes" : "No");
+        }
+        ImGui::PopID();
+        return false;
+    }
+
+    void InspectorPanel::RenderAddComponent(GameObject& gameObject)
+    {
+        if (editor_ == nullptr)
+        {
+            return;
+        }
+
+        const std::vector<ScriptTypeInfo>& scriptTypes = editor_->GetScriptDatabase().GetScriptTypes();
+        if (scriptTypes.empty())
+        {
+            return;
+        }
+
+        if (!ImGui::CollapsingHeader("Add Component"))
+        {
+            return;
+        }
+
+        if (ImGui::BeginCombo("Script", "Select script"))
+        {
+            for (const ScriptTypeInfo& scriptType : scriptTypes)
+            {
+                const char* label = scriptType.displayName.empty() ? scriptType.typeName.c_str() : scriptType.displayName.c_str();
+                if (ImGui::Selectable(label))
+                {
+                    ve::ScriptingSystem& scriptingSystem = editor_->GetRuntime().GetScriptingSystem();
+                    Result<DotnetScriptableComponent*> result =
+                        gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptType.typeName, scriptingSystem);
+                    if (!result)
+                    {
+                        VE_LOG_WARN_CATEGORY("Editor", "Failed to add script component '{}': {}", scriptType.typeName, result.GetError().GetMessage());
+                    }
+                }
+            }
+            ImGui::EndCombo();
+        }
     }
 
     void InspectorPanel::RenderAsset(const EditorAssetRecord& asset)

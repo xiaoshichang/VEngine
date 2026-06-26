@@ -399,9 +399,14 @@ namespace ve
                 components.push_back(WriteLightComponent(*light));
             }
 
-            if (const DotnetScriptableComponent* script = gameObject.GetComponent<DotnetScriptableComponent>(); script != nullptr)
+            for (SizeT scriptIndex = 0; scriptIndex < gameObject.GetScriptableComponentCount(); ++scriptIndex)
             {
-                components.push_back(WriteDotnetScriptableComponent(*script));
+                const ScriptableComponent* script = gameObject.GetScriptableComponent(scriptIndex);
+                const DotnetScriptableComponent* dotnetScript = dynamic_cast<const DotnetScriptableComponent*>(script);
+                if (dotnetScript != nullptr)
+                {
+                    components.push_back(WriteDotnetScriptableComponent(*dotnetScript));
+                }
             }
             object["components"] = std::move(components);
 
@@ -591,23 +596,14 @@ namespace ve
 
         [[nodiscard]] ErrorCode ApplyDotnetScriptableComponent(GameObject& gameObject, const boost::json::object& object, ScriptingSystem& scriptingSystem)
         {
-            DotnetScriptableComponent* script = gameObject.GetComponent<DotnetScriptableComponent>();
-            const std::string scriptTypeName = ReadString(object, "scriptTypeName", script != nullptr ? script->GetScriptTypeName() : std::string());
-            if (script == nullptr)
+            const std::string scriptTypeName = ReadString(object, "scriptTypeName");
+            Result<DotnetScriptableComponent*> result = gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptTypeName, scriptingSystem);
+            if (!result)
             {
-                Result<DotnetScriptableComponent*> result =
-                    gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptTypeName, scriptingSystem);
-                if (!result)
-                {
-                    return result.GetError().GetCode();
-                }
-                script = result.GetValue();
-            }
-            else if (script->GetScriptTypeName() != scriptTypeName)
-            {
-                return ErrorCode::InvalidState;
+                return result.GetError().GetCode();
             }
 
+            DotnetScriptableComponent* script = result.GetValue();
             script->SetEnabled(ReadBool(object, "enabled", script->IsEnabled()));
             return ErrorCode::None;
         }
@@ -650,17 +646,22 @@ namespace ve
                 }
             }
 
-            const boost::json::object* script = FindComponent(components, "DotnetScriptableComponent");
-            if (script == nullptr)
+            for (const boost::json::value& componentValue : components)
             {
-                script = FindComponent(components, "ScriptableComponent");
-            }
-            if (script != nullptr)
-            {
-                const ErrorCode result = ApplyDotnetScriptableComponent(gameObject, *script, scriptingSystem);
-                if (result != ErrorCode::None)
+                if (!componentValue.is_object())
                 {
-                    return result;
+                    continue;
+                }
+
+                const boost::json::object& componentObject = componentValue.as_object();
+                const std::string componentType = ReadString(componentObject, "type");
+                if (componentType == "DotnetScriptableComponent" || componentType == "ScriptableComponent")
+                {
+                    const ErrorCode result = ApplyDotnetScriptableComponent(gameObject, componentObject, scriptingSystem);
+                    if (result != ErrorCode::None)
+                    {
+                        return result;
+                    }
                 }
             }
 

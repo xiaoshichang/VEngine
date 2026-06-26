@@ -204,8 +204,10 @@ namespace ve
                     VE_ASSERT_ALWAYS_MESSAGE(false, "Unhandled exception escaped SceneSystem update.");
                 }
             }
-
-            impl.scene->Clear();
+            if (impl.scene != nullptr)
+            {
+                impl.scene->Clear();
+            }
             impl.scene = nullptr;
             impl.renderSystem->Flush();
 

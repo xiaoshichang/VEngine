@@ -30,6 +30,21 @@ namespace ve
         return initialized_ ? ErrorCode::Unsupported : ErrorCode::InvalidState;
     }
 
+    ErrorCode IOSAOTScriptingBackend::LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc)
+    {
+        static_cast<void>(desc);
+        return initialized_ ? ErrorCode::Unsupported : ErrorCode::InvalidState;
+    }
+
+    void IOSAOTScriptingBackend::UnloadProjectAssembly() noexcept
+    {
+    }
+
+    std::vector<ScriptTypeInfo> IOSAOTScriptingBackend::GetAvailableScriptTypes()
+    {
+        return {};
+    }
+
     Result<ScriptInstanceHandle> IOSAOTScriptingBackend::CreateScriptInstance(const ScriptInstanceDesc& desc)
     {
         static_cast<void>(desc);

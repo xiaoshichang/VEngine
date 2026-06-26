@@ -63,6 +63,24 @@ namespace ve
         return backend_->LoadAssembly(desc);
     }
 
+    ErrorCode ScriptingSystem::LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc)
+    {
+        VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::LoadProjectAssembly requires an initialized scripting system.");
+        return backend_->LoadProjectAssembly(desc);
+    }
+
+    void ScriptingSystem::UnloadProjectAssembly() noexcept
+    {
+        VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::UnloadProjectAssembly requires an initialized scripting system.");
+        backend_->UnloadProjectAssembly();
+    }
+
+    std::vector<ScriptTypeInfo> ScriptingSystem::GetAvailableScriptTypes()
+    {
+        VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::GetAvailableScriptTypes requires an initialized scripting system.");
+        return backend_->GetAvailableScriptTypes();
+    }
+
     Result<ScriptInstanceHandle> ScriptingSystem::CreateScriptInstance(const ScriptInstanceDesc& desc)
     {
         VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::CreateScriptInstance requires an initialized scripting system.");

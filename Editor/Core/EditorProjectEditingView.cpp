@@ -175,6 +175,16 @@ namespace ve::editor
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("Scripts"))
+        {
+            if (ImGui::MenuItem("Recompile Scripts", nullptr, false, !editor.IsPlaying()))
+            {
+                editor.RecompileScripts();
+            }
+
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMainMenuBar();
     }
 

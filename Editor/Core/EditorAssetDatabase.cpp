@@ -2,6 +2,7 @@
 
 #include "Editor/Core/EditorAssetPath.h"
 #include "Editor/Core/EditorProject.h"
+#include "Editor/Core/EditorScriptProjectGenerator.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
@@ -29,6 +30,9 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#ifdef GetMessage
+#undef GetMessage
+#endif
 #endif
 
 namespace ve::editor
@@ -84,6 +88,11 @@ namespace ve::editor
                 return EditorAssetType::Scene;
             }
 
+            if (extension == ".cs")
+            {
+                return EditorAssetType::Script;
+            }
+
             return EditorAssetType::Unknown;
         }
 
@@ -111,6 +120,8 @@ namespace ve::editor
                 return "Shader";
             case EditorAssetType::Scene:
                 return "Scene";
+            case EditorAssetType::Script:
+                return "Script";
             case EditorAssetType::Unknown:
                 break;
             }
@@ -146,6 +157,8 @@ namespace ve::editor
                 return ResourceType::Shader;
             case EditorAssetType::Scene:
                 return ResourceType::Scene;
+            case EditorAssetType::Script:
+                return ResourceType::Unknown;
             case EditorAssetType::Unknown:
                 break;
             }
@@ -885,7 +898,13 @@ namespace ve::editor
                 return builtinResult;
             }
         }
-        return ResolveAssetDependencies();
+        const ErrorCode dependencyResult = ResolveAssetDependencies();
+        if (dependencyResult != ErrorCode::None)
+        {
+            return dependencyResult;
+        }
+
+        return RegenerateScriptProject();
     }
 
     ErrorCode EditorAssetDatabase::ReimportAll()
@@ -918,7 +937,13 @@ namespace ve::editor
                 return builtinResult;
             }
         }
-        return ResolveAssetDependencies();
+        const ErrorCode dependencyResult = ResolveAssetDependencies();
+        if (dependencyResult != ErrorCode::None)
+        {
+            return dependencyResult;
+        }
+
+        return RegenerateScriptProject();
     }
 
     ErrorCode EditorAssetDatabase::ReimportAsset(const Path& projectRelativePath)
@@ -1021,6 +1046,8 @@ namespace ve::editor
             return "Shader";
         case EditorAssetType::Scene:
             return "Scene";
+        case EditorAssetType::Script:
+            return "C# Script";
         case EditorAssetType::Unknown:
             break;
         }
@@ -1310,6 +1337,46 @@ namespace ve::editor
             }
 
             ResolveMaterialTextureDependencies(propertiesValue->as_object(), layout.GetValue(), record.asset.dependencies);
+        }
+
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorAssetDatabase::RegenerateScriptProject() const
+    {
+        if (!initialized_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        Result<EditorProjectDescriptor> descriptor = EditorProject::LoadDescriptor(projectRoot_);
+        const std::string projectName = descriptor && !descriptor.GetValue().name.empty() ? descriptor.GetValue().name : projectRoot_.GetFilename();
+        if (projectName.empty())
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        std::vector<Path> scriptAssetPaths;
+        for (const auto& pair : assetsByID_)
+        {
+            const EditorAssetRecord& record = pair.second;
+            if (record.type != EditorAssetType::Script || !record.path.GetString().starts_with("Assets/"))
+            {
+                continue;
+            }
+
+            scriptAssetPaths.push_back(record.path);
+        }
+
+        Result<Path> result = EditorScriptProjectGenerator::GenerateProject(EditorScriptProjectGenerateDesc{
+            .projectRoot = projectRoot_,
+            .projectName = projectName,
+            .scriptAssetPaths = std::move(scriptAssetPaths),
+        });
+        if (!result)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to regenerate project script csproj: {}", result.GetError().GetMessage());
+            return result.GetError().GetCode();
         }
 
         return ErrorCode::None;

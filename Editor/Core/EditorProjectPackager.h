@@ -57,7 +57,9 @@ namespace ve::editor
         [[nodiscard]] ErrorCode RefreshAssetDatabase(Editor& editor);
         [[nodiscard]] ErrorCode ExportAssetManifest(Editor& editor);
         [[nodiscard]] ErrorCode CopyRuntimeAssets(Editor& editor);
+        [[nodiscard]] ErrorCode CopyManagedScripts();
         [[nodiscard]] ErrorCode CopyWindowsPlayerExecutable();
+        [[nodiscard]] ErrorCode CopyWindowsPlayerManagedRuntime();
         [[nodiscard]] ErrorCode WritePackageInfo();
 
         void InitializeSteps();

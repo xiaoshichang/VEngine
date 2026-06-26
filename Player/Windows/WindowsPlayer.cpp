@@ -4,6 +4,7 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
+#include "Engine/Runtime/Scripting/ScriptingSystem.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <boost/json.hpp>
@@ -16,6 +17,7 @@ namespace ve
         constexpr const char* PackageDataDirectoryName = "Data";
         constexpr const char* PackageManifestFilename = "AssetManifest.json";
         constexpr const char* ProjectDescriptorFilename = "VEProject.json";
+        constexpr const char* ScriptAssemblyManifestPath = "Scripts/ScriptAssembly.json";
         constexpr const char* DefaultStartScene = "Assets/Scenes/SampleScene.vescene";
 
         struct PackagedProjectDescriptor
@@ -91,6 +93,40 @@ namespace ve
             descriptor.name = ReadString(object, "name");
             descriptor.startScene = ReadString(object, "startScene", descriptor.startScene);
             return Result<PackagedProjectDescriptor>::Success(std::move(descriptor));
+        }
+
+        [[nodiscard]] Result<Path> LoadPackagedScriptAssemblyPath(const Path& dataRoot)
+        {
+            const Path manifestPath = dataRoot / ScriptAssemblyManifestPath;
+            if (!FileSystem::IsFile(manifestPath))
+            {
+                return Result<Path>::Failure(Error(ErrorCode::NotFound, "Packaged script manifest was not found."));
+            }
+
+            Result<std::string> text = FileSystem::ReadTextFile(manifestPath);
+            if (!text)
+            {
+                return Result<Path>::Failure(text.GetError());
+            }
+
+            Result<boost::json::value> json = JsonUtils::Parse(text.GetValue());
+            if (!json)
+            {
+                return Result<Path>::Failure(json.GetError());
+            }
+
+            if (!json.GetValue().is_object())
+            {
+                return Result<Path>::Failure(Error(ErrorCode::InvalidArgument, "Script assembly manifest root must be a JSON object."));
+            }
+
+            const std::string assemblyPath = ReadString(json.GetValue().as_object(), "assemblyPath");
+            if (assemblyPath.empty())
+            {
+                return Result<Path>::Failure(Error(ErrorCode::InvalidArgument, "Script assembly manifest is missing assemblyPath."));
+            }
+
+            return Result<Path>::Success(dataRoot / assemblyPath);
         }
     } // namespace
 
@@ -191,6 +227,8 @@ namespace ve
             return;
         }
 
+        (void)InitializePackagedScripts(dataRoot);
+
         // 5. Record the start scene for a one-shot Scene Thread load once the main loop starts.
         SchedulePackagedStartupSceneLoad(descriptor.GetValue().startScene);
 
@@ -218,6 +256,36 @@ namespace ve
             return false;
         }
 
+        return true;
+    }
+
+    bool WindowsPlayer::InitializePackagedScripts(const Path& dataRoot)
+    {
+        Result<Path> projectAssemblyPath = LoadPackagedScriptAssemblyPath(dataRoot);
+        if (!projectAssemblyPath)
+        {
+            VE_LOG_INFO_CATEGORY("Player", "No packaged script assembly loaded: {}", projectAssemblyPath.GetError().GetMessage());
+            return false;
+        }
+
+        const Path hostRoot = FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
+        const Path hostAssemblyPath = hostRoot / "VEngine.ScriptHost.dll";
+        const ErrorCode hostResult = GetRuntime().GetScriptingSystem().LoadAssembly(
+            ScriptingAssemblyLoadDesc{hostAssemblyPath, "VEngine.Scripting.NativeScriptBridge, VEngine.ScriptHost"});
+        if (hostResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to load VEngine.ScriptHost '{}': {}", hostAssemblyPath.GetString(), ToString(hostResult));
+            return false;
+        }
+
+        const ErrorCode projectResult = GetRuntime().GetScriptingSystem().LoadProjectAssembly(ScriptingProjectAssemblyLoadDesc{projectAssemblyPath.GetValue()});
+        if (projectResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to load project scripts '{}': {}", projectAssemblyPath.GetValue().GetString(), ToString(projectResult));
+            return false;
+        }
+
+        VE_LOG_INFO_CATEGORY("Player", "Loaded packaged script assembly '{}'.", projectAssemblyPath.GetValue().GetString());
         return true;
     }
 
