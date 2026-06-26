@@ -26,7 +26,6 @@ namespace ve::editor
         constexpr float AxisOverlaySize = 96.0f;
         constexpr float AxisOverlayPadding = 14.0f;
         constexpr float AxisOverlayRadius = 28.0f;
-        constexpr float AxisOverlayDepthScale = 0.35f;
         constexpr float AxisOverlayLineThickness = 2.5f;
         constexpr float AxisOverlayDotRadius = 4.0f;
         constexpr Float32 GridUnitSizes[] = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f};
@@ -75,8 +74,7 @@ namespace ve::editor
 
         [[nodiscard]] ImVec2 ProjectAxisDirection(const Vector3& direction, const ImVec2& origin) noexcept
         {
-            return ImVec2(origin.x + (direction.GetX() * AxisOverlayRadius),
-                          origin.y - (direction.GetY() * AxisOverlayRadius) + (direction.GetZ() * AxisOverlayRadius * AxisOverlayDepthScale));
+            return ImVec2(origin.x + (direction.GetX() * AxisOverlayRadius), origin.y - (direction.GetY() * AxisOverlayRadius));
         }
 
         [[nodiscard]] bool AxisDepthLess(const AxisOverlayEntry& left, const AxisOverlayEntry& right) noexcept
@@ -203,8 +201,12 @@ namespace ve::editor
         }
 
         ImGui::Image(ImTextureRef(static_cast<ImTextureID>(reinterpret_cast<intptr_t>(resourceView))), imageSize);
-        RenderSceneViewOverlays(ImGui::GetItemRectMin(), imageSize);
-        UpdateCameraFromInput(ImGui::IsItemHovered(), ImGui::IsItemClicked(), ImGui::IsItemClicked(ImGuiMouseButton_Right));
+        const ImVec2 imageMin = ImGui::GetItemRectMin();
+        const bool viewportHovered = ImGui::IsItemHovered();
+        const bool viewportClicked = ImGui::IsItemClicked();
+        const bool viewportRightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+        UpdateCameraFromInput(viewportHovered, viewportClicked, viewportRightClicked);
+        RenderSceneViewOverlays(imageMin, imageSize);
     }
 
     void SceneViewPanel::RenderControlBar()
@@ -411,7 +413,7 @@ namespace ve::editor
 
         for (AxisOverlayEntry& axis : axes)
         {
-            axis.depth = axis.direction.GetZ();
+            axis.depth = -axis.direction.GetZ();
         }
         std::sort(std::begin(axes), std::end(axes), AxisDepthLess);
 
