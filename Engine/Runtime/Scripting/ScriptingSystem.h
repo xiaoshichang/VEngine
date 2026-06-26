@@ -7,6 +7,8 @@
 #include "Engine/Runtime/Scripting/ScriptingTypes.h"
 
 #include <memory>
+#include <string>
+#include <string_view>
 
 namespace ve
 {
@@ -27,6 +29,9 @@ namespace ve
         [[nodiscard]] Result<ScriptInstanceHandle> CreateScriptInstance(const ScriptInstanceDesc& desc);
         void DestroyScriptInstance(ScriptInstanceHandle script) noexcept;
         void InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds = 0.0f) noexcept;
+        [[nodiscard]] Result<std::string> GetScriptFieldsJson(ScriptInstanceHandle script);
+        [[nodiscard]] ErrorCode SetScriptFieldsJson(ScriptInstanceHandle script, std::string_view fieldsJson);
+        [[nodiscard]] ErrorCode SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson);
 
     private:
         [[nodiscard]] static std::unique_ptr<ScriptingSystemBackend> CreateBackend(ScriptingBackendType backendType);

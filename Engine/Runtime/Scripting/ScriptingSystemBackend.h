@@ -5,6 +5,9 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Scripting/ScriptingTypes.h"
 
+#include <string>
+#include <string_view>
+
 namespace ve
 {
     class ScriptingSystemBackend : public NonMovable
@@ -23,5 +26,8 @@ namespace ve
         [[nodiscard]] virtual Result<ScriptInstanceHandle> CreateScriptInstance(const ScriptInstanceDesc& desc) = 0;
         virtual void DestroyScriptInstance(ScriptInstanceHandle script) noexcept = 0;
         virtual void InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds = 0.0f) noexcept = 0;
+        [[nodiscard]] virtual Result<std::string> GetScriptFieldsJson(ScriptInstanceHandle script) = 0;
+        [[nodiscard]] virtual ErrorCode SetScriptFieldsJson(ScriptInstanceHandle script, std::string_view fieldsJson) = 0;
+        [[nodiscard]] virtual ErrorCode SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson) = 0;
     };
 } // namespace ve

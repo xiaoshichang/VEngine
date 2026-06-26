@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Scripting/DotNetScriptingBackend.h"
 
 #include <filesystem>
+#include <string_view>
 #include <vector>
 
 namespace ve
@@ -23,6 +24,9 @@ namespace ve
         [[nodiscard]] Result<ScriptInstanceHandle> CreateScriptInstance(const ScriptInstanceDesc& desc) override;
         void DestroyScriptInstance(ScriptInstanceHandle script) noexcept override;
         void InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds = 0.0f) noexcept override;
+        [[nodiscard]] Result<std::string> GetScriptFieldsJson(ScriptInstanceHandle script) override;
+        [[nodiscard]] ErrorCode SetScriptFieldsJson(ScriptInstanceHandle script, std::string_view fieldsJson) override;
+        [[nodiscard]] ErrorCode SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson) override;
 
     private:
         [[nodiscard]] ErrorCode InitializeHost(const ScriptingSystemInitParam& initParam);

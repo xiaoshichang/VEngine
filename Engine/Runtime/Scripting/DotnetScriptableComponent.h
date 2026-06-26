@@ -1,9 +1,13 @@
 #pragma once
 
+#include "Engine/Runtime/Core/Error.h"
+#include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Scripting/ScriptableComponent.h"
 #include "Engine/Runtime/Scripting/ScriptingTypes.h"
 
+#include <boost/json.hpp>
 #include <string>
+#include <string_view>
 
 namespace ve
 {
@@ -20,6 +24,10 @@ namespace ve
 
         [[nodiscard]] const std::string& GetScriptTypeName() const noexcept override;
         [[nodiscard]] bool HasScriptInstance() const noexcept override;
+        [[nodiscard]] ErrorCode EnsureScriptInstance(bool invokeOnCreate);
+        [[nodiscard]] Result<boost::json::object> GetScriptFields() const;
+        [[nodiscard]] ErrorCode SetScriptFields(const boost::json::object& fields);
+        [[nodiscard]] ErrorCode SetScriptField(std::string_view fieldName, const boost::json::value& value);
 
         void OnCreate() override;
         void OnDestroy() override;
@@ -29,11 +37,12 @@ namespace ve
         void OnDisable() override;
 
     private:
-        void CreateScriptInstance();
+        [[nodiscard]] ErrorCode CreateScriptInstance(bool invokeOnCreate);
         void ReleaseScriptInstance() noexcept;
 
         ScriptingSystem* scriptingSystem_ = nullptr;
         std::string scriptTypeName_;
         ScriptInstanceHandle scriptInstance_ = 0;
+        bool lifecycleStarted_ = false;
     };
 } // namespace ve

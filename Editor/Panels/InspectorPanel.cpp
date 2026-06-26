@@ -221,6 +221,230 @@ namespace ve::editor
 
             return Result<AssetID>::Success(AssetID(guid.GetValue(), subID));
         }
+
+        [[nodiscard]] Float32 ReadJsonFloat(const boost::json::value& value, Float32 fallback = 0.0f) noexcept
+        {
+            if (value.is_double())
+            {
+                return static_cast<Float32>(value.as_double());
+            }
+            if (value.is_int64())
+            {
+                return static_cast<Float32>(value.as_int64());
+            }
+            if (value.is_uint64())
+            {
+                return static_cast<Float32>(value.as_uint64());
+            }
+
+            return fallback;
+        }
+
+        [[nodiscard]] boost::json::value GetDefaultScriptFieldValue(const ScriptFieldInfo& field)
+        {
+            if (!field.defaultValueJson.empty())
+            {
+                Result<boost::json::value> defaultValue = JsonUtils::Parse(field.defaultValueJson);
+                if (defaultValue)
+                {
+                    return defaultValue.MoveValue();
+                }
+            }
+
+            switch (field.kind)
+            {
+            case ScriptFieldKind::Bool:
+                return false;
+            case ScriptFieldKind::Int:
+                return 0;
+            case ScriptFieldKind::Float:
+                return 0.0;
+            case ScriptFieldKind::String:
+                return boost::json::string();
+            case ScriptFieldKind::Vector3:
+                return boost::json::object{{"X", 0.0}, {"Y", 0.0}, {"Z", 0.0}};
+            case ScriptFieldKind::Color:
+                return boost::json::object{{"R", 0.0}, {"G", 0.0}, {"B", 0.0}, {"A", 1.0}};
+            case ScriptFieldKind::Enum:
+                return boost::json::string(field.enumNames.empty() ? "" : field.enumNames.front());
+            case ScriptFieldKind::Unsupported:
+                break;
+            }
+
+            return nullptr;
+        }
+
+        [[nodiscard]] boost::json::value GetScriptFieldValue(const boost::json::object& fields, const ScriptFieldInfo& field)
+        {
+            if (const boost::json::value* value = fields.if_contains(field.name); value != nullptr)
+            {
+                return boost::json::value(*value);
+            }
+
+            return GetDefaultScriptFieldValue(field);
+        }
+
+        [[nodiscard]] std::array<float, 3> ReadScriptVector3(const boost::json::value& value)
+        {
+            if (value.is_object())
+            {
+                const boost::json::object& object = value.as_object();
+                const boost::json::value* x = object.if_contains("X");
+                const boost::json::value* y = object.if_contains("Y");
+                const boost::json::value* z = object.if_contains("Z");
+                return {x != nullptr ? ReadJsonFloat(*x) : 0.0f, y != nullptr ? ReadJsonFloat(*y) : 0.0f, z != nullptr ? ReadJsonFloat(*z) : 0.0f};
+            }
+
+            if (value.is_array() && value.as_array().size() == 3)
+            {
+                const boost::json::array& array = value.as_array();
+                return {ReadJsonFloat(array[0]), ReadJsonFloat(array[1]), ReadJsonFloat(array[2])};
+            }
+
+            return {0.0f, 0.0f, 0.0f};
+        }
+
+        [[nodiscard]] boost::json::object WriteScriptVector3(const std::array<float, 3>& value)
+        {
+            return boost::json::object{{"X", value[0]}, {"Y", value[1]}, {"Z", value[2]}};
+        }
+
+        [[nodiscard]] std::array<float, 4> ReadScriptColor(const boost::json::value& value)
+        {
+            if (value.is_object())
+            {
+                const boost::json::object& object = value.as_object();
+                const boost::json::value* r = object.if_contains("R");
+                const boost::json::value* g = object.if_contains("G");
+                const boost::json::value* b = object.if_contains("B");
+                const boost::json::value* a = object.if_contains("A");
+                return {r != nullptr ? ReadJsonFloat(*r) : 0.0f,
+                        g != nullptr ? ReadJsonFloat(*g) : 0.0f,
+                        b != nullptr ? ReadJsonFloat(*b) : 0.0f,
+                        a != nullptr ? ReadJsonFloat(*a, 1.0f) : 1.0f};
+            }
+
+            if (value.is_array() && value.as_array().size() == 4)
+            {
+                const boost::json::array& array = value.as_array();
+                return {ReadJsonFloat(array[0]), ReadJsonFloat(array[1]), ReadJsonFloat(array[2]), ReadJsonFloat(array[3], 1.0f)};
+            }
+
+            return {0.0f, 0.0f, 0.0f, 1.0f};
+        }
+
+        [[nodiscard]] boost::json::object WriteScriptColor(const std::array<float, 4>& value)
+        {
+            return boost::json::object{{"R", value[0]}, {"G", value[1]}, {"B", value[2]}, {"A", value[3]}};
+        }
+
+        void SetScriptField(DotnetScriptableComponent& script, const ScriptFieldInfo& field, const boost::json::value& value)
+        {
+            const ErrorCode result = script.SetScriptField(field.name, value);
+            if (result != ErrorCode::None)
+            {
+                VE_LOG_WARN_CATEGORY("Editor", "Failed to set script field '{}.{}': {}", script.GetScriptTypeName(), field.name, ToString(result));
+            }
+        }
+
+        void RenderScriptField(DotnetScriptableComponent& script, const boost::json::object& fields, const ScriptFieldInfo& field)
+        {
+            ImGui::PushID(field.name.c_str());
+            const std::string& label = field.displayName.empty() ? field.name : field.displayName;
+            boost::json::value value = GetScriptFieldValue(fields, field);
+
+            switch (field.kind)
+            {
+            case ScriptFieldKind::Bool:
+            {
+                bool boolValue = value.is_bool() ? value.as_bool() : false;
+                if (ImGui::Checkbox(label.c_str(), &boolValue))
+                {
+                    SetScriptField(script, field, boolValue);
+                }
+                break;
+            }
+            case ScriptFieldKind::Int:
+            {
+                int intValue = static_cast<int>(ReadJsonFloat(value));
+                if (ImGui::DragInt(label.c_str(), &intValue))
+                {
+                    SetScriptField(script, field, intValue);
+                }
+                break;
+            }
+            case ScriptFieldKind::Float:
+            {
+                float floatValue = ReadJsonFloat(value);
+                if (ImGui::DragFloat(label.c_str(), &floatValue, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+                {
+                    SetScriptField(script, field, floatValue);
+                }
+                break;
+            }
+            case ScriptFieldKind::String:
+            {
+                std::array<char, TextBufferSize> buffer = ToTextBuffer(value.is_string() ? std::string(value.as_string()) : std::string());
+                if (ImGui::InputText(label.c_str(), buffer.data(), buffer.size()))
+                {
+                    SetScriptField(script, field, boost::json::string(buffer.data()));
+                }
+                break;
+            }
+            case ScriptFieldKind::Vector3:
+            {
+                std::array<float, 3> vectorValue = ReadScriptVector3(value);
+                if (ImGui::DragFloat3(label.c_str(), vectorValue.data(), TransformDragSpeed, 0.0f, 0.0f, "%.3f"))
+                {
+                    SetScriptField(script, field, WriteScriptVector3(vectorValue));
+                }
+                break;
+            }
+            case ScriptFieldKind::Color:
+            {
+                std::array<float, 4> colorValue = ReadScriptColor(value);
+                if (ImGui::ColorEdit4(label.c_str(), colorValue.data()))
+                {
+                    SetScriptField(script, field, WriteScriptColor(colorValue));
+                }
+                break;
+            }
+            case ScriptFieldKind::Enum:
+            {
+                int selectedIndex = 0;
+                std::string selectedName;
+                if (value.is_string())
+                {
+                    selectedName = std::string(value.as_string());
+                }
+                for (SizeT index = 0; index < field.enumNames.size(); ++index)
+                {
+                    if (field.enumNames[index] == selectedName)
+                    {
+                        selectedIndex = static_cast<int>(index);
+                        break;
+                    }
+                }
+
+                std::vector<const char*> enumLabels;
+                enumLabels.reserve(field.enumNames.size());
+                for (const std::string& enumName : field.enumNames)
+                {
+                    enumLabels.push_back(enumName.c_str());
+                }
+
+                if (!enumLabels.empty() && ImGui::Combo(label.c_str(), &selectedIndex, enumLabels.data(), static_cast<int>(enumLabels.size())))
+                {
+                    SetScriptField(script, field, boost::json::string(field.enumNames[static_cast<SizeT>(selectedIndex)]));
+                }
+                break;
+            }
+            case ScriptFieldKind::Unsupported:
+                break;
+            }
+
+            ImGui::PopID();
+        }
     } // namespace
 
     void InspectorPanel::Init(Editor& editor)
@@ -531,6 +755,30 @@ namespace ve::editor
             else
             {
                 ImGui::Text("Type: %s", scriptType->typeName.c_str());
+                boost::json::object fields;
+                const ErrorCode ensureResult = script.EnsureScriptInstance(false);
+                if (ensureResult != ErrorCode::None)
+                {
+                    ImGui::TextDisabled("Managed Instance: Failed");
+                    VE_LOG_WARN_CATEGORY("Editor", "Failed to create editor script instance '{}': {}", script.GetScriptTypeName(), ToString(ensureResult));
+                }
+                else
+                {
+                    Result<boost::json::object> fieldResult = script.GetScriptFields();
+                    if (fieldResult)
+                    {
+                        fields = fieldResult.MoveValue();
+                    }
+                    else
+                    {
+                        VE_LOG_WARN_CATEGORY("Editor", "Failed to read script fields '{}': {}", script.GetScriptTypeName(), fieldResult.GetError().GetMessage());
+                    }
+                }
+
+                for (const ScriptFieldInfo& field : scriptType->fields)
+                {
+                    RenderScriptField(script, fields, field);
+                }
             }
 
             ImGui::Text("Managed Instance: %s", script.HasScriptInstance() ? "Yes" : "No");
@@ -570,6 +818,14 @@ namespace ve::editor
                     if (!result)
                     {
                         VE_LOG_WARN_CATEGORY("Editor", "Failed to add script component '{}': {}", scriptType.typeName, result.GetError().GetMessage());
+                    }
+                    else
+                    {
+                        const ErrorCode ensureResult = result.GetValue()->EnsureScriptInstance(false);
+                        if (ensureResult != ErrorCode::None)
+                        {
+                            VE_LOG_WARN_CATEGORY("Editor", "Failed to create editor script instance '{}': {}", scriptType.typeName, ToString(ensureResult));
+                        }
                     }
                 }
             }

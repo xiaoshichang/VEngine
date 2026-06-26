@@ -10,7 +10,7 @@ namespace VEngine.Scripting;
 
 public static unsafe class NativeScriptBridge
 {
-    private static readonly Dictionary<ulong, ScriptComponent> Scripts = new();
+    private static readonly Dictionary<ulong, ScriptInstanceState> Scripts = new();
     private static readonly List<ScriptTypeInfo> ScriptTypes = new();
     private static AssemblyLoadContext? projectContext_;
     private static Assembly? projectAssembly_;
@@ -51,9 +51,13 @@ public static unsafe class NativeScriptBridge
 
     private static void UnloadProjectAssemblyInternal()
     {
-        foreach (ScriptComponent script in Scripts.Values)
+        foreach (ScriptInstanceState state in Scripts.Values)
         {
-            script.OnDestroy();
+            if (state.LifecycleStarted)
+            {
+                state.Component.OnDestroy();
+                state.LifecycleStarted = false;
+            }
         }
 
         Scripts.Clear();
@@ -85,7 +89,7 @@ public static unsafe class NativeScriptBridge
     }
 
     [UnmanagedCallersOnly]
-    public static ulong CreateScript(nint nativeComponent, byte* scriptTypeName)
+    public static ulong CreateScript(nint nativeComponent, byte* scriptTypeName, int invokeOnCreate)
     {
         if (nativeComponent == 0 || projectAssembly_ == null)
         {
@@ -109,55 +113,106 @@ public static unsafe class NativeScriptBridge
 
         ulong handle = nextHandle_++;
         script.NativeComponent = nativeComponent;
-        Scripts[handle] = script;
-        script.OnCreate();
+        ScriptInstanceState state = new(script);
+        Scripts[handle] = state;
+        if (invokeOnCreate != 0)
+        {
+            StartScriptLifecycle(state);
+        }
         return handle;
     }
 
     [UnmanagedCallersOnly]
     public static void DestroyScript(ulong script)
     {
-        if (!Scripts.Remove(script, out ScriptComponent? component))
+        if (!Scripts.Remove(script, out ScriptInstanceState? state))
         {
             return;
         }
 
-        component.OnDestroy();
+        if (state.LifecycleStarted)
+        {
+            state.Component.OnDestroy();
+            state.LifecycleStarted = false;
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    public static void OnCreate(ulong script)
+    {
+        if (Scripts.TryGetValue(script, out ScriptInstanceState? state))
+        {
+            StartScriptLifecycle(state);
+        }
+    }
+
+    [UnmanagedCallersOnly]
+    public static nint GetScriptFieldsJson(ulong script)
+    {
+        if (!Scripts.TryGetValue(script, out ScriptInstanceState? state))
+        {
+            return 0;
+        }
+
+        string json = JsonSerializer.Serialize(ReadSerializableFields(state.Component));
+        return AllocateUtf8(json);
+    }
+
+    [UnmanagedCallersOnly]
+    public static int SetScriptFieldsJson(ulong script, byte* fieldsJson)
+    {
+        if (!Scripts.TryGetValue(script, out ScriptInstanceState? state))
+        {
+            return 1;
+        }
+
+        return ApplySerializedFields(state.Component, ReadUtf8(fieldsJson)) ? 0 : 1;
+    }
+
+    [UnmanagedCallersOnly]
+    public static int SetScriptFieldJson(ulong script, byte* fieldName, byte* valueJson)
+    {
+        if (!Scripts.TryGetValue(script, out ScriptInstanceState? state))
+        {
+            return 1;
+        }
+
+        return ApplySerializedField(state.Component, ReadUtf8(fieldName), ReadUtf8(valueJson)) ? 0 : 1;
     }
 
     [UnmanagedCallersOnly]
     public static void OnUpdate(ulong script, float deltaSeconds)
     {
-        if (Scripts.TryGetValue(script, out ScriptComponent? component))
+        if (Scripts.TryGetValue(script, out ScriptInstanceState? state) && state.LifecycleStarted)
         {
-            component.OnUpdate(deltaSeconds);
+            state.Component.OnUpdate(deltaSeconds);
         }
     }
 
     [UnmanagedCallersOnly]
     public static void OnLateUpdate(ulong script, float deltaSeconds)
     {
-        if (Scripts.TryGetValue(script, out ScriptComponent? component))
+        if (Scripts.TryGetValue(script, out ScriptInstanceState? state) && state.LifecycleStarted)
         {
-            component.OnLateUpdate(deltaSeconds);
+            state.Component.OnLateUpdate(deltaSeconds);
         }
     }
 
     [UnmanagedCallersOnly]
     public static void OnEnable(ulong script)
     {
-        if (Scripts.TryGetValue(script, out ScriptComponent? component))
+        if (Scripts.TryGetValue(script, out ScriptInstanceState? state) && state.LifecycleStarted)
         {
-            component.OnEnable();
+            state.Component.OnEnable();
         }
     }
 
     [UnmanagedCallersOnly]
     public static void OnDisable(ulong script)
     {
-        if (Scripts.TryGetValue(script, out ScriptComponent? component))
+        if (Scripts.TryGetValue(script, out ScriptInstanceState? state) && state.LifecycleStarted)
         {
-            component.OnDisable();
+            state.Component.OnDisable();
         }
     }
 
@@ -205,7 +260,7 @@ public static unsafe class NativeScriptBridge
                 continue;
             }
 
-            ScriptTypes.Add(new ScriptTypeInfo(type.FullName ?? type.Name, type.Name));
+            ScriptTypes.Add(new ScriptTypeInfo(type.FullName ?? type.Name, type.Name, GetSerializableFields(type)));
         }
 
         ScriptTypes.Sort((left, right) => string.CompareOrdinal(left.TypeName, right.TypeName));
@@ -214,6 +269,258 @@ public static unsafe class NativeScriptBridge
     private static bool IsScriptComponentType(Type type)
     {
         return type.IsClass && !type.IsAbstract && type.GetConstructor(Type.EmptyTypes) != null && typeof(ScriptComponent).IsAssignableFrom(type);
+    }
+
+    private static List<ScriptFieldInfo> GetSerializableFields(Type scriptType)
+    {
+        List<ScriptFieldInfo> fields = new();
+        object? defaultInstance = null;
+        try
+        {
+            defaultInstance = Activator.CreateInstance(scriptType);
+        }
+        catch (Exception exception)
+        {
+            NativeApi.LogInfo("Failed to create default script instance for field metadata: " + exception.Message);
+        }
+
+        foreach (FieldInfo field in scriptType.GetFields(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (field.IsStatic || field.IsInitOnly || field.IsLiteral || field.GetCustomAttribute<NonSerializedAttribute>() != null)
+            {
+                continue;
+            }
+
+            if (!TryGetScriptFieldKind(field.FieldType, out string kind))
+            {
+                continue;
+            }
+
+            object? defaultValue = defaultInstance != null ? field.GetValue(defaultInstance) : GetFallbackDefaultValue(field.FieldType);
+            fields.Add(new ScriptFieldInfo(field.Name,
+                                           field.Name,
+                                           kind,
+                                           field.FieldType.FullName ?? field.FieldType.Name,
+                                           field.FieldType.IsEnum ? Enum.GetNames(field.FieldType) : Array.Empty<string>(),
+                                           NormalizeFieldValue(defaultValue, field.FieldType)));
+        }
+
+        fields.Sort((left, right) => string.CompareOrdinal(left.Name, right.Name));
+        return fields;
+    }
+
+    private static bool TryGetScriptFieldKind(Type type, out string kind)
+    {
+        if (type == typeof(bool))
+        {
+            kind = "Bool";
+            return true;
+        }
+        if (type == typeof(int))
+        {
+            kind = "Int";
+            return true;
+        }
+        if (type == typeof(float))
+        {
+            kind = "Float";
+            return true;
+        }
+        if (type == typeof(string))
+        {
+            kind = "String";
+            return true;
+        }
+        if (type == typeof(Vector3))
+        {
+            kind = "Vector3";
+            return true;
+        }
+        if (type == typeof(Color))
+        {
+            kind = "Color";
+            return true;
+        }
+        if (type.IsEnum)
+        {
+            kind = "Enum";
+            return true;
+        }
+
+        kind = "Unsupported";
+        return false;
+    }
+
+    private static object? GetFallbackDefaultValue(Type type)
+    {
+        if (type == typeof(string))
+        {
+            return string.Empty;
+        }
+
+        return type.IsValueType ? Activator.CreateInstance(type) : null;
+    }
+
+    private static object? NormalizeFieldValue(object? value, Type type)
+    {
+        if (type.IsEnum)
+        {
+            return value?.ToString() ?? string.Empty;
+        }
+
+        return value;
+    }
+
+    private static void StartScriptLifecycle(ScriptInstanceState state)
+    {
+        if (state.LifecycleStarted)
+        {
+            return;
+        }
+
+        state.Component.OnCreate();
+        state.LifecycleStarted = true;
+    }
+
+    private static Dictionary<string, object?> ReadSerializableFields(ScriptComponent script)
+    {
+        Dictionary<string, object?> values = new();
+        Type scriptType = script.GetType();
+        foreach (FieldInfo field in scriptType.GetFields(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (field.IsStatic || field.IsInitOnly || field.IsLiteral || field.GetCustomAttribute<NonSerializedAttribute>() != null)
+            {
+                continue;
+            }
+
+            if (!TryGetScriptFieldKind(field.FieldType, out _))
+            {
+                continue;
+            }
+
+            values[field.Name] = NormalizeFieldValue(field.GetValue(script), field.FieldType);
+        }
+
+        return values;
+    }
+
+    private static bool ApplySerializedFields(ScriptComponent script, string serializedFieldsJson)
+    {
+        if (string.IsNullOrWhiteSpace(serializedFieldsJson))
+        {
+            return true;
+        }
+
+        Dictionary<string, JsonElement>? values;
+        try
+        {
+            values = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(serializedFieldsJson);
+        }
+        catch (JsonException exception)
+        {
+            NativeApi.LogInfo("Failed to parse serialized script fields: " + exception.Message);
+            return false;
+        }
+
+        if (values == null)
+        {
+            return true;
+        }
+
+        Type scriptType = script.GetType();
+        foreach ((string fieldName, JsonElement value) in values)
+        {
+            ApplySerializedField(script, scriptType, fieldName, value);
+        }
+
+        return true;
+    }
+
+    private static bool ApplySerializedField(ScriptComponent script, string fieldName, string valueJson)
+    {
+        if (string.IsNullOrWhiteSpace(fieldName) || string.IsNullOrWhiteSpace(valueJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(valueJson);
+            return ApplySerializedField(script, script.GetType(), fieldName, document.RootElement);
+        }
+        catch (JsonException exception)
+        {
+            NativeApi.LogInfo("Failed to parse serialized script field '" + fieldName + "': " + exception.Message);
+            return false;
+        }
+    }
+
+    private static bool ApplySerializedField(ScriptComponent script, Type scriptType, string fieldName, JsonElement value)
+    {
+        FieldInfo? field = scriptType.GetField(fieldName, BindingFlags.Instance | BindingFlags.Public);
+        if (field == null || field.IsStatic || field.IsInitOnly || field.IsLiteral || field.GetCustomAttribute<NonSerializedAttribute>() != null)
+        {
+            return false;
+        }
+
+        if (!TryGetScriptFieldKind(field.FieldType, out _) || !TryReadFieldValue(value, field.FieldType, out object? fieldValue))
+        {
+            NativeApi.LogInfo("Failed to apply serialized script field: " + scriptType.FullName + "." + fieldName);
+            return false;
+        }
+
+        field.SetValue(script, fieldValue);
+        return true;
+    }
+
+    private static bool TryReadFieldValue(JsonElement value, Type type, out object? fieldValue)
+    {
+        try
+        {
+            if (type == typeof(bool))
+            {
+                fieldValue = value.GetBoolean();
+                return true;
+            }
+            if (type == typeof(int))
+            {
+                fieldValue = value.GetInt32();
+                return true;
+            }
+            if (type == typeof(float))
+            {
+                fieldValue = value.GetSingle();
+                return true;
+            }
+            if (type == typeof(string))
+            {
+                fieldValue = value.GetString() ?? string.Empty;
+                return true;
+            }
+            if (type == typeof(Vector3))
+            {
+                fieldValue = value.Deserialize<Vector3>();
+                return fieldValue != null;
+            }
+            if (type == typeof(Color))
+            {
+                fieldValue = value.Deserialize<Color>();
+                return fieldValue != null;
+            }
+            if (type.IsEnum)
+            {
+                fieldValue = value.ValueKind == JsonValueKind.String
+                    ? Enum.Parse(type, value.GetString() ?? string.Empty)
+                    : Enum.ToObject(type, value.GetInt32());
+                return true;
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        fieldValue = null;
+        return false;
     }
 
     private static string ReadUtf8(byte* text)
@@ -245,5 +552,24 @@ public static unsafe class NativeScriptBridge
     }
 
     private sealed record ScriptTypeInfo([property: JsonPropertyName("typeName")] string TypeName,
-                                         [property: JsonPropertyName("displayName")] string DisplayName);
+                                         [property: JsonPropertyName("displayName")] string DisplayName,
+                                         [property: JsonPropertyName("fields")] IReadOnlyList<ScriptFieldInfo> Fields);
+
+    private sealed record ScriptFieldInfo([property: JsonPropertyName("name")] string Name,
+                                          [property: JsonPropertyName("displayName")] string DisplayName,
+                                          [property: JsonPropertyName("kind")] string Kind,
+                                          [property: JsonPropertyName("managedTypeName")] string ManagedTypeName,
+                                          [property: JsonPropertyName("enumNames")] IReadOnlyList<string> EnumNames,
+                                          [property: JsonPropertyName("defaultValue")] object? DefaultValue);
+
+    private sealed class ScriptInstanceState
+    {
+        public ScriptInstanceState(ScriptComponent component)
+        {
+            Component = component;
+        }
+
+        public ScriptComponent Component { get; }
+        public bool LifecycleStarted { get; set; }
+    }
 }

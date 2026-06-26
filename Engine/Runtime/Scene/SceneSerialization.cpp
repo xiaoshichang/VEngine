@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Guid.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -370,6 +371,16 @@ namespace ve
             object["type"] = "DotnetScriptableComponent";
             object["enabled"] = script.IsEnabled();
             object["scriptTypeName"] = script.GetScriptTypeName();
+            Result<boost::json::object> fields = script.GetScriptFields();
+            if (fields)
+            {
+                object["serializedFields"] = fields.MoveValue();
+            }
+            else
+            {
+                VE_LOG_WARN_CATEGORY("Scene", "Failed to serialize script fields '{}': {}", script.GetScriptTypeName(), fields.GetError().GetMessage());
+                object["serializedFields"] = boost::json::object();
+            }
             return object;
         }
 
@@ -604,6 +615,24 @@ namespace ve
             }
 
             DotnetScriptableComponent* script = result.GetValue();
+            const ErrorCode ensureResult = script->EnsureScriptInstance(false);
+            if (ensureResult != ErrorCode::None)
+            {
+                return ensureResult;
+            }
+
+            if (const boost::json::value* serializedFields = object.if_contains("serializedFields"); serializedFields != nullptr)
+            {
+                if (!serializedFields->is_object())
+                {
+                    return ErrorCode::InvalidArgument;
+                }
+                const ErrorCode fieldsResult = script->SetScriptFields(serializedFields->as_object());
+                if (fieldsResult != ErrorCode::None)
+                {
+                    return fieldsResult;
+                }
+            }
             script->SetEnabled(ReadBool(object, "enabled", script->IsEnabled()));
             return ErrorCode::None;
         }

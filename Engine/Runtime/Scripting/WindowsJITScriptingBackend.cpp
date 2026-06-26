@@ -291,6 +291,81 @@ namespace ve
             return ErrorCode::None;
         }
 
+        [[nodiscard]] ScriptFieldKind ParseScriptFieldKind(std::string_view text) noexcept
+        {
+            if (text == "Bool")
+            {
+                return ScriptFieldKind::Bool;
+            }
+            if (text == "Int")
+            {
+                return ScriptFieldKind::Int;
+            }
+            if (text == "Float")
+            {
+                return ScriptFieldKind::Float;
+            }
+            if (text == "String")
+            {
+                return ScriptFieldKind::String;
+            }
+            if (text == "Vector3")
+            {
+                return ScriptFieldKind::Vector3;
+            }
+            if (text == "Color")
+            {
+                return ScriptFieldKind::Color;
+            }
+            if (text == "Enum")
+            {
+                return ScriptFieldKind::Enum;
+            }
+
+            return ScriptFieldKind::Unsupported;
+        }
+
+        [[nodiscard]] ScriptFieldInfo ReadScriptFieldInfo(const boost::json::object& object)
+        {
+            ScriptFieldInfo info;
+            if (const boost::json::value* name = object.if_contains("name"); name != nullptr && name->is_string())
+            {
+                info.name = std::string(name->as_string());
+            }
+            if (const boost::json::value* displayName = object.if_contains("displayName"); displayName != nullptr && displayName->is_string())
+            {
+                info.displayName = std::string(displayName->as_string());
+            }
+            else
+            {
+                info.displayName = info.name;
+            }
+            if (const boost::json::value* kind = object.if_contains("kind"); kind != nullptr && kind->is_string())
+            {
+                info.kind = ParseScriptFieldKind(std::string_view(kind->as_string().data(), kind->as_string().size()));
+            }
+            if (const boost::json::value* managedTypeName = object.if_contains("managedTypeName"); managedTypeName != nullptr && managedTypeName->is_string())
+            {
+                info.managedTypeName = std::string(managedTypeName->as_string());
+            }
+            if (const boost::json::value* enumNames = object.if_contains("enumNames"); enumNames != nullptr && enumNames->is_array())
+            {
+                for (const boost::json::value& enumName : enumNames->as_array())
+                {
+                    if (enumName.is_string())
+                    {
+                        info.enumNames.emplace_back(enumName.as_string());
+                    }
+                }
+            }
+            if (const boost::json::value* defaultValue = object.if_contains("defaultValue"); defaultValue != nullptr)
+            {
+                info.defaultValueJson = boost::json::serialize(*defaultValue);
+            }
+
+            return info;
+        }
+
 #endif
     } // namespace
 
@@ -458,6 +533,22 @@ namespace ve
             {
                 info.displayName = info.typeName;
             }
+            if (const boost::json::value* fields = object.if_contains("fields"); fields != nullptr && fields->is_array())
+            {
+                for (const boost::json::value& fieldValue : fields->as_array())
+                {
+                    if (!fieldValue.is_object())
+                    {
+                        continue;
+                    }
+
+                    ScriptFieldInfo fieldInfo = ReadScriptFieldInfo(fieldValue.as_object());
+                    if (!fieldInfo.name.empty() && fieldInfo.kind != ScriptFieldKind::Unsupported)
+                    {
+                        info.fields.push_back(std::move(fieldInfo));
+                    }
+                }
+            }
             scriptTypes.push_back(std::move(info));
         }
 
@@ -476,7 +567,7 @@ namespace ve
             return Result<ScriptInstanceHandle>::Failure(Error(ErrorCode::InvalidArgument, "Script instance creation requires a component and script type name."));
         }
 
-        ScriptInstanceHandle handle = entryPoints_.create(desc.component, desc.typeName.c_str());
+        ScriptInstanceHandle handle = entryPoints_.create(desc.component, desc.typeName.c_str(), desc.invokeOnCreate ? 1 : 0);
         if (handle == 0)
         {
             VE_LOG_ERROR_CATEGORY("Script", "Managed script bridge returned an empty handle for '{}'.", desc.typeName);
@@ -506,6 +597,10 @@ namespace ve
         switch (event)
         {
         case ScriptLifecycleEvent::OnCreate:
+            if (entryPoints_.createEvent != nullptr)
+            {
+                entryPoints_.createEvent(script);
+            }
             break;
         case ScriptLifecycleEvent::OnDestroy:
             DestroyScriptInstance(script);
@@ -535,6 +630,51 @@ namespace ve
             }
             break;
         }
+    }
+
+    Result<std::string> WindowsJITScriptingBackend::GetScriptFieldsJson(ScriptInstanceHandle script)
+    {
+        if (script == 0 || entryPoints_.getFieldsJson == nullptr)
+        {
+            return Result<std::string>::Failure(Error(ErrorCode::InvalidState, "Script field read requires a valid managed script instance."));
+        }
+
+        const char* jsonText = entryPoints_.getFieldsJson(script);
+        if (jsonText == nullptr)
+        {
+            return Result<std::string>::Failure(Error(ErrorCode::InvalidState, "Managed script bridge failed to read script fields."));
+        }
+
+        std::string result(jsonText);
+        if (entryPoints_.freeString != nullptr)
+        {
+            entryPoints_.freeString(jsonText);
+        }
+
+        return Result<std::string>::Success(std::move(result));
+    }
+
+    ErrorCode WindowsJITScriptingBackend::SetScriptFieldsJson(ScriptInstanceHandle script, std::string_view fieldsJson)
+    {
+        if (script == 0 || entryPoints_.setFieldsJson == nullptr)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        std::string fields(fieldsJson);
+        return entryPoints_.setFieldsJson(script, fields.c_str()) == 0 ? ErrorCode::None : ErrorCode::InvalidArgument;
+    }
+
+    ErrorCode WindowsJITScriptingBackend::SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson)
+    {
+        if (script == 0 || entryPoints_.setFieldJson == nullptr)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        std::string name(fieldName);
+        std::string value(valueJson);
+        return entryPoints_.setFieldJson(script, name.c_str(), value.c_str()) == 0 ? ErrorCode::None : ErrorCode::InvalidArgument;
     }
 
     ErrorCode WindowsJITScriptingBackend::InitializeHost(const ScriptingSystemInitParam& initParam)

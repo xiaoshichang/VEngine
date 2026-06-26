@@ -825,11 +825,37 @@ namespace ve::editor
             return;
         }
 
+        std::string sceneReloadSnapshot;
+        if (sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr)
+        {
+            Result<std::string> snapshot = SceneSerialization::SaveToString(*sceneSystem_->GetScene());
+            if (!snapshot)
+            {
+                VE_LOG_WARN_CATEGORY("Editor", "Failed to snapshot editing scene before script reload: {}", snapshot.GetError().GetMessage());
+                return;
+            }
+
+            sceneReloadSnapshot = snapshot.MoveValue();
+        }
+
         const ErrorCode loadResult = runtime_->GetScriptingSystem().LoadProjectAssembly(ScriptingProjectAssemblyLoadDesc{compileResult.GetValue().assemblyPath});
         if (loadResult != ErrorCode::None)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Failed to load project script assembly '{}': {}", compileResult.GetValue().assemblyPath.GetString(), ToString(loadResult));
             return;
+        }
+
+        if (!sceneReloadSnapshot.empty() && sceneSystem_ != nullptr)
+        {
+            ClearSelection();
+            SceneLoadRequest loadRequest;
+            loadRequest.source = SceneLoadSource::Text;
+            loadRequest.sceneText = sceneReloadSnapshot;
+            loadRequest.executionMode = SceneExecutionMode::Editing;
+            loadRequest.provider = &assetDatabase_;
+            loadRequest.resourceSystem = &runtime_->GetResourceSystem();
+            loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
+            sceneSystem_->LoadScene(loadRequest);
         }
 
         const ErrorCode refreshResult = scriptDatabase_.RefreshFromScriptingSystem(runtime_->GetScriptingSystem());

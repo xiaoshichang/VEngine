@@ -491,6 +491,30 @@ namespace ve
             return result;
         }
 
+        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnCreate", loadedEntryPoints.createEvent);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"GetScriptFieldsJson", loadedEntryPoints.getFieldsJson);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"SetScriptFieldsJson", loadedEntryPoints.setFieldsJson);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"SetScriptFieldJson", loadedEntryPoints.setFieldJson);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
         static_cast<void>(LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnUpdate", loadedEntryPoints.update));
         static_cast<void>(LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnLateUpdate", loadedEntryPoints.lateUpdate));
         static_cast<void>(LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnEnable", loadedEntryPoints.enable));

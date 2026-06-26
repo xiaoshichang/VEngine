@@ -45,10 +45,33 @@ namespace ve
         Path assemblyPath;
     };
 
+    enum class ScriptFieldKind
+    {
+        Bool,
+        Int,
+        Float,
+        String,
+        Vector3,
+        Color,
+        Enum,
+        Unsupported,
+    };
+
+    struct ScriptFieldInfo
+    {
+        std::string name;
+        std::string displayName;
+        ScriptFieldKind kind = ScriptFieldKind::Unsupported;
+        std::string managedTypeName;
+        std::vector<std::string> enumNames;
+        std::string defaultValueJson;
+    };
+
     struct ScriptTypeInfo
     {
         std::string typeName;
         std::string displayName;
+        std::vector<ScriptFieldInfo> fields;
     };
 
     struct NativeScriptApi
@@ -92,14 +115,18 @@ namespace ve
     {
         ScriptableComponent* component = nullptr;
         std::string typeName;
+        bool invokeOnCreate = false;
     };
 
     struct ManagedScriptEntryPoints
     {
-        using CreateFn = ScriptInstanceHandle (*)(void* nativeComponent, const char* scriptTypeName);
+        using CreateFn = ScriptInstanceHandle (*)(void* nativeComponent, const char* scriptTypeName, Int32 invokeOnCreate);
         using DestroyFn = void (*)(ScriptInstanceHandle script);
         using UpdateFn = void (*)(ScriptInstanceHandle script, Float32 deltaSeconds);
         using EventFn = void (*)(ScriptInstanceHandle script);
+        using GetFieldsJsonFn = const char* (*)(ScriptInstanceHandle script);
+        using SetFieldsJsonFn = Int32 (*)(ScriptInstanceHandle script, const char* fieldsJson);
+        using SetFieldJsonFn = Int32 (*)(ScriptInstanceHandle script, const char* fieldName, const char* valueJson);
         using RegisterNativeApiFn = void (*)(const NativeScriptApi* nativeApi);
         using LoadProjectAssemblyFn = int (*)(const char* assemblyPath);
         using UnloadProjectAssemblyFn = void (*)();
@@ -113,9 +140,13 @@ namespace ve
         FreeStringFn freeString = nullptr;
         CreateFn create = nullptr;
         DestroyFn destroy = nullptr;
+        EventFn createEvent = nullptr;
         UpdateFn update = nullptr;
         UpdateFn lateUpdate = nullptr;
         EventFn enable = nullptr;
         EventFn disable = nullptr;
+        GetFieldsJsonFn getFieldsJson = nullptr;
+        SetFieldsJsonFn setFieldsJson = nullptr;
+        SetFieldJsonFn setFieldJson = nullptr;
     };
 } // namespace ve

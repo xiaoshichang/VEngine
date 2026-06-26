@@ -99,6 +99,24 @@ namespace ve
         backend_->InvokeScriptEvent(script, event, deltaSeconds);
     }
 
+    Result<std::string> ScriptingSystem::GetScriptFieldsJson(ScriptInstanceHandle script)
+    {
+        VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::GetScriptFieldsJson requires an initialized scripting system.");
+        return backend_->GetScriptFieldsJson(script);
+    }
+
+    ErrorCode ScriptingSystem::SetScriptFieldsJson(ScriptInstanceHandle script, std::string_view fieldsJson)
+    {
+        VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::SetScriptFieldsJson requires an initialized scripting system.");
+        return backend_->SetScriptFieldsJson(script, fieldsJson);
+    }
+
+    ErrorCode ScriptingSystem::SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson)
+    {
+        VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::SetScriptFieldJson requires an initialized scripting system.");
+        return backend_->SetScriptFieldJson(script, fieldName, valueJson);
+    }
+
     std::unique_ptr<ScriptingSystemBackend> ScriptingSystem::CreateBackend(ScriptingBackendType backendType)
     {
         ScriptingBackendType resolvedBackend = backendType;

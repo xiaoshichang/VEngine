@@ -33,7 +33,10 @@
                 {
                     "type": "DotnetScriptableComponent",
                     "enabled": true,
-                    "scriptTypeName": "Game.PlayerController"
+                    "scriptTypeName": "Game.PlayerController",
+                    "serializedFields": {
+                        "X": 5E0
+                    }
                 }
             ],
             "children": []
