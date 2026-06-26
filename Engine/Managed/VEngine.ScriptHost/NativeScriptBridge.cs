@@ -18,11 +18,9 @@ public static unsafe class NativeScriptBridge
     private static ulong nextHandle_ = 1;
 
     [UnmanagedCallersOnly]
-    public static void RegisterNativeApi(delegate* unmanaged[Cdecl]<nint, float*, float*, float*, void> getTransformLocalPosition,
-                                         delegate* unmanaged[Cdecl]<nint, float, float, float, void> setTransformLocalPosition,
-                                         delegate* unmanaged[Cdecl]<byte*, void> logInfo)
+    public static void RegisterNativeApi(NativeScriptApi* nativeApi)
     {
-        NativeApi.Register(getTransformLocalPosition, setTransformLocalPosition, logInfo);
+        NativeApi.Register(nativeApi);
     }
 
     [UnmanagedCallersOnly]

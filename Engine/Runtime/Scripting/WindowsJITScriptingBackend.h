@@ -27,7 +27,6 @@ namespace ve
     private:
         [[nodiscard]] ErrorCode InitializeHost(const ScriptingSystemInitParam& initParam);
         void ShutdownHost() noexcept;
-        [[nodiscard]] ErrorCode LoadManagedEntryPoints(const ScriptingAssemblyLoadDesc& desc, ManagedScriptEntryPoints& entryPoints);
 
     private:
         std::filesystem::path runtimeRoot_;

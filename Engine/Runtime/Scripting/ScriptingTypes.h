@@ -51,6 +51,41 @@ namespace ve
         std::string displayName;
     };
 
+    struct NativeScriptApi
+    {
+        void* getTransformLocalPosition = nullptr;
+        void* setTransformLocalPosition = nullptr;
+        void* hasCamera = nullptr;
+        void* getCameraIsPrimary = nullptr;
+        void* setCameraIsPrimary = nullptr;
+        void* getCameraProjectionMode = nullptr;
+        void* setCameraProjectionMode = nullptr;
+        void* getCameraVerticalFieldOfViewRadians = nullptr;
+        void* setCameraVerticalFieldOfViewRadians = nullptr;
+        void* getCameraOrthographicSize = nullptr;
+        void* setCameraOrthographicSize = nullptr;
+        void* getCameraAspectRatio = nullptr;
+        void* setCameraAspectRatio = nullptr;
+        void* getCameraNearClipPlane = nullptr;
+        void* setCameraNearClipPlane = nullptr;
+        void* getCameraFarClipPlane = nullptr;
+        void* setCameraFarClipPlane = nullptr;
+        void* getCameraClearColor = nullptr;
+        void* setCameraClearColor = nullptr;
+        void* hasLight = nullptr;
+        void* getLightType = nullptr;
+        void* setLightType = nullptr;
+        void* getLightColor = nullptr;
+        void* setLightColor = nullptr;
+        void* getLightIntensity = nullptr;
+        void* setLightIntensity = nullptr;
+        void* getLightRange = nullptr;
+        void* setLightRange = nullptr;
+        void* getLightCastShadows = nullptr;
+        void* setLightCastShadows = nullptr;
+        void* logInfo = nullptr;
+    };
+
     using ScriptInstanceHandle = UInt64;
 
     struct ScriptInstanceDesc
@@ -65,7 +100,7 @@ namespace ve
         using DestroyFn = void (*)(ScriptInstanceHandle script);
         using UpdateFn = void (*)(ScriptInstanceHandle script, Float32 deltaSeconds);
         using EventFn = void (*)(ScriptInstanceHandle script);
-        using RegisterNativeApiFn = void (*)(void* getTransformLocalPosition, void* setTransformLocalPosition, void* logInfo);
+        using RegisterNativeApiFn = void (*)(const NativeScriptApi* nativeApi);
         using LoadProjectAssemblyFn = int (*)(const char* assemblyPath);
         using UnloadProjectAssemblyFn = void (*)();
         using GetScriptTypesJsonFn = const char* (*)();

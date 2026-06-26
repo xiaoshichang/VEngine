@@ -5,6 +5,8 @@ public abstract class ScriptComponent
     internal nint NativeComponent { get; set; }
 
     public Transform Transform => new(NativeComponent);
+    public Camera Camera => new(NativeComponent);
+    public Light Light => new(NativeComponent);
 
     public virtual void OnCreate()
     {
