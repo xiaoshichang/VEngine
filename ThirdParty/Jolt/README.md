@@ -8,7 +8,7 @@ The pinned upstream version is `5.5.0`, stored as the version-controlled `JoltPh
 To prepare source after cloning the repository, extract the bundled archive into `Source/`:
 
 ```bat
-ThirdParty\Jolt\Setup_Windows64.ps1
+ThirdParty\Jolt\Setup_Windows64.bat
 ```
 
 To build Jolt's upstream tests and common demos:

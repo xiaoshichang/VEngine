@@ -13,6 +13,22 @@
 #include <string_view>
 #include <vector>
 
+#ifndef VE_DEFAULT_DXC_EXECUTABLE
+#define VE_DEFAULT_DXC_EXECUTABLE "dxc"
+#endif
+
+#ifndef VE_DEFAULT_FXC_EXECUTABLE
+#define VE_DEFAULT_FXC_EXECUTABLE "fxc"
+#endif
+
+#ifndef VE_DEFAULT_SLANG_EXECUTABLE
+#define VE_DEFAULT_SLANG_EXECUTABLE "slangc"
+#endif
+
+#ifndef VE_DEFAULT_SPIRV_CROSS_EXECUTABLE
+#define VE_DEFAULT_SPIRV_CROSS_EXECUTABLE "spirv-cross"
+#endif
+
 namespace
 {
     struct CompileOptions
@@ -20,9 +36,10 @@ namespace
         std::filesystem::path sourcePath;
         std::filesystem::path outputDirectory;
         std::string shaderName;
-        std::filesystem::path dxcExecutable = "dxc";
-        std::filesystem::path fxcExecutable = "fxc";
-        std::filesystem::path spirvCrossExecutable = "spirv-cross";
+        std::filesystem::path dxcExecutable = VE_DEFAULT_DXC_EXECUTABLE;
+        std::filesystem::path fxcExecutable = VE_DEFAULT_FXC_EXECUTABLE;
+        std::filesystem::path slangExecutable = VE_DEFAULT_SLANG_EXECUTABLE;
+        std::filesystem::path spirvCrossExecutable = VE_DEFAULT_SPIRV_CROSS_EXECUTABLE;
     };
 
     struct ShaderStage
@@ -32,6 +49,8 @@ namespace
         std::string_view entryPoint;
         std::string_view d3d11Profile;
         std::string_view dxcProfile;
+        std::string_view slangProfile;
+        std::string_view slangStage;
     };
 
     struct BindingInfo
@@ -45,8 +64,8 @@ namespace
     };
 
     constexpr ShaderStage ShaderStages[] = {
-        {"Vertex", "VS", "VSMain", "vs_5_0", "vs_6_0"},
-        {"Pixel", "PS", "PSMain", "ps_5_0", "ps_6_0"},
+        {"Vertex", "VS", "VSMain", "vs_5_0", "vs_6_0", "sm_6_0", "vertex"},
+        {"Pixel", "PS", "PSMain", "ps_5_0", "ps_6_0", "sm_6_0", "pixel"},
     };
 
     void PrintHelp()
@@ -54,7 +73,7 @@ namespace
         std::cout << "VEngineShaderTool\n"
                   << "\n"
                   << "Commands:\n"
-                  << "  compile --source <file> --output <dir> --name <shader> [--dxc <path>] [--fxc <path>] "
+                  << "  compile --source <file> --output <dir> --name <shader> [--dxc <path>] [--fxc <path>] [--slang <path>] "
                      "[--spirv-cross <path>]\n"
                   << "  --help\n";
     }
@@ -317,18 +336,23 @@ namespace
         }
 
         if (RunProcess({
-                options.dxcExecutable.string(),
-                "-nologo",
-                "-spirv",
-                "-T",
-                std::string(stage.dxcProfile),
-                "-E",
-                std::string(stage.entryPoint),
-                "-fvk-use-dx-layout",
-                "-fspv-target-env=vulkan1.1",
-                "-Fo",
-                spirvPath.string(),
+                options.slangExecutable.string(),
                 options.sourcePath.string(),
+                "-target",
+                "spirv",
+                "-profile",
+                std::string(stage.slangProfile),
+                "-entry",
+                std::string(stage.entryPoint),
+                "-stage",
+                std::string(stage.slangStage),
+                "-fvk-use-dx-layout",
+                "-fvk-use-entrypoint-name",
+                "-fspv-reflect",
+                "-warnings-disable",
+                "39029,39001",
+                "-o",
+                spirvPath.string(),
             }) != 0)
         {
             return false;
@@ -498,6 +522,16 @@ namespace
                 }
 
                 options.fxcExecutable = *value;
+            }
+            else if (argument == "--slang")
+            {
+                value = ReadOptionValue(index, argc, argv);
+                if (!value)
+                {
+                    return std::nullopt;
+                }
+
+                options.slangExecutable = *value;
             }
             else if (argument == "--spirv-cross")
             {

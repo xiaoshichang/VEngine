@@ -32,7 +32,7 @@ function(ve_prepare_jolt_source)
 
     if(WIN32 AND VE_JOLT_SETUP_IF_MISSING)
         execute_process(
-            COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${VE_JOLT_THIRD_PARTY_ROOT}/Setup_Windows64.ps1" -Tag ${VE_JOLT_GIT_TAG}
+            COMMAND "${VE_JOLT_THIRD_PARTY_ROOT}/Setup_Windows64.bat" -Tag ${VE_JOLT_GIT_TAG}
             WORKING_DIRECTORY "${_VE_JOLT_REPOSITORY_ROOT}"
             RESULT_VARIABLE setupJoltResult
         )
@@ -46,7 +46,7 @@ function(ve_prepare_jolt_source)
         if(NOT EXISTS "${requiredJoltFile}")
             message(FATAL_ERROR
                 "Jolt Physics source is missing required file: ${requiredJoltFile}\n"
-                "Run ThirdParty/Jolt/Setup_Windows64.ps1 or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout."
+                "Run ThirdParty/Jolt/Setup_Windows64.bat or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout."
             )
         endif()
     endforeach()

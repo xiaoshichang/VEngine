@@ -19,13 +19,13 @@ HLSL source
     -> D3D11: DXBC through D3DCompile / fxc-compatible path
     -> D3D12: DXIL through DirectXShaderCompiler
     -> Metal:
-      -> SPIR-V through DirectXShaderCompiler
+      -> SPIR-V through Slang
       -> MSL source through SPIRV-Cross
       -> metallib through Apple's metal command line tools during Apple-platform packaging
     -> Normalized reflection metadata
 ```
 
-Use `DirectXShaderCompiler` and `SPIRV-Cross` in the offline toolchain, not in the normal Player runtime.
+Use `DirectXShaderCompiler`, `Slang`, and `SPIRV-Cross` in the offline toolchain, not in the normal Player runtime.
 
 Use Apple Metal Shader Converter as a future optional path for DXIL-to-Metal library generation, but do not make it
 the first-stage path. It is valuable for high-end DirectX 12 feature parity, but it raises the minimum runtime and
@@ -47,22 +47,21 @@ The flow is not a complete promise that every HLSL feature will cross-compile cl
 portable HLSL subset first, validate generated MSL with Apple's compiler, and grow feature support only when backed by
 tests.
 
-The most important constraint is D3D11. D3D12 and Metal can share a more modern shader model through DXC and SPIR-V,
-but D3D11 should use a Shader Model 5 DXBC path. First-stage shared shaders therefore need to compile under both the
-D3D11 path and the D3D12/Metal path.
+The most important constraint is D3D11. D3D12 and Metal can share a more modern shader model through DXC, Slang, and
+SPIR-V, but D3D11 should use a Shader Model 5 DXBC path. First-stage shared shaders therefore need to compile under both
+the D3D11 path and the D3D12/Metal path.
 
 ## 4. Tooling Assessment
 
 ### 4.1 DirectXShaderCompiler
 
-`DirectXShaderCompiler` is the primary compiler for modern HLSL. It compiles HLSL to DXIL for D3D12 and can also target
-SPIR-V through its SPIR-V code generation path.
+`DirectXShaderCompiler` is the primary compiler for modern HLSL on the Direct3D 12 path. VEngine uses it to compile
+HLSL to DXIL.
 
 Use it for:
 
 - D3D12 shader bytecode.
 - HLSL syntax validation for modern profiles.
-- HLSL to SPIR-V generation for the Metal cross-compile path.
 
 Do not use DXIL directly for D3D11.
 
@@ -75,9 +74,20 @@ This gives a clean split:
 
 - D3D11: `vs_5_0`, `ps_5_0`, DXBC.
 - D3D12: `vs_6_0+`, `ps_6_0+`, DXIL.
-- Metal: HLSL profile accepted by DXC SPIR-V generation, then MSL.
+- Metal: HLSL profile accepted by Slang SPIR-V generation, then MSL.
 
-### 4.3 SPIRV-Cross
+### 4.3 Slang
+
+`Slang` is the first-stage HLSL to SPIR-V compiler. It keeps the authored shader source in the HLSL family while
+providing a modern SPIR-V path for Metal cross-compilation.
+
+Use it for:
+
+- HLSL to SPIR-V generation for the Metal cross-compile path.
+- DirectX-compatible constant-buffer layout through `-fvk-use-dx-layout`.
+- Reflection-friendly SPIR-V decorations through `-fspv-reflect`.
+
+### 4.4 SPIRV-Cross
 
 `SPIRV-Cross` is the first-stage bridge from SPIR-V to Metal Shading Language. It also provides reflection data that
 can be normalized into VEngine's shader metadata.
@@ -88,7 +98,7 @@ Use it for:
 - Reflection over resources, stage inputs, stage outputs, and constant buffers.
 - Optional binding remapping before MSL emission.
 
-### 4.4 Apple Metal Tools
+### 4.5 Apple Metal Tools
 
 For iOS and other Apple targets, generated MSL should be compiled into a Metal library during Apple-platform packaging.
 
@@ -105,7 +115,7 @@ Generated .metal files
 The engine runtime should load a precompiled `.metallib` or default bundle library for normal execution. Runtime
 compilation from MSL source should be treated as a debug-only fallback.
 
-### 4.5 Apple Metal Shader Converter
+### 4.6 Apple Metal Shader Converter
 
 Apple Metal Shader Converter converts DXIL or other LLVM IR bytecode into Metal-compatible bytecode and can produce
 `.metallib` output. It is available as a standalone executable and as a library, and it supports both Windows and macOS.
@@ -204,21 +214,22 @@ profiles and flags.
 
 ### 5.4 SPIR-V Output For Metal
 
-Compile HLSL with DXC to SPIR-V.
+Compile HLSL with Slang to SPIR-V.
 
 Command shape:
 
 ```text
-dxc -spirv -T vs_6_0 -E VSMain -fvk-use-dx-layout -Fo BasicMesh.VS.spv BasicMesh.hlsl
-dxc -spirv -T ps_6_0 -E PSMain -fvk-use-dx-layout -Fo BasicMesh.PS.spv BasicMesh.hlsl
+slangc BasicMesh.hlsl -target spirv -profile sm_6_0 -entry VSMain -stage vertex -fvk-use-dx-layout -fvk-use-entrypoint-name -fspv-reflect -o BasicMesh.VS.spv
+slangc BasicMesh.hlsl -target spirv -profile sm_6_0 -entry PSMain -stage pixel -fvk-use-dx-layout -fvk-use-entrypoint-name -fspv-reflect -o BasicMesh.PS.spv
 ```
-
-The exact SPIR-V target environment should be a `VEngineShaderTool` option, not hard-coded in shader source. Start with
-a conservative Vulkan environment supported by DXC and SPIRV-Cross, then lock the value once the first iOS Metal smoke
-test is in place.
 
 Use `-fvk-use-dx-layout` initially to reduce layout drift from the DirectX path. Reflection metadata and explicit
 packing tests remain mandatory; do not rely only on compiler flags for CPU/GPU layout compatibility.
+
+Use `-fvk-use-entrypoint-name` so SPIR-V entry point names stay close to the HLSL source entry points, and use
+`-fspv-reflect` so SPIRV-Cross has the decorations it needs for raw reflection output. VEngine's normalized reflection
+should continue to derive stable resource names, registers, spaces, and binding slots from explicit HLSL declarations
+until Slang and SPIRV-Cross reflection naming is fully normalized.
 
 ### 5.5 MSL Output
 
@@ -459,8 +470,9 @@ Responsibilities:
 - Parse shader manifests.
 - Expand variants.
 - Resolve includes.
-- Invoke or embed DXC.
+- Invoke or embed DXC for D3D12 DXIL.
 - Invoke `D3DCompile` for D3D11 output on Windows.
+- Invoke or embed Slang for SPIR-V.
 - Invoke or embed SPIRV-Cross for MSL and reflection.
 - Emit normalized reflection metadata.
 - Validate required resource bindings.
@@ -468,7 +480,7 @@ Responsibilities:
 - Produce deterministic output paths.
 - Report diagnostics in a format usable by the Editor.
 
-The runtime engine library should not depend on DXC or SPIRV-Cross.
+The runtime engine library should not depend on DXC, Slang, or SPIRV-Cross.
 
 ## 11. Build And CMake Integration
 
@@ -477,6 +489,7 @@ Recommended CMake shape:
 ```text
 CMake/
   SetupDirectXShaderCompiler.cmake
+  SetupSlang.cmake
   SetupSpirvCross.cmake
 
 Tools/
@@ -544,7 +557,7 @@ Negative tests:
 
 ### Phase 3: SPIR-V, MSL, And Reflection
 
-- Add DXC SPIR-V generation.
+- Add Slang SPIR-V generation.
 - Add SPIRV-Cross MSL generation.
 - Add SPIRV-Cross reflection extraction.
 - Normalize metadata into `.veshader.json`.
@@ -614,7 +627,7 @@ Mitigation:
 
 Risk:
 
-DXC and SPIRV-Cross may succeed, but Apple's Metal compiler may reject generated MSL.
+Slang and SPIRV-Cross may succeed, but Apple's Metal compiler may reject generated MSL.
 
 Mitigation:
 
@@ -626,7 +639,7 @@ Mitigation:
 
 Risk:
 
-DXC, SPIRV-Cross, Xcode, and Metal Shader Converter versions can change behavior over time.
+DXC, Slang, SPIRV-Cross, Xcode, and Metal Shader Converter versions can change behavior over time.
 
 Mitigation:
 
@@ -648,7 +661,7 @@ The 2.2 milestone is complete when:
 ## 16. Reference Sources
 
 - Microsoft DirectXShaderCompiler README: https://github.com/microsoft/DirectXShaderCompiler/blob/main/README.md
-- Microsoft DirectXShaderCompiler HLSL to SPIR-V mapping: https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/SPIR-V.rst?plain=1
+- Slang command line usage: https://shader-slang.com/slang/user-guide/compiling.html#command-line-compilation-with-slangc
 - Microsoft D3DCompile documentation: https://learn.microsoft.com/en-us/windows/win32/api/d3dcompiler/nf-d3dcompiler-d3dcompile
 - KhronosGroup SPIRV-Cross README: https://github.com/KhronosGroup/SPIRV-Cross
 - Apple Metal Shader Converter: https://developer.apple.com/metal/shader-converter/

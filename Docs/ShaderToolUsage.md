@@ -14,7 +14,7 @@
 
 - D3D11 DXBC：通过 `fxc`，目标 profile 为 `vs_5_0` / `ps_5_0`。
 - D3D12 DXIL：通过 `dxc`，目标 profile 为 `vs_6_0` / `ps_6_0`。
-- SPIR-V：通过 `dxc -spirv`，目标环境为 `vulkan1.1`。
+- SPIR-V：通过 `slangc`，目标为 `spirv`，profile 为 `sm_6_0`，并继续使用 DirectX 风格的常量缓冲布局。
 - Metal MSL 源码：通过 `spirv-cross --msl --msl-ios` 从 SPIR-V 生成。
 - SPIRV-Cross 原始反射 JSON：每个 stage 一份。
 - VEngine 归一化反射 JSON：每个 shader 一份 `.veshader.json`。
@@ -41,6 +41,7 @@ ThirdParty\Setup_Windows64.bat
 
 - Boost：`ThirdParty\Boost\Build\Windows64`
 - DXC：`ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe`
+- Slang：`ThirdParty\Slang\windows64\bin\slangc.exe`
 - SPIRV-Cross：`ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe`
 
 然后配置并构建工具：
@@ -79,6 +80,7 @@ VEngineShaderTool compile
   --name <shader name>
   [--dxc <dxc executable>]
   [--fxc <fxc executable>]
+  [--slang <slangc executable>]
   [--spirv-cross <spirv-cross executable>]
 ```
 
@@ -92,10 +94,11 @@ VEngineShaderTool compile
 | `--name` | 是 | Shader 名称，也会作为输出文件名前缀。 |
 | `--dxc` | 否 | DXC 可执行文件路径。未指定时使用 PATH 中的 `dxc`。 |
 | `--fxc` | 否 | FXC 可执行文件路径。未指定时使用 PATH 中的 `fxc`。 |
+| `--slang` | 否 | Slang 命令行编译器路径。未指定时使用 CMake 发现到的 `slangc`，或 PATH 中的 `slangc`。 |
 | `--spirv-cross` | 否 | SPIRV-Cross 可执行文件路径。未指定时使用 PATH 中的 `spirv-cross`。 |
 
-推荐手动运行时显式传入 `--dxc` 和 `--spirv-cross`，并通过 `CMake\Scripts\WithMsvc.bat` 运行命令，让 Windows SDK
-里的 `fxc` 自动出现在 PATH 中。
+推荐手动运行时显式传入 `--dxc`、`--slang` 和 `--spirv-cross`，并通过 `CMake\Scripts\WithMsvc.bat` 运行命令，让
+Windows SDK 里的 `fxc` 自动出现在 PATH 中。
 
 ## 5. HLSL 输入约定
 
@@ -217,6 +220,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --name BasicMesh ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
+  --slang ThirdParty\Slang\windows64\bin\slangc.exe ^
   --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
 ```
 
@@ -286,6 +290,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --name SolidColor ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
+  --slang ThirdParty\Slang\windows64\bin\slangc.exe ^
   --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
 ```
 
@@ -337,6 +342,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --name MissingRegister ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
+  --slang ThirdParty\Slang\windows64\bin\slangc.exe ^
   --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
 ```
 
@@ -393,6 +399,7 @@ ThirdParty\Setup_Windows64.bat
 
 ```text
 --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe
+--slang ThirdParty\Slang\windows64\bin\slangc.exe
 ```
 
 ### 11.3 找不到 spirv-cross

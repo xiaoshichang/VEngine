@@ -40,6 +40,7 @@ Prototype:
 HLSL
   -> DXC
     -> DXIL
+  -> Slang
     -> SPIR-V
   -> SPIRV-Cross
     -> MSL

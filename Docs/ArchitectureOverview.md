@@ -101,6 +101,8 @@ Jolt Physics
 DirectXShaderCompiler
   - HLSL compilation
   - DXIL generation
+
+Slang
   - SPIR-V generation
 
 SPIRV-Cross
@@ -864,6 +866,7 @@ HLSL Source
   -> DirectXShaderCompiler
     -> DXIL for D3D12
     -> DXBC-compatible output or fallback path for D3D11
+  -> Slang
     -> SPIR-V
       -> SPIRV-Cross
         -> MSL for Metal

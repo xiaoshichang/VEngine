@@ -32,7 +32,7 @@ function(ve_setup_spirv_cross)
 
         if(NOT EXISTS "${builtSpirvCrossExecutable}" AND VE_SPIRV_CROSS_BUILD_IF_MISSING)
             execute_process(
-                COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${VE_SPIRV_CROSS_THIRD_PARTY_ROOT}/Setup_Windows64.ps1" -Configuration ${VE_SPIRV_CROSS_BUILD_CONFIG}
+                COMMAND "${VE_SPIRV_CROSS_THIRD_PARTY_ROOT}/Setup_Windows64.bat" -Configuration ${VE_SPIRV_CROSS_BUILD_CONFIG}
                 WORKING_DIRECTORY "${_VE_SPIRV_CROSS_REPOSITORY_ROOT}"
                 RESULT_VARIABLE setupSpirvCrossResult
             )

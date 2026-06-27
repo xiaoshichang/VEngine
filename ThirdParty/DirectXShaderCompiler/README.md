@@ -1,6 +1,6 @@
 # DirectXShaderCompiler
 
-VEngine uses `Microsoft.Direct3D.DXC` as the SPIR-V-capable DXC package for shader compilation.
+VEngine uses `Microsoft.Direct3D.DXC` as the DXC package for D3D12 DXIL shader compilation.
 
 To prepare it explicitly after cloning the repository:
 
