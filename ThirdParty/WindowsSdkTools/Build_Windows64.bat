@@ -1,3 +1,8 @@
 @echo off
-setlocal
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Setup_Windows64.ps1" %*
+setlocal EnableExtensions
+
+pushd "%~dp0"
+python main.py %*
+set "VE_EXIT_CODE=%ERRORLEVEL%"
+popd
+exit /b %VE_EXIT_CODE%

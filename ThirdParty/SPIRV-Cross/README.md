@@ -12,7 +12,7 @@ The Windows build script is intentionally pinned to Visual Studio 2022 Build Too
 It uses CMake's `Visual Studio 17 2022` generator and `-T v143`; newer Visual Studio toolsets are not selected by this
 script.
 
-The script clones the pinned SPIRV-Cross tag into `Source/` and builds the command line tool under
+The script expands the bundled source archive into `Source/` and builds the command line tool under
 `Build/Windows64/<tag>/<configuration>/`.
 
 CMake uses the same build output path. Downloaded source and standalone build output are ignored by git.

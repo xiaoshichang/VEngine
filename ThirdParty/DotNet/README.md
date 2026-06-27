@@ -3,8 +3,8 @@
 VEngine uses this directory for the Windows app-local .NET runtime payload used by the future `nethost` / `hostfxr`
 C# scripting backend.
 
-The runtime version is pinned by `Setup_Windows64.ps1`. Do not pass a version on the command line; changing the runtime
-version is a project dependency update and should be reviewed with the same care as other third-party version changes.
+The runtime version is pinned by `main.py`. Do not pass a version on the command line; changing the runtime version is
+a project dependency update and should be reviewed with the same care as other third-party version changes.
 
 To prepare it explicitly after cloning the repository:
 

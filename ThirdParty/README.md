@@ -11,13 +11,14 @@ Boost artifacts.
 After cloning the repository on Windows, prepare third-party dependencies with:
 
 ```bat
-ThirdParty\Setup_Windows64.bat
+ThirdParty\Build_Windows64.bat
 ```
 
 The script prepares:
 
 - Boost 1.85.0 under `Boost/Build/Windows64`.
 - Microsoft DirectXShaderCompiler under `DirectXShaderCompiler/Build/Windows64`.
+- Slang under `Slang/slang-2026.12-windows-x86_64`.
 - Microsoft .NET Runtime 10.0.9 under `DotNet/win-x64/10.0.9`.
 - Windows SDK `fxc.exe` under `WindowsSdkTools/Tools/x64`.
 - SPIRV-Cross under `SPIRV-Cross/Source` and `SPIRV-Cross/Build/Windows64`.
@@ -32,4 +33,4 @@ CMake can still prepare missing shader-tool dependencies during configure/build,
 recommended for a predictable clone-to-build workflow.
 
 The .NET runtime payload is app-local infrastructure for the future Windows C# scripting host. Its version is pinned in
-`DotNet/Setup_Windows64.ps1` and is not selected through command line arguments.
+`DotNet/main.py` and is not selected through command line arguments.

@@ -1,0 +1,6 @@
+*
+!/.gitignore
+!/Build_Windows64.bat
+!/main.py
+!/slang-2026.12-windows-x86_64.zip
+__pycache__/

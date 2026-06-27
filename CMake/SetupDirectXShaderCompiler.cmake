@@ -2,7 +2,7 @@ include_guard(GLOBAL)
 
 get_filename_component(_VE_DXC_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
-set(VE_DXC_EXECUTABLE "" CACHE FILEPATH "Path to a SPIR-V capable dxc executable.")
+set(VE_DXC_EXECUTABLE "" CACHE FILEPATH "Path to the dxc executable used for DXIL output.")
 set(VE_FXC_EXECUTABLE "" CACHE FILEPATH "Path to the fxc executable used for D3D11 DXBC output.")
 set(VE_DXC_NUGET_VERSION "1.9.2602.17" CACHE STRING "Microsoft.Direct3D.DXC NuGet package version.")
 set(VE_DXC_NUGET_SHA256 "95703CA504F1C42B8FC3F0D1C4A7FED56BAE16299CF253D432BC90C24A86AE9A" CACHE STRING "Expected Microsoft.Direct3D.DXC NuGet SHA256.")
@@ -15,7 +15,7 @@ function(ve_reset_old_build_local_dxc_cache)
     endif()
 
     if(NOT EXISTS "${VE_DXC_EXECUTABLE}")
-        set(VE_DXC_EXECUTABLE "" CACHE FILEPATH "Path to a SPIR-V capable dxc executable." FORCE)
+        set(VE_DXC_EXECUTABLE "" CACHE FILEPATH "Path to the dxc executable used for DXIL output." FORCE)
         return()
     endif()
 
@@ -24,7 +24,7 @@ function(ve_reset_old_build_local_dxc_cache)
     string(FIND "${normalizedDxcExecutable}" "${oldBuildDependencyPrefix}" oldBuildDependencyIndex)
 
     if(oldBuildDependencyIndex EQUAL 0)
-        set(VE_DXC_EXECUTABLE "" CACHE FILEPATH "Path to a SPIR-V capable dxc executable." FORCE)
+        set(VE_DXC_EXECUTABLE "" CACHE FILEPATH "Path to the dxc executable used for DXIL output." FORCE)
     endif()
 endfunction()
 
@@ -39,10 +39,7 @@ function(ve_download_dxc_package outVariable)
 
     if(NOT EXISTS "${dxcExecutable}")
         execute_process(
-            COMMAND powershell
-                -NoProfile
-                -ExecutionPolicy Bypass
-                -File "${VE_DXC_THIRD_PARTY_ROOT}/Setup_Windows64.ps1"
+            COMMAND cmd /c "${VE_DXC_THIRD_PARTY_ROOT}/Build_Windows64.bat"
                 -Version "${VE_DXC_NUGET_VERSION}"
                 -Sha256 "${VE_DXC_NUGET_SHA256}"
             WORKING_DIRECTORY "${_VE_DXC_REPOSITORY_ROOT}"
@@ -78,7 +75,7 @@ function(ve_setup_directx_shader_compiler)
         ve_download_dxc_package(downloadedDxcExecutable)
 
         if(downloadedDxcExecutable)
-            set(VE_DXC_EXECUTABLE "${downloadedDxcExecutable}" CACHE FILEPATH "Path to a SPIR-V capable dxc executable." FORCE)
+            set(VE_DXC_EXECUTABLE "${downloadedDxcExecutable}" CACHE FILEPATH "Path to the dxc executable used for DXIL output." FORCE)
         endif()
     endif()
 
@@ -96,7 +93,7 @@ function(ve_setup_directx_shader_compiler)
 
     if(NOT VE_DXC_EXECUTABLE)
         message(FATAL_ERROR
-            "dxc was not found. Set VE_DXC_EXECUTABLE to a SPIR-V capable dxc executable "
+            "dxc was not found. Set VE_DXC_EXECUTABLE to a DXIL-capable dxc executable "
             "or leave VE_DXC_DOWNLOAD_IF_MISSING enabled on Windows."
         )
     endif()
