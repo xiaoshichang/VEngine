@@ -17,7 +17,7 @@ ThirdParty\Setup_Windows64.bat
 The script prepares:
 
 - Boost 1.85.0 under `Boost/Build/Windows64`.
-- Microsoft DirectXShaderCompiler under `DirectXShaderCompiler/Build/Windows64`.
+- Microsoft DirectXShaderCompiler under `DirectXShaderCompiler`.
 - Slang under `Slang/windows64`.
 - Microsoft .NET Runtime 10.0.9 under `DotNet/win-x64/10.0.9`.
 - Windows SDK `fxc.exe` under `WindowsSdkTools/Tools/x64`.

@@ -40,7 +40,7 @@ ThirdParty\Setup_Windows64.bat
 这个脚本会准备：
 
 - Boost：`ThirdParty\Boost\Build\Windows64`
-- DXC：`ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe`
+- DXC：`ThirdParty\DirectXShaderCompiler\dxc.exe`
 - Slang：`ThirdParty\Slang\windows64\bin\slangc.exe`
 - SPIRV-Cross：`ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe`
 
@@ -218,7 +218,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --source Assets\BuiltinAsset\Engine\Shaders\BasicMesh.hlsl ^
   --output Build\Generated\ShaderExamples\BasicMesh ^
   --name BasicMesh ^
-  --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
+  --dxc ThirdParty\DirectXShaderCompiler\dxc.exe ^
   --fxc fxc ^
   --slang ThirdParty\Slang\windows64\bin\slangc.exe ^
   --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
@@ -288,7 +288,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --source Build\Generated\ShaderExamples\SolidColor.hlsl ^
   --output Build\Generated\ShaderExamples\SolidColor ^
   --name SolidColor ^
-  --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
+  --dxc ThirdParty\DirectXShaderCompiler\dxc.exe ^
   --fxc fxc ^
   --slang ThirdParty\Slang\windows64\bin\slangc.exe ^
   --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
@@ -340,7 +340,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --source Build\Generated\ShaderExamples\MissingRegister.hlsl ^
   --output Build\Generated\ShaderExamples\MissingRegister ^
   --name MissingRegister ^
-  --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
+  --dxc ThirdParty\DirectXShaderCompiler\dxc.exe ^
   --fxc fxc ^
   --slang ThirdParty\Slang\windows64\bin\slangc.exe ^
   --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
@@ -398,7 +398,7 @@ ThirdParty\Setup_Windows64.bat
 然后在编译命令中传入：
 
 ```text
---dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe
+--dxc ThirdParty\DirectXShaderCompiler\dxc.exe
 --slang ThirdParty\Slang\windows64\bin\slangc.exe
 ```
 

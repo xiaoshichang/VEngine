@@ -45,7 +45,7 @@ if "%BOOST_READY%"=="1" (
 )
 
 :SkipBoostSetup
-call "%ROOT%DirectXShaderCompiler\Setup_Windows64.bat" || exit /b 1
+call :TestDxcReady || exit /b 1
 call "%ROOT%Slang\Setup_Windows64.bat" || exit /b 1
 call "%ROOT%DotNet\Setup_Windows64.bat" || exit /b 1
 call "%ROOT%WindowsSdkTools\Setup_Windows64.bat" || exit /b 1
@@ -69,3 +69,19 @@ if not exist "%BOOST_LIB_DIR%\libboost_log_setup-vc143-mt-gd-x64-1_85.lib" set "
 if not exist "%BOOST_LIB_DIR%\libboost_system-vc143-mt-x64-1_85.lib" set "BOOST_READY=0"
 if not exist "%BOOST_LIB_DIR%\libboost_system-vc143-mt-gd-x64-1_85.lib" set "BOOST_READY=0"
 exit /b 0
+
+:TestDxcReady
+set "DXC_READY=1"
+set "DXC_DIR=%ROOT%DirectXShaderCompiler"
+
+if not exist "%DXC_DIR%\dxc.exe" set "DXC_READY=0"
+if not exist "%DXC_DIR%\dxcompiler.dll" set "DXC_READY=0"
+if not exist "%DXC_DIR%\dxil.dll" set "DXC_READY=0"
+
+if "%DXC_READY%"=="1" (
+    echo DirectXShaderCompiler ready: %DXC_DIR%\dxc.exe
+    exit /b 0
+)
+
+echo DirectXShaderCompiler payload is missing under %DXC_DIR%.
+exit /b 1
