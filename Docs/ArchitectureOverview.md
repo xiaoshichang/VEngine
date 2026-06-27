@@ -119,7 +119,7 @@ Dependency management should use a repository-owned `ThirdParty/` approach:
 
 - Third-party source archives, source checkouts, prebuilt tool packages, and built libraries live under `ThirdParty/`.
 - CMake wrapper files under `CMake/` locate, download, or build those dependencies.
-- A platform setup script such as `ThirdParty/Setup_Windows64.bat` prepares dependencies after clone.
+- A platform build script such as `ThirdParty/Build_Windows64.bat` prepares dependencies after clone.
 - The first Windows dependency and build baseline is Visual Studio 2022 Build Tools, or Visual Studio 2022, with MSVC
   v143 x64/x86 build tools. The `windows-msvc-*` presets use the `Visual Studio 17 2022` generator and explicitly request
   `v143`; newer Visual Studio installations are not a replacement unless a new preset and dependency baseline are

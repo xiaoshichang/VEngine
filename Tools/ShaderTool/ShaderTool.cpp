@@ -15,6 +15,12 @@
 
 namespace
 {
+#ifdef VE_DEFAULT_SLANG_EXECUTABLE
+    constexpr const char* DefaultSlangExecutable = VE_DEFAULT_SLANG_EXECUTABLE;
+#else
+    constexpr const char* DefaultSlangExecutable = "slangc";
+#endif
+
     struct CompileOptions
     {
         std::filesystem::path sourcePath;
@@ -22,7 +28,7 @@ namespace
         std::string shaderName;
         std::filesystem::path dxcExecutable = "dxc";
         std::filesystem::path fxcExecutable = "fxc";
-        std::filesystem::path spirvCrossExecutable = "spirv-cross";
+        std::filesystem::path slangExecutable = DefaultSlangExecutable;
     };
 
     struct ShaderStage
@@ -30,6 +36,7 @@ namespace
         std::string_view displayName;
         std::string_view shortName;
         std::string_view entryPoint;
+        std::string_view slangStage;
         std::string_view d3d11Profile;
         std::string_view dxcProfile;
     };
@@ -45,8 +52,8 @@ namespace
     };
 
     constexpr ShaderStage ShaderStages[] = {
-        {"Vertex", "VS", "VSMain", "vs_5_0", "vs_6_0"},
-        {"Pixel", "PS", "PSMain", "ps_5_0", "ps_6_0"},
+        {"Vertex", "VS", "VSMain", "vertex", "vs_5_0", "vs_6_0"},
+        {"Pixel", "PS", "PSMain", "pixel", "ps_5_0", "ps_6_0"},
     };
 
     void PrintHelp()
@@ -55,7 +62,7 @@ namespace
                   << "\n"
                   << "Commands:\n"
                   << "  compile --source <file> --output <dir> --name <shader> [--dxc <path>] [--fxc <path>] "
-                     "[--spirv-cross <path>]\n"
+                     "[--slang <path>]\n"
                   << "  --help\n";
     }
 
@@ -317,17 +324,20 @@ namespace
         }
 
         if (RunProcess({
-                options.dxcExecutable.string(),
-                "-nologo",
-                "-spirv",
-                "-T",
-                std::string(stage.dxcProfile),
-                "-E",
+                options.slangExecutable.string(),
+                "-stage",
+                std::string(stage.slangStage),
+                "-entry",
                 std::string(stage.entryPoint),
+                "-profile",
+                std::string(stage.dxcProfile),
+                "-target",
+                "spirv",
                 "-fvk-use-dx-layout",
-                "-fspv-target-env=vulkan1.1",
-                "-Fo",
+                "-o",
                 spirvPath.string(),
+                "-reflection-json",
+                reflectionPath.string(),
                 options.sourcePath.string(),
             }) != 0)
         {
@@ -335,23 +345,18 @@ namespace
         }
 
         if (RunProcess({
-                options.spirvCrossExecutable.string(),
-                spirvPath.string(),
-                "--msl",
-                "--msl-ios",
-                "--output",
+                options.slangExecutable.string(),
+                "-stage",
+                std::string(stage.slangStage),
+                "-entry",
+                std::string(stage.entryPoint),
+                "-profile",
+                std::string(stage.dxcProfile),
+                "-target",
+                "metal",
+                "-o",
                 metalPath.string(),
-            }) != 0)
-        {
-            return false;
-        }
-
-        if (RunProcess({
-                options.spirvCrossExecutable.string(),
-                spirvPath.string(),
-                "--reflect",
-                "--output",
-                reflectionPath.string(),
+                options.sourcePath.string(),
             }) != 0)
         {
             return false;
@@ -499,7 +504,7 @@ namespace
 
                 options.fxcExecutable = *value;
             }
-            else if (argument == "--spirv-cross")
+            else if (argument == "--slang")
             {
                 value = ReadOptionValue(index, argc, argv);
                 if (!value)
@@ -507,7 +512,7 @@ namespace
                     return std::nullopt;
                 }
 
-                options.spirvCrossExecutable = *value;
+                options.slangExecutable = *value;
             }
             else
             {

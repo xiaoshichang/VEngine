@@ -74,7 +74,7 @@ Approved first-stage dependencies:
 Logging must use Boost.Log through a VEngine logging facade. Do not add spdlog.
 
 Manage project dependencies through `ThirdParty/` CMake wrappers and download scripts. Do not add vcpkg manifest
-integration. After cloning on Windows, `ThirdParty/Setup_Windows64.bat` should prepare the project-owned dependency
+integration. After cloning on Windows, `ThirdParty/Build_Windows64.bat` should prepare the project-owned dependency
 payloads.
 
 ## Runtime Architecture

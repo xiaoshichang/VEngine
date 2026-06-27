@@ -14,9 +14,9 @@
 
 - D3D11 DXBC：通过 `fxc`，目标 profile 为 `vs_5_0` / `ps_5_0`。
 - D3D12 DXIL：通过 `dxc`，目标 profile 为 `vs_6_0` / `ps_6_0`。
-- SPIR-V：通过 `dxc -spirv`，目标环境为 `vulkan1.1`。
-- Metal MSL 源码：通过 `spirv-cross --msl --msl-ios` 从 SPIR-V 生成。
-- SPIRV-Cross 原始反射 JSON：每个 stage 一份。
+- SPIR-V：通过 `slangc -target spirv` 生成。
+- Metal MSL 源码：通过 `slangc -target metal` 生成。
+- 反射 JSON：通过 `slangc -reflection-json` 生成。
 - VEngine 归一化反射 JSON：每个 shader 一份 `.veshader.json`。
 
 当前版本有一些刻意收窄的限制：
@@ -34,14 +34,14 @@
 在 Windows64 上先准备第三方工具和构建产物：
 
 ```bat
-ThirdParty\Setup_Windows64.bat
+ThirdParty\Build_Windows64.bat
 ```
 
 这个脚本会准备：
 
 - Boost：`ThirdParty\Boost\Build\Windows64`
 - DXC：`ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe`
-- SPIRV-Cross：`ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe`
+- Slang：`ThirdParty\Slang\slang-2026.12-windows-x86_64\bin\slangc.exe`
 
 然后配置并构建工具：
 
@@ -79,7 +79,7 @@ VEngineShaderTool compile
   --name <shader name>
   [--dxc <dxc executable>]
   [--fxc <fxc executable>]
-  [--spirv-cross <spirv-cross executable>]
+  [--slang <slangc executable>]
 ```
 
 参数说明：
@@ -92,9 +92,9 @@ VEngineShaderTool compile
 | `--name` | 是 | Shader 名称，也会作为输出文件名前缀。 |
 | `--dxc` | 否 | DXC 可执行文件路径。未指定时使用 PATH 中的 `dxc`。 |
 | `--fxc` | 否 | FXC 可执行文件路径。未指定时使用 PATH 中的 `fxc`。 |
-| `--spirv-cross` | 否 | SPIRV-Cross 可执行文件路径。未指定时使用 PATH 中的 `spirv-cross`。 |
+| `--slang` | 否 | Slang `slangc.exe` 可执行文件路径。未指定时使用 PATH 中的 `slangc`。 |
 
-推荐手动运行时显式传入 `--dxc` 和 `--spirv-cross`，并通过 `CMake\Scripts\WithMsvc.bat` 运行命令，让 Windows SDK
+推荐手动运行时显式传入 `--dxc` 和 `--slang`，并通过 `CMake\Scripts\WithMsvc.bat` 运行命令，让 Windows SDK
 里的 `fxc` 自动出现在 PATH 中。
 
 ## 5. HLSL 输入约定
@@ -160,8 +160,8 @@ Bindable shader resource on line 8 must declare an explicit register.
 | `BasicTriangle.PS.spv` | Pixel shader 的 SPIR-V。 |
 | `BasicTriangle.VS.metal` | Vertex shader 转换后的 Metal MSL 源码。 |
 | `BasicTriangle.PS.metal` | Pixel shader 转换后的 Metal MSL 源码。 |
-| `BasicTriangle.VS.reflect.json` | SPIRV-Cross 生成的 vertex stage 原始反射信息。 |
-| `BasicTriangle.PS.reflect.json` | SPIRV-Cross 生成的 pixel stage 原始反射信息。 |
+| `BasicTriangle.VS.reflect.json` | Slang 生成的 vertex stage 原始反射信息。 |
+| `BasicTriangle.PS.reflect.json` | Slang 生成的 pixel stage 原始反射信息。 |
 | `BasicTriangle.veshader.json` | VEngine 归一化反射信息。 |
 
 `.veshader.json` 会记录 stage 产物路径和资源绑定信息，例如：
@@ -217,7 +217,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --name BasicMesh ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
-  --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
+  --slang ThirdParty\Slang\slang-2026.12-windows-x86_64\bin\slangc.exe
 ```
 
 成功时最后会输出：
@@ -286,7 +286,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --name SolidColor ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
-  --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
+  --slang ThirdParty\Slang\slang-2026.12-windows-x86_64\bin\slangc.exe
 ```
 
 输出文件会以 `SolidColor` 为前缀：
@@ -337,7 +337,7 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
   --name MissingRegister ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
-  --spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
+  --slang ThirdParty\Slang\slang-2026.12-windows-x86_64\bin\slangc.exe
 ```
 
 预期结果是失败。这个测试用于确认工具会拒绝没有显式绑定信息的资源声明。
@@ -386,7 +386,7 @@ cmd /c CMake\Scripts\WithMsvc.bat Build\windows-msvc-release\Release\VEngineShad
 先运行：
 
 ```bat
-ThirdParty\Setup_Windows64.bat
+ThirdParty\Build_Windows64.bat
 ```
 
 然后在编译命令中传入：
@@ -395,18 +395,18 @@ ThirdParty\Setup_Windows64.bat
 --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe
 ```
 
-### 11.3 找不到 spirv-cross
+### 11.3 找不到 slangc
 
 先运行：
 
 ```bat
-ThirdParty\Setup_Windows64.bat
+ThirdParty\Build_Windows64.bat
 ```
 
 然后在编译命令中传入：
 
 ```text
---spirv-cross ThirdParty\SPIRV-Cross\Build\Windows64\vulkan-sdk-1.4.309.0\Release\spirv-cross.exe
+--slang ThirdParty\Slang\slang-2026.12-windows-x86_64\bin\slangc.exe
 ```
 
 ### 11.4 提示资源必须声明 explicit register

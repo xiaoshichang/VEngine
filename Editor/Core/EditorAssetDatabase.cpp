@@ -1234,11 +1234,11 @@ namespace ve::editor
         arguments.push_back("--fxc");
         arguments.push_back(fxcPath.GetString());
 
-        const Path spirvCrossPath = repositoryRoot / "ThirdParty/SPIRV-Cross/Build/Windows64/vulkan-sdk-1.4.309.0/Release/spirv-cross.exe";
-        if (FileSystem::IsFile(spirvCrossPath))
+        const Path slangPath = repositoryRoot / "ThirdParty/Slang/slang-2026.12-windows-x86_64/bin/slangc.exe";
+        if (FileSystem::IsFile(slangPath))
         {
-            arguments.push_back("--spirv-cross");
-            arguments.push_back(spirvCrossPath.GetString());
+            arguments.push_back("--slang");
+            arguments.push_back(slangPath.GetString());
         }
 
         const int shaderToolExitCode = RunProcess(arguments);

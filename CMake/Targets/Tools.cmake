@@ -6,20 +6,24 @@ function(ve_add_shader_tool)
     endif()
 
     ve_setup_directx_shader_compiler()
-    ve_setup_spirv_cross()
+    ve_setup_slang()
 
     add_executable(VEngineShaderTool
         Tools/ShaderTool/ShaderTool.cpp
     )
 
+    if(VE_SLANG_EXECUTABLE)
+        file(TO_CMAKE_PATH "${VE_SLANG_EXECUTABLE}" veSlangExecutablePath)
+        target_compile_definitions(VEngineShaderTool
+            PRIVATE
+                VE_DEFAULT_SLANG_EXECUTABLE="${veSlangExecutablePath}"
+        )
+    endif()
+
     target_link_libraries(VEngineShaderTool
         PRIVATE
             VEngine
     )
-
-    if(VE_SPIRV_CROSS_TARGET)
-        add_dependencies(VEngineShaderTool ${VE_SPIRV_CROSS_TARGET})
-    endif()
 
     ve_configure_target(VEngineShaderTool)
 endfunction()

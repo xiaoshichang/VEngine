@@ -34,13 +34,14 @@ From a Windows shell:
 ```bat
 git clone <repo-url>
 cd VEngine
-ThirdParty\Setup_Windows64.bat
+ThirdParty\Build_Windows64.bat
 ```
 
 The setup script downloads and builds the project-owned third-party payloads used by the current Windows build:
 
 - Boost.
 - DirectXShaderCompiler.
+- Slang.
 - SPIRV-Cross.
 
 Generated dependency source checkouts, build directories, archives, and binaries are not committed to git. Re-run the
@@ -118,6 +119,6 @@ Third-party generated payloads live under each dependency's `ThirdParty/<Depende
 They can be recreated with:
 
 ```bat
-ThirdParty\Setup_Windows64.bat
+ThirdParty\Build_Windows64.bat
 ```
 
