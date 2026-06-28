@@ -128,42 +128,84 @@ function(ve_add_windows_editor)
     endif()
 endfunction()
 
-function(ve_add_ios_player)
-    if(NOT VE_BUILD_IOS_PLAYER)
+function(ve_add_mac_player)
+    if(NOT VE_BUILD_MAC_PLAYER)
         return()
     endif()
 
     if(NOT APPLE)
-        message(FATAL_ERROR "VEngineIOSPlayer requires an Apple toolchain.")
+        message(FATAL_ERROR "VEngineMacPlayer requires an Apple toolchain.")
     endif()
 
     enable_language(OBJCXX)
 
-    add_executable(VEngineIOSPlayer MACOSX_BUNDLE
-        Player/iOS/IOSPlayer.mm
+    add_executable(VEngineMacPlayer MACOSX_BUNDLE
+        Player/macOS/MacPlayer.mm
     )
 
-    target_link_libraries(VEngineIOSPlayer
+    target_link_libraries(VEngineMacPlayer
         PRIVATE
             VEngine
     )
 
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
-    find_library(UIKIT_FRAMEWORK UIKit REQUIRED)
+    find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
 
-    target_link_libraries(VEngineIOSPlayer
+    target_link_libraries(VEngineMacPlayer
         PRIVATE
             ${FOUNDATION_FRAMEWORK}
-            ${UIKIT_FRAMEWORK}
+            ${APPKIT_FRAMEWORK}
     )
 
-    set_target_properties(VEngineIOSPlayer
+    set_target_properties(VEngineMacPlayer
         PROPERTIES
-            MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/iOS/Info.plist.in
-            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER ${VE_IOS_BUNDLE_IDENTIFIER}
-            XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
-            XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "iphonesimulator iphoneos"
+            MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/macOS/Info.plist.in
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER ${VE_MAC_BUNDLE_IDENTIFIER}
+            XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "macosx"
+            XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "YES"
     )
 
-    ve_configure_target(VEngineIOSPlayer)
+    ve_configure_target(VEngineMacPlayer)
+endfunction()
+
+function(ve_add_mac_editor)
+    if(NOT VE_BUILD_EDITOR)
+        return()
+    endif()
+
+    if(NOT APPLE)
+        message(FATAL_ERROR "VEngineMacEditor requires an Apple toolchain.")
+    endif()
+
+    enable_language(OBJCXX)
+
+    add_executable(VEngineMacEditor MACOSX_BUNDLE
+        Editor/macOS/MacEditorApplication.cpp
+        Editor/macOS/MacEditorApplication.h
+        Editor/macOS/main.mm
+    )
+
+    target_link_libraries(VEngineMacEditor
+        PRIVATE
+            VEngine
+    )
+
+    find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+
+    target_link_libraries(VEngineMacEditor
+        PRIVATE
+            ${FOUNDATION_FRAMEWORK}
+            ${APPKIT_FRAMEWORK}
+    )
+
+    set_target_properties(VEngineMacEditor
+        PROPERTIES
+            MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/macOS/Info.plist.in
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER ${VE_MAC_BUNDLE_IDENTIFIER}
+            XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "macosx"
+            XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "YES"
+    )
+
+    ve_configure_target(VEngineMacEditor)
 endfunction()

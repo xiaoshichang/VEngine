@@ -55,10 +55,8 @@ function(ve_add_engine)
             Engine/Runtime/Scene/TransformComponent.cpp
             Engine/Runtime/Scripting/Binding/NativeScriptBinding.cpp
             Engine/Runtime/Scripting/DotnetScriptableComponent.cpp
-            Engine/Runtime/Scripting/IOSAOTScriptingBackend.cpp
             Engine/Runtime/Scripting/ScriptableComponent.cpp
             Engine/Runtime/Scripting/ScriptingSystem.cpp
-            Engine/Runtime/Scripting/WindowsJITScriptingBackend.cpp
             Engine/Runtime/Threading/Synchronization.cpp
             Engine/Runtime/Threading/Thread.cpp
             Engine/Runtime/Time/Time.cpp
@@ -130,12 +128,11 @@ function(ve_add_engine)
             Engine/Runtime/Scripting/Binding/NativeScriptBinding.h
             Engine/Runtime/Scripting/DotNetScriptingBackend.h
             Engine/Runtime/Scripting/DotnetScriptableComponent.h
-            Engine/Runtime/Scripting/IOSAOTScriptingBackend.h
+            Engine/Runtime/Scripting/NullScriptingBackend.h
             Engine/Runtime/Scripting/ScriptableComponent.h
             Engine/Runtime/Scripting/ScriptingSystem.h
             Engine/Runtime/Scripting/ScriptingSystemBackend.h
             Engine/Runtime/Scripting/ScriptingTypes.h
-            Engine/Runtime/Scripting/WindowsJITScriptingBackend.h
             Engine/Runtime/Threading/Atomic.h
             Engine/Runtime/Threading/LockFreeMpscQueue.h
             Engine/Runtime/Threading/LockFreeSpscQueue.h
@@ -170,28 +167,21 @@ function(ve_add_engine)
         target_compile_definitions(VEngine
             PUBLIC
                 VE_PLATFORM_WINDOWS=1
-                VE_PLATFORM_IOS=0
+                VE_PLATFORM_MACOS=0
                 VE_PLATFORM_APPLE=0
-        )
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        target_compile_definitions(VEngine
-            PUBLIC
-                VE_PLATFORM_WINDOWS=0
-                VE_PLATFORM_IOS=1
-                VE_PLATFORM_APPLE=1
         )
     elseif(APPLE)
         target_compile_definitions(VEngine
             PUBLIC
                 VE_PLATFORM_WINDOWS=0
-                VE_PLATFORM_IOS=0
+                VE_PLATFORM_MACOS=1
                 VE_PLATFORM_APPLE=1
         )
     else()
         target_compile_definitions(VEngine
             PUBLIC
                 VE_PLATFORM_WINDOWS=0
-                VE_PLATFORM_IOS=0
+                VE_PLATFORM_MACOS=0
                 VE_PLATFORM_APPLE=0
         )
     endif()
@@ -205,15 +195,24 @@ function(ve_add_engine)
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.cpp
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.cpp
                 Engine/Runtime/Platform/Windows/Win32Window.cpp
+                Engine/Runtime/Scripting/WindowsJITScriptingBackend.cpp
             PUBLIC
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.h
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.h
                 Engine/Runtime/Platform/Windows/Win32Window.h
+                Engine/Runtime/Scripting/WindowsJITScriptingBackend.h
         )
 
         target_link_libraries(VEngine
             PUBLIC
                 user32
+        )
+    endif()
+
+    if(APPLE AND NOT WIN32)
+        target_sources(VEngine
+            PRIVATE
+                Engine/Runtime/Scripting/NullScriptingBackend.cpp
         )
     endif()
 

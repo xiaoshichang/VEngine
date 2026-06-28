@@ -30,7 +30,7 @@ normal Player runtime.
 
 Use Apple Metal Shader Converter as a future optional path for DXIL-to-Metal library generation, but do not make it
 the first-stage path. It is valuable for high-end DirectX 12 feature parity, but it raises the minimum runtime and
-binding-model expectations compared with the current iOS Simulator milestone.
+binding-model expectations compared with the current macOS placeholder milestone.
 
 ## 3. Feasibility Result
 
@@ -42,7 +42,7 @@ The flow is feasible for the first rendering slice:
 - Sampler states.
 - Basic material parameters.
 - Static mesh rendering.
-- D3D11, D3D12, and iOS Metal triangle and mesh smoke tests.
+- D3D11, D3D12, and macOS Metal triangle and mesh smoke tests.
 
 The flow is not a complete promise that every HLSL feature will cross-compile cleanly. VEngine should define a small
 portable HLSL subset first, validate generated MSL with Apple's compiler, and grow feature support only when backed by
@@ -89,15 +89,15 @@ Use it for:
 
 ### 4.4 Apple Metal Tools
 
-For iOS and other Apple targets, generated MSL should be compiled into a Metal library during Apple-platform packaging.
+For Apple targets, generated MSL should be compiled into a Metal library during Apple-platform packaging.
 
 Recommended packaging path:
 
 ```text
 Generated .metal files
-  -> xcrun -sdk iphonesimulator metal
+  -> xcrun -sdk macosx metal
   -> .air or .metallib
-  -> bundled into iOS app
+  -> bundled into macOS app
   -> loaded by MetalRHI through MTLLibrary
 ```
 
@@ -113,7 +113,7 @@ It should be recorded as a future option, not the first-stage default, because:
 
 - Its Metal libraries require Argument Buffers Tier 2 for full support.
 - The documented runtime baseline is macOS 14 / iOS 17 or later for full support.
-- The first iOS target is an early simulator demo, and the current engine architecture plans direct-slot Metal binding
+  - The first macOS target is a placeholder app, and the current engine architecture plans direct-slot Metal binding
   before argument buffers.
 - The SPIR-V to MSL path produces inspectable MSL text, which is easier to debug while the RHI and shader metadata are
   still being designed.
@@ -213,7 +213,7 @@ slangc -stage pixel -entry PSMain -profile ps_6_0 -target spirv -fvk-use-dx-layo
 ```
 
 The exact SPIR-V target environment should be a `VEngineShaderTool` option, not hard-coded in shader source. Start with
-a conservative Vulkan environment supported by Slang, then lock the value once the first iOS Metal smoke test is in
+a conservative Vulkan environment supported by Slang, then lock the value once the first macOS Metal smoke test is in
 place.
 
 Use `-fvk-use-dx-layout` initially to reduce layout drift from the DirectX path. Reflection metadata and explicit
@@ -237,15 +237,14 @@ Compile generated MSL to a Metal library as part of the Apple build or asset-coo
 Command shape:
 
 ```text
-xcrun -sdk iphonesimulator metal -c BasicMesh.VS.metal -o BasicMesh.VS.air
-xcrun -sdk iphonesimulator metal -c BasicMesh.PS.metal -o BasicMesh.PS.air
-xcrun -sdk iphonesimulator metallib BasicMesh.VS.air BasicMesh.PS.air -o BasicMesh.metallib
+xcrun -sdk macosx metal -c BasicMesh.VS.metal -o BasicMesh.VS.air
+xcrun -sdk macosx metal -c BasicMesh.PS.metal -o BasicMesh.PS.air
+xcrun -sdk macosx metallib BasicMesh.VS.air BasicMesh.PS.air -o BasicMesh.metallib
 ```
 
 The SDK should match the target:
 
-- `iphonesimulator` for iOS Simulator.
-- `iphoneos` for iOS device builds.
+- `macosx` for macOS host validation.
 - `macosx` only for future macOS tooling or host validation.
 
 ## 6. Binding Model
@@ -494,7 +493,7 @@ set(VE_SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Generated/Shaders" CACHE PATH "Gen
 Host behavior:
 
 - Windows host: build and run D3D11, D3D12, SPIR-V, MSL text generation, and reflection tests.
-- Apple host: additionally compile generated MSL to `.metallib` for iOS Simulator and validate Metal pipeline creation.
+- Apple host: additionally compile generated MSL to `.metallib` for macOS validation and validate Metal pipeline creation.
 - Non-Apple host: do not require `xcrun metal`; produce MSL text and defer `.metallib` packaging.
 
 ## 12. Smoke Tests
@@ -508,13 +507,13 @@ Minimum shader tests:
 5. Generate reflection JSON.
 6. Validate that `CameraConstants : register(b0, space0)` maps to the expected binding metadata.
 7. On Apple host, compile generated MSL to `.metallib`.
-8. On iOS Simulator, create `MTLLibrary`, retrieve vertex and fragment functions, and render a triangle.
+8. On macOS, create `MTLLibrary`, retrieve vertex and fragment functions, and render a triangle.
 
 Runtime smoke tests:
 
 - D3D11 triangle demo uses shader artifacts generated from HLSL.
 - D3D12 triangle demo uses shader artifacts generated from the same HLSL.
-- iOS Metal triangle demo uses MSL/metallib generated from the same HLSL.
+- macOS Metal triangle demo uses MSL/metallib generated from the same HLSL.
 
 Negative tests:
 
@@ -547,7 +546,7 @@ Negative tests:
 ### Phase 4: Metal Packaging
 
 - Add Apple-host packaging command that compiles generated MSL to `.metallib`.
-- Bundle `.metallib` into the iOS demo target.
+- Bundle `.metallib` into the macOS demo target.
 - Load Metal functions through `MetalRHI`.
 
 ### Phase 5: RHI Integration
@@ -636,7 +635,7 @@ The 2.2 milestone is complete when:
 - `VEngineShaderTool` can compile one HLSL triangle shader to D3D11 DXBC, D3D12 DXIL, SPIR-V, MSL, and reflection JSON.
 - Windows shader tests validate D3D11, D3D12, SPIR-V, MSL text generation, and metadata.
 - Apple-host validation compiles generated MSL to `.metallib`.
-- The D3D11, D3D12, and iOS Metal triangle demos can use artifacts generated from the same HLSL source.
+- The D3D11, D3D12, and macOS Metal triangle demos can use artifacts generated from the same HLSL source.
 - Reflection metadata drives at least one constant buffer binding and one texture/sampler binding.
 - Runtime code loads precompiled artifacts and does not perform normal shader cross-compilation.
 

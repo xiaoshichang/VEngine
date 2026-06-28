@@ -25,7 +25,7 @@
                 "VE_BUILD_EDITOR": "ON",
                 "VE_BUILD_TESTS": "OFF",
                 "VE_BUILD_TOOLS": "ON",
-                "VE_BUILD_IOS_PLAYER": "OFF",
+                "VE_BUILD_MAC_PLAYER": "ON",
                 "VE_ENABLE_D3D11": "ON",
                 "VE_ENABLE_D3D12": "ON",
                 "VE_ENABLE_METAL": "OFF"
@@ -50,29 +50,40 @@
             }
         },
         {
-            "name": "ios-simulator-debug",
-            "displayName": "iOS Simulator Debug",
+            "name": "mac-debug",
+            "displayName": "macOS Debug",
             "generator": "Xcode",
-            "toolchainFile": "${sourceDir}/CMake/Toolchains/iOS.cmake",
-            "binaryDir": "${sourceDir}/Build/ios-simulator-debug",
+            "toolchainFile": "${sourceDir}/CMake/Toolchains/Mac.cmake",
+            "binaryDir": "${sourceDir}/Build/mac-debug",
             "cacheVariables": {
-                "VE_IOS_PLATFORM": "SIMULATOR",
-                "VE_IOS_ARCHITECTURES": "arm64",
-                "VE_BUILD_PLAYER": "OFF",
-                "VE_BUILD_EDITOR": "OFF",
+                "VE_MAC_PLATFORM": "MACOS",
+                "VE_BUILD_PLAYER": "ON",
+                "VE_BUILD_EDITOR": "ON",
                 "VE_BUILD_TESTS": "OFF",
-                "VE_BUILD_TOOLS": "OFF",
-                "VE_BUILD_IOS_PLAYER": "ON",
+                "VE_BUILD_TOOLS": "ON",
+                "VE_BUILD_MAC_PLAYER": "ON",
                 "VE_ENABLE_D3D11": "OFF",
                 "VE_ENABLE_D3D12": "OFF",
                 "VE_ENABLE_METAL": "ON"
             }
         },
         {
-            "name": "ios-simulator-release",
-            "displayName": "iOS Simulator Release",
-            "inherits": "ios-simulator-debug",
-            "binaryDir": "${sourceDir}/Build/ios-simulator-release"
+            "name": "mac-release",
+            "displayName": "macOS Release",
+            "inherits": "mac-debug",
+            "binaryDir": "${sourceDir}/Build/mac-release"
+        },
+        {
+            "name": "mac-test",
+            "displayName": "macOS Test",
+            "inherits": "mac-debug",
+            "binaryDir": "${sourceDir}/Build/mac-test",
+            "cacheVariables": {
+                "VE_BUILD_PLAYER": "OFF",
+                "VE_BUILD_EDITOR": "OFF",
+                "VE_BUILD_TESTS": "ON",
+                "VE_BUILD_TOOLS": "OFF"
+            }
         }
     ],
     "buildPresets": [
@@ -92,14 +103,19 @@
             "configuration": "Debug"
         },
         {
-            "name": "ios-simulator-debug",
-            "configurePreset": "ios-simulator-debug",
+            "name": "mac-debug",
+            "configurePreset": "mac-debug",
             "configuration": "Debug"
         },
         {
-            "name": "ios-simulator-release",
-            "configurePreset": "ios-simulator-release",
+            "name": "mac-release",
+            "configurePreset": "mac-release",
             "configuration": "Release"
+        },
+        {
+            "name": "mac-test",
+            "configurePreset": "mac-test",
+            "configuration": "Debug"
         }
     ],
     "testPresets": [

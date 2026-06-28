@@ -2,8 +2,11 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Platform.h"
+#include "Engine/Runtime/Scripting/NullScriptingBackend.h"
 #include "Engine/Runtime/Scripting/IOSAOTScriptingBackend.h"
+#if VE_PLATFORM_WINDOWS
 #include "Engine/Runtime/Scripting/WindowsJITScriptingBackend.h"
+#endif
 
 #include <utility>
 
@@ -124,10 +127,8 @@ namespace ve
         {
 #if VE_PLATFORM_WINDOWS
             resolvedBackend = ScriptingBackendType::WindowsJIT;
-#elif VE_PLATFORM_IOS
-            resolvedBackend = ScriptingBackendType::IOSAOT;
 #else
-            return nullptr;
+            return std::make_unique<NullScriptingBackend>();
 #endif
         }
 
@@ -139,8 +140,6 @@ namespace ve
 #else
             return nullptr;
 #endif
-        case ScriptingBackendType::IOSAOT:
-            return std::make_unique<IOSAOTScriptingBackend>();
         case ScriptingBackendType::Auto:
             return nullptr;
         }

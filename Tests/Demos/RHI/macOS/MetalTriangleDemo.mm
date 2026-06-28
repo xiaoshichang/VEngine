@@ -1,7 +1,7 @@
 #include "Engine/RHI/Metal/MetalRhi.h"
 
+#import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
-#import <UIKit/UIKit.h>
 #include <array>
 #include <memory>
 
@@ -44,7 +44,6 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
     bool RenderTriangle(CAMetalLayer* layer, CGSize size)
     {
         std::unique_ptr<ve::rhi::RhiDevice> device = ve::rhi::CreateMetalDevice(false);
-
         if (device == nullptr)
         {
             return false;
@@ -59,7 +58,6 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         swapchainDesc.debugName = "MetalTriangleSwapchain";
 
         std::unique_ptr<ve::rhi::RhiSwapchain> swapchain = device->CreateSwapchain(swapchainDesc);
-
         if (swapchain == nullptr)
         {
             return false;
@@ -78,7 +76,6 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         vertexBufferDesc.debugName = "TriangleVertexBuffer";
 
         std::unique_ptr<ve::rhi::RhiBuffer> vertexBuffer = device->CreateBuffer(vertexBufferDesc);
-
         if (vertexBuffer == nullptr)
         {
             return false;
@@ -91,7 +88,6 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         vertexShaderDesc.debugName = "TriangleVertexShader";
 
         std::unique_ptr<ve::rhi::RhiShaderModule> vertexShader = device->CreateShaderModule(vertexShaderDesc);
-
         if (vertexShader == nullptr)
         {
             return false;
@@ -104,7 +100,6 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         fragmentShaderDesc.debugName = "TriangleFragmentShader";
 
         std::unique_ptr<ve::rhi::RhiShaderModule> fragmentShader = device->CreateShaderModule(fragmentShaderDesc);
-
         if (fragmentShader == nullptr)
         {
             return false;
@@ -127,14 +122,12 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         pipelineDesc.debugName = "TrianglePipeline";
 
         std::unique_ptr<ve::rhi::RhiPipelineState> pipelineState = device->CreateGraphicsPipeline(pipelineDesc);
-
         if (pipelineState == nullptr)
         {
             return false;
         }
 
         std::unique_ptr<ve::rhi::RhiCommandList> commandList = device->CreateCommandList();
-
         if (commandList == nullptr)
         {
             return false;
@@ -171,7 +164,7 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
     }
 } // namespace
 
-@interface VEngineMetalTriangleView : UIView
+@interface VEngineMetalTriangleView : NSView
 
 @end
 
@@ -184,7 +177,7 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
 
 @end
 
-@interface VEngineMetalTriangleViewController : UIViewController
+@interface VEngineMetalTriangleViewController : NSViewController
 
 @end
 
@@ -195,12 +188,12 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
 
 - (void)loadView
 {
-    self.view = [[VEngineMetalTriangleView alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+    self.view = [[VEngineMetalTriangleView alloc] initWithFrame:[[NSScreen mainScreen] frame]];
 }
 
-- (void)viewDidLayoutSubviews
+- (void)viewDidLayout
 {
-    [super viewDidLayoutSubviews];
+    [super viewDidLayout];
 
     if (rendered_)
     {
@@ -210,33 +203,10 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
     rendered_ = YES;
 
     CAMetalLayer* layer = (CAMetalLayer*)self.view.layer;
-    const CGFloat scale = self.view.window.screen.scale;
+    const CGFloat scale = self.view.window.backingScaleFactor;
     const CGSize drawableSize = CGSizeMake(self.view.bounds.size.width * scale, self.view.bounds.size.height * scale);
     layer.contentsScale = scale;
-
     RenderTriangle(layer, drawableSize);
-}
-
-@end
-
-@interface VEngineMetalTriangleAppDelegate : UIResponder <UIApplicationDelegate>
-
-@property(strong, nonatomic) UIWindow* window;
-
-@end
-
-@implementation VEngineMetalTriangleAppDelegate
-
-- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary*)launchOptions
-{
-    (void)application;
-    (void)launchOptions;
-
-    self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-    self.window.rootViewController = [[VEngineMetalTriangleViewController alloc] init];
-    [self.window makeKeyAndVisible];
-
-    return YES;
 }
 
 @end
@@ -245,6 +215,20 @@ int main(int argc, char* argv[])
 {
     @autoreleasepool
     {
-        return UIApplicationMain(argc, argv, nil, NSStringFromClass([VEngineMetalTriangleAppDelegate class]));
+        (void)argc;
+        (void)argv;
+
+        [NSApplication sharedApplication];
+        NSWindow* window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1280, 720)
+                                                       styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable)
+                                                         backing:NSBackingStoreBuffered
+                                                           defer:NO];
+
+        VEngineMetalTriangleViewController* viewController = [[VEngineMetalTriangleViewController alloc] init];
+        window.contentViewController = viewController;
+        [window makeKeyAndOrderFront:nil];
+        [NSApp activateIgnoringOtherApps:YES];
+        [NSApp run];
+        return 0;
     }
 }

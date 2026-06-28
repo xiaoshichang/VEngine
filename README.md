@@ -1,7 +1,7 @@
 # VEngine
 
 `VEngine` is a cross-platform lightweight 3D mini game engine built with C++20 and CMake. The first-stage targets are
-Windows x64 Player, Windows x64 Editor, Windows tests, and an iOS Simulator Player path.
+Windows x64 Player, Windows x64 Editor, Windows tests, and macOS placeholder Player/Editor targets.
 
 This repository is designed around a clone-to-build workflow: project-owned setup scripts prepare third-party
 dependencies under `ThirdParty/`, then CMake presets configure and build the engine targets.
@@ -20,12 +20,12 @@ Windows:
 - PowerShell.
 - Network access for the first third-party dependency setup.
 
-iOS:
+macOS:
 
 - macOS with Xcode.
 - CMake 3.25 or newer.
 
-The iOS presets are documented here for completeness, but they cannot be built from Windows.
+The macOS presets are documented here for completeness, but they cannot be built from Windows.
 
 ## Clone And Prepare Dependencies
 
@@ -99,16 +99,17 @@ Build outputs are generated under `Build/`, for example:
 - `Build/windows-msvc-release/Release`
 - `Build/windows-msvc-tests/Debug`
 
-## iOS Simulator Build
+## macOS Build
 
 On macOS with Xcode:
 
 ```sh
-cmake --preset ios-simulator-debug
-cmake --build --preset ios-simulator-debug
+cmake --preset mac-debug
+cmake --build --preset mac-debug
 ```
 
-The first-stage iOS path builds `VEngineIOSPlayer` and the Metal triangle demo target when Metal RHI demos are enabled.
+The first-stage macOS path builds `VEngineMacPlayer`, `VEngineMacEditor`, and the Metal triangle demo target when
+Metal RHI demos are enabled.
 
 ## Clean Regeneration
 
@@ -121,4 +122,3 @@ They can be recreated with:
 ```bat
 ThirdParty\Build_Windows64.bat
 ```
-

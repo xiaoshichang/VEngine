@@ -304,7 +304,7 @@ Examples:
 Windows D3D11/D3D12
   platformHandle -> HWND, kept out of common public headers.
 
-iOS Metal
+macOS Metal
   platformHandle -> CAMetalLayer, kept out of common public headers.
 ```
 
@@ -342,7 +342,7 @@ Stage 2: D3D11 + D3D12 clear-color render pass.
 Stage 3: D3D11 + D3D12 triangle with one pipeline and one vertex buffer.
 Stage 4: D3D11 + D3D12 indexed mesh with constant buffer, texture, and sampler.
 Stage 5: Per-frame resources and fence-based frames-in-flight.
-Stage 6: Metal device, CAMetalLayer surface, clear-color render pass on iOS Simulator.
+Stage 6: Metal device, CAMetalLayer surface, clear-color render pass on macOS.
 Stage 7: Metal triangle using the same high-level RHI client code shape.
 Stage 8: Metal indexed mesh with constant buffer, texture, and sampler.
 ```

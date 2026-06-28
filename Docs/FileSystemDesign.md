@@ -268,10 +268,10 @@ non-ASCII paths viable in early tests and future tools.
 The implementation uses `std::filesystem` for file and directory operations, while constructing native paths carefully
 from UTF-8.
 
-### iOS
+### macOS
 
-The first implementation does not add UIKit or bundle-resource APIs. The UTF-8 path and synchronous IO layer should still
-compile with the iOS toolchain, but iOS app bundle, documents directory, and packaged-resource handling are future work.
+The first implementation does not add AppKit or bundle-resource APIs. The UTF-8 path and synchronous IO layer should still
+compile with the macOS toolchain, but macOS app bundle, documents directory, and packaged-resource handling are future work.
 
 ## 12. Future Mount Points
 

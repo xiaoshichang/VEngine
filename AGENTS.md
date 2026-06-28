@@ -17,7 +17,7 @@ Canonical docs:
 - Build core runtime logic as the `VEngine` static library.
 - Windows x64 application outputs are `VEnginePlayer` and `VEngineEditor`; Windows tests are registered as individual
   CTest executables.
-- iOS outputs include `VEngineIOSPlayer` and the first iOS Simulator Metal demo target.
+- macOS outputs include `VEngineMacPlayer` and the first Metal demo target.
 - Use namespace `ve` for engine code.
 
 ## Build Commands

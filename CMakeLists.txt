@@ -27,7 +27,8 @@ ve_add_engine()
 
 ve_add_windows_player()
 ve_add_windows_editor()
-ve_add_ios_player()
+ve_add_mac_player()
+ve_add_mac_editor()
 
 if(VE_BUILD_TESTS)
     enable_testing()

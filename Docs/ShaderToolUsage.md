@@ -26,8 +26,9 @@
 - 不支持 shader manifest。
 - 不支持变体、宏定义参数、include search path 参数。
 - 不支持 compute、geometry、tessellation、mesh、ray tracing shader。
-- 当前工具链验证和 CMake 接入以 Windows64 为主。
-- Metal 输出当前是 `.metal` MSL 源码，不是最终 `.metallib`。Apple 平台打包阶段后续再把 `.metal` 编译成 Metal library。
+- Windows 路径保留 DXBC / DXIL / SPIR-V / MSL / 反射。
+- macOS 路径使用 `slangc` 生成 SPIR-V，再通过 `spirv-cross` 生成 Metal MSL。
+- Metal 输出当前是 `.metal` 源码，不是最终 `.metallib`。Apple 平台打包阶段后续再把 `.metal` 编译成 Metal library。
 
 ## 3. 准备工具链
 

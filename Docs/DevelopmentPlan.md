@@ -4,7 +4,7 @@
 
 This document describes the rough development plan for `VEngine`.
 
-The plan is intentionally milestone-oriented. Each milestone should produce a usable vertical slice instead of only isolated low-level systems. The goal is to reduce architectural risk early, especially around the RHI design, shader cross-compilation, C# hosting, and iOS Metal integration.
+The plan is intentionally milestone-oriented. Each milestone should produce a usable vertical slice instead of only isolated low-level systems. The goal is to reduce architectural risk early, especially around the RHI design, shader cross-compilation, C# hosting, and macOS Metal integration.
 
 ## 2. Technical Feasibility Items To Validate Early
 
@@ -62,18 +62,17 @@ C++ Player
   -> C# calls native logging API
 ```
 
-### 2.4 iOS Metal Demo
+### 2.4 macOS Metal Flow
 
 Goal:
 
-- Confirm CMake/Xcode target can run a native iOS Simulator app using Metal.
+- Confirm CMake/Xcode target can run a native macOS app using Metal.
 
 Prototype:
 
 ```text
-iOS app
-  -> UIKit lifecycle
-  -> CAMetalLayer / MTKView
+macOS app
+  -> AppKit lifecycle
   -> Metal device
   -> Draw triangle
 ```
@@ -98,8 +97,8 @@ VE_LOG_INFO
 
 Current status: Milestones 0-2 are broadly implemented. Milestones 3-7 are partially implemented through the common
 RHI, D3D11/D3D12/Metal backend slices, RenderSystem, ShaderTool, Scene/Resource systems, Editor asset database, Editor
-viewport/panels, and Windows packaging flow. Milestones 8-9 remain future work. Milestone 10 has an early iOS player
-target and a separate Metal triangle demo, but not a complete iOS Player engine loop.
+viewport/panels, and Windows packaging flow. Mac targets currently use minimal placeholder player/editor shells while the
+full macOS platform backend remains future work.
 
 ### Milestone 0: Project Skeleton
 
@@ -220,16 +219,16 @@ target and a separate Metal triangle demo, but not a complete iOS Player engine 
 - Implement ColliderComponent.
 - Add simple UI and picking demo.
 
-### Milestone 10: iOS Simulator Demo
+### Milestone 10: macOS Metal Demo
 
-- Create iOS Player target.
+- Create macOS Player target.
 - Add Objective-C++ platform bridge.
-- Add UIKit app lifecycle.
+- Add AppKit app lifecycle.
 - Add Metal surface integration.
 - Implement MetalRHI minimum path.
 - Use HLSL to MSL shader flow.
-- Draw simple 3D demo in iOS Simulator.
-- Add touch input demo.
+- Draw simple 3D demo in macOS.
+- Add input demo.
 
 ## 4. Recommended Implementation Order
 
@@ -248,7 +247,7 @@ CMake skeleton
   -> Editor MVP
   -> C# scripting
   -> Runtime UI / lightweight physics
-  -> Metal / iOS Simulator
+  -> Metal / macOS
 ```
 
 D3D11, D3D12, and Metal should be considered together during RHI design. However, each backend should be implemented through small smoke-tested vertical slices instead of attempting a complete renderer immediately.

@@ -6,7 +6,7 @@
 #include "Engine/Runtime/Core/SourceLocation.h"
 
 #include <filesystem>
-#include <format>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -75,9 +75,12 @@ namespace ve
     namespace detail
     {
         template<typename... TArgs>
-        [[nodiscard]] std::string FormatLogMessage(std::format_string<TArgs...> formatString, TArgs&&... args)
+        [[nodiscard]] std::string FormatLogMessage(std::string_view formatString, TArgs&&... args)
         {
-            return std::format(formatString, std::forward<TArgs>(args)...);
+            std::ostringstream stream;
+            stream << formatString;
+            ((stream << ' ' << std::forward<TArgs>(args)), ...);
+            return stream.str();
         }
 
         void LogFormattedMessage(LogSeverity severity, const char* category, std::string message, SourceLocation location);

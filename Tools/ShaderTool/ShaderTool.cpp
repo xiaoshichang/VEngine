@@ -23,6 +23,7 @@ namespace
         std::filesystem::path dxcExecutable = "dxc";
         std::filesystem::path fxcExecutable = "fxc";
         std::filesystem::path slangExecutable = "slangc";
+        std::filesystem::path spirvCrossExecutable = "spirv-cross";
     };
 
     struct ShaderStage
@@ -58,6 +59,7 @@ namespace
                   << "  compile --source <file> --output <dir> --name <shader> [--dxc <path>] [--fxc <path>] "
                      "[--slang <path>]\n"
                   << "  --help\n";
+        std::cout << "Mac flow: HLSL -> Slang -> SPIR-V -> SPIRV-Cross -> Metal\n";
     }
 
     std::string EscapeJson(std::string_view text)
@@ -279,7 +281,8 @@ namespace
         return options.outputDirectory / (options.shaderName + "." + std::string(stage.shortName) + "." + std::string(extension));
     }
 
-    bool CompileStage(const CompileOptions& options, const ShaderStage& stage, const std::filesystem::path& d3d11SourcePath)
+#if defined(_WIN32)
+    bool CompileStageWindows(const CompileOptions& options, const ShaderStage& stage, const std::filesystem::path& d3d11SourcePath)
     {
         const std::filesystem::path dxbcPath = BuildArtifactPath(options, stage, "dxbc");
         const std::filesystem::path dxilPath = BuildArtifactPath(options, stage, "dxil");
@@ -338,6 +341,8 @@ namespace
             return false;
         }
 
+        const std::filesystem::path slangMetalPath = BuildArtifactPath(options, stage, "slang.metal");
+
         if (RunProcess({
                 options.slangExecutable.string(),
                 "-stage",
@@ -355,6 +360,73 @@ namespace
         {
             return false;
         }
+
+        return true;
+    }
+#endif
+
+    bool CompileStageApple(const CompileOptions& options, const ShaderStage& stage)
+    {
+        const std::filesystem::path spirvPath = BuildArtifactPath(options, stage, "spv");
+        const std::filesystem::path metalPath = BuildArtifactPath(options, stage, "metal");
+        const std::filesystem::path slangMetalPath = BuildArtifactPath(options, stage, "slang.metal");
+        const std::filesystem::path reflectionPath = BuildArtifactPath(options, stage, "reflect.json");
+
+        if (RunProcess({
+                options.slangExecutable.string(),
+                "-stage",
+                std::string(stage.slangStage),
+                "-entry",
+                std::string(stage.entryPoint),
+                "-profile",
+                std::string(stage.dxcProfile),
+                "-target",
+                "spirv",
+                "-fvk-use-dx-layout",
+                "-o",
+                spirvPath.string(),
+                "-reflection-json",
+                reflectionPath.string(),
+                options.sourcePath.string(),
+            }) != 0)
+        {
+            return false;
+        }
+
+        if (RunProcess({
+                options.slangExecutable.string(),
+                "-stage",
+                std::string(stage.slangStage),
+                "-entry",
+                std::string(stage.entryPoint),
+                "-profile",
+                std::string(stage.dxcProfile),
+                "-target",
+                "metal",
+                "-o",
+                slangMetalPath.string(),
+                options.sourcePath.string(),
+            }) != 0)
+        {
+            return false;
+        }
+
+        if (RunProcess({
+                options.spirvCrossExecutable.string(),
+                spirvPath.string(),
+                "--msl",
+                "--msl-version",
+                "30000",
+                "--output",
+                metalPath.string(),
+            }) != 0)
+        {
+            return false;
+        }
+
+        std::cout << "  SPIR-V: " << spirvPath << '\n';
+        std::cout << "  Slang MSL: " << slangMetalPath << '\n';
+        std::cout << "  Metal MSL: " << metalPath << '\n';
 
         return true;
     }
@@ -558,11 +630,19 @@ namespace
 
         for (const ShaderStage& stage : ShaderStages)
         {
-            if (!CompileStage(options, stage, d3d11SourcePath))
+#if defined(_WIN32)
+            if (!CompileStageWindows(options, stage, d3d11SourcePath))
             {
                 std::cerr << "Failed to compile " << options.shaderName << " " << stage.displayName << " shader" << '\n';
                 return 1;
             }
+#else
+            if (!CompileStageApple(options, stage))
+            {
+                std::cerr << "Failed to compile " << options.shaderName << " " << stage.displayName << " shader" << '\n';
+                return 1;
+            }
+#endif
         }
 
         const std::vector<BindingInfo> bindings = ExtractBindings(*source);

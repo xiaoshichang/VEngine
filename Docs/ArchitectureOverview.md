@@ -8,9 +8,9 @@ Primary goals:
 
 - Provide a C++20 engine core managed by CMake.
 - Build the engine core as a static library.
-- Support Windows x64 and iOS.
+- Support Windows x64 and macOS.
 - Provide a Windows Player, Windows Editor, and Windows unit tests.
-- Provide an iOS Player that can run a demo in the iOS Simulator.
+- Provide a macOS Player and macOS Editor placeholder while the platform backend is still being established.
 - Use a multithreaded architecture with Game Thread, Render Thread, Job System, and IO Thread.
 - Support lightweight 3D rendering through D3D11, D3D12, and Metal.
 - Use a traditional `GameObject + Component` scene model.
@@ -26,9 +26,9 @@ Windows x64
   - D3D11 RHI
   - D3D12 RHI
 
-iOS
+macOS
   - Player
-  - iOS Simulator demo in the first stage
+  - Editor placeholder
   - Metal RHI
 ```
 
@@ -46,7 +46,7 @@ The first stage should avoid over-expanding the scope. These systems are not fir
 - Material graph editor.
 - Visual scripting.
 - Complex prefab workflow.
-- Runtime C# hot reload on iOS.
+- Runtime C# hot reload on macOS remains a future milestone.
 - Complete production-grade asset cooking pipeline.
 
 The architecture should leave room for these features, but the first implementation should focus on a stable vertical slice.
@@ -154,9 +154,9 @@ VEnginePlayer
 VEngineEditor
   Windows editor executable.
 
-VEngineIOSPlayer
-  iOS player app target. The current implementation is an early UIKit shell that initializes the shared runtime path
-  but does not yet provide a complete iOS window/application backend.
+VEngineMacPlayer
+  macOS player app target. The current implementation is an early AppKit shell that initializes the shared runtime path
+  but does not yet provide a complete macOS window/application backend.
 
 VEngineAssetTool
   Command line asset import and cook tool target. The current executable is a lightweight placeholder while the Editor
@@ -179,16 +179,16 @@ VEngineShaderTool.exe
 Windows unit and smoke test executables are registered through CTest. Individual test target names are intentionally kept
 out of this high-level target list so new module tests can be added without changing the architecture overview.
 
-Planned iOS first-stage outputs:
+Planned macOS first-stage outputs:
 
 ```text
-VEngineIOSPlayer.app
-VEngineRhiMetalTriangleDemo.app
+VEngineMacPlayer.app
+VEngineMacEditor.app
 ```
 
 The cross-platform `Application` window backend is still Windows-only because `Window::Create()` only has a Win32
-implementation. The repository now includes an iOS player target and a separate iOS Metal triangle RHI demo; a complete
-iOS application/window backend remains future work.
+implementation. The repository now includes macOS player and editor placeholder targets; a complete macOS
+application/window backend remains future work.
 
 ## 6. Recommended Directory Layout
 
@@ -205,7 +205,7 @@ VEngine/
       WithMsvc.bat
     Toolchains/
       Windows64.cmake
-      iOS.cmake
+      Mac.cmake
 
   Engine/
     Runtime/
@@ -236,7 +236,7 @@ VEngine/
 
   Player/
     Windows/
-    iOS/
+    macOS/
 
   Editor/
     Windows/
@@ -310,17 +310,17 @@ Future Windows responsibilities:
 - File path conversion.
 - D3D11 and D3D12 surface / swapchain integration.
 
-Milestone 10 iOS responsibilities:
+Milestone 10 macOS responsibilities:
 
 - Objective-C++ bridge.
-- UIKit application lifecycle.
+- AppKit application lifecycle.
 - View controller integration.
 - `CAMetalLayer` or `MTKView` integration.
-- Touch input.
-- App pause / resume / termination handling.
+- Keyboard and mouse input.
+- App activation / deactivation / termination handling.
 - Metal drawable management.
 
-The current `Application::Run()` backend is Windows-only. iOS application lifecycle support should land with the iOS
+The current `Application::Run()` backend is Windows-only. macOS application lifecycle support should land with the macOS
 Simulator milestone instead of being implied by the Milestone 1 platform work.
 
 The platform layer is self-owned by the engine. SDL, GLFW, Qt, and similar framework-style platform abstractions are not used.
@@ -632,7 +632,7 @@ Windows first stage:
 - Keyboard.
 - Mouse.
 
-iOS first stage:
+macOS first stage:
 
 - Touch.
 
@@ -674,13 +674,13 @@ First-stage Windows scope:
 - Dispatch lifecycle methods such as `OnCreate`, `OnDestroy`, `OnUpdate`, `OnLateUpdate`, `OnEnable`, and `OnDisable`.
 - Support reloading after stopping the scene in Editor.
 
-First-stage iOS scope:
+First-stage macOS scope:
 
 - Do not run C# scripts.
 - Run native demo logic.
 - Keep the architecture open for future AOT-based investigation.
 
-The iOS C# path should be treated as a separate research milestone because iOS has stricter runtime and dynamic-code constraints than Windows.
+The macOS C# path should be treated as a separate research milestone because Apple platform runtime constraints still shape the implementation.
 
 ### 7.17 Physics
 
@@ -1098,7 +1098,7 @@ Editor reload policy:
 - Standard architecture target: allow Editor to rebuild C# project and reload script domain while preserving serialized scene data.
 - Advanced runtime state-preserving hot reload is not a first-stage requirement.
 
-iOS first-stage policy:
+macOS first-stage policy:
 
 - C# scripting is disabled.
 - Demo logic is native.
@@ -1157,7 +1157,7 @@ First-stage features:
 - Button interaction.
 - Simple layout.
 - Mouse input on Windows.
-- Touch input on iOS.
+- Touch input on Apple platforms.
 
 The runtime UI renderer should integrate with the Render system and RHI, not with ImGui.
 
@@ -1176,23 +1176,23 @@ Windows platform layer:
 - Later supports dynamic library loading for scripting.
 - Later provides platform file path utilities.
 
-### 17.2 iOS
+### 17.2 macOS
 
-Current iOS platform status:
+Current macOS platform status:
 
 - Uses Objective-C++ for native bridge files.
-- Provides an early UIKit player shell in `VEngineIOSPlayer`.
+- Provides an early AppKit player shell in `VEngineMacPlayer`.
 - Provides a separate `VEngineRhiMetalTriangleDemo` that creates a Metal-backed view and exercises the Metal RHI.
 
-Remaining iOS platform work:
+Remaining macOS platform work:
 
-- Route `Application` and `Window` creation through an iOS backend instead of the current Win32-only `Window::Create()`.
+- Route `Application` and `Window` creation through a macOS backend instead of the current Win32-only `Window::Create()`.
 - Integrate `CAMetalLayer` or `MTKView` surface ownership into the normal Player path.
-- Forward touch events to Input.
-- Coordinate pause and resume.
+- Forward keyboard and mouse events to Input.
+- Coordinate application activation and deactivation.
 - Provide Metal drawable and surface access to `MetalRHI` through the shared RenderSystem path.
 
-The first iOS Simulator proof is present as the Metal triangle demo. The normal iOS Player path is still an early shell,
+The first macOS proof is present as the Metal triangle demo. The normal macOS Player path is still an early shell,
 not a complete engine loop with scene rendering and input.
 
 ## 18. Testing Strategy
@@ -1229,7 +1229,7 @@ Manual/sample checks:
 ```text
 Windows Player demo
 Windows Editor demo
-iOS Simulator demo
+macOS demo
 ```
 
 RHI validation should stay focused on RenderSystem-owned runtime paths:
@@ -1248,7 +1248,7 @@ option(VE_BUILD_PLAYER "Build Windows player" ON)
 option(VE_BUILD_EDITOR "Build Windows editor" ON)
 option(VE_BUILD_TESTS "Build tests" ON)
 option(VE_BUILD_TOOLS "Build tools" ON)
-option(VE_BUILD_IOS_PLAYER "Build iOS player" OFF)
+option(VE_BUILD_MAC_PLAYER "Build macOS player" OFF)
 
 option(VE_ENABLE_D3D11 "Enable D3D11 RHI" ON)
 option(VE_ENABLE_D3D12 "Enable D3D12 RHI" ON)
@@ -1261,14 +1261,15 @@ Recommended presets:
 windows-msvc-debug
 windows-msvc-release
 windows-msvc-tests
-ios-simulator-debug
-ios-simulator-release
+mac-debug
+mac-release
+mac-test
 ```
 
 The Windows presets are the Visual Studio 2022/v143 lane. If the project adds a Visual Studio 2026 or later lane, keep it
 as an explicit new preset and rebuild or revalidate the third-party payloads against that compiler baseline.
 
-iOS may be generated through CMake/Xcode, while keeping a small amount of iOS-specific template content such as `Info.plist`, app delegate, view controller, and entitlement files.
+macOS may be generated through CMake/Xcode, while keeping a small amount of macOS-specific template content such as `Info.plist`, app delegate, view controller, and entitlement files.
 
 ## 20. Development Plan
 

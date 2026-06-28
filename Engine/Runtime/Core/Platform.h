@@ -26,11 +26,11 @@
 #endif
 #endif
 
-#if !defined(VE_PLATFORM_IOS)
-#if defined(__APPLE__) && defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
-#define VE_PLATFORM_IOS 1
+#if !defined(VE_PLATFORM_MACOS)
+#if defined(__APPLE__) && defined(TARGET_OS_OSX) && TARGET_OS_OSX
+#define VE_PLATFORM_MACOS 1
 #else
-#define VE_PLATFORM_IOS 0
+#define VE_PLATFORM_MACOS 0
 #endif
 #endif
 

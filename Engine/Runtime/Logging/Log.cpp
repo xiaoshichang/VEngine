@@ -104,16 +104,17 @@ namespace
     {
         const char* category = record.category != nullptr ? record.category : "General";
 
-        std::string line =
-            std::format("[{}][{}][{}][Thread {}] {}", MakeTimestamp(), ve::ToString(record.severity), category, MakeThreadIdString(), record.message);
+        std::ostringstream stream;
+        stream << '[' << MakeTimestamp() << "][" << ve::ToString(record.severity) << "][" << category << "][Thread " << MakeThreadIdString() << "] "
+               << record.message;
 
         if (IsAtLeastSeverity(record.severity, ve::LogSeverity::Error))
         {
             const char* functionName = record.location.function_name() != nullptr ? record.location.function_name() : "<unknown>";
-            line += std::format(" ({}:{} {})", MakeFileName(record.location), record.location.line(), functionName);
+            stream << " (" << MakeFileName(record.location) << ':' << record.location.line() << ' ' << functionName << ')';
         }
 
-        return line;
+        return stream.str();
     }
 
     void WriteDebuggerOutput(std::string_view line)
@@ -157,7 +158,7 @@ namespace ve
 #endif
 
         config.enableConsole = true;
-        config.enableFile = VE_PLATFORM_IOS == 0;
+        config.enableFile = VE_PLATFORM_MACOS == 0;
         config.enableDebuggerOutput = VE_PLATFORM_WINDOWS != 0;
         config.filePath = std::filesystem::path("Logs") / "VEngine.log";
         return config;

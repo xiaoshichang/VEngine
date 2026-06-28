@@ -12,8 +12,8 @@ namespace ve
 
 #if defined(VE_PLATFORM_WINDOWS) && VE_PLATFORM_WINDOWS
         platform = "Windows";
-#elif defined(VE_PLATFORM_IOS) && VE_PLATFORM_IOS
-        platform = "iOS";
+#elif defined(VE_PLATFORM_MACOS) && VE_PLATFORM_MACOS
+        platform = "macOS";
 #elif defined(VE_PLATFORM_APPLE) && VE_PLATFORM_APPLE
         platform = "Apple";
 #endif

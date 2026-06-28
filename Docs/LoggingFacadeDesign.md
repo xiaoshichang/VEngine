@@ -22,7 +22,7 @@ The first-stage `Logging` design follows these decisions:
 - `Fatal` is only the highest severity level in the first version; it does not abort or break by itself.
 - Log formatting uses C++20 `std::format` and `{}` placeholders.
 - Windows defaults to console, file, and debugger-output sinks.
-- iOS defaults to console output; file output is available through explicit config.
+- macOS defaults to console output; file output is available through explicit config.
 - Editor Console support is exposed through a callback hook, not an Editor UI implementation.
 - Tests are registered through CMake/CTest.
 
