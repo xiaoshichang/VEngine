@@ -47,6 +47,7 @@ namespace ve
         struct HostRuntimePaths
         {
             std::filesystem::path runtimeRoot;
+            std::filesystem::path scriptHostRoot;
             std::filesystem::path runtimeConfigPath;
             std::filesystem::path hostFxrPath;
         };
@@ -140,6 +141,24 @@ namespace ve
             return FindDotNetRuntimeRootFrom(ToNativePath(FileSystem::GetExecutableDirectory()));
         }
 
+        [[nodiscard]] std::filesystem::path ResolveDefaultScriptHostRoot()
+        {
+            const std::filesystem::path executableDirectory = ToNativePath(FileSystem::GetExecutableDirectory());
+            const std::filesystem::path playerRoot = executableDirectory.parent_path() / "VEngineMacPlayer.Managed" / "VEngine.ScriptHost";
+            if (std::filesystem::exists(playerRoot))
+            {
+                return playerRoot;
+            }
+
+            const std::filesystem::path editorRoot = executableDirectory.parent_path() / "VEngineMacEditor.Managed" / "VEngine.ScriptHost";
+            if (std::filesystem::exists(editorRoot))
+            {
+                return editorRoot;
+            }
+
+            return {};
+        }
+
         [[nodiscard]] std::filesystem::path ResolveHostFxrPath(const std::filesystem::path& runtimeRoot)
         {
             const std::filesystem::path pinnedHostFxrPath = runtimeRoot / L"host" / L"fxr" / L"10.0.9" / L"hostfxr.dll";
@@ -190,6 +209,7 @@ namespace ve
         {
             // Step 1: resolve the app-local or project-local .NET runtime that owns hostfxr.
             std::filesystem::path runtimeRoot = initParam.dotNetRuntimeRoot.IsEmpty() ? ResolveDefaultRuntimeRoot() : ToNativePath(initParam.dotNetRuntimeRoot);
+            std::filesystem::path scriptHostRoot = initParam.scriptHostRoot.IsEmpty() ? ResolveDefaultScriptHostRoot() : ToNativePath(initParam.scriptHostRoot);
             std::error_code error;
             if (runtimeRoot.empty() || !std::filesystem::exists(runtimeRoot / L"dotnet.exe", error))
             {
@@ -211,6 +231,12 @@ namespace ve
                 return FailHostInitialization(ErrorCode::NotFound, "WindowsJITScriptingBackend runtimeconfig path does not exist.");
             }
 
+            if (scriptHostRoot.empty() || !std::filesystem::exists(scriptHostRoot, error))
+            {
+                VE_LOG_ERROR_CATEGORY("Script", "Managed script host root was not found: '{}'.", scriptHostRoot.string());
+                return FailHostInitialization(ErrorCode::NotFound, "WindowsJITScriptingBackend requires a managed script host root.");
+            }
+
             // Step 3: load hostfxr from the chosen runtime instead of relying on machine-global state.
             const std::filesystem::path hostFxrPath = ResolveHostFxrPath(runtimeRoot);
             if (hostFxrPath.empty())
@@ -220,6 +246,7 @@ namespace ve
             }
 
             paths.runtimeRoot = std::move(runtimeRoot);
+            paths.scriptHostRoot = std::move(scriptHostRoot);
             paths.runtimeConfigPath = std::move(runtimeConfigPath);
             paths.hostFxrPath = std::move(hostFxrPath);
             return ErrorCode::None;

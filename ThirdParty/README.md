@@ -19,7 +19,7 @@ The script prepares:
 - Boost 1.85.0 under `Boost/Build/Windows64`.
 - Microsoft DirectXShaderCompiler under `DirectXShaderCompiler/Build/Windows64`.
 - Slang under `Slang/slang-2026.12-windows-x86_64`.
-- Microsoft .NET Runtime 10.0.9 under `DotNet/win-x64/10.0.9`.
+- Microsoft .NET Runtime 10.0.9 under `DotNet/win-x64/10.0.9` and `DotNet/osx-arm64/10.0.9`.
 - Windows SDK `fxc.exe` under `WindowsSdkTools/Tools/x64`.
 - SPIRV-Cross under `SPIRV-Cross/Source` and `SPIRV-Cross/Build/Windows64`.
 - Dear ImGui is vendored under `ImGui/imgui-1.92.8`.

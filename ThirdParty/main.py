@@ -34,6 +34,7 @@ def build_default_steps(root: Path) -> list[tuple[str, list[Path | str]]]:
 
     if host_platform == "Darwin":
         steps.insert(1, ("imgui", [root / "ImGui" / "main.py"]))
+        steps.insert(2, ("dotnet", [root / "DotNet" / "main.py"]))
     else:
         steps.insert(1, ("directxshadercompiler", [root / "DirectXShaderCompiler" / "main.py"]))
         steps.insert(3, ("dotnet", [root / "DotNet" / "main.py"]))

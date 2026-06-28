@@ -31,6 +31,7 @@ namespace ve
     {
         ScriptingBackendType backendType = ScriptingBackendType::Auto;
         Path dotNetRuntimeRoot;
+        Path scriptHostRoot;
         Path runtimeConfigPath;
     };
 

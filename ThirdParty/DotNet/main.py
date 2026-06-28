@@ -3,18 +3,31 @@ from __future__ import annotations
 
 import hashlib
 import json
+import platform
 import shutil
 import subprocess
 import sys
-import urllib.request
 import zipfile
 from pathlib import Path
 
 
 DOTNET_RUNTIME_VERSION = "10.0.9"
-DOTNET_RUNTIME_RID = "win-x64"
-DOTNET_RUNTIME_FILE_NAME = "dotnet-runtime-win-x64.zip"
 RELEASE_METADATA_URL = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json"
+REQUEST_TIMEOUT_SECONDS = 30
+RUNTIME_PACKAGES = {
+    "Windows": {
+        "rid": "win-x64",
+        "archive_name": "dotnet-runtime-win-x64.zip",
+        "runtime_exe": "dotnet.exe",
+        "hostfxr_name": "hostfxr.dll",
+    },
+    "Darwin": {
+        "rid": "osx-arm64",
+        "archive_name": "dotnet-runtime-osx-arm64.tar.gz",
+        "runtime_exe": "dotnet",
+        "hostfxr_name": "hostfxr.dylib",
+    },
+}
 
 
 def sha512_hex(path: Path) -> str:
@@ -31,30 +44,91 @@ def run(*args: str) -> None:
         raise SystemExit(result.returncode)
 
 
+def run_capture(*args: str) -> str:
+    result = subprocess.run(args, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "Command failed.")
+    return result.stdout
+
+
 def test_expected_hash(path: Path, expected_hash: str) -> bool:
     return path.exists() and sha512_hex(path) == expected_hash.lower()
 
 
+def get_host_key() -> str:
+    host_system = platform.system()
+    if host_system not in RUNTIME_PACKAGES:
+        raise RuntimeError(f"Unsupported host platform for .NET runtime setup: {host_system}")
+    return host_system
+
+
+def find_runtime_root(root: Path, rid: str) -> Path:
+    return root / rid / DOTNET_RUNTIME_VERSION
+
+
+def locate_runtime_artifacts(runtime_root: Path, runtime_exe_name: str, hostfxr_name: str) -> bool:
+    runtime_exe = runtime_root / runtime_exe_name
+    host_root = runtime_root / "host" / "fxr"
+    if not runtime_exe.exists() or not host_root.exists():
+        return False
+    if platform.system() == "Darwin":
+        return next(host_root.rglob("libhostfxr.dylib"), None) is not None
+    return next(host_root.rglob(hostfxr_name), None) is not None
+
+
+def fetch_text(url: str) -> str:
+    if platform.system() == "Darwin":
+        return run_capture("curl", "-fsSL", "--retry", "3", "--connect-timeout", str(REQUEST_TIMEOUT_SECONDS), url)
+
+    import urllib.request
+    from urllib.error import URLError
+
+    try:
+        with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return response.read().decode("utf-8")
+    except (URLError, TimeoutError) as error:
+        raise RuntimeError("Failed to read .NET release metadata.") from error
+
+
+def download_file(url: str, output_path: Path) -> None:
+    if platform.system() == "Darwin":
+        subprocess.run(
+            ["curl", "-fL", "--retry", "3", "--connect-timeout", str(REQUEST_TIMEOUT_SECONDS), url, "-o", str(output_path)],
+            check=True,
+        )
+        return
+
+    import urllib.request
+    from urllib.error import URLError
+
+    try:
+        urllib.request.urlretrieve(url, output_path)
+    except (URLError, TimeoutError) as error:
+        raise RuntimeError("Failed to download .NET runtime package.") from error
+
+
 def main(_: list[str]) -> int:
+    host_key = get_host_key()
+    package = RUNTIME_PACKAGES[host_key]
+    rid = package["rid"]
     root = Path(__file__).resolve().parent
     download_root = root / "Downloads"
     extract_root = root / "Extract"
-    runtime_root = root / DOTNET_RUNTIME_RID / DOTNET_RUNTIME_VERSION
-    archive_file = download_root / f"dotnet-runtime-{DOTNET_RUNTIME_VERSION}-{DOTNET_RUNTIME_RID}.zip"
-    extract_dir = extract_root / f"{DOTNET_RUNTIME_VERSION}-{DOTNET_RUNTIME_RID}"
-    dotnet_exe = runtime_root / "dotnet.exe"
-    host_root = runtime_root / "host" / "fxr"
-    shared_root = runtime_root / "shared" / "Microsoft.NETCore.App" / DOTNET_RUNTIME_VERSION
-    coreclr_dll = shared_root / "coreclr.dll"
-
-    if dotnet_exe.exists() and coreclr_dll.exists() and host_root.exists():
-        hostfxr = next(host_root.rglob("hostfxr.dll"), None)
-        if hostfxr is not None:
-            print(f".NET runtime ready: {runtime_root}")
-            return 0
+    runtime_root = find_runtime_root(root, rid)
+    archive_file = download_root / package["archive_name"]
+    extract_dir = extract_root / f"{DOTNET_RUNTIME_VERSION}-{rid}"
+    if locate_runtime_artifacts(runtime_root, package["runtime_exe"], package["hostfxr_name"]):
+        print(f".NET runtime ready: {runtime_root}")
+        return 0
 
     print(f"Reading .NET {DOTNET_RUNTIME_VERSION} release metadata.")
-    metadata = json.loads(urllib.request.urlopen(RELEASE_METADATA_URL).read().decode("utf-8"))
+    try:
+        metadata = json.loads(fetch_text(RELEASE_METADATA_URL))
+    except RuntimeError as error:
+        raise RuntimeError(
+            "Failed to read .NET release metadata. Check network access and macOS trust store certificates."
+        ) from error
+
     release = next((item for item in metadata["releases"] if item["release-version"] == DOTNET_RUNTIME_VERSION), None)
     if release is None:
         raise RuntimeError(f".NET release {DOTNET_RUNTIME_VERSION} was not found.")
@@ -63,7 +137,7 @@ def main(_: list[str]) -> int:
         (
             item
             for item in release["runtime"]["files"]
-            if item["rid"] == DOTNET_RUNTIME_RID and item["name"] == DOTNET_RUNTIME_FILE_NAME
+            if item["rid"] == rid and item["name"] == package["archive_name"]
         ),
         None,
     )
@@ -78,8 +152,13 @@ def main(_: list[str]) -> int:
         archive_file.unlink()
 
     if not archive_file.exists():
-        print(f"Downloading .NET runtime {DOTNET_RUNTIME_VERSION} for {DOTNET_RUNTIME_RID}")
-        urllib.request.urlretrieve(runtime_url, archive_file)
+        print(f"Downloading .NET runtime {DOTNET_RUNTIME_VERSION} for {rid}")
+        try:
+            download_file(runtime_url, archive_file)
+        except RuntimeError as error:
+            raise RuntimeError(
+                f"Failed to download .NET runtime package for {rid}. Check network access and certificate trust."
+            ) from error
 
     if not test_expected_hash(archive_file, expected_hash):
         raise RuntimeError("Runtime package hash mismatch.")
@@ -90,11 +169,11 @@ def main(_: list[str]) -> int:
     runtime_root.mkdir(parents=True, exist_ok=True)
 
     try:
-        with zipfile.ZipFile(archive_file) as archive:
-            archive.extractall(extract_dir)
-
-        if not (extract_dir / "dotnet.exe").exists():
-            raise RuntimeError("dotnet.exe was not found inside the .NET runtime archive.")
+        if archive_file.suffix == ".zip":
+            with zipfile.ZipFile(archive_file) as archive:
+                archive.extractall(extract_dir)
+        else:
+            subprocess.run(["tar", "xzf", str(archive_file), "-C", str(extract_dir), "--strip-components=1"], check=True)
 
         for item in extract_dir.iterdir():
             target = runtime_root / item.name
@@ -105,7 +184,7 @@ def main(_: list[str]) -> int:
     finally:
         shutil.rmtree(extract_dir, ignore_errors=True)
 
-    if not (dotnet_exe.exists() and coreclr_dll.exists() and host_root.exists()):
+    if not locate_runtime_artifacts(runtime_root, package["runtime_exe"], package["hostfxr_name"]):
         raise RuntimeError(f".NET runtime was not ready after extraction: {runtime_root}")
 
     print(f".NET runtime ready: {runtime_root}")
