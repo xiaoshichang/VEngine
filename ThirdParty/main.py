@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def run(script: Path, *args: str) -> int:
-    return subprocess.call([sys.executable, str(script), *args])
+    return subprocess.call([sys.executable, str(script), *args], cwd=script.parent)
 
 
 def main(argv: list[str]) -> int:
@@ -27,7 +27,7 @@ def main(argv: list[str]) -> int:
 
         for name, command in steps:
             print(f"==> {name}")
-            code = subprocess.call([sys.executable, *map(str, command)])
+            code = subprocess.call([sys.executable, *map(str, command)], cwd=command[0].parent)
             if code != 0:
                 return code
 

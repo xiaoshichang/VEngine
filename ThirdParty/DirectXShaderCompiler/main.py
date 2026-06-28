@@ -31,8 +31,8 @@ def run(*args: str) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--version", default=VERSION)
-    parser.add_argument("--sha256", default=SHA256)
+    parser.add_argument("--version", "-Version", default=VERSION)
+    parser.add_argument("--sha256", "-Sha256", default=SHA256)
     args = parser.parse_args(argv[1:])
 
     root = Path(__file__).resolve().parent
