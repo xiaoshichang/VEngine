@@ -6,7 +6,6 @@ set(VE_SLANG_PACKAGE_NAME "slang-2026.12-windows-x86_64" CACHE STRING "Slang pac
 set(VE_SLANG_THIRD_PARTY_ROOT "${_VE_SLANG_REPOSITORY_ROOT}/ThirdParty/Slang" CACHE PATH "Slang third-party root.")
 set(VE_SLANG_PACKAGE_ROOT "${VE_SLANG_THIRD_PARTY_ROOT}/${VE_SLANG_PACKAGE_NAME}" CACHE PATH "Extracted Slang package root.")
 set(VE_SLANG_EXECUTABLE "" CACHE FILEPATH "Path to the slangc executable.")
-option(VE_SLANG_BUILD_IF_MISSING "Prepare Slang through its build script when the executable is not set." ON)
 
 function(ve_reset_old_slang_cache)
     if(VE_SLANG_EXECUTABLE AND NOT EXISTS "${VE_SLANG_EXECUTABLE}")
@@ -28,18 +27,6 @@ function(ve_setup_slang)
 
         if(foundSlangExecutable)
             set(VE_SLANG_EXECUTABLE "${foundSlangExecutable}" CACHE FILEPATH "Path to the slangc executable." FORCE)
-        endif()
-    endif()
-
-    if(NOT VE_SLANG_EXECUTABLE AND WIN32 AND VE_SLANG_BUILD_IF_MISSING)
-        execute_process(
-            COMMAND cmd /c "${VE_SLANG_THIRD_PARTY_ROOT}/Build_Windows64.bat"
-            WORKING_DIRECTORY "${_VE_SLANG_REPOSITORY_ROOT}"
-            RESULT_VARIABLE setupSlangResult
-        )
-
-        if(NOT setupSlangResult EQUAL 0)
-            message(FATAL_ERROR "Slang preparation failed with exit code ${setupSlangResult}.")
         endif()
     endif()
 

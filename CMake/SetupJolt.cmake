@@ -5,7 +5,6 @@ get_filename_component(_VE_JOLT_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." A
 set(VE_JOLT_GIT_TAG "v5.5.0" CACHE STRING "Jolt Physics git tag used by the setup script.")
 set(VE_JOLT_THIRD_PARTY_ROOT "${_VE_JOLT_REPOSITORY_ROOT}/ThirdParty/Jolt" CACHE PATH "Jolt Physics third-party root.")
 set(VE_JOLT_SOURCE_DIR "${VE_JOLT_THIRD_PARTY_ROOT}/Source" CACHE PATH "Downloaded Jolt Physics source directory.")
-option(VE_JOLT_SETUP_IF_MISSING "Download Jolt Physics through the setup script when the source is missing." ON)
 option(VE_JOLT_BUILD_TESTS_AND_DEMOS "Build Jolt upstream tests and demos as part of the VEngine CMake graph." OFF)
 option(VE_JOLT_ENABLE_DEBUG_RENDERER "Enable Jolt debug renderer support in the embedded VEngine build." OFF)
 option(VE_JOLT_ENABLE_PROFILER "Enable Jolt profiler support in the embedded VEngine build." OFF)
@@ -28,18 +27,6 @@ function(ve_prepare_jolt_source)
 
     if(joltSourceReady)
         return()
-    endif()
-
-    if(WIN32 AND VE_JOLT_SETUP_IF_MISSING)
-        execute_process(
-            COMMAND cmd /c "${VE_JOLT_THIRD_PARTY_ROOT}/Build_Windows64.bat" --tag ${VE_JOLT_GIT_TAG}
-            WORKING_DIRECTORY "${_VE_JOLT_REPOSITORY_ROOT}"
-            RESULT_VARIABLE setupJoltResult
-        )
-
-        if(NOT setupJoltResult EQUAL 0)
-            message(FATAL_ERROR "Jolt Physics setup failed with exit code ${setupJoltResult}.")
-        endif()
     endif()
 
     foreach(requiredJoltFile IN LISTS requiredJoltFiles)
