@@ -1,142 +1,118 @@
 include_guard(GLOBAL)
 
 function(ve_add_windows_player)
-    if(NOT VE_BUILD_PLAYER)
-        return()
-    endif()
+    add_executable(VEnginePlayer WIN32
+        Player/Windows/main.cpp
+        Player/Windows/WindowsPlayer.cpp
+        Player/Windows/WindowsPlayer.h
+    )
 
-    if(WIN32)
-        add_executable(VEnginePlayer WIN32
-            Player/Windows/main.cpp
-            Player/Windows/WindowsPlayer.cpp
-            Player/Windows/WindowsPlayer.h
-        )
+    target_link_libraries(VEnginePlayer
+        PRIVATE
+            VEngine
+    )
 
-        target_link_libraries(VEnginePlayer
-            PRIVATE
-                VEngine
-        )
+    ve_add_managed_script_host()
+    add_dependencies(VEnginePlayer VEngineScriptHostManaged)
 
-        ve_add_managed_script_host()
-        add_dependencies(VEnginePlayer VEngineScriptHostManaged)
+    add_custom_command(TARGET VEnginePlayer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+            "$<TARGET_FILE_DIR:VEnginePlayer>/Managed/VEngine.ScriptHost"
+        COMMENT "Copying VEngine.ScriptHost managed assembly"
+    )
 
-        add_custom_command(TARGET VEnginePlayer POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-                "$<TARGET_FILE_DIR:VEnginePlayer>/Managed/VEngine.ScriptHost"
-            COMMENT "Copying VEngine.ScriptHost managed assembly"
-        )
-
-        ve_configure_target(VEnginePlayer)
-    else()
-        message(STATUS "VEnginePlayer is only built on Windows.")
-    endif()
+    ve_configure_target(VEnginePlayer)
 endfunction()
 
 function(ve_add_windows_editor)
-    if(NOT VE_BUILD_EDITOR)
-        return()
-    endif()
+    add_executable(VEngineEditor WIN32
+        Editor/Core/EditorAssetDatabase.cpp
+        Editor/Core/EditorAssetDatabase.h
+        Editor/Core/EditorAssetPath.cpp
+        Editor/Core/EditorAssetPath.h
+        Editor/Core/EditorBuildPackageDialog.cpp
+        Editor/Core/EditorBuildPackageDialog.h
+        Editor/Core/EditorBuiltinResources.cpp
+        Editor/Core/EditorBuiltinResources.h
+        Editor/Core/Editor.cpp
+        Editor/Core/Editor.h
+        Editor/Core/EditorEventDispatcher.h
+        Editor/Core/EditorEvents.h
+        Editor/Core/EditorInput.cpp
+        Editor/Core/EditorInput.h
+        Editor/Core/EditorProject.cpp
+        Editor/Core/EditorProject.h
+        Editor/Core/EditorProjectDirectoryDialog.cpp
+        Editor/Core/EditorProjectDirectoryDialog.h
+        Editor/Core/EditorProjectEditingView.cpp
+        Editor/Core/EditorProjectEditingView.h
+        Editor/Core/EditorProjectPackager.cpp
+        Editor/Core/EditorProjectPackager.h
+        Editor/Core/EditorProjectRegistry.cpp
+        Editor/Core/EditorProjectRegistry.h
+        Editor/Core/EditorProjectSelectionView.cpp
+        Editor/Core/EditorProjectSelectionView.h
+        "../../Editor/Core/EditorResourceLoader.cpp"
+        "../../Editor/Core/EditorResourceLoader.h"
+        Editor/Core/EditorScriptCompiler.cpp
+        Editor/Core/EditorScriptCompiler.h
+        Editor/Core/EditorScriptDatabase.cpp
+        Editor/Core/EditorScriptDatabase.h
+        Editor/Core/EditorScriptProjectGenerator.cpp
+        Editor/Core/EditorScriptProjectGenerator.h
+        Editor/Core/Gizmos.cpp
+        Editor/Core/Gizmos.h
+        Editor/RenderPass/EditorGizmoRenderPass.cpp
+        Editor/RenderPass/EditorGizmoRenderPass.h
+        Editor/RenderPass/SceneGridRenderPass.cpp
+        Editor/RenderPass/SceneGridRenderPass.h
+        Editor/Panels/AssetsPanel.cpp
+        Editor/Panels/AssetsPanel.h
+        Editor/Panels/BasePanel.cpp
+        Editor/Panels/BasePanel.h
+        Editor/Panels/GameViewPanel.cpp
+        Editor/Panels/GameViewPanel.h
+        Editor/Panels/HierarchyPanel.cpp
+        Editor/Panels/HierarchyPanel.h
+        Editor/Panels/InspectorPanel.cpp
+        Editor/Panels/InspectorPanel.h
+        Editor/Panels/SceneViewPanel.cpp
+        Editor/Panels/SceneViewPanel.h
+        Editor/Windows/main.cpp
+        Editor/Windows/WindowsEditorApplication.cpp
+        Editor/Windows/WindowsEditorApplication.h
+    )
 
-    if(WIN32)
-        add_executable(VEngineEditor WIN32
-            Editor/Core/EditorAssetDatabase.cpp
-            Editor/Core/EditorAssetDatabase.h
-            Editor/Core/EditorAssetPath.cpp
-            Editor/Core/EditorAssetPath.h
-            Editor/Core/EditorBuildPackageDialog.cpp
-            Editor/Core/EditorBuildPackageDialog.h
-            Editor/Core/EditorBuiltinResources.cpp
-            Editor/Core/EditorBuiltinResources.h
-            Editor/Core/Editor.cpp
-            Editor/Core/Editor.h
-            Editor/Core/EditorEventDispatcher.h
-            Editor/Core/EditorEvents.h
-            Editor/Core/EditorInput.cpp
-            Editor/Core/EditorInput.h
-            Editor/Core/EditorProject.cpp
-            Editor/Core/EditorProject.h
-            Editor/Core/EditorProjectDirectoryDialog.cpp
-            Editor/Core/EditorProjectDirectoryDialog.h
-            Editor/Core/EditorProjectEditingView.cpp
-            Editor/Core/EditorProjectEditingView.h
-            Editor/Core/EditorProjectPackager.cpp
-            Editor/Core/EditorProjectPackager.h
-            Editor/Core/EditorProjectRegistry.cpp
-            Editor/Core/EditorProjectRegistry.h
-            Editor/Core/EditorProjectSelectionView.cpp
-            Editor/Core/EditorProjectSelectionView.h
-            "../../Editor/Core/EditorResourceLoader.cpp"
-            "../../Editor/Core/EditorResourceLoader.h"
-            Editor/Core/EditorScriptCompiler.cpp
-            Editor/Core/EditorScriptCompiler.h
-            Editor/Core/EditorScriptDatabase.cpp
-            Editor/Core/EditorScriptDatabase.h
-            Editor/Core/EditorScriptProjectGenerator.cpp
-            Editor/Core/EditorScriptProjectGenerator.h
-            Editor/Core/Gizmos.cpp
-            Editor/Core/Gizmos.h
-            Editor/RenderPass/EditorGizmoRenderPass.cpp
-            Editor/RenderPass/EditorGizmoRenderPass.h
-            Editor/RenderPass/SceneGridRenderPass.cpp
-            Editor/RenderPass/SceneGridRenderPass.h
-            Editor/Panels/AssetsPanel.cpp
-            Editor/Panels/AssetsPanel.h
-            Editor/Panels/BasePanel.cpp
-            Editor/Panels/BasePanel.h
-            Editor/Panels/GameViewPanel.cpp
-            Editor/Panels/GameViewPanel.h
-            Editor/Panels/HierarchyPanel.cpp
-            Editor/Panels/HierarchyPanel.h
-            Editor/Panels/InspectorPanel.cpp
-            Editor/Panels/InspectorPanel.h
-            Editor/Panels/SceneViewPanel.cpp
-            Editor/Panels/SceneViewPanel.h
-            Editor/Windows/main.cpp
-            Editor/Windows/WindowsEditorApplication.cpp
-            Editor/Windows/WindowsEditorApplication.h
-        )
+    target_link_libraries(VEngineEditor
+        PRIVATE
+            VEngine
+    )
 
-        target_link_libraries(VEngineEditor
-            PRIVATE
-                VEngine
-        )
+    ve_add_shader_tool()
+    ve_add_managed_script_host()
+    add_dependencies(VEngineEditor VEngineShaderTool VEngineScriptHostManaged)
 
-        ve_add_shader_tool()
-        ve_add_managed_script_host()
-        add_dependencies(VEngineEditor VEngineShaderTool VEngineScriptHostManaged)
+    ve_setup_imgui(VEngineEditor)
 
-        ve_setup_imgui(VEngineEditor)
+    add_custom_command(TARGET VEngineEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${PROJECT_SOURCE_DIR}/Assets"
+            "$<TARGET_FILE_DIR:VEngineEditor>/Assets"
+        COMMENT "Copying VEngine editor asset roots"
+    )
 
-        add_custom_command(TARGET VEngineEditor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${PROJECT_SOURCE_DIR}/Assets"
-                "$<TARGET_FILE_DIR:VEngineEditor>/Assets"
-            COMMENT "Copying VEngine editor asset roots"
-        )
+    add_custom_command(TARGET VEngineEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+            "$<TARGET_FILE_DIR:VEngineEditor>/Managed/VEngine.ScriptHost"
+        COMMENT "Copying VEngine.ScriptHost managed assembly"
+    )
 
-        add_custom_command(TARGET VEngineEditor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-                "$<TARGET_FILE_DIR:VEngineEditor>/Managed/VEngine.ScriptHost"
-            COMMENT "Copying VEngine.ScriptHost managed assembly"
-        )
-
-        ve_configure_target(VEngineEditor)
-    else()
-        message(STATUS "VEngineEditor is only built on Windows.")
-    endif()
+    ve_configure_target(VEngineEditor)
 endfunction()
 
 function(ve_add_mac_player)
-    if(NOT VE_BUILD_MAC_PLAYER)
-        return()
-    endif()
-
-    if(NOT APPLE)
-        message(FATAL_ERROR "VEngineMacPlayer requires an Apple toolchain.")
-    endif()
-
     enable_language(OBJCXX)
 
     add_executable(VEngineMacPlayer MACOSX_BUNDLE
@@ -157,6 +133,20 @@ function(ve_add_mac_player)
             ${APPKIT_FRAMEWORK}
     )
 
+    ve_add_managed_script_host()
+    add_dependencies(VEngineMacPlayer VEngineScriptHostManaged)
+
+    add_custom_command(TARGET VEngineMacPlayer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:VEngineMacPlayer>/../../VEngineMacPlayer.Managed"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:VEngineMacPlayer>/../VEngineMacPlayer.Managed"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+            "$<TARGET_FILE_DIR:VEngineMacPlayer>/../../../VEngineMacPlayer.Managed/VEngine.ScriptHost"
+        COMMENT "Copying VEngine.ScriptHost managed assembly"
+    )
+
     set_target_properties(VEngineMacPlayer
         PROPERTIES
             MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/macOS/Info.plist.in
@@ -169,14 +159,6 @@ function(ve_add_mac_player)
 endfunction()
 
 function(ve_add_mac_editor)
-    if(NOT VE_BUILD_EDITOR)
-        return()
-    endif()
-
-    if(NOT APPLE)
-        message(FATAL_ERROR "VEngineMacEditor requires an Apple toolchain.")
-    endif()
-
     enable_language(OBJCXX)
 
     add_executable(VEngineMacEditor MACOSX_BUNDLE
@@ -199,6 +181,20 @@ function(ve_add_mac_editor)
             ${APPKIT_FRAMEWORK}
     )
 
+    ve_add_managed_script_host()
+    add_dependencies(VEngineMacEditor VEngineScriptHostManaged)
+
+    add_custom_command(TARGET VEngineMacEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:VEngineMacEditor>/../../VEngineMacEditor.Managed"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:VEngineMacEditor>/../VEngineMacEditor.Managed"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+            "$<TARGET_FILE_DIR:VEngineMacEditor>/../../../VEngineMacEditor.Managed/VEngine.ScriptHost"
+        COMMENT "Copying VEngine.ScriptHost managed assembly"
+    )
+
     set_target_properties(VEngineMacEditor
         PROPERTIES
             MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/macOS/Info.plist.in
@@ -208,4 +204,28 @@ function(ve_add_mac_editor)
     )
 
     ve_configure_target(VEngineMacEditor)
+endfunction()
+
+function(ve_add_player)
+    if(NOT VE_BUILD_PLAYER)
+        return()
+    endif()
+
+    if(WIN32)
+        ve_add_windows_player()
+    elseif(APPLE)
+        ve_add_mac_player()
+    endif()
+endfunction()
+
+function(ve_add_editor)
+    if(NOT VE_BUILD_EDITOR)
+        return()
+    endif()
+
+    if(WIN32)
+        ve_add_windows_editor()
+    elseif(APPLE)
+        ve_add_mac_editor()
+    endif()
 endfunction()

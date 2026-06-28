@@ -1,4 +1,5 @@
 #include "Editor/macOS/MacEditorApplication.h"
+#include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 
@@ -23,6 +24,9 @@ int main(int argc, char* argv[])
         initParam.mainWindow.height = 1000;
         initParam.mainWindow.visible = true;
         initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
+
+        const ve::Path executableDirectory = ve::FileSystem::GetExecutableDirectory();
+        initParam.runtime.scriptingSystem.scriptHostRoot = executableDirectory.GetParentPath() / "VEngineMacEditor.Managed" / "VEngine.ScriptHost";
 
         ve::editor::MacEditorApplication application(std::move(initParam));
         int exitCode = application.Init();

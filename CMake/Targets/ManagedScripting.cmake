@@ -2,14 +2,54 @@ include_guard(GLOBAL)
 
 set(VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Managed/VEngine.ScriptHost")
 set(VE_SCRIPT_HOST_MANAGED_OBJ_DIR "${CMAKE_BINARY_DIR}/ManagedObj/VEngine.ScriptHost/")
+set(VE_DOTNET_RUNTIME_ROOT "" CACHE PATH "App-local .NET runtime root used by managed scripting.")
+set(VE_DOTNET_SDK_EXECUTABLE "" CACHE FILEPATH "Path to the system dotnet SDK used to build managed scripting.")
 
 function(ve_find_dotnet_sdk output_variable)
-    find_program(VE_DOTNET_EXECUTABLE dotnet)
-    if(NOT VE_DOTNET_EXECUTABLE)
-        message(FATAL_ERROR "dotnet SDK was not found. VEngine managed scripting requires dotnet on PATH.")
+    if(VE_DOTNET_SDK_EXECUTABLE AND EXISTS "${VE_DOTNET_SDK_EXECUTABLE}")
+        set(${output_variable} "${VE_DOTNET_SDK_EXECUTABLE}" PARENT_SCOPE)
+        message(STATUS "dotnet SDK: ${VE_DOTNET_SDK_EXECUTABLE}")
+        return()
     endif()
 
-    set(${output_variable} "${VE_DOTNET_EXECUTABLE}" PARENT_SCOPE)
+    find_program(VE_DOTNET_SDK_EXECUTABLE dotnet)
+    if(NOT VE_DOTNET_SDK_EXECUTABLE)
+        message(FATAL_ERROR "dotnet SDK was not found. Install the system .NET SDK or set VE_DOTNET_SDK_EXECUTABLE.")
+    endif()
+
+    set(${output_variable} "${VE_DOTNET_SDK_EXECUTABLE}" PARENT_SCOPE)
+    message(STATUS "dotnet SDK: ${VE_DOTNET_SDK_EXECUTABLE}")
+endfunction()
+
+function(ve_find_dotnet_runtime_root output_variable)
+    if(VE_DOTNET_RUNTIME_ROOT AND EXISTS "${VE_DOTNET_RUNTIME_ROOT}/dotnet")
+        set(${output_variable} "${VE_DOTNET_RUNTIME_ROOT}" PARENT_SCOPE)
+        message(STATUS ".NET runtime: ${VE_DOTNET_RUNTIME_ROOT}")
+        return()
+    endif()
+
+    if(APPLE)
+        set(runtimeCandidates
+            "${PROJECT_SOURCE_DIR}/ThirdParty/DotNet/osx-arm64/10.0.9"
+        )
+    elseif(WIN32)
+        set(runtimeCandidates
+            "${PROJECT_SOURCE_DIR}/ThirdParty/DotNet/win-x64/10.0.9"
+        )
+    else()
+        set(runtimeCandidates)
+    endif()
+
+    foreach(candidateRoot IN LISTS runtimeCandidates)
+        if(EXISTS "${candidateRoot}/dotnet")
+            set(VE_DOTNET_RUNTIME_ROOT "${candidateRoot}" CACHE PATH "App-local .NET runtime root used by managed scripting." FORCE)
+            set(${output_variable} "${candidateRoot}" PARENT_SCOPE)
+            message(STATUS ".NET runtime: ${candidateRoot}")
+            return()
+        endif()
+    endforeach()
+
+    message(FATAL_ERROR "Project-local .NET runtime was not found under ThirdParty/DotNet. Run ThirdParty/DotNet/Build_Mac.sh or the Windows runtime setup first.")
 endfunction()
 
 function(ve_add_managed_script_host)
@@ -17,15 +57,18 @@ function(ve_add_managed_script_host)
         return()
     endif()
 
-    if(NOT WIN32)
+    if(NOT (WIN32 OR APPLE))
         return()
     endif()
 
-    ve_find_dotnet_sdk(dotnet_executable)
+    ve_find_dotnet_sdk(dotnetSdkExecutable)
+    ve_find_dotnet_runtime_root(dotnetRuntimeRoot)
+    message(STATUS "Managed scripting build tool: ${dotnetSdkExecutable}")
+    message(STATUS "Managed scripting runtime root: ${dotnetRuntimeRoot}")
 
     add_custom_target(VEngineScriptHostManaged
         COMMAND ${CMAKE_COMMAND} -E make_directory "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-        COMMAND "${dotnet_executable}" build
+        COMMAND "${dotnetSdkExecutable}" build
             "${PROJECT_SOURCE_DIR}/Engine/Managed/VEngine.ScriptHost/VEngine.ScriptHost.csproj"
             --configuration $<CONFIG>
             --output "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
