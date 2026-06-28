@@ -15,12 +15,6 @@
 
 namespace
 {
-#ifdef VE_DEFAULT_SLANG_EXECUTABLE
-    constexpr const char* DefaultSlangExecutable = VE_DEFAULT_SLANG_EXECUTABLE;
-#else
-    constexpr const char* DefaultSlangExecutable = "slangc";
-#endif
-
     struct CompileOptions
     {
         std::filesystem::path sourcePath;
@@ -28,7 +22,7 @@ namespace
         std::string shaderName;
         std::filesystem::path dxcExecutable = "dxc";
         std::filesystem::path fxcExecutable = "fxc";
-        std::filesystem::path slangExecutable = DefaultSlangExecutable;
+        std::filesystem::path slangExecutable = "slangc";
     };
 
     struct ShaderStage

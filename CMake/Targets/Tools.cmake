@@ -12,14 +12,6 @@ function(ve_add_shader_tool)
         Tools/ShaderTool/ShaderTool.cpp
     )
 
-    if(VE_SLANG_EXECUTABLE)
-        file(TO_CMAKE_PATH "${VE_SLANG_EXECUTABLE}" veSlangExecutablePath)
-        target_compile_definitions(VEngineShaderTool
-            PRIVATE
-                VE_DEFAULT_SLANG_EXECUTABLE="${veSlangExecutablePath}"
-        )
-    endif()
-
     target_link_libraries(VEngineShaderTool
         PRIVATE
             VEngine
