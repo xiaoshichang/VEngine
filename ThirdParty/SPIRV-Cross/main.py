@@ -53,9 +53,10 @@ def main(argv: list[str]) -> int:
 
     root = Path(__file__).resolve().parent
     source_dir = root / "Source"
-    build_dir = root / "Build" / "Windows64" / "vulkan-sdk-1.4.309.0"
+    host_build_dir = "Mac" if sys.platform == "darwin" else "Windows64"
+    build_dir = root / "Build" / host_build_dir / ("vulkan-sdk-1.4.309.0" if host_build_dir == "Windows64" else "SPIRV-Cross-MoltenVK-1.1.5.zip")
     archive_path = root / "SPIRV-Cross-MoltenVK-1.1.5.zip"
-    built_exe = build_dir / args.configuration / "spirv-cross.exe"
+    built_exe = build_dir / args.configuration / ("spirv-cross" if sys.platform == "darwin" else "spirv-cross.exe")
 
     if source_dir.exists() and not test_source(source_dir):
         shutil.rmtree(source_dir, ignore_errors=True)
@@ -73,18 +74,12 @@ def main(argv: list[str]) -> int:
         print(f"SPIRV-Cross source ready: {source_dir}")
         return 0
 
-    run(
+    cmake_args = [
         "cmake",
         "-S",
         str(source_dir),
         "-B",
         str(build_dir),
-        "-G",
-        "Visual Studio 17 2022",
-        "-A",
-        "x64",
-        "-T",
-        "v143",
         "-DSPIRV_CROSS_CLI=ON",
         "-DSPIRV_CROSS_ENABLE_TESTS=OFF",
         "-DSPIRV_CROSS_ENABLE_GLSL=ON",
@@ -92,7 +87,12 @@ def main(argv: list[str]) -> int:
         "-DSPIRV_CROSS_ENABLE_REFLECT=ON",
         "-DSPIRV_CROSS_ENABLE_UTIL=ON",
         "-DSPIRV_CROSS_SHARED=OFF",
-    )
+    ]
+    if sys.platform == "darwin":
+        cmake_args.extend(["-G", "Xcode"])
+    else:
+        cmake_args.extend(["-G", "Visual Studio 17 2022", "-A", "x64", "-T", "v143"])
+    run(*cmake_args)
     run("cmake", "--build", str(build_dir), "--config", args.configuration, "--target", "spirv-cross")
 
     if not built_exe.exists():

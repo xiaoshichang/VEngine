@@ -6,7 +6,7 @@ set(VE_SPIRV_CROSS_EXECUTABLE "" CACHE FILEPATH "Path to the spirv-cross executa
 set(VE_SPIRV_CROSS_GIT_TAG "vulkan-sdk-1.4.309.0" CACHE STRING "SPIRV-Cross git tag used by the setup script.")
 set(VE_SPIRV_CROSS_THIRD_PARTY_ROOT "${_VE_SPIRV_CROSS_REPOSITORY_ROOT}/ThirdParty/SPIRV-Cross" CACHE PATH "SPIRV-Cross third-party root.")
 set(VE_SPIRV_CROSS_SOURCE_DIR "${VE_SPIRV_CROSS_THIRD_PARTY_ROOT}/Source" CACHE PATH "Downloaded SPIRV-Cross source directory.")
-set(VE_SPIRV_CROSS_BUILD_DIR "${VE_SPIRV_CROSS_THIRD_PARTY_ROOT}/Build/Windows64/${VE_SPIRV_CROSS_GIT_TAG}" CACHE PATH "SPIRV-Cross standalone build directory.")
+set(VE_SPIRV_CROSS_BUILD_DIR "" CACHE PATH "SPIRV-Cross standalone build directory.")
 set(VE_SPIRV_CROSS_BUILD_CONFIG "Release" CACHE STRING "SPIRV-Cross standalone build configuration used by VEngine.")
 
 function(ve_reset_old_spirv_cross_cache)
@@ -26,8 +26,22 @@ endfunction()
 function(ve_setup_spirv_cross)
     ve_reset_old_spirv_cross_cache()
 
+    if(NOT VE_SPIRV_CROSS_BUILD_DIR)
+        if(APPLE)
+            set(VE_SPIRV_CROSS_BUILD_DIR "${VE_SPIRV_CROSS_THIRD_PARTY_ROOT}/Build/Mac/SPIRV-Cross-MoltenVK-1.1.5.zip" CACHE PATH "SPIRV-Cross standalone build directory." FORCE)
+        else()
+            set(VE_SPIRV_CROSS_BUILD_DIR "${VE_SPIRV_CROSS_THIRD_PARTY_ROOT}/Build/Windows64/${VE_SPIRV_CROSS_GIT_TAG}" CACHE PATH "SPIRV-Cross standalone build directory." FORCE)
+        endif()
+    endif()
+
     if(NOT VE_SPIRV_CROSS_EXECUTABLE AND WIN32)
         set(builtSpirvCrossExecutable "${VE_SPIRV_CROSS_BUILD_DIR}/${VE_SPIRV_CROSS_BUILD_CONFIG}/spirv-cross.exe")
+
+        if(EXISTS "${builtSpirvCrossExecutable}")
+            set(VE_SPIRV_CROSS_EXECUTABLE "${builtSpirvCrossExecutable}" CACHE FILEPATH "Path to the spirv-cross executable." FORCE)
+        endif()
+    elseif(NOT VE_SPIRV_CROSS_EXECUTABLE AND APPLE)
+        set(builtSpirvCrossExecutable "${VE_SPIRV_CROSS_BUILD_DIR}/${VE_SPIRV_CROSS_BUILD_CONFIG}/spirv-cross")
 
         if(EXISTS "${builtSpirvCrossExecutable}")
             set(VE_SPIRV_CROSS_EXECUTABLE "${builtSpirvCrossExecutable}" CACHE FILEPATH "Path to the spirv-cross executable." FORCE)
@@ -41,7 +55,7 @@ function(ve_setup_spirv_cross)
     endif()
 
     message(FATAL_ERROR
-        "SPIRV-Cross executable was not found. Run ThirdParty/SPIRV-Cross/Build_Windows64.bat "
+        "SPIRV-Cross executable was not found. Run ThirdParty/Build_Mac.sh or ThirdParty/SPIRV-Cross/Build_Windows64.bat "
         "or set VE_SPIRV_CROSS_EXECUTABLE."
     )
 endfunction()

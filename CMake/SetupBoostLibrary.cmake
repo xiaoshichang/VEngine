@@ -19,6 +19,8 @@ function(ve_get_default_boost_root outVariable)
 
     if(WIN32)
         set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/Windows64")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/Mac")
     elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         if(VE_IOS_PLATFORM STREQUAL "DEVICE")
             set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/IOS/device")

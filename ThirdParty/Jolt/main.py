@@ -67,7 +67,7 @@ def main(argv: list[str]) -> int:
 
     root = Path(__file__).resolve().parent
     source_dir = root / "Source"
-    build_dir = root / "Build" / "Windows64" / args.tag
+    build_dir = root / "Build" / ("Mac" if sys.platform == "darwin" else "Windows64") / args.tag
     archive_path = root / args.archive
 
     if not source_dir.exists():
@@ -98,18 +98,12 @@ def main(argv: list[str]) -> int:
     build_samples = "Samples" in build_targets
     build_viewer = "JoltViewer" in build_targets
 
-    run(
+    cmake_args = [
         "cmake",
         "-S",
         str(source_dir / "Build"),
         "-B",
         str(build_dir),
-        "-G",
-        "Visual Studio 17 2022",
-        "-A",
-        "x64",
-        "-T",
-        "v143",
         "-DBUILD_SHARED_LIBS=OFF",
         "-DENABLE_INSTALL=OFF",
         "-DUSE_STATIC_MSVC_RUNTIME_LIBRARY=OFF",
@@ -118,7 +112,12 @@ def main(argv: list[str]) -> int:
         f"-DTARGET_PERFORMANCE_TEST={build_performance_test}",
         f"-DTARGET_SAMPLES={build_samples}",
         f"-DTARGET_VIEWER={build_viewer}",
-    )
+    ]
+    if sys.platform == "darwin":
+        cmake_args.extend(["-G", "Xcode"])
+    else:
+        cmake_args.extend(["-G", "Visual Studio 17 2022", "-A", "x64", "-T", "v143"])
+    run(*cmake_args)
 
     for target in build_targets:
         run("cmake", "--build", str(build_dir), "--config", args.configuration, "--target", target)

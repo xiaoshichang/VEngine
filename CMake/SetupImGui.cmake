@@ -20,10 +20,15 @@ function(ve_validate_imgui_source)
         "${VE_IMGUI_SOURCE_DIR}/imgui_draw.cpp"
         "${VE_IMGUI_SOURCE_DIR}/imgui_tables.cpp"
         "${VE_IMGUI_SOURCE_DIR}/imgui_widgets.cpp"
-        "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx11.cpp"
-        "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx12.cpp"
-        "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_win32.cpp"
     )
+
+    if(WIN32)
+        list(APPEND requiredImGuiFiles
+            "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx11.cpp"
+            "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx12.cpp"
+            "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_win32.cpp"
+        )
+    endif()
 
     foreach(requiredImGuiFile IN LISTS requiredImGuiFiles)
         if(NOT EXISTS "${requiredImGuiFile}")
@@ -51,10 +56,16 @@ function(ve_add_imgui_library)
         "${VE_IMGUI_SOURCE_DIR}/imgui_draw.cpp"
         "${VE_IMGUI_SOURCE_DIR}/imgui_tables.cpp"
         "${VE_IMGUI_SOURCE_DIR}/imgui_widgets.cpp"
-        "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx11.cpp"
-        "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx12.cpp"
-        "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_win32.cpp"
     )
+
+    if(WIN32)
+        target_sources(VEngineImGui
+            PRIVATE
+                "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx11.cpp"
+                "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_dx12.cpp"
+                "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_win32.cpp"
+        )
+    endif()
 
     add_library(VEngine::ImGui ALIAS VEngineImGui)
 
@@ -89,6 +100,12 @@ function(ve_add_imgui_library)
                 d3d12
                 d3dcompiler
                 dxgi
+        )
+    elseif(APPLE)
+        target_sources(VEngineImGui
+            PRIVATE
+                "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_osx.mm"
+                "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_metal.mm"
         )
     endif()
 endfunction()

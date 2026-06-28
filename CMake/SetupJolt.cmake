@@ -33,7 +33,7 @@ function(ve_prepare_jolt_source)
         if(NOT EXISTS "${requiredJoltFile}")
             message(FATAL_ERROR
                 "Jolt Physics source is missing required file: ${requiredJoltFile}\n"
-                "Run ThirdParty/Jolt/Build_Windows64.bat or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout."
+                "Run ThirdParty/Jolt/Build_Windows64.bat or ThirdParty/Build_Mac.sh, or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout."
             )
         endif()
     endforeach()
