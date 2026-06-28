@@ -16,8 +16,8 @@
 
 #include <imgui.h>
 
-#if VE_PLATFORM_WINDOWS
 #include <backends/imgui_impl_dx11.h>
+#if VE_PLATFORM_WINDOWS
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -174,9 +174,6 @@ namespace ve::editor
         runtime_ = &runtime;
         renderSystem_ = &runtime.GetRenderSystem();
         mainThreadCommandQueue_ = &mainThreadCommandQueue;
-        const ErrorCode renderBackendResult = InitRenderBackend(*renderSystem_);
-        VE_ASSERT(renderBackendResult == ErrorCode::None);
-
         projectSelectionView_ = new ProjectSelectionView();
         projectEditingView_ = new ProjectEditingView();
 
@@ -200,18 +197,6 @@ namespace ve::editor
         if (!initialized_.load(std::memory_order_acquire))
         {
             return;
-        }
-
-        switch (renderBackend_)
-        {
-        case RenderBackend::D3D11:
-#if VE_PLATFORM_WINDOWS
-            ImGui_ImplDX11_NewFrame();
-#endif
-            break;
-        case RenderBackend::D3D12:
-        case RenderBackend::Metal:
-            break;
         }
 
         input_.StartFrame();
@@ -289,7 +274,7 @@ namespace ve::editor
 
     EditorOverlayRenderCallback Editor::BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const
     {
-        return [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)]()
+        return [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)](rhi::RhiCommandList& commandList)
         {
             VE_ASSERT_RENDER_THREAD();
 
@@ -298,17 +283,6 @@ namespace ve::editor
                 return;
             }
 
-            switch (backend)
-            {
-            case RenderBackend::D3D11:
-#if VE_PLATFORM_WINDOWS
-                ImGui_ImplDX11_RenderDrawData(&frameDrawData->drawData);
-#endif
-                break;
-            case RenderBackend::D3D12:
-            case RenderBackend::Metal:
-                break;
-            }
         };
     }
 
@@ -399,8 +373,6 @@ namespace ve::editor
         delete projectEditingView_;
         projectSelectionView_ = nullptr;
         projectEditingView_ = nullptr;
-
-        ShutdownRenderBackend();
 
         input_.Shutdown();
 
@@ -1187,68 +1159,4 @@ namespace ve::editor
         return "Unknown";
     }
 
-    ErrorCode Editor::InitRenderBackend(RenderSystem& renderSystem)
-    {
-        RenderNativeHandles nativeHandles;
-        const ErrorCode queryResult = renderSystem.QueryNativeHandles(nativeHandles);
-        if (queryResult != ErrorCode::None)
-        {
-            return queryResult;
-        }
-
-        if (!nativeHandles.hasMainSwapchain)
-        {
-            return ErrorCode::InvalidState;
-        }
-
-        renderBackend_ = nativeHandles.backend;
-        switch (nativeHandles.backend)
-        {
-        case RenderBackend::D3D11:
-        {
-#if VE_PLATFORM_WINDOWS
-            auto* nativeDevice = static_cast<ID3D11Device*>(nativeHandles.device);
-            auto* nativeImmediateContext = static_cast<ID3D11DeviceContext*>(nativeHandles.immediateContext);
-            if (nativeDevice == nullptr || nativeImmediateContext == nullptr)
-            {
-                return ErrorCode::InvalidState;
-            }
-
-            if (!ImGui_ImplDX11_Init(nativeDevice, nativeImmediateContext))
-            {
-                return ErrorCode::PlatformError;
-            }
-
-            return ErrorCode::None;
-#else
-            return ErrorCode::Unsupported;
-#endif
-        }
-        case RenderBackend::D3D12:
-            VE_LOG_WARN_CATEGORY("Editor", "ImGui D3D12 backend initialization is not implemented yet.");
-            return ErrorCode::Unsupported;
-        case RenderBackend::Metal:
-            VE_LOG_WARN_CATEGORY("Editor", "ImGui Metal backend initialization is not implemented yet.");
-            return ErrorCode::Unsupported;
-        }
-
-        return ErrorCode::Unsupported;
-    }
-
-    void Editor::ShutdownRenderBackend() noexcept
-    {
-        switch (renderBackend_)
-        {
-        case RenderBackend::D3D11:
-#if VE_PLATFORM_WINDOWS
-            VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::ShutdownRenderBackend requires an active ImGui context.");
-            ImGui_ImplDX11_Shutdown();
-#endif
-            break;
-        case RenderBackend::D3D12:
-        case RenderBackend::Metal:
-            VE_ASSERT_ALWAYS_MESSAGE(false, "Editor::ShutdownRenderBackend called for unsupported backend in current build.");
-            break;
-        }
-    }
 } // namespace ve::editor

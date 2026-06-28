@@ -157,6 +157,18 @@ namespace ve::rhi
 
         /// Issues an indexed draw call.
         virtual void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) = 0;
+
+        /// Returns the backend-native render encoder/command encoder for the active render pass when available.
+        [[nodiscard]] virtual void* GetNativeRenderEncoderHandle() const noexcept
+        {
+            return nullptr;
+        }
+
+        /// Returns the backend-native command buffer for the active submission when available.
+        [[nodiscard]] virtual void* GetNativeCommandBufferHandle() const noexcept
+        {
+            return nullptr;
+        }
     };
 
     /// Creates RHI objects and submits command lists to a backend graphics queue.

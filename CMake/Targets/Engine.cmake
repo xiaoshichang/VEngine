@@ -212,7 +212,10 @@ function(ve_add_engine)
     if(APPLE AND NOT WIN32)
         target_sources(VEngine
             PRIVATE
+                Engine/Runtime/Platform/MacOS/MacWindow.mm
                 Engine/Runtime/Scripting/NullScriptingBackend.cpp
+            PUBLIC
+                Engine/Runtime/Platform/MacOS/MacWindow.h
         )
     endif()
 

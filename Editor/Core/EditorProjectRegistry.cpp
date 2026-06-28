@@ -119,6 +119,8 @@ namespace ve::editor
         }
 
         RegCloseKey(registryKey);
+#else
+        return recentProjects;
 #endif
 
         return recentProjects;

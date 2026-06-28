@@ -30,14 +30,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     }
 
     ve::ApplicationInitParam initParam;
-    initParam.name = "VEnginePlayer";
-    initParam.mainWindow.title = "VEngine Player";
+    initParam.name = "VEngineWinPlayer";
+    initParam.mainWindow.title = "VEngine Win Player";
     initParam.mainWindow.width = 1280;
     initParam.mainWindow.height = 720;
     initParam.mainWindow.visible = true;
-    initParam.runtime.jobSystem.workerThreadNamePrefix = "VEnginePlayerJobWorker";
-    initParam.runtime.ioSystem.threadName = "VEnginePlayerIOThread";
-    initParam.runtime.renderSystem.threadName = "VEnginePlayerRenderThread";
+    initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineWinPlayerJobWorker";
+    initParam.runtime.ioSystem.threadName = "VEngineWinPlayerIOThread";
+    initParam.runtime.renderSystem.threadName = "VEngineWinPlayerRenderThread";
     initParam.runtime.renderSystem.device.backend = ve::RenderBackend::D3D11;
     initParam.runtime.scriptingSystem.runtimeConfigPath =
         ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost" / "VEngine.ScriptHost.runtimeconfig.json";

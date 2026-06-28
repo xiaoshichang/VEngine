@@ -704,7 +704,17 @@ namespace ve::rhi
                                                   indexCount:indexCount
                                                    indexType:indexType_
                                                  indexBuffer:indexBuffer_
-                                           indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
+                                                  indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
+            }
+
+            [[nodiscard]] void* GetNativeRenderEncoderHandle() const noexcept override
+            {
+                return renderCommandEncoder_;
+            }
+
+            [[nodiscard]] void* GetNativeCommandBufferHandle() const noexcept override
+            {
+                return commandBuffer_;
             }
 
             [[nodiscard]] bool CommitAndWait()

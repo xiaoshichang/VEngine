@@ -12,13 +12,36 @@ function(ve_find_dotnet_sdk output_variable)
         return()
     endif()
 
-    find_program(VE_DOTNET_SDK_EXECUTABLE dotnet)
-    if(NOT VE_DOTNET_SDK_EXECUTABLE)
-        message(FATAL_ERROR "dotnet SDK was not found. Install the system .NET SDK or set VE_DOTNET_SDK_EXECUTABLE.")
+    set(dotnetCandidates)
+    if(DEFINED ENV{DOTNET_ROOT} AND EXISTS "$ENV{DOTNET_ROOT}/dotnet")
+        list(APPEND dotnetCandidates "$ENV{DOTNET_ROOT}/dotnet")
     endif()
 
-    set(${output_variable} "${VE_DOTNET_SDK_EXECUTABLE}" PARENT_SCOPE)
-    message(STATUS "dotnet SDK: ${VE_DOTNET_SDK_EXECUTABLE}")
+    if(EXISTS "/usr/local/share/dotnet/dotnet")
+        list(APPEND dotnetCandidates "/usr/local/share/dotnet/dotnet")
+    endif()
+
+    find_program(foundDotnet dotnet)
+    if(foundDotnet)
+        list(APPEND dotnetCandidates "${foundDotnet}")
+    endif()
+
+    list(REMOVE_DUPLICATES dotnetCandidates)
+
+    foreach(candidate IN LISTS dotnetCandidates)
+        if(EXISTS "${candidate}")
+            set(VE_DOTNET_SDK_EXECUTABLE "${candidate}" CACHE FILEPATH "Path to the system dotnet SDK used to build managed scripting." FORCE)
+            set(${output_variable} "${candidate}" PARENT_SCOPE)
+            message(STATUS "dotnet SDK: ${candidate}")
+            return()
+        endif()
+    endforeach()
+
+    if(dotnetCandidates)
+        message(FATAL_ERROR "dotnet SDK was not found at any known path: ${dotnetCandidates}. Install the system .NET SDK or set VE_DOTNET_SDK_EXECUTABLE.")
+    endif()
+
+    message(FATAL_ERROR "dotnet SDK was not found. Install the system .NET SDK or set VE_DOTNET_SDK_EXECUTABLE.")
 endfunction()
 
 function(ve_find_dotnet_runtime_root output_variable)
@@ -68,11 +91,13 @@ function(ve_add_managed_script_host)
 
     add_custom_target(VEngineScriptHostManaged
         COMMAND ${CMAKE_COMMAND} -E make_directory "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-        COMMAND "${dotnetSdkExecutable}" build
+        COMMAND "${dotnetSdkExecutable}" publish
             "${PROJECT_SOURCE_DIR}/Engine/Managed/VEngine.ScriptHost/VEngine.ScriptHost.csproj"
             --configuration $<CONFIG>
+            --framework net10.0
             --output "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
             -p:BaseIntermediateOutputPath="${VE_SCRIPT_HOST_MANAGED_OBJ_DIR}"
+            -p:PublishSingleFile=false
             --nologo
         BYPRODUCTS
             "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}/VEngine.ScriptHost.dll"

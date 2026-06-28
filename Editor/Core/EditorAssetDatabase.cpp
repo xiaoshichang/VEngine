@@ -323,9 +323,13 @@ namespace ve::editor
             return descriptorPhysicalPath.GetParentPath() / sourcePath;
         }
 
-        [[nodiscard]] Path GetBuiltinFxcPath(const Path& repositoryRoot)
+        [[nodiscard]] Path GetShaderToolExecutablePath(const Path& executableDirectory)
         {
-            return repositoryRoot / "ThirdParty/WindowsSdkTools/Tools/x64/fxc.exe";
+#if VE_PLATFORM_WINDOWS
+            return executableDirectory / "VEngineShaderTool.exe";
+#else
+            return executableDirectory / "VEngineShaderTool";
+#endif
         }
 
         [[nodiscard]] boost::json::array WriteVector3(const std::array<double, 3>& value)
@@ -1199,7 +1203,7 @@ namespace ve::editor
 
         const Path outputDirectory = projectRoot_ / GetImportedShaderDirectory(guid);
         const Path executableDirectory = FileSystem::GetExecutableDirectory();
-        const Path shaderToolPath = executableDirectory / "VEngineShaderTool.exe";
+        const Path shaderToolPath = GetShaderToolExecutablePath(executableDirectory);
         if (!FileSystem::IsFile(shaderToolPath))
         {
             return ErrorCode::NotFound;
@@ -1216,6 +1220,7 @@ namespace ve::editor
             shaderName,
         };
 
+#if VE_PLATFORM_WINDOWS
         const Path repositoryRoot = executableDirectory.GetParentPath().GetParentPath().GetParentPath();
         const Path dxcPath = repositoryRoot / "ThirdParty/DirectXShaderCompiler/Build/Windows64/1.9.2602.17/Tools/x64/dxc.exe";
         if (FileSystem::IsFile(dxcPath))
@@ -1224,7 +1229,7 @@ namespace ve::editor
             arguments.push_back(dxcPath.GetString());
         }
 
-        const Path fxcPath = GetBuiltinFxcPath(repositoryRoot);
+        const Path fxcPath = repositoryRoot / "ThirdParty/WindowsSdkTools/Tools/x64/fxc.exe";
         if (!FileSystem::IsFile(fxcPath))
         {
             VE_LOG_ERROR_CATEGORY("Editor", "Builtin fxc.exe was not found: {}", fxcPath.GetString());
@@ -1240,6 +1245,27 @@ namespace ve::editor
             arguments.push_back("--slang");
             arguments.push_back(slangPath.GetString());
         }
+#else
+        const Path repositoryRoot = executableDirectory.GetParentPath().GetParentPath().GetParentPath();
+        const Path slangPath = repositoryRoot / "ThirdParty/Slang/slang-2026.12-macos-aarch64/bin/slangc";
+        if (!FileSystem::IsFile(slangPath))
+        {
+            VE_LOG_ERROR_CATEGORY("Editor", "Slang executable was not found: {}", slangPath.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        const Path spirvCrossPath = repositoryRoot / "ThirdParty/SPIRV-Cross/Build/Mac/SPIRV-Cross-MoltenVK-1.1.5.zip/Release/spirv-cross";
+        if (!FileSystem::IsFile(spirvCrossPath))
+        {
+            VE_LOG_ERROR_CATEGORY("Editor", "SPIRV-Cross executable was not found: {}", spirvCrossPath.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        arguments.push_back("--slang");
+        arguments.push_back(slangPath.GetString());
+        arguments.push_back("--spirv-cross");
+        arguments.push_back(spirvCrossPath.GetString());
+#endif
 
         const int shaderToolExitCode = RunProcess(arguments);
         if (shaderToolExitCode != 0)

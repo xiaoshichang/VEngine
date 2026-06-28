@@ -1,32 +1,32 @@
 include_guard(GLOBAL)
 
 function(ve_add_windows_player)
-    add_executable(VEnginePlayer WIN32
+    add_executable(VEngineWinPlayer WIN32
         Player/Windows/main.cpp
         Player/Windows/WindowsPlayer.cpp
         Player/Windows/WindowsPlayer.h
     )
 
-    target_link_libraries(VEnginePlayer
+    target_link_libraries(VEngineWinPlayer
         PRIVATE
             VEngine
     )
 
     ve_add_managed_script_host()
-    add_dependencies(VEnginePlayer VEngineScriptHostManaged)
+    add_dependencies(VEngineWinPlayer VEngineScriptHostManaged)
 
-    add_custom_command(TARGET VEnginePlayer POST_BUILD
+    add_custom_command(TARGET VEngineWinPlayer POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-            "$<TARGET_FILE_DIR:VEnginePlayer>/Managed/VEngine.ScriptHost"
+            "$<TARGET_FILE_DIR:VEngineWinPlayer>/Managed/VEngine.ScriptHost"
         COMMENT "Copying VEngine.ScriptHost managed assembly"
     )
 
-    ve_configure_target(VEnginePlayer)
+    ve_configure_target(VEngineWinPlayer)
 endfunction()
 
 function(ve_add_windows_editor)
-    add_executable(VEngineEditor WIN32
+    add_executable(VEngineWinEditor WIN32
         Editor/Core/EditorAssetDatabase.cpp
         Editor/Core/EditorAssetDatabase.h
         Editor/Core/EditorAssetPath.cpp
@@ -39,8 +39,6 @@ function(ve_add_windows_editor)
         Editor/Core/Editor.h
         Editor/Core/EditorEventDispatcher.h
         Editor/Core/EditorEvents.h
-        Editor/Core/EditorInput.cpp
-        Editor/Core/EditorInput.h
         Editor/Core/EditorProject.cpp
         Editor/Core/EditorProject.h
         Editor/Core/EditorProjectDirectoryDialog.cpp
@@ -53,8 +51,8 @@ function(ve_add_windows_editor)
         Editor/Core/EditorProjectRegistry.h
         Editor/Core/EditorProjectSelectionView.cpp
         Editor/Core/EditorProjectSelectionView.h
-        "../../Editor/Core/EditorResourceLoader.cpp"
-        "../../Editor/Core/EditorResourceLoader.h"
+        Editor/Core/EditorResourceLoader.cpp
+        Editor/Core/EditorResourceLoader.h
         Editor/Core/EditorScriptCompiler.cpp
         Editor/Core/EditorScriptCompiler.h
         Editor/Core/EditorScriptDatabase.cpp
@@ -80,42 +78,46 @@ function(ve_add_windows_editor)
         Editor/Panels/SceneViewPanel.cpp
         Editor/Panels/SceneViewPanel.h
         Editor/Windows/main.cpp
+        Editor/Core/EditorInput.cpp
+        Editor/Core/EditorInput.h
         Editor/Windows/WindowsEditorApplication.cpp
         Editor/Windows/WindowsEditorApplication.h
     )
 
-    target_link_libraries(VEngineEditor
+    target_link_libraries(VEngineWinEditor
         PRIVATE
             VEngine
     )
 
     ve_add_shader_tool()
     ve_add_managed_script_host()
-    add_dependencies(VEngineEditor VEngineShaderTool VEngineScriptHostManaged)
+    add_dependencies(VEngineWinEditor VEngineShaderTool VEngineScriptHostManaged)
 
-    ve_setup_imgui(VEngineEditor)
+    ve_setup_imgui(VEngineWinEditor)
 
-    add_custom_command(TARGET VEngineEditor POST_BUILD
+    add_custom_command(TARGET VEngineWinEditor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${PROJECT_SOURCE_DIR}/Assets"
-            "$<TARGET_FILE_DIR:VEngineEditor>/Assets"
+            "$<TARGET_FILE_DIR:VEngineWinEditor>/Assets"
         COMMENT "Copying VEngine editor asset roots"
     )
 
-    add_custom_command(TARGET VEngineEditor POST_BUILD
+    add_custom_command(TARGET VEngineWinEditor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-            "$<TARGET_FILE_DIR:VEngineEditor>/Managed/VEngine.ScriptHost"
+            "$<TARGET_FILE_DIR:VEngineWinEditor>/Managed/VEngine.ScriptHost"
         COMMENT "Copying VEngine.ScriptHost managed assembly"
     )
 
-    ve_configure_target(VEngineEditor)
+    ve_configure_target(VEngineWinEditor)
 endfunction()
 
 function(ve_add_mac_player)
     enable_language(OBJCXX)
 
     add_executable(VEngineMacPlayer MACOSX_BUNDLE
+        Player/Windows/WindowsPlayer.cpp
+        Player/Windows/WindowsPlayer.h
         Player/macOS/MacPlayer.mm
     )
 
@@ -126,15 +128,20 @@ function(ve_add_mac_player)
 
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+    find_library(GAMECONTROLLER_FRAMEWORK GameController REQUIRED)
 
     target_link_libraries(VEngineMacPlayer
         PRIVATE
             ${FOUNDATION_FRAMEWORK}
             ${APPKIT_FRAMEWORK}
+            ${GAMECONTROLLER_FRAMEWORK}
+            VEngine::ImGui
     )
 
     ve_add_managed_script_host()
     add_dependencies(VEngineMacPlayer VEngineScriptHostManaged)
+
+    ve_setup_imgui(VEngineMacPlayer)
 
     add_custom_command(TARGET VEngineMacPlayer POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E remove_directory
@@ -162,8 +169,61 @@ function(ve_add_mac_editor)
     enable_language(OBJCXX)
 
     add_executable(VEngineMacEditor MACOSX_BUNDLE
+        Editor/Core/Editor.cpp
+        Editor/Core/Editor.h
+        Editor/Core/EditorAssetDatabase.cpp
+        Editor/Core/EditorAssetDatabase.h
+        Editor/Core/EditorAssetPath.cpp
+        Editor/Core/EditorAssetPath.h
+        Editor/Core/EditorBuildPackageDialog.cpp
+        Editor/Core/EditorBuildPackageDialog.h
+        Editor/Core/EditorBuiltinResources.cpp
+        Editor/Core/EditorBuiltinResources.h
+        Editor/Core/EditorEventDispatcher.h
+        Editor/Core/EditorEvents.h
+        Editor/Core/EditorProject.cpp
+        Editor/Core/EditorProject.h
+        Editor/Core/EditorProjectDirectoryDialog.cpp
+        Editor/Core/EditorProjectDirectoryDialog.h
+        Editor/Core/EditorProjectEditingView.cpp
+        Editor/Core/EditorProjectEditingView.h
+        Editor/Core/EditorProjectPackager.cpp
+        Editor/Core/EditorProjectPackager.h
+        Editor/Core/EditorProjectRegistry.cpp
+        Editor/Core/EditorProjectRegistry.h
+        Editor/Core/EditorProjectSelectionView.cpp
+        Editor/Core/EditorProjectSelectionView.h
+        Editor/Core/EditorInput.h
+        Editor/Core/EditorResourceLoader.cpp
+        Editor/Core/EditorResourceLoader.h
+        Editor/Core/EditorScriptCompiler.cpp
+        Editor/Core/EditorScriptCompiler.h
+        Editor/Core/EditorScriptDatabase.cpp
+        Editor/Core/EditorScriptDatabase.h
+        Editor/Core/EditorScriptProjectGenerator.cpp
+        Editor/Core/EditorScriptProjectGenerator.h
+        Editor/Core/Gizmos.cpp
+        Editor/Core/Gizmos.h
+        Editor/RenderPass/EditorGizmoRenderPass.cpp
+        Editor/RenderPass/EditorGizmoRenderPass.h
+        Editor/RenderPass/SceneGridRenderPass.cpp
+        Editor/RenderPass/SceneGridRenderPass.h
+        Editor/Panels/AssetsPanel.cpp
+        Editor/Panels/AssetsPanel.h
+        Editor/Panels/BasePanel.cpp
+        Editor/Panels/BasePanel.h
+        Editor/Panels/GameViewPanel.cpp
+        Editor/Panels/GameViewPanel.h
+        Editor/Panels/HierarchyPanel.cpp
+        Editor/Panels/HierarchyPanel.h
+        Editor/Panels/InspectorPanel.cpp
+        Editor/Panels/InspectorPanel.h
+        Editor/Panels/SceneViewPanel.cpp
+        Editor/Panels/SceneViewPanel.h
         Editor/macOS/MacEditorApplication.cpp
         Editor/macOS/MacEditorApplication.h
+        Editor/macOS/EditorInput.mm
+        Editor/macOS/EditorRenderBackend.mm
         Editor/macOS/main.mm
     )
 
@@ -174,15 +234,20 @@ function(ve_add_mac_editor)
 
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
     find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+    find_library(GAMECONTROLLER_FRAMEWORK GameController REQUIRED)
 
     target_link_libraries(VEngineMacEditor
         PRIVATE
             ${FOUNDATION_FRAMEWORK}
             ${APPKIT_FRAMEWORK}
+            ${GAMECONTROLLER_FRAMEWORK}
+            VEngine::ImGui
     )
 
     ve_add_managed_script_host()
     add_dependencies(VEngineMacEditor VEngineScriptHostManaged)
+
+    ve_setup_imgui(VEngineMacEditor)
 
     add_custom_command(TARGET VEngineMacEditor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E remove_directory

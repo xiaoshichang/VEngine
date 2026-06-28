@@ -100,8 +100,6 @@ namespace ve::editor
             Playing,
         };
 
-        [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
-        void ShutdownRenderBackend() noexcept;
         void RenderActiveMainView();
         [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CaptureImGuiFrameDrawData() const;
         [[nodiscard]] EditorFrameRenderViews CollectFrameRenderViews() const;
@@ -127,6 +125,8 @@ namespace ve::editor
         static void ApplyMainWindowTitle(void* nativeWindowHandle, const std::string& title);
         [[nodiscard]] std::string BuildMainWindowTitle() const;
         [[nodiscard]] const char* GetRenderBackendName() const noexcept;
+        [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
+        void ShutdownRenderBackend() noexcept;
 
         SceneSystem* sceneSystem_ = nullptr;
         EngineRuntime* runtime_ = nullptr;

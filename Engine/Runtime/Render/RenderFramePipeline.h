@@ -15,8 +15,12 @@
 namespace ve
 {
     class ShaderManager;
+    namespace rhi
+    {
+        class RhiCommandList;
+    }
 
-    using EditorOverlayRenderCallback = std::function<void()>;
+    using EditorOverlayRenderCallback = std::function<void(rhi::RhiCommandList& commandList)>;
 
     /// Describes the editor frame flow after editor UI has produced draw data on the Scene Thread.
     struct EditorRenderFramePipelineInitParam

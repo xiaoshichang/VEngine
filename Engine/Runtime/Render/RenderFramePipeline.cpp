@@ -103,7 +103,7 @@ namespace ve
 
         if (overlayRenderCallback_)
         {
-            overlayRenderCallback_();
+            overlayRenderCallback_(*frameData.commandList);
         }
 
         frameData.commandList->EndRenderPass();

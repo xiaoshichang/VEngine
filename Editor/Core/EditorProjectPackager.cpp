@@ -24,7 +24,7 @@ namespace ve::editor
     namespace
     {
         constexpr const char* WindowsPlatformName = "Windows";
-        constexpr const char* PlayerExecutableName = "VEnginePlayer.exe";
+        constexpr const char* PlayerExecutableName = "VEngineWinPlayer.exe";
         constexpr const char* PackageManifestFilename = "AssetManifest.json";
         constexpr const char* PackageInfoFilename = "PackageInfo.json";
         constexpr const char* ScriptAssemblyManifestFilename = "ScriptAssembly.json";
