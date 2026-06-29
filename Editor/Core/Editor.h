@@ -31,6 +31,7 @@ namespace ve::editor
 {
     struct EditorFrameDrawData;
     struct EditorFrameRenderViews;
+    class EditorRenderBackend;
     class ProjectEditingView;
     class ProjectSelectionView;
 
@@ -38,7 +39,7 @@ namespace ve::editor
     class Editor : public NonMovable
     {
     public:
-        Editor() = default;
+        Editor();
         ~Editor();
 
         [[nodiscard]] ErrorCode Init(EngineRuntime& runtime, ApplicationCommandQueue& mainThreadCommandQueue, void* nativeWindowHandle);
@@ -130,7 +131,6 @@ namespace ve::editor
         [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
         void BeginRenderBackendFrame();
         void ShutdownRenderBackend() noexcept;
-        static void RenderImGuiDrawData(RenderBackend backend, rhi::RhiCommandList& commandList, ImDrawData& drawData);
 
         SceneSystem* sceneSystem_ = nullptr;
         EngineRuntime* runtime_ = nullptr;
@@ -149,11 +149,11 @@ namespace ve::editor
         EditorSelectionType selectionType_ = EditorSelectionType::None;
         ve::GameObject* selectedGameObject_ = nullptr;
         Path selectedAssetPath_;
+        std::unique_ptr<EditorRenderBackend> editorRenderBackend_;
         std::atomic_bool initialized_{false};
         MainView mainView_ = MainView::ProjectSelection;
         EditorPlayState playState_ = EditorPlayState::Editing;
         UInt64 playSessionID_ = 0;
-        void* renderBackendNativeDevice_ = nullptr;
 
         // ImGui consumes native texture handles as raw IDs. Keep the owning RenderTexture objects alive at editor
         // scope, and let panels register those textures once when their editor-side view is initialized.

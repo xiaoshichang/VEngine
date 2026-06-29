@@ -4,13 +4,17 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Input/OSEvent.h"
 
+#include <memory>
+
 namespace ve::editor
 {
-    /// Owns Editor-side ImGui platform input integration and OS event routing decisions.
+    class EditorInputBackend;
+
+    /// Cross-platform entry point for Editor-side platform input integration.
     class EditorInput : public NonMovable
     {
     public:
-        EditorInput() = default;
+        EditorInput();
         ~EditorInput();
 
         [[nodiscard]] ErrorCode Init(void* nativeWindowHandle);
@@ -23,14 +27,6 @@ namespace ve::editor
         [[nodiscard]] Int32 GetMouseDeltaY() const noexcept;
 
     private:
-        void StoreMousePosition(const OSEvent& event) noexcept;
-
-        bool initialized_ = false;
-        Int32 mouseX_ = 0;
-        Int32 mouseY_ = 0;
-        Int32 mouseDeltaX_ = 0;
-        Int32 mouseDeltaY_ = 0;
-        bool hasMousePosition_ = false;
-        void* nativeView_ = nullptr;
+        std::unique_ptr<EditorInputBackend> backend_;
     };
 } // namespace ve::editor

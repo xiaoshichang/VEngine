@@ -1129,6 +1129,10 @@ Editor principles:
 - Editor edits scene through public Scene and Reflection APIs.
 - Editor imports assets through AssetDatabase and AssetImporter.
 - Editor Viewport renders through the engine Render and RHI layers.
+- Editor UI render backend setup enters through `Editor::InitRenderBackend()`, then dispatches by platform to
+  `EditorRenderBackend` implementations such as the Windows ImGui/D3D11 backend and the macOS ImGui/Metal backend.
+- Editor input setup enters through `EditorInput`, then dispatches by platform to `EditorInputBackend` implementations
+  such as the Windows ImGui/Win32 backend and the macOS ImGui/AppKit backend.
 - Editor Console receives logs through the VEngine logging facade callback path.
 - Editor panels receive their editor context during initialization; panel rendering should not take the whole `Editor`, and cross-panel communication should flow through editor-owned events.
 

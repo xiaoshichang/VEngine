@@ -53,6 +53,7 @@ function(ve_add_windows_editor)
         Editor/Core/EditorProjectSelectionView.h
         Editor/Core/EditorResourceLoader.cpp
         Editor/Core/EditorResourceLoader.h
+        Editor/Core/EditorRenderBackend.h
         Editor/Core/EditorScriptCompiler.cpp
         Editor/Core/EditorScriptCompiler.h
         Editor/Core/EditorScriptDatabase.cpp
@@ -80,6 +81,11 @@ function(ve_add_windows_editor)
         Editor/Windows/main.cpp
         Editor/Core/EditorInput.cpp
         Editor/Core/EditorInput.h
+        Editor/Core/EditorInputBackend.h
+        Editor/Windows/WinEditorInputBackend.cpp
+        Editor/Windows/WinEditorInputBackend.h
+        Editor/Windows/WinEditorRenderBackend.cpp
+        Editor/Windows/WinEditorRenderBackend.h
         Editor/Windows/WindowsEditorApplication.cpp
         Editor/Windows/WindowsEditorApplication.h
     )
@@ -193,9 +199,12 @@ function(ve_add_mac_editor)
         Editor/Core/EditorProjectRegistry.h
         Editor/Core/EditorProjectSelectionView.cpp
         Editor/Core/EditorProjectSelectionView.h
+        Editor/Core/EditorInput.cpp
         Editor/Core/EditorInput.h
+        Editor/Core/EditorInputBackend.h
         Editor/Core/EditorResourceLoader.cpp
         Editor/Core/EditorResourceLoader.h
+        Editor/Core/EditorRenderBackend.h
         Editor/Core/EditorScriptCompiler.cpp
         Editor/Core/EditorScriptCompiler.h
         Editor/Core/EditorScriptDatabase.cpp
@@ -222,8 +231,10 @@ function(ve_add_mac_editor)
         Editor/Panels/SceneViewPanel.h
         Editor/macOS/MacEditorApplication.cpp
         Editor/macOS/MacEditorApplication.h
-        Editor/macOS/EditorInput.mm
-        Editor/macOS/EditorRenderBackend.mm
+        Editor/macOS/MacEditorInputBackend.h
+        Editor/macOS/MacEditorInputBackend.mm
+        Editor/macOS/MacEditorRenderBackend.h
+        Editor/macOS/MacEditorRenderBackend.mm
         Editor/macOS/main.mm
     )
 

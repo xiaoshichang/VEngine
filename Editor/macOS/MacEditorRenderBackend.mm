@@ -1,5 +1,6 @@
-#include "Editor/Core/Editor.h"
+#include "Editor/macOS/MacEditorRenderBackend.h"
 
+#include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 
@@ -8,6 +9,9 @@
 #import <AppKit/AppKit.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+
+#include <memory>
+#include <string>
 
 namespace ve::editor
 {
@@ -39,7 +43,7 @@ namespace ve::editor
         [[view window] setTitle:[NSString stringWithUTF8String:title.c_str()]];
     }
 
-    ErrorCode Editor::InitRenderBackend(RenderSystem& renderSystem)
+    ErrorCode MacEditorRenderBackend::Init(RenderSystem& renderSystem)
     {
         RenderNativeHandles nativeHandles;
         const ErrorCode queryResult = renderSystem.QueryNativeHandles(nativeHandles);
@@ -53,7 +57,7 @@ namespace ve::editor
             return ErrorCode::InvalidState;
         }
 
-        renderBackend_ = nativeHandles.backend;
+        backend_ = nativeHandles.backend;
         if (nativeHandles.backend != RenderBackend::Metal)
         {
             VE_LOG_WARN_CATEGORY("Editor", "Mac editor currently only supports Metal render backend.");
@@ -61,7 +65,7 @@ namespace ve::editor
         }
 
         auto* nativeDevice = static_cast<id<MTLDevice>>(nativeHandles.device);
-        if (nativeDevice == nullptr)
+        if (nativeDevice == nil)
         {
             return ErrorCode::InvalidState;
         }
@@ -71,18 +75,19 @@ namespace ve::editor
             return ErrorCode::PlatformError;
         }
 
-        renderBackendNativeDevice_ = nativeDevice;
+        nativeDevice_ = nativeDevice;
+        initialized_ = true;
         return ErrorCode::None;
     }
 
-    void Editor::BeginRenderBackendFrame()
+    void MacEditorRenderBackend::BeginFrame()
     {
-        if (renderBackend_ != RenderBackend::Metal || renderBackendNativeDevice_ == nullptr)
+        if (!initialized_ || backend_ != RenderBackend::Metal || nativeDevice_ == nullptr)
         {
             return;
         }
 
-        auto* nativeDevice = static_cast<id<MTLDevice>>(renderBackendNativeDevice_);
+        auto* nativeDevice = static_cast<id<MTLDevice>>(nativeDevice_);
         MTLTextureDescriptor* textureDescriptor = CreateImGuiFramebufferTextureDescriptor();
         id<MTLTexture> texture = [nativeDevice newTextureWithDescriptor:textureDescriptor];
         if (texture == nil)
@@ -99,21 +104,22 @@ namespace ve::editor
         [texture release];
     }
 
-    void Editor::ShutdownRenderBackend() noexcept
+    void MacEditorRenderBackend::Shutdown() noexcept
     {
-        if (renderBackend_ != RenderBackend::Metal)
+        if (!initialized_)
         {
             return;
         }
 
-        VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::ShutdownRenderBackend requires an active ImGui context.");
+        VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "MacEditorRenderBackend::Shutdown requires an active ImGui context.");
         ImGui_ImplMetal_Shutdown();
-        renderBackendNativeDevice_ = nullptr;
+        nativeDevice_ = nullptr;
+        initialized_ = false;
     }
 
-    void Editor::RenderImGuiDrawData(RenderBackend backend, rhi::RhiCommandList& commandList, ImDrawData& drawData)
+    void MacEditorRenderBackend::RenderDrawData(rhi::RhiCommandList& commandList, ImDrawData& drawData)
     {
-        if (backend != RenderBackend::Metal)
+        if (!initialized_ || backend_ != RenderBackend::Metal)
         {
             return;
         }
@@ -126,5 +132,10 @@ namespace ve::editor
         }
 
         ImGui_ImplMetal_RenderDrawData(&drawData, commandBuffer, renderCommandEncoder);
+    }
+
+    std::unique_ptr<EditorRenderBackend> CreateMacEditorRenderBackend()
+    {
+        return std::make_unique<MacEditorRenderBackend>();
     }
 } // namespace ve::editor

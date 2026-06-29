@@ -1,4 +1,4 @@
-#include "Editor/Core/EditorInput.h"
+#include "Editor/macOS/MacEditorInputBackend.h"
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -8,14 +8,48 @@
 
 #import <AppKit/AppKit.h>
 
+#include <memory>
+
 namespace ve::editor
 {
-    EditorInput::~EditorInput()
+    namespace
+    {
+        [[nodiscard]] int MouseButtonToImGuiButton(InputMouseButton button) noexcept
+        {
+            switch (button)
+            {
+            case InputMouseButton::Left:
+                return 0;
+            case InputMouseButton::Right:
+                return 1;
+            case InputMouseButton::Middle:
+                return 2;
+            case InputMouseButton::X1:
+                return 3;
+            case InputMouseButton::X2:
+                return 4;
+            case InputMouseButton::Count:
+                break;
+            }
+
+            return 0;
+        }
+
+        void SubmitModifierEvents(ImGuiIO& io, InputModifierFlags modifiers)
+        {
+            io.AddKeyEvent(ImGuiMod_Ctrl, HasInputModifier(modifiers, InputModifierFlags::Control));
+            io.AddKeyEvent(ImGuiMod_Shift, HasInputModifier(modifiers, InputModifierFlags::Shift));
+            io.AddKeyEvent(ImGuiMod_Alt, HasInputModifier(modifiers, InputModifierFlags::Alt));
+            io.AddKeyEvent(ImGuiMod_Super, HasInputModifier(modifiers, InputModifierFlags::Super));
+        }
+    } // namespace
+
+    MacEditorInputBackend::~MacEditorInputBackend()
     {
         Shutdown();
     }
 
-    ErrorCode EditorInput::Init(void* nativeWindowHandle)
+    ErrorCode MacEditorInputBackend::Init(void* nativeWindowHandle)
     {
         if (initialized_)
         {
@@ -37,7 +71,7 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    void EditorInput::StartFrame()
+    void MacEditorInputBackend::StartFrame()
     {
         VE_ASSERT_SCENE_THREAD();
         if (!initialized_)
@@ -48,7 +82,7 @@ namespace ve::editor
         ImGui_ImplOSX_NewFrame(static_cast<NSView*>(nativeView_));
     }
 
-    void EditorInput::Shutdown() noexcept
+    void MacEditorInputBackend::Shutdown() noexcept
     {
         if (!initialized_)
         {
@@ -63,13 +97,13 @@ namespace ve::editor
         mouseDeltaY_ = 0;
     }
 
-    void EditorInput::BeginOSEventFrame() noexcept
+    void MacEditorInputBackend::BeginOSEventFrame() noexcept
     {
         mouseDeltaX_ = 0;
         mouseDeltaY_ = 0;
     }
 
-    bool EditorInput::OnOSEvent(const OSEvent& event)
+    bool MacEditorInputBackend::OnOSEvent(const OSEvent& event)
     {
         VE_ASSERT_SCENE_THREAD();
         if (!initialized_)
@@ -98,8 +132,7 @@ namespace ve::editor
         case OSEventType::MouseButtonUp:
             StoreMousePosition(event);
             io.AddMousePosEvent(static_cast<float>(event.mouseX), static_cast<float>(event.mouseY));
-            io.AddMouseButtonEvent(event.mouseButton == InputMouseButton::Left ? 0 : event.mouseButton == InputMouseButton::Right ? 1 : event.mouseButton == InputMouseButton::Middle ? 2 : event.mouseButton == InputMouseButton::X1 ? 3 : 4,
-                                   event.type == OSEventType::MouseButtonDown);
+            io.AddMouseButtonEvent(MouseButtonToImGuiButton(event.mouseButton), event.type == OSEventType::MouseButtonDown);
             return false;
         case OSEventType::MouseWheel:
             StoreMousePosition(event);
@@ -108,10 +141,7 @@ namespace ve::editor
             return false;
         case OSEventType::KeyboardKeyDown:
         case OSEventType::KeyboardKeyUp:
-            io.AddKeyEvent(ImGuiMod_Ctrl, HasInputModifier(event.modifiers, InputModifierFlags::Control));
-            io.AddKeyEvent(ImGuiMod_Shift, HasInputModifier(event.modifiers, InputModifierFlags::Shift));
-            io.AddKeyEvent(ImGuiMod_Alt, HasInputModifier(event.modifiers, InputModifierFlags::Alt));
-            io.AddKeyEvent(ImGuiMod_Super, HasInputModifier(event.modifiers, InputModifierFlags::Super));
+            SubmitModifierEvents(io, event.modifiers);
             return false;
         case OSEventType::WindowMinimized:
         case OSEventType::WindowRestored:
@@ -125,7 +155,7 @@ namespace ve::editor
         return false;
     }
 
-    void EditorInput::StoreMousePosition(const OSEvent& event) noexcept
+    void MacEditorInputBackend::StoreMousePosition(const OSEvent& event) noexcept
     {
         if (hasMousePosition_)
         {
@@ -138,18 +168,23 @@ namespace ve::editor
         hasMousePosition_ = true;
     }
 
-    bool EditorInput::IsInitialized() const noexcept
+    bool MacEditorInputBackend::IsInitialized() const noexcept
     {
         return initialized_;
     }
 
-    Int32 EditorInput::GetMouseDeltaX() const noexcept
+    Int32 MacEditorInputBackend::GetMouseDeltaX() const noexcept
     {
         return mouseDeltaX_;
     }
 
-    Int32 EditorInput::GetMouseDeltaY() const noexcept
+    Int32 MacEditorInputBackend::GetMouseDeltaY() const noexcept
     {
         return mouseDeltaY_;
+    }
+
+    std::unique_ptr<EditorInputBackend> CreateMacEditorInputBackend()
+    {
+        return std::make_unique<MacEditorInputBackend>();
     }
 } // namespace ve::editor

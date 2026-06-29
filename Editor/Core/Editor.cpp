@@ -3,9 +3,11 @@
 #include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectEditingView.h"
 #include "Editor/Core/EditorProjectSelectionView.h"
+#include "Editor/Core/EditorRenderBackend.h"
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 #include "Editor/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Core/Platform.h"
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
@@ -17,7 +19,6 @@
 #include <imgui.h>
 
 #if VE_PLATFORM_WINDOWS
-#include <backends/imgui_impl_dx11.h>
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -28,7 +29,6 @@
 #ifdef GetMessage
 #undef GetMessage
 #endif
-#include <d3d11.h>
 #endif
 
 #include <algorithm>
@@ -147,6 +147,8 @@ namespace ve::editor
             return frameDrawData;
         }
     } // namespace
+
+    Editor::Editor() = default;
 
     Editor::~Editor()
     {
@@ -287,16 +289,17 @@ namespace ve::editor
 
     EditorOverlayRenderCallback Editor::BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const
     {
-        return [backend = renderBackend_, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)](rhi::RhiCommandList& commandList)
+        EditorRenderBackend* renderBackend = editorRenderBackend_.get();
+        return [renderBackend, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)](rhi::RhiCommandList& commandList)
         {
             VE_ASSERT_RENDER_THREAD();
 
-            if (editorInitialized == nullptr || !editorInitialized->load(std::memory_order_acquire) || frameDrawData == nullptr)
+            if (editorInitialized == nullptr || !editorInitialized->load(std::memory_order_acquire) || frameDrawData == nullptr || renderBackend == nullptr)
             {
                 return;
             }
 
-            RenderImGuiDrawData(backend, commandList, frameDrawData->drawData);
+            renderBackend->RenderDrawData(commandList, frameDrawData->drawData);
         };
     }
 
@@ -1178,72 +1181,52 @@ namespace ve::editor
         return "Unknown";
     }
 
-#if VE_PLATFORM_WINDOWS
     ErrorCode Editor::InitRenderBackend(RenderSystem& renderSystem)
     {
-        RenderNativeHandles nativeHandles;
-        const ErrorCode queryResult = renderSystem.QueryNativeHandles(nativeHandles);
-        if (queryResult != ErrorCode::None)
-        {
-            return queryResult;
-        }
+#if VE_PLATFORM_WINDOWS
+        editorRenderBackend_ = CreateWinEditorRenderBackend();
+#elif VE_PLATFORM_MACOS
+        editorRenderBackend_ = CreateMacEditorRenderBackend();
+#else
+        VE_LOG_WARN_CATEGORY("Editor", "Editor render backend is unsupported on this platform.");
+        return ErrorCode::Unsupported;
+#endif
 
-        if (!nativeHandles.hasMainSwapchain)
+        if (editorRenderBackend_ == nullptr)
         {
-            return ErrorCode::InvalidState;
-        }
-
-        renderBackend_ = nativeHandles.backend;
-        if (nativeHandles.backend != RenderBackend::D3D11)
-        {
-            VE_LOG_WARN_CATEGORY("Editor", "Windows editor currently supports ImGui rendering through the D3D11 backend.");
             return ErrorCode::Unsupported;
         }
 
-        auto* nativeDevice = static_cast<ID3D11Device*>(nativeHandles.device);
-        auto* nativeContext = static_cast<ID3D11DeviceContext*>(nativeHandles.immediateContext);
-        if (nativeDevice == nullptr || nativeContext == nullptr)
+        const ErrorCode initResult = editorRenderBackend_->Init(renderSystem);
+        if (initResult != ErrorCode::None)
         {
-            return ErrorCode::InvalidState;
+            editorRenderBackend_.reset();
+            return initResult;
         }
 
-        if (!ImGui_ImplDX11_Init(nativeDevice, nativeContext))
-        {
-            return ErrorCode::PlatformError;
-        }
-
-        renderBackendNativeDevice_ = nativeDevice;
+        renderBackend_ = editorRenderBackend_->GetBackend();
         return ErrorCode::None;
     }
 
     void Editor::BeginRenderBackendFrame()
     {
-        if (renderBackend_ == RenderBackend::D3D11)
-        {
-            ImGui_ImplDX11_NewFrame();
-        }
-    }
-
-    void Editor::ShutdownRenderBackend() noexcept
-    {
-        if (renderBackend_ != RenderBackend::D3D11)
+        if (editorRenderBackend_ == nullptr)
         {
             return;
         }
 
-        VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::ShutdownRenderBackend requires an active ImGui context.");
-        ImGui_ImplDX11_Shutdown();
-        renderBackendNativeDevice_ = nullptr;
+        editorRenderBackend_->BeginFrame();
     }
 
-    void Editor::RenderImGuiDrawData(RenderBackend backend, rhi::RhiCommandList& commandList, ImDrawData& drawData)
+    void Editor::ShutdownRenderBackend() noexcept
     {
-        (void)commandList;
-        if (backend == RenderBackend::D3D11)
+        if (editorRenderBackend_ == nullptr)
         {
-            ImGui_ImplDX11_RenderDrawData(&drawData);
+            return;
         }
+
+        editorRenderBackend_->Shutdown();
+        editorRenderBackend_.reset();
     }
-#endif
 
 } // namespace ve::editor
