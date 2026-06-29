@@ -19,7 +19,20 @@ namespace ve::editor
     int MacEditorApplication::Init()
     {
         VE_LOG_INFO("Initializing macOS editor application.");
-        return ve::Application::Init();
+        const int result = ve::Application::Init();
+        if (result != 0)
+        {
+            return result;
+        }
+
+        const ErrorCode editorResult = editor_.Init(GetRuntime(), GetMainThreadCommandQueue(), GetMainWindowNativeHandle());
+        if (editorResult != ErrorCode::None)
+        {
+            VE_LOG_ERROR("Editor::Init failed: {}", ToString(editorResult));
+            return 1;
+        }
+
+        return result;
     }
 
     void MacEditorApplication::Run()
@@ -29,6 +42,12 @@ namespace ve::editor
 
     void MacEditorApplication::UnInit()
     {
+        if (GetRuntime().IsInitialized())
+        {
+            GetRuntime().GetSceneSystem().Shutdown();
+        }
+
+        editor_.UnInit();
         ve::Application::UnInit();
     }
 } // namespace ve::editor

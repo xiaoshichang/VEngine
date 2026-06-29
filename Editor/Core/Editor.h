@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+struct ImDrawData;
+
 namespace ve
 {
     class GameObject;
@@ -126,7 +128,9 @@ namespace ve::editor
         [[nodiscard]] std::string BuildMainWindowTitle() const;
         [[nodiscard]] const char* GetRenderBackendName() const noexcept;
         [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
+        void BeginRenderBackendFrame();
         void ShutdownRenderBackend() noexcept;
+        static void RenderImGuiDrawData(RenderBackend backend, rhi::RhiCommandList& commandList, ImDrawData& drawData);
 
         SceneSystem* sceneSystem_ = nullptr;
         EngineRuntime* runtime_ = nullptr;
@@ -149,6 +153,7 @@ namespace ve::editor
         MainView mainView_ = MainView::ProjectSelection;
         EditorPlayState playState_ = EditorPlayState::Editing;
         UInt64 playSessionID_ = 0;
+        void* renderBackendNativeDevice_ = nullptr;
 
         // ImGui consumes native texture handles as raw IDs. Keep the owning RenderTexture objects alive at editor
         // scope, and let panels register those textures once when their editor-side view is initialized.

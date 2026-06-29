@@ -130,16 +130,31 @@ namespace ve
             return ErrorCode::PlatformError;
         }
 
-        sceneRenderer_.frameData = &frameData;
-        ForwardRenderer sceneRenderer(std::move(sceneRenderer_));
-        sceneRenderer.RenderScene();
-
-        const ErrorCode copyResult = CopySceneColorToSwapchain(*frameData.commandList, *frameData.mainSwapchain);
-        if (copyResult != ErrorCode::None)
+        if (sceneRenderer_.scene != nullptr)
         {
-            const bool ended = frameData.commandList->End();
-            VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after copy failure.");
-            return copyResult;
+            sceneRenderer_.frameData = &frameData;
+            ForwardRenderer sceneRenderer(std::move(sceneRenderer_));
+            sceneRenderer.RenderScene();
+
+            const ErrorCode copyResult = CopySceneColorToSwapchain(*frameData.commandList, *frameData.mainSwapchain);
+            if (copyResult != ErrorCode::None)
+            {
+                const bool ended = frameData.commandList->End();
+                VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after copy failure.");
+                return copyResult;
+            }
+        }
+        else
+        {
+            const rhi::RhiRenderPassDesc passDesc = BuildOverlayRenderPassDesc(*frameData.mainSwapchain, rhi::RhiLoadAction::Clear);
+            if (!frameData.commandList->BeginRenderPass(*frameData.mainSwapchain, passDesc))
+            {
+                const bool ended = frameData.commandList->End();
+                VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after empty frame failure.");
+                return ErrorCode::PlatformError;
+            }
+
+            frameData.commandList->EndRenderPass();
         }
 
         if (!frameData.commandList->End())

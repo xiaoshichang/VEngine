@@ -3,8 +3,8 @@ include_guard(GLOBAL)
 function(ve_add_windows_player)
     add_executable(VEngineWinPlayer WIN32
         Player/Windows/main.cpp
-        Player/Windows/WindowsPlayer.cpp
-        Player/Windows/WindowsPlayer.h
+        Player/Windows/VEnginePlayer.cpp
+        Player/Windows/VEnginePlayer.h
     )
 
     target_link_libraries(VEngineWinPlayer
@@ -116,8 +116,8 @@ function(ve_add_mac_player)
     enable_language(OBJCXX)
 
     add_executable(VEngineMacPlayer MACOSX_BUNDLE
-        Player/Windows/WindowsPlayer.cpp
-        Player/Windows/WindowsPlayer.h
+        Player/Windows/VEnginePlayer.cpp
+        Player/Windows/VEnginePlayer.h
         Player/macOS/MacPlayer.mm
     )
 
@@ -262,8 +262,8 @@ function(ve_add_mac_editor)
 
     set_target_properties(VEngineMacEditor
         PROPERTIES
-            MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/macOS/Info.plist.in
-            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER ${VE_MAC_BUNDLE_IDENTIFIER}
+            MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Editor/macOS/Info.plist.in
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${VE_MAC_BUNDLE_IDENTIFIER}.editor"
             XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "macosx"
             XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "YES"
     )

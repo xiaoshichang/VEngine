@@ -1,7 +1,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
-#include "Player/Windows/WindowsPlayer.h"
+#include "Player/Windows/VEnginePlayer.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -47,7 +47,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         initParam.runtime.scriptingSystem.dotNetRuntimeRoot = playerLocalDotNetRoot;
     }
 
-    ve::WindowsPlayer application(std::move(initParam));
+    ve::VEnginePlayer application(std::move(initParam));
     int exitCode = application.Init();
     if (exitCode == 0)
     {

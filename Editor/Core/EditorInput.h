@@ -31,5 +31,6 @@ namespace ve::editor
         Int32 mouseDeltaX_ = 0;
         Int32 mouseDeltaY_ = 0;
         bool hasMousePosition_ = false;
+        void* nativeView_ = nullptr;
     };
 } // namespace ve::editor

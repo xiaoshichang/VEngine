@@ -1050,6 +1050,16 @@ namespace ve::rhi
 
             void WaitIdle() override {}
 
+            [[nodiscard]] void* GetNativeDeviceHandle() const noexcept override
+            {
+                return device_;
+            }
+
+            [[nodiscard]] void* GetNativeGraphicsQueueHandle() const noexcept override
+            {
+                return commandQueue_;
+            }
+
         private:
             void SetLastError(std::string error)
             {

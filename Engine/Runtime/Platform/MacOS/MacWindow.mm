@@ -8,6 +8,17 @@
 #include <algorithm>
 #include <utility>
 
+@class VEngineMacWindowDelegate;
+@class VEngineMacContentView;
+
+@interface VEngineMacWindowDelegate : NSObject <NSWindowDelegate>
+@property(nonatomic, assign) ve::MacWindow* owner;
+@end
+
+@interface VEngineMacContentView : NSView
+@property(nonatomic, assign) ve::MacWindow* owner;
+@end
+
 namespace ve
 {
     namespace
@@ -27,6 +38,11 @@ namespace ve
             return (__bridge CAMetalLayer*)layer;
         }
 
+        [[nodiscard]] VEngineMacWindowDelegate* AsDelegate(void* delegate)
+        {
+            return (__bridge VEngineMacWindowDelegate*)delegate;
+        }
+
         [[nodiscard]] WindowExtent GetViewExtent(NSView* view)
         {
             const NSRect bounds = view != nil ? [view bounds] : NSZeroRect;
@@ -34,6 +50,74 @@ namespace ve
                 static_cast<uint32_t>(std::max(0.0, bounds.size.width)),
                 static_cast<uint32_t>(std::max(0.0, bounds.size.height)),
             };
+        }
+
+        [[nodiscard]] NSPoint GetLocalMousePoint(NSView* view, NSEvent* event)
+        {
+            if (view == nil || event == nil)
+            {
+                return NSZeroPoint;
+            }
+
+            const NSPoint windowPoint = [event locationInWindow];
+            NSPoint viewPoint = [view convertPoint:windowPoint fromView:nil];
+            const NSRect bounds = [view bounds];
+            viewPoint.y = bounds.size.height - viewPoint.y;
+            return viewPoint;
+        }
+
+        [[nodiscard]] Int32 ToInputCoordinate(CGFloat value) noexcept
+        {
+            return static_cast<Int32>(std::max<CGFloat>(0.0, value));
+        }
+
+        [[nodiscard]] InputModifierFlags GetInputModifiers(NSEventModifierFlags flags) noexcept
+        {
+            InputModifierFlags modifiers = InputModifierFlags::None;
+            if ((flags & NSEventModifierFlagShift) != 0)
+            {
+                modifiers |= InputModifierFlags::Shift;
+            }
+            if ((flags & NSEventModifierFlagControl) != 0)
+            {
+                modifiers |= InputModifierFlags::Control;
+            }
+            if ((flags & NSEventModifierFlagOption) != 0)
+            {
+                modifiers |= InputModifierFlags::Alt;
+            }
+            if ((flags & NSEventModifierFlagCommand) != 0)
+            {
+                modifiers |= InputModifierFlags::Super;
+            }
+            if ((flags & NSEventModifierFlagCapsLock) != 0)
+            {
+                modifiers |= InputModifierFlags::CapsLock;
+            }
+            if ((flags & NSEventModifierFlagNumericPad) != 0)
+            {
+                modifiers |= InputModifierFlags::NumLock;
+            }
+            return modifiers;
+        }
+
+        [[nodiscard]] InputMouseButton ToMouseButton(NSInteger buttonNumber) noexcept
+        {
+            switch (buttonNumber)
+            {
+            case 0:
+                return InputMouseButton::Left;
+            case 1:
+                return InputMouseButton::Right;
+            case 2:
+                return InputMouseButton::Middle;
+            case 3:
+                return InputMouseButton::X1;
+            case 4:
+                return InputMouseButton::X2;
+            default:
+                return InputMouseButton::Left;
+            }
         }
     } // namespace
 
@@ -74,6 +158,8 @@ namespace ve
         }
 
         [window makeKeyAndOrderFront:nil];
+        [window makeMainWindow];
+        [NSApp activateIgnoringOtherApps:YES];
         visible_ = true;
         focused_ = true;
     }
@@ -87,10 +173,39 @@ namespace ve
         }
 
         shouldClose_ = true;
+        VEngineMacWindowDelegate* delegate = AsDelegate(delegate_);
+        if (delegate != nil)
+        {
+            delegate.owner = nullptr;
+        }
+
+        if (VEngineMacContentView* contentView = static_cast<VEngineMacContentView*>(AsNSView(view_)); contentView != nil)
+        {
+            contentView.owner = nullptr;
+        }
+
+        [window setDelegate:nil];
         [window close];
-        window_ = nullptr;
-        view_ = nullptr;
-        metalLayer_ = nullptr;
+        if (metalLayer_ != nullptr)
+        {
+            CFRelease(metalLayer_);
+            metalLayer_ = nullptr;
+        }
+        if (view_ != nullptr)
+        {
+            CFRelease(view_);
+            view_ = nullptr;
+        }
+        if (delegate_ != nullptr)
+        {
+            CFRelease(delegate_);
+            delegate_ = nullptr;
+        }
+        if (window_ != nullptr)
+        {
+            CFRelease(window_);
+            window_ = nullptr;
+        }
     }
 
     WindowPumpStatus MacWindow::PumpEvents()
@@ -195,12 +310,12 @@ namespace ve
 
         [window setTitle:[NSString stringWithUTF8String:title_.c_str()]];
 
-        NSView* view = [[NSView alloc] initWithFrame:frame];
+        VEngineMacContentView* view = [[VEngineMacContentView alloc] initWithFrame:frame];
         if (view == nil)
         {
             return ErrorCode::PlatformError;
         }
-
+        view.owner = this;
         CAMetalLayer* metalLayer = [CAMetalLayer layer];
         if (metalLayer == nil)
         {
@@ -214,9 +329,15 @@ namespace ve
         [window setContentView:view];
         [window center];
 
-        window_ = (__bridge_retained void*)window;
-        view_ = (__bridge_retained void*)view;
-        metalLayer_ = (__bridge_retained void*)metalLayer;
+        VEngineMacWindowDelegate* delegate = [[VEngineMacWindowDelegate alloc] init];
+        delegate.owner = this;
+        [window setDelegate:delegate];
+        [window setAcceptsMouseMovedEvents:YES];
+
+        window_ = window;
+        view_ = view;
+        metalLayer_ = [metalLayer retain];
+        delegate_ = delegate;
 
         if (desc.visible)
         {
@@ -230,4 +351,307 @@ namespace ve
     {
         pendingOSEvents_.push_back(event);
     }
+
+    void MacWindow::OnNativeWindowWillClose()
+    {
+        shouldClose_ = true;
+        visible_ = false;
+        focused_ = false;
+        QueueOSEvent(OSEvent{OSEventType::WindowHidden});
+    }
+
+    void MacWindow::OnNativeWindowFocusChanged(bool focused)
+    {
+        focused_ = focused;
+        QueueOSEvent(OSEvent{focused ? OSEventType::WindowFocusGained : OSEventType::WindowFocusLost});
+    }
+
+    void MacWindow::OnNativeWindowMiniaturized(bool minimized)
+    {
+        minimized_ = minimized;
+        QueueOSEvent(OSEvent{minimized ? OSEventType::WindowMinimized : OSEventType::WindowRestored});
+    }
+
+    void MacWindow::OnNativeWindowResized()
+    {
+        NSView* view = AsNSView(view_);
+        if (view == nil)
+        {
+            return;
+        }
+
+        clientExtent_ = GetViewExtent(view);
+        CAMetalLayer* metalLayer = AsCAMetalLayer(metalLayer_);
+        if (metalLayer != nil)
+        {
+            metalLayer.frame = view.bounds;
+            metalLayer.drawableSize = CGSizeMake(clientExtent_.width, clientExtent_.height);
+        }
+
+        OSEvent event;
+        event.type = OSEventType::WindowResized;
+        event.width = clientExtent_.width;
+        event.height = clientExtent_.height;
+        QueueOSEvent(event);
+    }
+
+    void MacWindow::OnNativeMouseMoved(Int32 x, Int32 y)
+    {
+        OSEvent event;
+        event.type = OSEventType::MouseMoved;
+        event.mouseX = x;
+        event.mouseY = y;
+        QueueOSEvent(event);
+    }
+
+    void MacWindow::OnNativeMouseButton(OSEventType type, InputMouseButton button, Int32 x, Int32 y)
+    {
+        OSEvent event;
+        event.type = type;
+        event.mouseButton = button;
+        event.mouseX = x;
+        event.mouseY = y;
+        QueueOSEvent(event);
+    }
+
+    void MacWindow::OnNativeMouseWheel(Float32 deltaX, Float32 deltaY, Int32 x, Int32 y)
+    {
+        OSEvent event;
+        event.type = OSEventType::MouseWheel;
+        event.mouseWheelX = deltaX;
+        event.mouseWheelY = deltaY;
+        event.mouseX = x;
+        event.mouseY = y;
+        QueueOSEvent(event);
+    }
+
+    void MacWindow::OnNativeKey(OSEventType type, UInt32 keyCode, UInt32 scanCode, InputModifierFlags modifiers, bool repeat)
+    {
+        OSEvent event;
+        event.type = type;
+        event.keyCode = keyCode;
+        event.scanCode = scanCode;
+        event.modifiers = modifiers;
+        event.isRepeat = repeat;
+        QueueOSEvent(event);
+    }
+
+    void MacWindow::OnNativeText(UInt32 codepoint)
+    {
+        OSEvent event;
+        event.type = OSEventType::TextInput;
+        event.textCodepoint = codepoint;
+        QueueOSEvent(event);
+    }
 } // namespace ve
+
+@implementation VEngineMacWindowDelegate
+
+- (void)windowWillClose:(NSNotification*)notification
+{
+    (void)notification;
+    if (_owner != nullptr)
+    {
+        _owner->OnNativeWindowWillClose();
+    }
+}
+
+- (void)windowDidBecomeKey:(NSNotification*)notification
+{
+    (void)notification;
+    if (_owner != nullptr)
+    {
+        _owner->OnNativeWindowFocusChanged(true);
+    }
+}
+
+- (void)windowDidResignKey:(NSNotification*)notification
+{
+    (void)notification;
+    if (_owner != nullptr)
+    {
+        _owner->OnNativeWindowFocusChanged(false);
+    }
+}
+
+- (void)windowDidMiniaturize:(NSNotification*)notification
+{
+    (void)notification;
+    if (_owner != nullptr)
+    {
+        _owner->OnNativeWindowMiniaturized(true);
+    }
+}
+
+- (void)windowDidDeminiaturize:(NSNotification*)notification
+{
+    (void)notification;
+    if (_owner != nullptr)
+    {
+        _owner->OnNativeWindowMiniaturized(false);
+    }
+}
+
+- (void)windowDidResize:(NSNotification*)notification
+{
+    (void)notification;
+    if (_owner != nullptr)
+    {
+        _owner->OnNativeWindowResized();
+    }
+}
+
+@end
+
+@implementation VEngineMacContentView
+
+- (BOOL)acceptsFirstResponder
+{
+    return YES;
+}
+
+- (BOOL)isFlipped
+{
+    return YES;
+}
+
+- (void)viewDidMoveToWindow
+{
+    [super viewDidMoveToWindow];
+    [[self window] makeFirstResponder:self];
+}
+
+- (void)setFrameSize:(NSSize)newSize
+{
+    [super setFrameSize:newSize];
+    if (_owner != nullptr)
+    {
+        _owner->OnNativeWindowResized();
+    }
+}
+
+- (void)dispatchMouseMove:(NSEvent*)event
+{
+    if (_owner == nullptr)
+    {
+        return;
+    }
+
+    const NSPoint point = ve::GetLocalMousePoint(self, event);
+    _owner->OnNativeMouseMoved(ve::ToInputCoordinate(point.x), ve::ToInputCoordinate(point.y));
+}
+
+- (void)dispatchMouseButton:(NSEvent*)event type:(ve::OSEventType)type
+{
+    if (_owner == nullptr)
+    {
+        return;
+    }
+
+    const NSPoint point = ve::GetLocalMousePoint(self, event);
+    _owner->OnNativeMouseButton(type, ve::ToMouseButton([event buttonNumber]), ve::ToInputCoordinate(point.x), ve::ToInputCoordinate(point.y));
+}
+
+- (void)mouseMoved:(NSEvent*)event
+{
+    [self dispatchMouseMove:event];
+}
+
+- (void)mouseDragged:(NSEvent*)event
+{
+    [self dispatchMouseMove:event];
+}
+
+- (void)rightMouseDragged:(NSEvent*)event
+{
+    [self dispatchMouseMove:event];
+}
+
+- (void)otherMouseDragged:(NSEvent*)event
+{
+    [self dispatchMouseMove:event];
+}
+
+- (void)mouseDown:(NSEvent*)event
+{
+    [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonDown];
+}
+
+- (void)mouseUp:(NSEvent*)event
+{
+    [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonUp];
+}
+
+- (void)rightMouseDown:(NSEvent*)event
+{
+    [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonDown];
+}
+
+- (void)rightMouseUp:(NSEvent*)event
+{
+    [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonUp];
+}
+
+- (void)otherMouseDown:(NSEvent*)event
+{
+    [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonDown];
+}
+
+- (void)otherMouseUp:(NSEvent*)event
+{
+    [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonUp];
+}
+
+- (void)scrollWheel:(NSEvent*)event
+{
+    if (_owner == nullptr)
+    {
+        return;
+    }
+
+    const NSPoint point = ve::GetLocalMousePoint(self, event);
+    _owner->OnNativeMouseWheel(static_cast<ve::Float32>([event scrollingDeltaX]),
+                               static_cast<ve::Float32>([event scrollingDeltaY]),
+                               ve::ToInputCoordinate(point.x),
+                               ve::ToInputCoordinate(point.y));
+}
+
+- (void)keyDown:(NSEvent*)event
+{
+    if (_owner == nullptr)
+    {
+        return;
+    }
+
+    _owner->OnNativeKey(ve::OSEventType::KeyboardKeyDown,
+                        static_cast<ve::UInt32>([event keyCode]),
+                        static_cast<ve::UInt32>([event keyCode]),
+                        ve::GetInputModifiers([event modifierFlags]),
+                        [event isARepeat] == YES);
+
+    NSString* characters = [event characters];
+    for (NSUInteger index = 0; index < [characters length]; ++index)
+    {
+        const unichar character = [characters characterAtIndex:index];
+        if (character >= 0x20 || character == '\n' || character == '\t')
+        {
+            _owner->OnNativeText(static_cast<ve::UInt32>(character));
+        }
+    }
+}
+
+- (void)keyUp:(NSEvent*)event
+{
+    if (_owner == nullptr)
+    {
+        return;
+    }
+
+    _owner->OnNativeKey(ve::OSEventType::KeyboardKeyUp,
+                        static_cast<ve::UInt32>([event keyCode]),
+                        static_cast<ve::UInt32>([event keyCode]),
+                        ve::GetInputModifiers([event modifierFlags]),
+                        false);
+}
+
+@end

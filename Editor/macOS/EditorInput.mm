@@ -32,6 +32,7 @@ namespace ve::editor
             return ErrorCode::PlatformError;
         }
 
+        nativeView_ = nativeWindowHandle;
         initialized_ = true;
         return ErrorCode::None;
     }
@@ -44,7 +45,7 @@ namespace ve::editor
             return;
         }
 
-        ImGui_ImplOSX_NewFrame(nullptr);
+        ImGui_ImplOSX_NewFrame(static_cast<NSView*>(nativeView_));
     }
 
     void EditorInput::Shutdown() noexcept
@@ -56,6 +57,7 @@ namespace ve::editor
 
         ImGui_ImplOSX_Shutdown();
         initialized_ = false;
+        nativeView_ = nullptr;
         hasMousePosition_ = false;
         mouseDeltaX_ = 0;
         mouseDeltaY_ = 0;

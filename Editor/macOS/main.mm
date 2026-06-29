@@ -12,6 +12,10 @@ int main(int argc, char* argv[])
         (void)argc;
         (void)argv;
 
+        [NSApplication sharedApplication];
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        [NSApp finishLaunching];
+
         if (ve::InitializeLogging() != ve::ErrorCode::None)
         {
             return 1;
@@ -32,8 +36,7 @@ int main(int argc, char* argv[])
         int exitCode = application.Init();
         if (exitCode == 0)
         {
-            [NSApplication sharedApplication];
-            [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+            [NSApp activateIgnoringOtherApps:YES];
             application.Run();
             exitCode = application.GetExitCode();
         }

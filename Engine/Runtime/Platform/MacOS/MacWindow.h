@@ -34,6 +34,16 @@ namespace ve
         [[nodiscard]] void* GetNativeHandle() const noexcept override;
         [[nodiscard]] void* GetNativeLayer() const noexcept override;
 
+        void OnNativeWindowWillClose();
+        void OnNativeWindowFocusChanged(bool focused);
+        void OnNativeWindowMiniaturized(bool minimized);
+        void OnNativeWindowResized();
+        void OnNativeMouseMoved(Int32 x, Int32 y);
+        void OnNativeMouseButton(OSEventType type, InputMouseButton button, Int32 x, Int32 y);
+        void OnNativeMouseWheel(Float32 deltaX, Float32 deltaY, Int32 x, Int32 y);
+        void OnNativeKey(OSEventType type, UInt32 keyCode, UInt32 scanCode, InputModifierFlags modifiers, bool repeat);
+        void OnNativeText(UInt32 codepoint);
+
     private:
         MacWindow() = default;
 
@@ -44,6 +54,7 @@ namespace ve
         void* window_ = nullptr;
         void* view_ = nullptr;
         void* metalLayer_ = nullptr;
+        void* delegate_ = nullptr;
         std::string title_;
         WindowExtent clientExtent_ = {};
         std::deque<OSEvent> pendingOSEvents_;

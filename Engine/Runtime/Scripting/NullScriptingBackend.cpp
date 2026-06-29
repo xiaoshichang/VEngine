@@ -4,7 +4,7 @@ namespace ve
 {
     ErrorCode NullScriptingBackend::Initialize(const ScriptingSystemInitParam&)
     {
-        return ErrorCode::Unsupported;
+        return ErrorCode::None;
     }
 
     void NullScriptingBackend::Shutdown() noexcept

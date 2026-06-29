@@ -16,8 +16,8 @@
 
 #include <imgui.h>
 
-#include <backends/imgui_impl_dx11.h>
 #if VE_PLATFORM_WINDOWS
+#include <backends/imgui_impl_dx11.h>
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -37,6 +37,10 @@
 
 namespace ve::editor
 {
+#if VE_PLATFORM_MACOS
+    void ApplyMacMainWindowTitle(void* nativeWindowHandle, const std::string& title);
+#endif
+
     struct EditorFrameDrawData
     {
         ImDrawData drawData;
@@ -171,6 +175,14 @@ namespace ve::editor
         const ErrorCode inputResult = input_.Init(nativeWindowHandle);
         VE_ASSERT(inputResult == ErrorCode::None);
 
+        const ErrorCode renderBackendResult = InitRenderBackend(runtime.GetRenderSystem());
+        if (renderBackendResult != ErrorCode::None)
+        {
+            input_.Shutdown();
+            ImGui::DestroyContext();
+            return renderBackendResult;
+        }
+
         runtime_ = &runtime;
         renderSystem_ = &runtime.GetRenderSystem();
         mainThreadCommandQueue_ = &mainThreadCommandQueue;
@@ -199,6 +211,7 @@ namespace ve::editor
             return;
         }
 
+        BeginRenderBackendFrame();
         input_.StartFrame();
         ImGui::NewFrame();
     }
@@ -283,6 +296,7 @@ namespace ve::editor
                 return;
             }
 
+            RenderImGuiDrawData(backend, commandList, frameDrawData->drawData);
         };
     }
 
@@ -365,6 +379,7 @@ namespace ve::editor
         {
             renderSystem_->Flush();
         }
+        ShutdownRenderBackend();
         retainedImGuiRenderTextures_.clear();
         resourceLoader_.Shutdown();
         assetDatabase_.Shutdown();
@@ -1126,8 +1141,12 @@ namespace ve::editor
         MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title.data(), static_cast<int>(title.size()), wideTitle.data(), requiredLength);
         SetWindowTextW(static_cast<HWND>(nativeWindowHandle), wideTitle.c_str());
 #else
+#if VE_PLATFORM_MACOS
+        ApplyMacMainWindowTitle(nativeWindowHandle, title);
+#else
         (void)nativeWindowHandle;
         (void)title;
+#endif
 #endif
     }
 
@@ -1158,5 +1177,73 @@ namespace ve::editor
 
         return "Unknown";
     }
+
+#if VE_PLATFORM_WINDOWS
+    ErrorCode Editor::InitRenderBackend(RenderSystem& renderSystem)
+    {
+        RenderNativeHandles nativeHandles;
+        const ErrorCode queryResult = renderSystem.QueryNativeHandles(nativeHandles);
+        if (queryResult != ErrorCode::None)
+        {
+            return queryResult;
+        }
+
+        if (!nativeHandles.hasMainSwapchain)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        renderBackend_ = nativeHandles.backend;
+        if (nativeHandles.backend != RenderBackend::D3D11)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Windows editor currently supports ImGui rendering through the D3D11 backend.");
+            return ErrorCode::Unsupported;
+        }
+
+        auto* nativeDevice = static_cast<ID3D11Device*>(nativeHandles.device);
+        auto* nativeContext = static_cast<ID3D11DeviceContext*>(nativeHandles.immediateContext);
+        if (nativeDevice == nullptr || nativeContext == nullptr)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (!ImGui_ImplDX11_Init(nativeDevice, nativeContext))
+        {
+            return ErrorCode::PlatformError;
+        }
+
+        renderBackendNativeDevice_ = nativeDevice;
+        return ErrorCode::None;
+    }
+
+    void Editor::BeginRenderBackendFrame()
+    {
+        if (renderBackend_ == RenderBackend::D3D11)
+        {
+            ImGui_ImplDX11_NewFrame();
+        }
+    }
+
+    void Editor::ShutdownRenderBackend() noexcept
+    {
+        if (renderBackend_ != RenderBackend::D3D11)
+        {
+            return;
+        }
+
+        VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "Editor::ShutdownRenderBackend requires an active ImGui context.");
+        ImGui_ImplDX11_Shutdown();
+        renderBackendNativeDevice_ = nullptr;
+    }
+
+    void Editor::RenderImGuiDrawData(RenderBackend backend, rhi::RhiCommandList& commandList, ImDrawData& drawData)
+    {
+        (void)commandList;
+        if (backend == RenderBackend::D3D11)
+        {
+            ImGui_ImplDX11_RenderDrawData(&drawData);
+        }
+    }
+#endif
 
 } // namespace ve::editor
