@@ -1,4 +1,4 @@
-#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
+#include "Engine/Runtime/Platform/Windows/Win32DebugConsoleBackend.h"
 
 #include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/Logging/Log.h"
@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
@@ -51,7 +52,7 @@ namespace
         std::wstring inputLine;
         size_t cursor = 0;
         int logScrollOffset = 0;
-        ve::Win32DebugConsoleCommandHandler commandHandler;
+        ve::DebugConsoleCommandHandler commandHandler;
         HANDLE inputHandle = INVALID_HANDLE_VALUE;
         HANDLE outputHandle = INVALID_HANDLE_VALUE;
         WORD defaultAttributes = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
@@ -587,7 +588,7 @@ namespace
 
 namespace ve
 {
-    void InitializeWin32DebugConsole()
+    void Win32DebugConsoleBackend::Initialize()
     {
 #if VE_BUILD_DEBUG
         if (GetConsoleWindow() == nullptr)
@@ -655,18 +656,18 @@ namespace ve
 #endif
     }
 
-    void SetWin32DebugConsoleCommandHandler(Win32DebugConsoleCommandHandler handler)
+    void Win32DebugConsoleBackend::SetCommandHandler(DebugConsoleCommandHandler handler)
     {
         DebugConsoleState& state = GetDebugConsoleState();
         std::lock_guard lock(state.mutex);
         state.commandHandler = std::move(handler);
     }
 
-    void PumpWin32DebugConsoleCommands()
+    void Win32DebugConsoleBackend::PumpCommands()
     {
         DebugConsoleState& state = GetDebugConsoleState();
         std::queue<std::string> commands;
-        Win32DebugConsoleCommandHandler handler;
+        DebugConsoleCommandHandler handler;
 
         {
             std::lock_guard lock(state.mutex);
@@ -686,7 +687,7 @@ namespace ve
         }
     }
 
-    void WriteWin32DebugConsoleLog(LogSeverity severity, std::string_view line)
+    void Win32DebugConsoleBackend::WriteLog(LogSeverity severity, std::string_view line)
     {
         DebugConsoleState& state = GetDebugConsoleState();
 
@@ -701,5 +702,10 @@ namespace ve
         }
 
         WriteSimpleConsoleLog(severity, line);
+    }
+
+    std::unique_ptr<DebugConsoleBackend> CreateWin32DebugConsoleBackend()
+    {
+        return std::make_unique<Win32DebugConsoleBackend>();
     }
 } // namespace ve

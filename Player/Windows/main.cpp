@@ -1,6 +1,6 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
-#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
+#include "Engine/Runtime/Platform/DebugConsole.h"
 #include "Player/Windows/VEnginePlayer.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -21,7 +21,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     (void)commandLine;
     (void)showCommand;
 
-    ve::InitializeWin32DebugConsole();
+    ve::InitializeDebugConsole();
 
     ve::ErrorCode loggingResult = ve::InitializeLogging();
     if (loggingResult != ve::ErrorCode::None)

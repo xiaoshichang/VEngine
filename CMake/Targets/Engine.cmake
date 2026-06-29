@@ -24,6 +24,7 @@ function(ve_add_engine)
             Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
+            Engine/Runtime/Platform/DebugConsole.cpp
             Engine/Runtime/Platform/Window.cpp
             Engine/Runtime/Render/BaseRenderer.cpp
             Engine/Runtime/Render/RenderTarget.cpp
@@ -94,6 +95,8 @@ function(ve_add_engine)
             Engine/Runtime/Math/Vector3.h
             Engine/Runtime/Math/Vector4.h
             Engine/Runtime/Memory/PoolAllocator.h
+            Engine/Runtime/Platform/DebugConsole.h
+            Engine/Runtime/Platform/DebugConsoleBackend.h
             Engine/Runtime/Platform/Window.h
             Engine/Runtime/Render/BaseRenderer.h
             Engine/Runtime/Render/RenderTarget.h
@@ -197,7 +200,7 @@ function(ve_add_engine)
                 Engine/Runtime/Platform/Windows/Win32Window.cpp
                 Engine/Runtime/Scripting/DotnetJITScriptingBackend.cpp
             PUBLIC
-                Engine/Runtime/Platform/Windows/Win32DebugConsole.h
+                Engine/Runtime/Platform/Windows/Win32DebugConsoleBackend.h
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.h
                 Engine/Runtime/Platform/Windows/Win32Window.h
                 Engine/Runtime/Scripting/DotnetJITScriptingBackend.h
@@ -212,10 +215,17 @@ function(ve_add_engine)
     if(APPLE AND NOT WIN32)
         target_sources(VEngine
             PRIVATE
+                Engine/Runtime/Platform/MacOS/MacDebugConsoleBackend.mm
                 Engine/Runtime/Platform/MacOS/MacWindow.mm
                 Engine/Runtime/Scripting/NullScriptingBackend.cpp
             PUBLIC
+                Engine/Runtime/Platform/MacOS/MacDebugConsoleBackend.h
                 Engine/Runtime/Platform/MacOS/MacWindow.h
+        )
+
+        target_link_libraries(VEngine
+            PUBLIC
+                "-framework AppKit"
         )
     endif()
 

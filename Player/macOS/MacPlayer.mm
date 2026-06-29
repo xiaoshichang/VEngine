@@ -2,6 +2,7 @@
 #include "Engine/Runtime/Core/Version.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Platform/DebugConsole.h"
 
 #import <AppKit/AppKit.h>
 
@@ -15,6 +16,8 @@ int main(int argc, char* argv[])
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp finishLaunching];
+
+        ve::InitializeDebugConsole();
 
         if (ve::InitializeLogging() != ve::ErrorCode::None)
         {

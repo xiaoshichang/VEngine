@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Platform/MacOS/MacWindow.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Platform/DebugConsole.h"
 
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -244,11 +245,12 @@ namespace ve
 
     void MacWindow::SetCommandHandler(WindowCommandHandler handler)
     {
-        (void)handler;
+        SetDebugConsoleCommandHandler(std::move(handler));
     }
 
     void MacWindow::PumpCommands()
     {
+        PumpDebugConsoleCommands();
     }
 
     bool MacWindow::ShouldClose() const noexcept

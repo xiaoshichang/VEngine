@@ -1,6 +1,6 @@
 #include "Engine/Runtime/Platform/Windows/Win32Window.h"
 
-#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
+#include "Engine/Runtime/Platform/DebugConsole.h"
 
 #include <algorithm>
 
@@ -232,12 +232,12 @@ namespace ve
 
     void Win32Window::SetCommandHandler(WindowCommandHandler handler)
     {
-        SetWin32DebugConsoleCommandHandler(std::move(handler));
+        SetDebugConsoleCommandHandler(std::move(handler));
     }
 
     void Win32Window::PumpCommands()
     {
-        PumpWin32DebugConsoleCommands();
+        PumpDebugConsoleCommands();
     }
 
     bool Win32Window::ShouldClose() const noexcept

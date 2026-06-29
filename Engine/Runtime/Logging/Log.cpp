@@ -1,14 +1,11 @@
 #include "Engine/Runtime/Logging/Log.h"
 
-#if VE_PLATFORM_WINDOWS
-#include "Engine/Runtime/Platform/Windows/Win32DebugConsole.h"
-#endif
+#include "Engine/Runtime/Platform/DebugConsole.h"
 
 #include <boost/log/core.hpp>
 #include <boost/log/sources/logger.hpp>
 #include <boost/log/sources/record_ostream.hpp>
 #include <boost/log/utility/setup/common_attributes.hpp>
-#include <boost/log/utility/setup/console.hpp>
 #include <boost/log/utility/setup/file.hpp>
 #include <chrono>
 #include <cstdio>
@@ -130,12 +127,7 @@ namespace
 
     void WriteConsoleOutput(ve::LogSeverity severity, std::string_view line)
     {
-#if VE_PLATFORM_WINDOWS
-        ve::WriteWin32DebugConsoleLog(severity, line);
-#else
-        std::ostream& stream = IsAtLeastSeverity(severity, ve::LogSeverity::Warn) ? std::cerr : std::clog;
-        stream << line << '\n';
-#endif
+        ve::WriteDebugConsoleLog(severity, line);
     }
 
     void WriteFallbackOutput(ve::LogSeverity severity, std::string_view line)
@@ -176,11 +168,6 @@ namespace ve
         try
         {
             boost::log::core::get()->remove_all_sinks();
-
-            if (config.enableConsole && VE_PLATFORM_WINDOWS == 0)
-            {
-                boost::log::add_console_log(std::clog, boost::log::keywords::format = "%Message%", boost::log::keywords::auto_flush = true);
-            }
 
             if (config.enableFile)
             {
@@ -298,14 +285,10 @@ namespace ve
         {
             BOOST_LOG(GetBoostLogger()) << line;
 
-#if VE_PLATFORM_WINDOWS
             if (enableConsole)
             {
                 WriteConsoleOutput(severity, line);
             }
-#else
-            (void)enableConsole;
-#endif
         }
         else
         {
