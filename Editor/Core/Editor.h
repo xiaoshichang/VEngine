@@ -129,6 +129,7 @@ namespace ve::editor
         [[nodiscard]] std::string BuildMainWindowTitle() const;
         [[nodiscard]] const char* GetRenderBackendName() const noexcept;
         [[nodiscard]] ErrorCode InitRenderBackend(RenderSystem& renderSystem);
+        void ConfigureImGuiIniFile();
         void BeginRenderBackendFrame();
         void ShutdownRenderBackend() noexcept;
 
@@ -161,6 +162,7 @@ namespace ve::editor
         std::vector<std::string> recentProjects_;
         std::string currentProjectPath_;
         std::string currentProjectName_;
+        std::string imguiIniFilename_;
         Path currentScenePath_;
         std::string editingSceneSnapshot_;
     };

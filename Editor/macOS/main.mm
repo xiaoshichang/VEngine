@@ -6,6 +6,9 @@
 
 #import <AppKit/AppKit.h>
 
+#include <cstdlib>
+#include <filesystem>
+
 int main(int argc, char* argv[])
 {
     @autoreleasepool
@@ -19,7 +22,14 @@ int main(int argc, char* argv[])
 
         ve::InitializeDebugConsole();
 
-        if (ve::InitializeLogging() != ve::ErrorCode::None)
+        ve::LoggingConfig loggingConfig = ve::MakeDefaultLoggingConfig();
+        const char* homePath = std::getenv("HOME");
+        if (homePath != nullptr && homePath[0] != '\0')
+        {
+            loggingConfig.filePath = std::filesystem::path(homePath) / "Library" / "Application Support" / "VEngine" / "Editor" / "Logs" / "VEngine.log";
+        }
+
+        if (ve::InitializeLogging(loggingConfig) != ve::ErrorCode::None)
         {
             return 1;
         }

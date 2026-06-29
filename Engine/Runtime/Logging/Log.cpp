@@ -3,12 +3,15 @@
 #include "Engine/Runtime/Platform/DebugConsole.h"
 
 #include <boost/log/core.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/log/sinks/text_file_backend.hpp>
 #include <boost/log/sources/logger.hpp>
 #include <boost/log/sources/record_ostream.hpp>
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/setup/file.hpp>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <mutex>
@@ -135,6 +138,21 @@ namespace
         WriteConsoleOutput(severity, line);
     }
 
+    std::filesystem::path MakeMacApplicationSupportLogPath()
+    {
+#if VE_PLATFORM_MACOS
+        const char* homePath = std::getenv("HOME");
+        if (homePath == nullptr || homePath[0] == '\0')
+        {
+            return std::filesystem::path("Logs") / "VEngine.log";
+        }
+
+        return std::filesystem::path(homePath) / "Library" / "Application Support" / "VEngine" / "Logs" / "VEngine.log";
+#else
+        return std::filesystem::path("Logs") / "VEngine.log";
+#endif
+    }
+
 } // namespace
 
 namespace ve
@@ -150,9 +168,9 @@ namespace ve
 #endif
 
         config.enableConsole = true;
-        config.enableFile = VE_PLATFORM_MACOS == 0;
+        config.enableFile = true;
         config.enableDebuggerOutput = VE_PLATFORM_WINDOWS != 0;
-        config.filePath = std::filesystem::path("Logs") / "VEngine.log";
+        config.filePath = MakeMacApplicationSupportLogPath();
         return config;
     }
 
@@ -177,10 +195,10 @@ namespace ve
                     std::filesystem::create_directories(parentPath);
                 }
 
-                boost::log::add_file_log(boost::log::keywords::file_name = config.filePath.string(),
-                                         boost::log::keywords::open_mode = std::ios_base::out | std::ios_base::trunc,
-                                         boost::log::keywords::format = "%Message%",
-                                         boost::log::keywords::auto_flush = true);
+                auto sink = boost::log::add_file_log(boost::log::keywords::file_name = config.filePath.string(),
+                                                     boost::log::keywords::open_mode = std::ios_base::out | std::ios_base::trunc,
+                                                     boost::log::keywords::auto_flush = true);
+                sink->set_formatter(boost::log::expressions::stream << boost::log::expressions::smessage);
             }
 
             boost::log::add_common_attributes();
@@ -256,6 +274,7 @@ namespace ve
         LogCallback callback = nullptr;
         bool initialized = false;
         bool enableConsole = false;
+        bool enableFile = false;
         bool enableDebuggerOutput = false;
 
         {
@@ -269,6 +288,7 @@ namespace ve
             callback = gLoggingState.callback;
             initialized = gLoggingState.initialized;
             enableConsole = config.enableConsole;
+            enableFile = config.enableFile;
             enableDebuggerOutput = config.enableDebuggerOutput;
         }
 
@@ -283,7 +303,10 @@ namespace ve
 
         if (initialized)
         {
-            BOOST_LOG(GetBoostLogger()) << line;
+            if (enableFile)
+            {
+                BOOST_LOG(GetBoostLogger()) << line;
+            }
 
             if (enableConsole)
             {

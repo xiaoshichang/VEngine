@@ -32,6 +32,7 @@
 #endif
 
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <utility>
 
@@ -170,6 +171,7 @@ namespace ve::editor
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "ImGui::CreateContext failed.");
+        ConfigureImGuiIniFile();
         ImGui::StyleColorsDark();
 
         recentProjects_ = EditorProjectRegistry::LoadRecentProjects();
@@ -1179,6 +1181,40 @@ namespace ve::editor
         }
 
         return "Unknown";
+    }
+
+    void Editor::ConfigureImGuiIniFile()
+    {
+        imguiIniFilename_.clear();
+
+#if VE_PLATFORM_MACOS
+        const char* homePath = std::getenv("HOME");
+
+        if (homePath != nullptr && homePath[0] != '\0')
+        {
+            const Path settingsDirectory = Path(homePath) / "Library/Application Support/VEngine/Editor";
+            const ErrorCode directoryResult = FileSystem::CreateDirectories(settingsDirectory);
+
+            if (directoryResult == ErrorCode::None)
+            {
+                imguiIniFilename_ = (settingsDirectory / "imgui.ini").GetString();
+            }
+            else
+            {
+                VE_LOG_WARN_CATEGORY("Editor", "Failed to create ImGui settings directory '{}': {}", settingsDirectory.GetString(), ToString(directoryResult));
+            }
+        }
+
+        if (imguiIniFilename_.empty())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to locate a macOS home directory for ImGui settings.");
+        }
+#endif
+
+        if (!imguiIniFilename_.empty())
+        {
+            ImGui::GetIO().IniFilename = imguiIniFilename_.c_str();
+        }
     }
 
     ErrorCode Editor::InitRenderBackend(RenderSystem& renderSystem)
