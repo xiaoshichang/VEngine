@@ -1133,6 +1133,8 @@ Editor principles:
   `EditorRenderBackend` implementations such as the Windows ImGui/D3D11 backend and the macOS ImGui/Metal backend.
 - Editor input setup enters through `EditorInput`, then dispatches by platform to `EditorInputBackend` implementations
   such as the Windows ImGui/Win32 backend and the macOS ImGui/AppKit backend.
+- Editor project history enters through `EditorProjectRegistry`, then dispatches by platform to
+  `EditorProjectRegistryBackend` implementations such as the Windows registry backend and the macOS UserDefaults backend.
 - Editor Console receives logs through the VEngine logging facade callback path.
 - Editor panels receive their editor context during initialization; panel rendering should not take the whole `Editor`, and cross-panel communication should flow through editor-owned events.
 

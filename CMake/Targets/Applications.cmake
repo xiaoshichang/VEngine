@@ -1,5 +1,63 @@
 include_guard(GLOBAL)
 
+set(VE_EDITOR_COMMON_SOURCES
+    Editor/Core/Editor.cpp
+    Editor/Core/Editor.h
+    Editor/Core/EditorAssetDatabase.cpp
+    Editor/Core/EditorAssetDatabase.h
+    Editor/Core/EditorAssetPath.cpp
+    Editor/Core/EditorAssetPath.h
+    Editor/Core/EditorBuildPackageDialog.cpp
+    Editor/Core/EditorBuildPackageDialog.h
+    Editor/Core/EditorBuiltinResources.cpp
+    Editor/Core/EditorBuiltinResources.h
+    Editor/Core/EditorEventDispatcher.h
+    Editor/Core/EditorEvents.h
+    Editor/Core/EditorInput.cpp
+    Editor/Core/EditorInput.h
+    Editor/Core/EditorInputBackend.h
+    Editor/Core/EditorProject.cpp
+    Editor/Core/EditorProject.h
+    Editor/Core/EditorProjectDirectoryDialog.cpp
+    Editor/Core/EditorProjectDirectoryDialog.h
+    Editor/Core/EditorProjectEditingView.cpp
+    Editor/Core/EditorProjectEditingView.h
+    Editor/Core/EditorProjectPackager.cpp
+    Editor/Core/EditorProjectPackager.h
+    Editor/Core/EditorProjectRegistry.cpp
+    Editor/Core/EditorProjectRegistry.h
+    Editor/Core/EditorProjectRegistryBackend.h
+    Editor/Core/EditorProjectSelectionView.cpp
+    Editor/Core/EditorProjectSelectionView.h
+    Editor/Core/EditorRenderBackend.h
+    Editor/Core/EditorResourceLoader.cpp
+    Editor/Core/EditorResourceLoader.h
+    Editor/Core/EditorScriptCompiler.cpp
+    Editor/Core/EditorScriptCompiler.h
+    Editor/Core/EditorScriptDatabase.cpp
+    Editor/Core/EditorScriptDatabase.h
+    Editor/Core/EditorScriptProjectGenerator.cpp
+    Editor/Core/EditorScriptProjectGenerator.h
+    Editor/Core/Gizmos.cpp
+    Editor/Core/Gizmos.h
+    Editor/Panels/AssetsPanel.cpp
+    Editor/Panels/AssetsPanel.h
+    Editor/Panels/BasePanel.cpp
+    Editor/Panels/BasePanel.h
+    Editor/Panels/GameViewPanel.cpp
+    Editor/Panels/GameViewPanel.h
+    Editor/Panels/HierarchyPanel.cpp
+    Editor/Panels/HierarchyPanel.h
+    Editor/Panels/InspectorPanel.cpp
+    Editor/Panels/InspectorPanel.h
+    Editor/Panels/SceneViewPanel.cpp
+    Editor/Panels/SceneViewPanel.h
+    Editor/RenderPass/EditorGizmoRenderPass.cpp
+    Editor/RenderPass/EditorGizmoRenderPass.h
+    Editor/RenderPass/SceneGridRenderPass.cpp
+    Editor/RenderPass/SceneGridRenderPass.h
+)
+
 function(ve_add_windows_player)
     add_executable(VEngineWinPlayer WIN32
         Player/Windows/main.cpp
@@ -27,63 +85,12 @@ endfunction()
 
 function(ve_add_windows_editor)
     add_executable(VEngineWinEditor WIN32
-        Editor/Core/EditorAssetDatabase.cpp
-        Editor/Core/EditorAssetDatabase.h
-        Editor/Core/EditorAssetPath.cpp
-        Editor/Core/EditorAssetPath.h
-        Editor/Core/EditorBuildPackageDialog.cpp
-        Editor/Core/EditorBuildPackageDialog.h
-        Editor/Core/EditorBuiltinResources.cpp
-        Editor/Core/EditorBuiltinResources.h
-        Editor/Core/Editor.cpp
-        Editor/Core/Editor.h
-        Editor/Core/EditorEventDispatcher.h
-        Editor/Core/EditorEvents.h
-        Editor/Core/EditorProject.cpp
-        Editor/Core/EditorProject.h
-        Editor/Core/EditorProjectDirectoryDialog.cpp
-        Editor/Core/EditorProjectDirectoryDialog.h
-        Editor/Core/EditorProjectEditingView.cpp
-        Editor/Core/EditorProjectEditingView.h
-        Editor/Core/EditorProjectPackager.cpp
-        Editor/Core/EditorProjectPackager.h
-        Editor/Core/EditorProjectRegistry.cpp
-        Editor/Core/EditorProjectRegistry.h
-        Editor/Core/EditorProjectSelectionView.cpp
-        Editor/Core/EditorProjectSelectionView.h
-        Editor/Core/EditorResourceLoader.cpp
-        Editor/Core/EditorResourceLoader.h
-        Editor/Core/EditorRenderBackend.h
-        Editor/Core/EditorScriptCompiler.cpp
-        Editor/Core/EditorScriptCompiler.h
-        Editor/Core/EditorScriptDatabase.cpp
-        Editor/Core/EditorScriptDatabase.h
-        Editor/Core/EditorScriptProjectGenerator.cpp
-        Editor/Core/EditorScriptProjectGenerator.h
-        Editor/Core/Gizmos.cpp
-        Editor/Core/Gizmos.h
-        Editor/RenderPass/EditorGizmoRenderPass.cpp
-        Editor/RenderPass/EditorGizmoRenderPass.h
-        Editor/RenderPass/SceneGridRenderPass.cpp
-        Editor/RenderPass/SceneGridRenderPass.h
-        Editor/Panels/AssetsPanel.cpp
-        Editor/Panels/AssetsPanel.h
-        Editor/Panels/BasePanel.cpp
-        Editor/Panels/BasePanel.h
-        Editor/Panels/GameViewPanel.cpp
-        Editor/Panels/GameViewPanel.h
-        Editor/Panels/HierarchyPanel.cpp
-        Editor/Panels/HierarchyPanel.h
-        Editor/Panels/InspectorPanel.cpp
-        Editor/Panels/InspectorPanel.h
-        Editor/Panels/SceneViewPanel.cpp
-        Editor/Panels/SceneViewPanel.h
+        ${VE_EDITOR_COMMON_SOURCES}
         Editor/Windows/main.cpp
-        Editor/Core/EditorInput.cpp
-        Editor/Core/EditorInput.h
-        Editor/Core/EditorInputBackend.h
         Editor/Windows/WinEditorInputBackend.cpp
         Editor/Windows/WinEditorInputBackend.h
+        Editor/Windows/WinEditorProjectRegistryBackend.cpp
+        Editor/Windows/WinEditorProjectRegistryBackend.h
         Editor/Windows/WinEditorRenderBackend.cpp
         Editor/Windows/WinEditorRenderBackend.h
         Editor/Windows/WindowsEditorApplication.cpp
@@ -175,64 +182,13 @@ function(ve_add_mac_editor)
     enable_language(OBJCXX)
 
     add_executable(VEngineMacEditor MACOSX_BUNDLE
-        Editor/Core/Editor.cpp
-        Editor/Core/Editor.h
-        Editor/Core/EditorAssetDatabase.cpp
-        Editor/Core/EditorAssetDatabase.h
-        Editor/Core/EditorAssetPath.cpp
-        Editor/Core/EditorAssetPath.h
-        Editor/Core/EditorBuildPackageDialog.cpp
-        Editor/Core/EditorBuildPackageDialog.h
-        Editor/Core/EditorBuiltinResources.cpp
-        Editor/Core/EditorBuiltinResources.h
-        Editor/Core/EditorEventDispatcher.h
-        Editor/Core/EditorEvents.h
-        Editor/Core/EditorProject.cpp
-        Editor/Core/EditorProject.h
-        Editor/Core/EditorProjectDirectoryDialog.cpp
-        Editor/Core/EditorProjectDirectoryDialog.h
-        Editor/Core/EditorProjectEditingView.cpp
-        Editor/Core/EditorProjectEditingView.h
-        Editor/Core/EditorProjectPackager.cpp
-        Editor/Core/EditorProjectPackager.h
-        Editor/Core/EditorProjectRegistry.cpp
-        Editor/Core/EditorProjectRegistry.h
-        Editor/Core/EditorProjectSelectionView.cpp
-        Editor/Core/EditorProjectSelectionView.h
-        Editor/Core/EditorInput.cpp
-        Editor/Core/EditorInput.h
-        Editor/Core/EditorInputBackend.h
-        Editor/Core/EditorResourceLoader.cpp
-        Editor/Core/EditorResourceLoader.h
-        Editor/Core/EditorRenderBackend.h
-        Editor/Core/EditorScriptCompiler.cpp
-        Editor/Core/EditorScriptCompiler.h
-        Editor/Core/EditorScriptDatabase.cpp
-        Editor/Core/EditorScriptDatabase.h
-        Editor/Core/EditorScriptProjectGenerator.cpp
-        Editor/Core/EditorScriptProjectGenerator.h
-        Editor/Core/Gizmos.cpp
-        Editor/Core/Gizmos.h
-        Editor/RenderPass/EditorGizmoRenderPass.cpp
-        Editor/RenderPass/EditorGizmoRenderPass.h
-        Editor/RenderPass/SceneGridRenderPass.cpp
-        Editor/RenderPass/SceneGridRenderPass.h
-        Editor/Panels/AssetsPanel.cpp
-        Editor/Panels/AssetsPanel.h
-        Editor/Panels/BasePanel.cpp
-        Editor/Panels/BasePanel.h
-        Editor/Panels/GameViewPanel.cpp
-        Editor/Panels/GameViewPanel.h
-        Editor/Panels/HierarchyPanel.cpp
-        Editor/Panels/HierarchyPanel.h
-        Editor/Panels/InspectorPanel.cpp
-        Editor/Panels/InspectorPanel.h
-        Editor/Panels/SceneViewPanel.cpp
-        Editor/Panels/SceneViewPanel.h
+        ${VE_EDITOR_COMMON_SOURCES}
         Editor/macOS/MacEditorApplication.cpp
         Editor/macOS/MacEditorApplication.h
         Editor/macOS/MacEditorInputBackend.h
         Editor/macOS/MacEditorInputBackend.mm
+        Editor/macOS/MacEditorProjectRegistryBackend.h
+        Editor/macOS/MacEditorProjectRegistryBackend.mm
         Editor/macOS/MacEditorRenderBackend.h
         Editor/macOS/MacEditorRenderBackend.mm
         Editor/macOS/main.mm
