@@ -1,4 +1,4 @@
-#include "Engine/Runtime/Scripting/WindowsJITScriptingBackend.h"
+#include "Engine/Runtime/Scripting/DotnetJITScriptingBackend.h"
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
@@ -144,6 +144,13 @@ namespace ve
         [[nodiscard]] std::filesystem::path ResolveDefaultScriptHostRoot()
         {
             const std::filesystem::path executableDirectory = ToNativePath(FileSystem::GetExecutableDirectory());
+#if VE_PLATFORM_WINDOWS
+            const std::filesystem::path windowsRoot = executableDirectory / "Managed" / "VEngine.ScriptHost";
+            if (std::filesystem::exists(windowsRoot))
+            {
+                return windowsRoot;
+            }
+#elif VE_PLATFORM_APPLE
             const std::filesystem::path playerRoot = executableDirectory.parent_path() / "VEngineMacPlayer.Managed" / "VEngine.ScriptHost";
             if (std::filesystem::exists(playerRoot))
             {
@@ -155,6 +162,7 @@ namespace ve
             {
                 return editorRoot;
             }
+#endif
 
             return {};
         }
@@ -214,27 +222,27 @@ namespace ve
             if (runtimeRoot.empty() || !std::filesystem::exists(runtimeRoot / L"dotnet.exe", error))
             {
                 VE_LOG_ERROR_CATEGORY("Script", "Failed to locate .NET runtime root. Requested root: '{}'.", runtimeRoot.string());
-                return FailHostInitialization(ErrorCode::NotFound, "WindowsJITScriptingBackend requires a valid .NET runtime root.");
+                return FailHostInitialization(ErrorCode::NotFound, "DotnetJITScriptingBackend requires a valid .NET runtime root.");
             }
 
             // Step 2: native hosting should initialize CoreCLR from the managed host runtimeconfig.
             if (initParam.runtimeConfigPath.IsEmpty())
             {
-                VE_LOG_ERROR_CATEGORY("Script", ".NET runtimeconfig path is required for Windows JIT scripting.");
-                return FailHostInitialization(ErrorCode::InvalidArgument, "WindowsJITScriptingBackend requires a .NET runtimeconfig path.");
+                VE_LOG_ERROR_CATEGORY("Script", ".NET runtimeconfig path is required for Dotnet JIT scripting.");
+                return FailHostInitialization(ErrorCode::InvalidArgument, "DotnetJITScriptingBackend requires a .NET runtimeconfig path.");
             }
 
             std::filesystem::path runtimeConfigPath = ToNativePath(initParam.runtimeConfigPath);
             if (!std::filesystem::exists(runtimeConfigPath, error))
             {
                 VE_LOG_ERROR_CATEGORY("Script", ".NET runtimeconfig was not found: '{}'.", runtimeConfigPath.string());
-                return FailHostInitialization(ErrorCode::NotFound, "WindowsJITScriptingBackend runtimeconfig path does not exist.");
+                return FailHostInitialization(ErrorCode::NotFound, "DotnetJITScriptingBackend runtimeconfig path does not exist.");
             }
 
             if (scriptHostRoot.empty() || !std::filesystem::exists(scriptHostRoot, error))
             {
                 VE_LOG_ERROR_CATEGORY("Script", "Managed script host root was not found: '{}'.", scriptHostRoot.string());
-                return FailHostInitialization(ErrorCode::NotFound, "WindowsJITScriptingBackend requires a managed script host root.");
+                return FailHostInitialization(ErrorCode::NotFound, "DotnetJITScriptingBackend requires a managed script host root.");
             }
 
             // Step 3: load hostfxr from the chosen runtime instead of relying on machine-global state.
@@ -242,7 +250,7 @@ namespace ve
             if (hostFxrPath.empty())
             {
                 VE_LOG_ERROR_CATEGORY("Script", "hostfxr.dll was not found under .NET runtime root '{}'.", runtimeRoot.string());
-                return FailHostInitialization(ErrorCode::NotFound, "WindowsJITScriptingBackend could not find hostfxr.dll.");
+                return FailHostInitialization(ErrorCode::NotFound, "DotnetJITScriptingBackend could not find hostfxr.dll.");
             }
 
             paths.runtimeRoot = std::move(runtimeRoot);
@@ -259,7 +267,7 @@ namespace ve
             if (library == nullptr)
             {
                 VE_LOG_ERROR_CATEGORY("Script", "Failed to load hostfxr.dll '{}' with Win32 error {}.", hostFxrPath.string(), GetLastError());
-                return FailHostInitialization(ErrorCode::PlatformError, "WindowsJITScriptingBackend failed to load hostfxr.dll.");
+                return FailHostInitialization(ErrorCode::PlatformError, "DotnetJITScriptingBackend failed to load hostfxr.dll.");
             }
 
             HostFxrExports loadedExports;
@@ -272,7 +280,7 @@ namespace ve
             {
                 VE_LOG_ERROR_CATEGORY("Script", "hostfxr.dll '{}' is missing required exports.", hostFxrPath.string());
                 FreeLibrary(library);
-                return FailHostInitialization(ErrorCode::InvalidState, "WindowsJITScriptingBackend hostfxr.dll is missing required exports.");
+                return FailHostInitialization(ErrorCode::InvalidState, "DotnetJITScriptingBackend hostfxr.dll is missing required exports.");
             }
 
             exports = loadedExports;
@@ -300,7 +308,7 @@ namespace ve
                                       result,
                                       paths.runtimeConfigPath.string(),
                                       paths.runtimeRoot.string());
-                return FailHostInitialization(ErrorCode::InvalidState, "WindowsJITScriptingBackend failed to initialize hostfxr from runtimeconfig.");
+                return FailHostInitialization(ErrorCode::InvalidState, "DotnetJITScriptingBackend failed to initialize hostfxr from runtimeconfig.");
             }
 
             // Step 6: get the unmanaged entry-point loader used for the managed bridge methods.
@@ -310,7 +318,7 @@ namespace ve
             {
                 VE_LOG_ERROR_CATEGORY("Script", "hostfxr_get_runtime_delegate failed with result {}.", result);
                 exports.close(initializedContext);
-                return FailHostInitialization(ErrorCode::InvalidState, "WindowsJITScriptingBackend failed to get hostfxr runtime delegate.");
+                return FailHostInitialization(ErrorCode::InvalidState, "DotnetJITScriptingBackend failed to get hostfxr runtime delegate.");
             }
 
             hostContext = initializedContext;
@@ -396,12 +404,12 @@ namespace ve
 #endif
     } // namespace
 
-    WindowsJITScriptingBackend::~WindowsJITScriptingBackend()
+    DotnetJITScriptingBackend::~DotnetJITScriptingBackend()
     {
         Shutdown();
     }
 
-    ErrorCode WindowsJITScriptingBackend::Initialize(const ScriptingSystemInitParam& initParam)
+    ErrorCode DotnetJITScriptingBackend::Initialize(const ScriptingSystemInitParam& initParam)
     {
         if (initialized_)
         {
@@ -418,7 +426,7 @@ namespace ve
         return ErrorCode::None;
     }
 
-    void WindowsJITScriptingBackend::Shutdown() noexcept
+    void DotnetJITScriptingBackend::Shutdown() noexcept
     {
         if (!initialized_)
         {
@@ -434,12 +442,12 @@ namespace ve
         runtimeConfigPath_.clear();
     }
 
-    ScriptingBackendType WindowsJITScriptingBackend::GetBackendType() const noexcept
+    ScriptingBackendType DotnetJITScriptingBackend::GetBackendType() const noexcept
     {
-        return ScriptingBackendType::WindowsJIT;
+        return ScriptingBackendType::DotnetJIT;
     }
 
-    ErrorCode WindowsJITScriptingBackend::LoadAssembly(const ScriptingAssemblyLoadDesc& desc)
+    ErrorCode DotnetJITScriptingBackend::LoadAssembly(const ScriptingAssemblyLoadDesc& desc)
     {
         if (!initialized_)
         {
@@ -474,7 +482,7 @@ namespace ve
         return ErrorCode::None;
     }
 
-    ErrorCode WindowsJITScriptingBackend::LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc)
+    ErrorCode DotnetJITScriptingBackend::LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc)
     {
         if (!initialized_ || !assemblyLoaded_ || entryPoints_.loadProjectAssembly == nullptr)
         {
@@ -503,7 +511,7 @@ namespace ve
         return ErrorCode::None;
     }
 
-    void WindowsJITScriptingBackend::UnloadProjectAssembly() noexcept
+    void DotnetJITScriptingBackend::UnloadProjectAssembly() noexcept
     {
         if (entryPoints_.unloadProjectAssembly != nullptr)
         {
@@ -511,7 +519,7 @@ namespace ve
         }
     }
 
-    std::vector<ScriptTypeInfo> WindowsJITScriptingBackend::GetAvailableScriptTypes()
+    std::vector<ScriptTypeInfo> DotnetJITScriptingBackend::GetAvailableScriptTypes()
     {
         std::vector<ScriptTypeInfo> scriptTypes;
         if (entryPoints_.getScriptTypesJson == nullptr)
@@ -582,7 +590,7 @@ namespace ve
         return scriptTypes;
     }
 
-    Result<ScriptInstanceHandle> WindowsJITScriptingBackend::CreateScriptInstance(const ScriptInstanceDesc& desc)
+    Result<ScriptInstanceHandle> DotnetJITScriptingBackend::CreateScriptInstance(const ScriptInstanceDesc& desc)
     {
         if (!initialized_ || !assemblyLoaded_)
         {
@@ -604,7 +612,7 @@ namespace ve
         return Result<ScriptInstanceHandle>::Success(handle);
     }
 
-    void WindowsJITScriptingBackend::DestroyScriptInstance(ScriptInstanceHandle script) noexcept
+    void DotnetJITScriptingBackend::DestroyScriptInstance(ScriptInstanceHandle script) noexcept
     {
         if (script == 0 || entryPoints_.destroy == nullptr)
         {
@@ -614,7 +622,7 @@ namespace ve
         entryPoints_.destroy(script);
     }
 
-    void WindowsJITScriptingBackend::InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds) noexcept
+    void DotnetJITScriptingBackend::InvokeScriptEvent(ScriptInstanceHandle script, ScriptLifecycleEvent event, Float32 deltaSeconds) noexcept
     {
         if (script == 0)
         {
@@ -659,7 +667,7 @@ namespace ve
         }
     }
 
-    Result<std::string> WindowsJITScriptingBackend::GetScriptFieldsJson(ScriptInstanceHandle script)
+    Result<std::string> DotnetJITScriptingBackend::GetScriptFieldsJson(ScriptInstanceHandle script)
     {
         if (script == 0 || entryPoints_.getFieldsJson == nullptr)
         {
@@ -681,7 +689,7 @@ namespace ve
         return Result<std::string>::Success(std::move(result));
     }
 
-    ErrorCode WindowsJITScriptingBackend::SetScriptFieldsJson(ScriptInstanceHandle script, std::string_view fieldsJson)
+    ErrorCode DotnetJITScriptingBackend::SetScriptFieldsJson(ScriptInstanceHandle script, std::string_view fieldsJson)
     {
         if (script == 0 || entryPoints_.setFieldsJson == nullptr)
         {
@@ -692,7 +700,7 @@ namespace ve
         return entryPoints_.setFieldsJson(script, fields.c_str()) == 0 ? ErrorCode::None : ErrorCode::InvalidArgument;
     }
 
-    ErrorCode WindowsJITScriptingBackend::SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson)
+    ErrorCode DotnetJITScriptingBackend::SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson)
     {
         if (script == 0 || entryPoints_.setFieldJson == nullptr)
         {
@@ -704,7 +712,7 @@ namespace ve
         return entryPoints_.setFieldJson(script, name.c_str(), value.c_str()) == 0 ? ErrorCode::None : ErrorCode::InvalidArgument;
     }
 
-    ErrorCode WindowsJITScriptingBackend::InitializeHost(const ScriptingSystemInitParam& initParam)
+    ErrorCode DotnetJITScriptingBackend::InitializeHost(const ScriptingSystemInitParam& initParam)
     {
 #if !VE_PLATFORM_WINDOWS
         static_cast<void>(initParam);
@@ -741,12 +749,12 @@ namespace ve
         runtimeRoot_ = std::move(paths.runtimeRoot);
         runtimeConfigPath_ = std::move(paths.runtimeConfigPath);
 
-        VE_LOG_INFO_CATEGORY("Script", "Initialized Windows JIT .NET host from {}.", paths.hostFxrPath.string());
+        VE_LOG_INFO_CATEGORY("Script", "Initialized Dotnet JIT .NET host from {}.", paths.hostFxrPath.string());
         return ErrorCode::None;
 #endif
     }
 
-    void WindowsJITScriptingBackend::ShutdownHost() noexcept
+    void DotnetJITScriptingBackend::ShutdownHost() noexcept
     {
 #if VE_PLATFORM_WINDOWS
         if (hostFxrContext_ != nullptr && closeHostFxr_ != nullptr)

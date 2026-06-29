@@ -195,12 +195,12 @@ function(ve_add_engine)
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.cpp
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.cpp
                 Engine/Runtime/Platform/Windows/Win32Window.cpp
-                Engine/Runtime/Scripting/WindowsJITScriptingBackend.cpp
+                Engine/Runtime/Scripting/DotnetJITScriptingBackend.cpp
             PUBLIC
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.h
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.h
                 Engine/Runtime/Platform/Windows/Win32Window.h
-                Engine/Runtime/Scripting/WindowsJITScriptingBackend.h
+                Engine/Runtime/Scripting/DotnetJITScriptingBackend.h
         )
 
         target_link_libraries(VEngine

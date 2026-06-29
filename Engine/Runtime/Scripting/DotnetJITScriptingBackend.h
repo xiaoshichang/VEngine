@@ -8,10 +8,10 @@
 
 namespace ve
 {
-    class WindowsJITScriptingBackend final : public DotNetScriptingBackend
+    class DotnetJITScriptingBackend final : public DotNetScriptingBackend
     {
     public:
-        ~WindowsJITScriptingBackend() override;
+        ~DotnetJITScriptingBackend() override;
 
         [[nodiscard]] ErrorCode Initialize(const ScriptingSystemInitParam& initParam) override;
         void Shutdown() noexcept override;

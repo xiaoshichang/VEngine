@@ -5,7 +5,7 @@
 #include "Engine/Runtime/Scripting/NullScriptingBackend.h"
 #include "Engine/Runtime/Scripting/IOSAOTScriptingBackend.h"
 #if VE_PLATFORM_WINDOWS
-#include "Engine/Runtime/Scripting/WindowsJITScriptingBackend.h"
+#include "Engine/Runtime/Scripting/DotnetJITScriptingBackend.h"
 #endif
 
 #include <utility>
@@ -126,7 +126,7 @@ namespace ve
         if (resolvedBackend == ScriptingBackendType::Auto)
         {
 #if VE_PLATFORM_WINDOWS
-            resolvedBackend = ScriptingBackendType::WindowsJIT;
+            resolvedBackend = ScriptingBackendType::DotnetJIT;
 #else
             return std::make_unique<NullScriptingBackend>();
 #endif
@@ -134,9 +134,9 @@ namespace ve
 
         switch (resolvedBackend)
         {
-        case ScriptingBackendType::WindowsJIT:
+        case ScriptingBackendType::DotnetJIT:
 #if VE_PLATFORM_WINDOWS
-            return std::make_unique<WindowsJITScriptingBackend>();
+            return std::make_unique<DotnetJITScriptingBackend>();
 #else
             return nullptr;
 #endif

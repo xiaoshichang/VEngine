@@ -13,7 +13,7 @@ namespace ve
     enum class ScriptingBackendType
     {
         Auto,
-        WindowsJIT,
+        DotnetJIT,
         IOSAOT,
     };
 

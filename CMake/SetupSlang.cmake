@@ -31,11 +31,16 @@ function(ve_setup_slang)
         set(VE_SLANG_PACKAGE_NAME "${VE_SLANG_PACKAGE_NAME}" CACHE STRING "Slang package directory name." FORCE)
     endif()
 
-    if(APPLE)
-        set(defaultPackageRoot "${VE_SLANG_THIRD_PARTY_ROOT}/${VE_SLANG_PACKAGE_NAME}")
-        if(EXISTS "${defaultPackageRoot}")
-            set(VE_SLANG_PACKAGE_ROOT "${defaultPackageRoot}" CACHE PATH "Extracted Slang package root." FORCE)
-        endif()
+    set(defaultPackageRoot "${VE_SLANG_THIRD_PARTY_ROOT}/${VE_SLANG_PACKAGE_NAME}")
+    if(EXISTS "${defaultPackageRoot}"
+       AND (NOT VE_SLANG_PACKAGE_ROOT
+            OR VE_SLANG_PACKAGE_ROOT STREQUAL "${VE_SLANG_THIRD_PARTY_ROOT}"
+            OR VE_SLANG_PACKAGE_ROOT STREQUAL "${VE_SLANG_THIRD_PARTY_ROOT}/"))
+        set(VE_SLANG_PACKAGE_ROOT "${defaultPackageRoot}" CACHE PATH "Extracted Slang package root." FORCE)
+    endif()
+
+    if(NOT VE_SLANG_EXECUTABLE AND EXISTS "${VE_SLANG_PACKAGE_ROOT}/bin/slangc.exe")
+        set(VE_SLANG_EXECUTABLE "${VE_SLANG_PACKAGE_ROOT}/bin/slangc.exe" CACHE FILEPATH "Path to the slangc executable." FORCE)
     endif()
 
     if(NOT VE_SLANG_EXECUTABLE AND EXISTS "${VE_SLANG_PACKAGE_ROOT}/bin/slangc")
@@ -53,12 +58,6 @@ function(ve_setup_slang)
 
         if(foundSlangExecutable)
             set(VE_SLANG_EXECUTABLE "${foundSlangExecutable}" CACHE FILEPATH "Path to the slangc executable." FORCE)
-        endif()
-    endif()
-
-    if(NOT VE_SLANG_EXECUTABLE)
-        if(EXISTS "${VE_SLANG_PACKAGE_ROOT}/bin/slangc.exe")
-            set(VE_SLANG_EXECUTABLE "${VE_SLANG_PACKAGE_ROOT}/bin/slangc.exe" CACHE FILEPATH "Path to the slangc executable." FORCE)
         endif()
     endif()
 
