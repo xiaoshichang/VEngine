@@ -217,8 +217,6 @@ function(ve_add_mac_editor)
     ve_setup_imgui(VEngineMacEditor)
 
     add_custom_command(TARGET VEngineMacEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove -f
-            "$<TARGET_FILE_DIR:VEngineMacEditor>/imgui.ini"
         COMMAND ${CMAKE_COMMAND} -E remove_directory
             "$<TARGET_FILE_DIR:VEngineMacEditor>/../../VEngineMacEditor.Managed"
         COMMAND ${CMAKE_COMMAND} -E remove_directory
