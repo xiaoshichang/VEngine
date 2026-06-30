@@ -29,6 +29,8 @@ namespace ve
 
         [[nodiscard]] Result<Vector3> GetBodyLinearVelocity(PhysicsBodyHandle body) const override;
         [[nodiscard]] ErrorCode SetBodyLinearVelocity(PhysicsBodyHandle body, Vector3 velocity) override;
+        [[nodiscard]] Result<Vector3> GetBodyAngularVelocity(PhysicsBodyHandle body) const override;
+        [[nodiscard]] ErrorCode SetBodyAngularVelocity(PhysicsBodyHandle body, Vector3 velocity) override;
 
     private:
         std::unique_ptr<PhysicsSystemBackendJoltImpl> impl_;

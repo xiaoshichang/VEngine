@@ -16,6 +16,7 @@
 #include <Jolt/Physics/Collision/BroadPhase/ObjectVsBroadPhaseLayerFilterTable.h>
 #include <Jolt/Physics/Collision/ObjectLayerPairFilterTable.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/EActivation.h>
@@ -176,6 +177,8 @@ namespace ve
                 }
 
                 return ErrorCode::None;
+            case PhysicsShapeType::Capsule:
+                return desc.radius > 0.0f && desc.halfHeight > 0.0f ? ErrorCode::None : ErrorCode::InvalidArgument;
             }
 
             return ErrorCode::InvalidArgument;
@@ -189,6 +192,8 @@ namespace ve
                 return new JPH::SphereShape(desc.radius);
             case PhysicsShapeType::Box:
                 return new JPH::BoxShape(ToJoltVec3(desc.halfExtent));
+            case PhysicsShapeType::Capsule:
+                return new JPH::CapsuleShape(desc.halfHeight, desc.radius);
             }
 
             return nullptr;
@@ -352,6 +357,11 @@ namespace ve
             return Result<PhysicsBodyHandle>::Failure(Error(shapeValidationResult, "Physics body requires a valid shape description."));
         }
 
+        if ((desc.motionType == PhysicsBodyMotionType::Dynamic && desc.mass <= 0.0f) || desc.linearDamping < 0.0f || desc.angularDamping < 0.0f)
+        {
+            return Result<PhysicsBodyHandle>::Failure(Error(ErrorCode::InvalidArgument, "Physics body requires valid mass and damping values."));
+        }
+
         JPH::RefConst<JPH::Shape> shape = CreateJoltShape(desc.shape);
         if (shape == nullptr)
         {
@@ -365,9 +375,18 @@ namespace ve
                                            ToJoltObjectLayer(desc.motionType));
         settings.mLinearVelocity = ToJoltVec3(desc.linearVelocity);
         settings.mAngularVelocity = ToJoltVec3(desc.angularVelocity);
+        settings.mLinearDamping = desc.linearDamping;
+        settings.mAngularDamping = desc.angularDamping;
+        settings.mGravityFactor = desc.gravityFactor;
         settings.mFriction = desc.friction;
         settings.mRestitution = desc.restitution;
         settings.mUserData = desc.userData;
+        settings.mIsSensor = desc.trigger;
+        if (desc.motionType == PhysicsBodyMotionType::Dynamic)
+        {
+            settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
+            settings.mMassPropertiesOverride.mMass = desc.mass;
+        }
 
         JPH::BodyInterface& bodyInterface = impl_->physicsSystem->GetBodyInterface();
         const JPH::BodyID bodyId = bodyInterface.CreateAndAddBody(settings, ToJoltActivation(desc.startActive));
@@ -513,6 +532,51 @@ namespace ve
         }
 
         bodyInterface.SetLinearVelocity(bodyId, ToJoltVec3(velocity));
+        return ErrorCode::None;
+    }
+
+    Result<Vector3> PhysicsSystemBackendJolt::GetBodyAngularVelocity(PhysicsBodyHandle body) const
+    {
+        if (!impl_->initialized)
+        {
+            return Result<Vector3>::Failure(Error(ErrorCode::InvalidState, "Physics backend is not initialized."));
+        }
+
+        if (!body.IsValid())
+        {
+            return Result<Vector3>::Failure(Error(ErrorCode::InvalidArgument, "Physics body handle is invalid."));
+        }
+
+        const JPH::BodyID bodyId = ToJoltBodyId(body);
+        const JPH::BodyInterface& bodyInterface = impl_->physicsSystem->GetBodyInterface();
+        if (!bodyInterface.IsAdded(bodyId))
+        {
+            return Result<Vector3>::Failure(Error(ErrorCode::NotFound, "Physics body was not found."));
+        }
+
+        return Result<Vector3>::Success(FromJoltVec3(bodyInterface.GetAngularVelocity(bodyId)));
+    }
+
+    ErrorCode PhysicsSystemBackendJolt::SetBodyAngularVelocity(PhysicsBodyHandle body, Vector3 velocity)
+    {
+        if (!impl_->initialized)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (!body.IsValid())
+        {
+            return ErrorCode::InvalidArgument;
+        }
+
+        const JPH::BodyID bodyId = ToJoltBodyId(body);
+        JPH::BodyInterface& bodyInterface = impl_->physicsSystem->GetBodyInterface();
+        if (!bodyInterface.IsAdded(bodyId))
+        {
+            return ErrorCode::NotFound;
+        }
+
+        bodyInterface.SetAngularVelocity(bodyId, ToJoltVec3(velocity));
         return ErrorCode::None;
     }
 } // namespace ve

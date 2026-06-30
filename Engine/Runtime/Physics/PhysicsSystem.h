@@ -11,6 +11,9 @@
 
 namespace ve
 {
+    class Scene;
+    struct PhysicsSystemSceneSyncState;
+
     class PhysicsSystem final : public NonMovable
     {
     public:
@@ -33,11 +36,17 @@ namespace ve
 
         [[nodiscard]] Result<Vector3> GetBodyLinearVelocity(PhysicsBodyHandle body) const;
         [[nodiscard]] ErrorCode SetBodyLinearVelocity(PhysicsBodyHandle body, Vector3 velocity);
+        [[nodiscard]] Result<Vector3> GetBodyAngularVelocity(PhysicsBodyHandle body) const;
+        [[nodiscard]] ErrorCode SetBodyAngularVelocity(PhysicsBodyHandle body, Vector3 velocity);
+
+        [[nodiscard]] ErrorCode SyncSceneBeforeStep(Scene& scene);
+        [[nodiscard]] ErrorCode WriteBackSceneAfterStep(Scene& scene);
 
     private:
         [[nodiscard]] static std::unique_ptr<PhysicsSystemBackend> CreateBackend(PhysicsBackendType backendType);
 
         std::unique_ptr<PhysicsSystemBackend> backend_;
+        std::unique_ptr<PhysicsSystemSceneSyncState> sceneSyncState_;
         bool initialized_ = false;
     };
 } // namespace ve

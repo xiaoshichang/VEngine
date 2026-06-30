@@ -687,31 +687,46 @@ The iOS C# path should be treated as a separate research milestone because iOS h
 First-stage physics is intentionally lightweight. The current runtime code exposes a `PhysicsSystem` facade with a
 `PhysicsSystemBackend` boundary and a first concrete `PhysicsSystemBackendJolt` implementation backed by Jolt Physics.
 This facade is compiled into the `VEngine` static library, but it is intentionally not owned by `EngineRuntime` yet and
-does not synchronize with Scene or Component state.
+does not run from the runtime frame loop yet.
 
 The initial engine-facing API covers:
 
 - Backend selection.
 - Physics world initialization and shutdown.
 - Fixed-step simulation calls.
-- Sphere and box rigid body creation.
+- Sphere, box, and capsule rigid body creation.
 - Body destruction.
-- Body transform and linear velocity read/write.
+- Body transform, linear velocity, and angular velocity read/write.
 - Scene-facing `ColliderComponent` and `RigidbodyComponent` stored as fixed `GameObject` component fields.
 - Component `Desc` structs for serialized Unity-style Collider and Rigidbody authoring data, separated from non-serialized
-  runtime `ColliderBackend` and `RigidbodyBackend` state such as physics body handles and velocities.
+  runtime `ColliderBackend` and `RigidbodyBackend` state such as physics body handles and dirty sync flags. Body
+  velocities belong to the actual `PhysicsSystemBackend` simulation state and are read or written through
+  `PhysicsSystem` APIs.
+- Explicit Scene synchronization APIs on `PhysicsSystem`. A caller can invoke `SyncSceneBeforeStep(scene)` before
+  `StepSimulation()` to create, destroy, or refresh internal physics bodies for new, removed, and dirty Collider or
+  Rigidbody components, then invoke `WriteBackSceneAfterStep(scene)` after stepping to copy dynamic body simulation
+  results back to `GameObject` transforms. `ClearSceneSyncState(scene)` destroys the physics bodies tracked for one
+  Scene. These APIs are intentionally manual until `EngineRuntime` owns the physics service.
+
+First-stage scene synchronization keeps an internal `PhysicsSystem` registry keyed by live `GameObject` pointers for the
+duration of the synchronized Scene. It supports static colliders, dynamic rigidbodies, kinematic rigidbodies, trigger
+sensors, mass, damping, gravity usage, friction, restitution, and backend-owned body velocities. When a dirty body must
+be recreated, existing velocities are read from the active physics backend before the old body is destroyed and passed to
+the replacement body. Transform sync currently maps through `TransformComponent` local position and rotation because the
+first-stage Transform API does not expose world-space setters; parented simulated objects should be treated as a future
+refinement. Capsule colliders are supported through Jolt's Y-axis capsule shape in this first pass.
 
 Future lightweight physics and scene-facing features:
 
 - `AABB`.
 - `Sphere`.
 - `Raycast`.
-- Component-to-PhysicsSystem synchronization.
+- Runtime frame-loop integration.
+- Parent-aware world transform synchronization.
 - Simple overlap tests.
 
-Scene synchronization, render/debug visualization, editor inspection, and the component model remain separate future
-work. Game Thread code should still treat physics simulation as a dedicated system boundary rather than reaching through
-to Jolt types directly.
+Render/debug visualization and editor inspection remain separate future work. Game Thread code should still treat
+physics simulation as a dedicated system boundary rather than reaching through to Jolt types directly.
 
 ## 8. Multithreaded Runtime Model
 

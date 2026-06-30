@@ -28,5 +28,7 @@ namespace ve
 
         [[nodiscard]] virtual Result<Vector3> GetBodyLinearVelocity(PhysicsBodyHandle body) const = 0;
         [[nodiscard]] virtual ErrorCode SetBodyLinearVelocity(PhysicsBodyHandle body, Vector3 velocity) = 0;
+        [[nodiscard]] virtual Result<Vector3> GetBodyAngularVelocity(PhysicsBodyHandle body) const = 0;
+        [[nodiscard]] virtual ErrorCode SetBodyAngularVelocity(PhysicsBodyHandle body, Vector3 velocity) = 0;
     };
 } // namespace ve

@@ -23,6 +23,7 @@ namespace ve
     {
         Sphere,
         Box,
+        Capsule,
     };
 
     struct PhysicsShapeDesc
@@ -43,8 +44,18 @@ namespace ve
             return desc;
         }
 
+        [[nodiscard]] static constexpr PhysicsShapeDesc CreateCapsule(Float32 radius, Float32 halfHeight) noexcept
+        {
+            PhysicsShapeDesc desc;
+            desc.type = PhysicsShapeType::Capsule;
+            desc.radius = radius;
+            desc.halfHeight = halfHeight;
+            return desc;
+        }
+
         PhysicsShapeType type = PhysicsShapeType::Sphere;
         Float32 radius = 0.5f;
+        Float32 halfHeight = 0.5f;
         Vector3 halfExtent = Vector3(0.5f, 0.5f, 0.5f);
     };
 
@@ -107,10 +118,15 @@ namespace ve
         PhysicsBodyTransform transform;
         Vector3 linearVelocity = Vector3::Zero();
         Vector3 angularVelocity = Vector3::Zero();
+        Float32 mass = 1.0f;
+        Float32 linearDamping = 0.0f;
+        Float32 angularDamping = 0.05f;
+        Float32 gravityFactor = 1.0f;
         Float32 friction = 0.2f;
         Float32 restitution = 0.0f;
         UInt64 userData = 0;
         bool startActive = true;
+        bool trigger = false;
     };
 
     struct PhysicsSystemInitParam

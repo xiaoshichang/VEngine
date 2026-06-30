@@ -17,26 +17,6 @@ namespace ve
         bodyHandle_.Reset();
     }
 
-    const Vector3& RigidbodyBackend::GetLinearVelocity() const noexcept
-    {
-        return linearVelocity_;
-    }
-
-    void RigidbodyBackend::SetLinearVelocity(const Vector3& linearVelocity) noexcept
-    {
-        linearVelocity_ = linearVelocity;
-    }
-
-    const Vector3& RigidbodyBackend::GetAngularVelocity() const noexcept
-    {
-        return angularVelocity_;
-    }
-
-    void RigidbodyBackend::SetAngularVelocity(const Vector3& angularVelocity) noexcept
-    {
-        angularVelocity_ = angularVelocity;
-    }
-
     bool RigidbodyBackend::IsRuntimeBodyDirty() const noexcept
     {
         return runtimeBodyDirty_;
@@ -180,26 +160,6 @@ namespace ve
     bool RigidbodyComponent::HasConstraint(RigidbodyConstraintFlags constraint) const noexcept
     {
         return (ToUnderlying(desc_.constraints) & ToUnderlying(constraint)) != 0;
-    }
-
-    const Vector3& RigidbodyComponent::GetLinearVelocity() const noexcept
-    {
-        return backend_.GetLinearVelocity();
-    }
-
-    void RigidbodyComponent::SetLinearVelocity(const Vector3& linearVelocity) noexcept
-    {
-        backend_.SetLinearVelocity(linearVelocity);
-    }
-
-    const Vector3& RigidbodyComponent::GetAngularVelocity() const noexcept
-    {
-        return backend_.GetAngularVelocity();
-    }
-
-    void RigidbodyComponent::SetAngularVelocity(const Vector3& angularVelocity) noexcept
-    {
-        backend_.SetAngularVelocity(angularVelocity);
     }
 
     PhysicsBodyHandle RigidbodyComponent::GetPhysicsBodyHandle() const noexcept

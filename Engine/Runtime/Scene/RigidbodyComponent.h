@@ -2,7 +2,6 @@
 
 #include "Engine/Runtime/Core/EnumFlags.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Physics/PhysicsTypes.h"
 #include "Engine/Runtime/Scene/Component.h"
 
@@ -62,20 +61,12 @@ namespace ve
         void SetPhysicsBodyHandle(PhysicsBodyHandle bodyHandle) noexcept;
         void ClearPhysicsBodyHandle() noexcept;
 
-        [[nodiscard]] const Vector3& GetLinearVelocity() const noexcept;
-        void SetLinearVelocity(const Vector3& linearVelocity) noexcept;
-
-        [[nodiscard]] const Vector3& GetAngularVelocity() const noexcept;
-        void SetAngularVelocity(const Vector3& angularVelocity) noexcept;
-
         [[nodiscard]] bool IsRuntimeBodyDirty() const noexcept;
         void MarkRuntimeBodyDirty() noexcept;
         void ClearRuntimeBodyDirty() noexcept;
 
     private:
         PhysicsBodyHandle bodyHandle_;
-        Vector3 linearVelocity_ = Vector3::Zero();
-        Vector3 angularVelocity_ = Vector3::Zero();
         bool runtimeBodyDirty_ = true;
     };
 
@@ -118,12 +109,6 @@ namespace ve
         [[nodiscard]] RigidbodyConstraintFlags GetConstraints() const noexcept;
         void SetConstraints(RigidbodyConstraintFlags constraints) noexcept;
         [[nodiscard]] bool HasConstraint(RigidbodyConstraintFlags constraint) const noexcept;
-
-        [[nodiscard]] const Vector3& GetLinearVelocity() const noexcept;
-        void SetLinearVelocity(const Vector3& linearVelocity) noexcept;
-
-        [[nodiscard]] const Vector3& GetAngularVelocity() const noexcept;
-        void SetAngularVelocity(const Vector3& angularVelocity) noexcept;
 
         [[nodiscard]] PhysicsBodyHandle GetPhysicsBodyHandle() const noexcept;
         void SetPhysicsBodyHandle(PhysicsBodyHandle bodyHandle) noexcept;
