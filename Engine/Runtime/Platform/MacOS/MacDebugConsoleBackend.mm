@@ -5,6 +5,7 @@
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 
+#include <algorithm>
 #include <deque>
 #include <iostream>
 #include <memory>
@@ -68,19 +69,29 @@ namespace ve
             return (__bridge NSWindow*)window;
         }
 
+        [[nodiscard]] NSWindow* GetWindowFromNativeHandle(void* nativeWindowHandle)
+        {
+            if (nativeWindowHandle == nullptr)
+            {
+                return nil;
+            }
+
+            id object = (__bridge id)nativeWindowHandle;
+            if ([object isKindOfClass:[NSWindow class]])
+            {
+                return static_cast<NSWindow*>(object);
+            }
+            if ([object isKindOfClass:[NSView class]])
+            {
+                return [static_cast<NSView*>(object) window];
+            }
+
+            return nil;
+        }
+
         [[nodiscard]] NSTextView* AsTextView(void* textView)
         {
             return (__bridge NSTextView*)textView;
-        }
-
-        [[nodiscard]] NSTextField* AsInputField(void* inputField)
-        {
-            return (__bridge NSTextField*)inputField;
-        }
-
-        [[nodiscard]] VEngineMacDebugConsoleDelegate* AsDelegate(void* delegate)
-        {
-            return (__bridge VEngineMacDebugConsoleDelegate*)delegate;
         }
 
         [[nodiscard]] NSColor* GetColorForSeverity(LogSeverity severity)
@@ -233,6 +244,66 @@ namespace ve
             [inputField release];
             RedrawConsoleLocked(state);
         }
+
+        [[nodiscard]] CGFloat Clamp(CGFloat value, CGFloat minValue, CGFloat maxValue)
+        {
+            if (maxValue < minValue)
+            {
+                return minValue;
+            }
+
+            return std::min(std::max(value, minValue), maxValue);
+        }
+
+        [[nodiscard]] NSRect GetFramePlacedRightOfEditor(const NSRect editorFrame, const NSSize consoleSize, const NSRect visibleFrame, CGFloat spacing)
+        {
+            const CGFloat minX = NSMinX(visibleFrame);
+            const CGFloat maxX = NSMaxX(visibleFrame) - consoleSize.width;
+            const CGFloat minY = NSMinY(visibleFrame);
+            const CGFloat maxY = NSMaxY(visibleFrame) - consoleSize.height;
+            const CGFloat preferredX = NSMaxX(editorFrame) + spacing;
+            const CGFloat preferredY = NSMaxY(editorFrame) - consoleSize.height;
+            return NSMakeRect(Clamp(preferredX, minX, maxX), Clamp(preferredY, minY, maxY), consoleSize.width, consoleSize.height);
+        }
+
+        [[nodiscard]] NSRect GetFramePlacedBelowEditor(const NSRect editorFrame, const NSSize consoleSize, const NSRect visibleFrame, CGFloat spacing)
+        {
+            const CGFloat minX = NSMinX(visibleFrame);
+            const CGFloat maxX = NSMaxX(visibleFrame) - consoleSize.width;
+            const CGFloat minY = NSMinY(visibleFrame);
+            const CGFloat maxY = NSMaxY(visibleFrame) - consoleSize.height;
+            const CGFloat preferredX = NSMinX(editorFrame);
+            const CGFloat preferredY = NSMinY(editorFrame) - spacing - consoleSize.height;
+            return NSMakeRect(Clamp(preferredX, minX, maxX), Clamp(preferredY, minY, maxY), consoleSize.width, consoleSize.height);
+        }
+
+        void PlaceDebugConsoleWindowNearEditor(NSWindow* consoleWindow, NSWindow* editorWindow)
+        {
+            if (consoleWindow == nil || editorWindow == nil)
+            {
+                return;
+            }
+
+            NSScreen* screen = [editorWindow screen];
+            if (screen == nil)
+            {
+                screen = [NSScreen mainScreen];
+            }
+            if (screen == nil)
+            {
+                return;
+            }
+
+            constexpr CGFloat spacing = 12.0;
+            const NSRect visibleFrame = [screen visibleFrame];
+            const NSRect editorFrame = [editorWindow frame];
+            const NSSize consoleSize = [consoleWindow frame].size;
+            const CGFloat rightSpace = NSMaxX(visibleFrame) - NSMaxX(editorFrame) - spacing;
+
+            const NSRect consoleFrame = rightSpace >= consoleSize.width ? GetFramePlacedRightOfEditor(editorFrame, consoleSize, visibleFrame, spacing)
+                                                                         : GetFramePlacedBelowEditor(editorFrame, consoleSize, visibleFrame, spacing);
+            [consoleWindow setFrame:consoleFrame display:YES];
+        }
     } // namespace
 
     void CommitMacDebugConsoleInput(MacDebugConsoleState& state, NSString* inputText)
@@ -341,6 +412,30 @@ namespace ve
                 AppendTextViewLine(AsTextView(state.textView), severity, text);
             }
         });
+    }
+
+    void MacDebugConsoleBackend::PlaceNearWindow(void* nativeWindowHandle)
+    {
+#if VE_BUILD_DEBUG
+        MacDebugConsoleState& state = GetMacDebugConsoleState();
+        RunOnMainThreadSync(^{
+            NSWindow* editorWindow = GetWindowFromNativeHandle(nativeWindowHandle);
+            if (editorWindow == nil)
+            {
+                return;
+            }
+
+            std::lock_guard lock(state.mutex);
+            if (!state.uiReady)
+            {
+                return;
+            }
+
+            PlaceDebugConsoleWindowNearEditor(AsWindow(state.window), editorWindow);
+        });
+#else
+        (void)nativeWindowHandle;
+#endif
     }
 
     std::unique_ptr<DebugConsoleBackend> CreateMacDebugConsoleBackend()

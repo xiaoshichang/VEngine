@@ -8,4 +8,5 @@ namespace ve
     void SetDebugConsoleCommandHandler(DebugConsoleCommandHandler handler);
     void PumpDebugConsoleCommands();
     void WriteDebugConsoleLog(LogSeverity severity, std::string_view line);
+    void PlaceDebugConsoleNearWindow(void* nativeWindowHandle);
 } // namespace ve

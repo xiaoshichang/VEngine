@@ -193,6 +193,8 @@ function(ve_add_mac_editor)
         Editor/macOS/MacEditorProjectRegistryBackend.mm
         Editor/macOS/MacEditorRenderBackend.h
         Editor/macOS/MacEditorRenderBackend.mm
+        Editor/macOS/MacEditorWindowPlacement.h
+        Editor/macOS/MacEditorWindowPlacement.mm
         Editor/macOS/main.mm
     )
 

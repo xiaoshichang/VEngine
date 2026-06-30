@@ -21,6 +21,10 @@ namespace ve
         virtual void SetCommandHandler(DebugConsoleCommandHandler handler) = 0;
         virtual void PumpCommands() = 0;
         virtual void WriteLog(LogSeverity severity, std::string_view line) = 0;
+        virtual void PlaceNearWindow(void* nativeWindowHandle)
+        {
+            (void)nativeWindowHandle;
+        }
     };
 
 #if VE_PLATFORM_WINDOWS

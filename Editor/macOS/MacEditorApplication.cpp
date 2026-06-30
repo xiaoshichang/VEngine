@@ -1,5 +1,6 @@
 #include "Editor/macOS/MacEditorApplication.h"
 
+#include "Editor/macOS/MacEditorWindowPlacement.h"
 #include "Engine/Runtime/Logging/Log.h"
 
 #include <utility>
@@ -31,6 +32,8 @@ namespace ve::editor
             VE_LOG_ERROR("Editor::Init failed: {}", ToString(editorResult));
             return 1;
         }
+
+        PlaceMacEditorStartupWindows(GetMainWindowNativeHandle());
 
         return result;
     }

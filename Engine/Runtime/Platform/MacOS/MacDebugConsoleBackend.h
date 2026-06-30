@@ -11,5 +11,6 @@ namespace ve
         void SetCommandHandler(DebugConsoleCommandHandler handler) override;
         void PumpCommands() override;
         void WriteLog(LogSeverity severity, std::string_view line) override;
+        void PlaceNearWindow(void* nativeWindowHandle) override;
     };
 } // namespace ve

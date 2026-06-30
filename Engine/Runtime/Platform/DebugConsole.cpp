@@ -81,4 +81,13 @@ namespace ve
 
         WriteFallbackConsoleLog(severity, line);
     }
+
+    void PlaceDebugConsoleNearWindow(void* nativeWindowHandle)
+    {
+        DebugConsoleBackend* backend = GetOrCreateDebugConsoleBackend();
+        if (backend != nullptr)
+        {
+            backend->PlaceNearWindow(nativeWindowHandle);
+        }
+    }
 } // namespace ve
