@@ -101,10 +101,9 @@ Jolt Physics
 DirectXShaderCompiler
   - HLSL compilation
   - DXIL generation
-  - SPIR-V generation
 
-SPIRV-Cross
-  - SPIR-V to MSL conversion
+Slang
+  - HLSL to Metal MSL generation
   - Shader reflection
 ```
 

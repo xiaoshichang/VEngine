@@ -97,14 +97,12 @@ namespace ve::editor
         {
             const std::string entryName = PathToUtf8String(entryPath.filename());
             const std::string entryId = PathToUtf8String(entryPath);
-            const char* entryLabel = entryName.empty() ? "<unnamed>" : entryName.c_str();
+            const std::string entryLabel = (entryName.empty() ? std::string("<unnamed>") : entryName) + "##" + (entryId.empty() ? std::string("unnamed") : entryId);
 
-            ImGui::PushID(entryId.c_str());
-            if (ImGui::Selectable(entryLabel))
+            if (ImGui::Selectable(entryLabel.c_str()))
             {
                 (void)NavigateToDirectory(entryPath);
             }
-            ImGui::PopID();
         }
         ImGui::EndChild();
 

@@ -18,14 +18,12 @@ HLSL source
   -> VEngineShaderTool
     -> D3D11: DXBC through D3DCompile / fxc-compatible path
     -> D3D12: DXIL through DirectXShaderCompiler
-    -> Metal:
-      -> SPIR-V through Slang
-      -> MSL source through Slang
-      -> metallib through Apple's metal command line tools during Apple-platform packaging
+    -> Metal: MSL source through Slang
+    -> metallib through Apple's metal command line tools during Apple-platform packaging
     -> Normalized reflection metadata
 ```
 
-Use `DirectXShaderCompiler` for DXIL and `Slang` for SPIR-V, MSL, and reflection in the offline toolchain, not in the
+Use `DirectXShaderCompiler` for DXIL and `Slang` for MSL and reflection in the offline toolchain, not in the
 normal Player runtime.
 
 Use Apple Metal Shader Converter as a future optional path for DXIL-to-Metal library generation, but do not make it
@@ -78,12 +76,11 @@ This gives a clean split:
 
 ### 4.3 Slang
 
-`Slang` is the first-stage compiler bridge for the Metal path. It generates SPIR-V for downstream validation, emits
-MSL source directly, and writes reflection JSON that can be normalized into VEngine's shader metadata.
+`Slang` is the first-stage compiler bridge for the Metal path. It emits MSL source directly and writes reflection JSON
+that can be normalized into VEngine's shader metadata.
 
 Use it for:
 
-- SPIR-V generation.
 - MSL source generation.
 - Reflection over resources, stage inputs, stage outputs, and constant buffers.
 
@@ -115,8 +112,8 @@ It should be recorded as a future option, not the first-stage default, because:
 - The documented runtime baseline is macOS 14 / iOS 17 or later for full support.
   - The first macOS target is a placeholder app, and the current engine architecture plans direct-slot Metal binding
   before argument buffers.
-- The SPIR-V to MSL path produces inspectable MSL text, which is easier to debug while the RHI and shader metadata are
-  still being designed.
+- Slang's direct MSL output preserves authored entry point names and explicit resource slots for the current direct-slot
+  Metal binding model.
 
 Re-evaluate Metal Shader Converter when VEngine moves beyond the initial forward-rendering slice or raises the Apple
 runtime baseline.
@@ -139,7 +136,6 @@ Shaders/
   Generated/
     DXBC/
     DXIL/
-    SPIRV/
     MSL/
     MetalLib/
     Reflection/
@@ -201,36 +197,18 @@ fxc /T ps_5_0 /E PSMain /Fo BasicMesh.PS.dxbc BasicMesh.hlsl
 If `VEngineShaderTool` uses the API path instead of shelling out, it should call `D3DCompile` with equivalent target
 profiles and flags.
 
-### 5.4 SPIR-V Output For Metal
-
-Compile HLSL with Slang to SPIR-V.
-
-Command shape:
-
-```text
-slangc -stage vertex -entry VSMain -profile vs_6_0 -target spirv -fvk-use-dx-layout -o BasicMesh.VS.spv -reflection-json BasicMesh.VS.reflect.json BasicMesh.hlsl
-slangc -stage pixel -entry PSMain -profile ps_6_0 -target spirv -fvk-use-dx-layout -o BasicMesh.PS.spv -reflection-json BasicMesh.PS.reflect.json BasicMesh.hlsl
-```
-
-The exact SPIR-V target environment should be a `VEngineShaderTool` option, not hard-coded in shader source. Start with
-a conservative Vulkan environment supported by Slang, then lock the value once the first macOS Metal smoke test is in
-place.
-
-Use `-fvk-use-dx-layout` initially to reduce layout drift from the DirectX path. Reflection metadata and explicit
-packing tests remain mandatory; do not rely only on compiler flags for CPU/GPU layout compatibility.
-
-### 5.5 MSL Output
+### 5.4 MSL Output
 
 Emit MSL directly with Slang.
 
 Command shape:
 
 ```text
-slangc -stage vertex -entry VSMain -profile vs_6_0 -target metal -o BasicMesh.VS.metal BasicMesh.hlsl
-slangc -stage pixel -entry PSMain -profile ps_6_0 -target metal -o BasicMesh.PS.metal BasicMesh.hlsl
+slangc -stage vertex -entry VSMain -profile vs_6_0 -target metal -o BasicMesh.VS.metal -reflection-json BasicMesh.VS.reflect.json BasicMesh.hlsl
+slangc -stage pixel -entry PSMain -profile ps_6_0 -target metal -o BasicMesh.PS.metal -reflection-json BasicMesh.PS.reflect.json BasicMesh.hlsl
 ```
 
-### 5.6 Metal Library Output
+### 5.5 Metal Library Output
 
 Compile generated MSL to a Metal library as part of the Apple build or asset-cook step.
 

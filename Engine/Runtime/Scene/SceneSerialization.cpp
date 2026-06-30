@@ -13,6 +13,7 @@
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Scripting/DotnetScriptableComponent.h"
 #include "Engine/Runtime/Scripting/ScriptableComponent.h"
+#include "Engine/Runtime/Scripting/ScriptingSystem.h"
 
 #include <boost/json.hpp>
 #include <string>
@@ -615,6 +616,14 @@ namespace ve
             }
 
             DotnetScriptableComponent* script = result.GetValue();
+            script->SetEnabled(ReadBool(object, "enabled", script->IsEnabled()));
+
+            if (scriptingSystem.GetBackendType() == ScriptingBackendType::Auto)
+            {
+                VE_LOG_WARN_CATEGORY("Scene", "Skipped script instance creation for '" + scriptTypeName + "' because scripting is not available on this platform.");
+                return ErrorCode::None;
+            }
+
             const ErrorCode ensureResult = script->EnsureScriptInstance(false);
             if (ensureResult != ErrorCode::None)
             {
@@ -633,7 +642,6 @@ namespace ve
                     return fieldsResult;
                 }
             }
-            script->SetEnabled(ReadBool(object, "enabled", script->IsEnabled()));
             return ErrorCode::None;
         }
 

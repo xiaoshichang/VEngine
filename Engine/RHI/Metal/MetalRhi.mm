@@ -13,6 +13,8 @@ namespace ve::rhi
 {
     namespace
     {
+        inline constexpr uint32_t MetalVertexBufferBaseIndex = 16;
+
         MTLPixelFormat ToMetalPixelFormat(RhiFormat format)
         {
             switch (format)
@@ -638,7 +640,7 @@ namespace ve::rhi
             {
                 (void)stride;
                 const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
-                [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+                [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:MetalVertexBufferBaseIndex + slot];
             }
 
             void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) override
@@ -949,12 +951,12 @@ namespace ve::rhi
                     const RhiVertexAttributeDesc& attribute = boundShaderState.vertexDeclaration.attributes[index];
                     vertexDescriptor.attributes[index].format = ToMetalVertexFormat(attribute.format);
                     vertexDescriptor.attributes[index].offset = attribute.offset;
-                    vertexDescriptor.attributes[index].bufferIndex = 0;
+                    vertexDescriptor.attributes[index].bufferIndex = MetalVertexBufferBaseIndex;
                 }
 
-                vertexDescriptor.layouts[0].stride = boundShaderState.vertexDeclaration.stride;
-                vertexDescriptor.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
-                vertexDescriptor.layouts[0].stepRate = 1;
+                vertexDescriptor.layouts[MetalVertexBufferBaseIndex].stride = boundShaderState.vertexDeclaration.stride;
+                vertexDescriptor.layouts[MetalVertexBufferBaseIndex].stepFunction = MTLVertexStepFunctionPerVertex;
+                vertexDescriptor.layouts[MetalVertexBufferBaseIndex].stepRate = 1;
 
                 MTLRenderPipelineDescriptor* pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
                 pipelineDescriptor.vertexFunction = vertexShaderModule->GetFunction();

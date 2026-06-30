@@ -58,6 +58,7 @@ namespace ve
         std::string title_;
         WindowExtent clientExtent_ = {};
         std::deque<OSEvent> pendingOSEvents_;
+        UInt32 pressedMouseButtonCount_ = 0;
         bool visible_ = false;
         bool focused_ = false;
         bool minimized_ = false;

@@ -23,7 +23,6 @@ namespace
         std::filesystem::path dxcExecutable = "dxc";
         std::filesystem::path fxcExecutable = "fxc";
         std::filesystem::path slangExecutable = "slangc";
-        std::filesystem::path spirvCrossExecutable = "spirv-cross";
     };
 
     struct ShaderStage
@@ -59,7 +58,7 @@ namespace
                   << "  compile --source <file> --output <dir> --name <shader> [--dxc <path>] [--fxc <path>] "
                      "[--slang <path>]\n"
                   << "  --help\n";
-        std::cout << "Mac flow: HLSL -> Slang -> SPIR-V -> SPIRV-Cross -> Metal\n";
+        std::cout << "Shader flow: HLSL -> Slang/FXC/DXC -> DXBC, DXIL, Metal MSL, reflection\n";
     }
 
     std::string EscapeJson(std::string_view text)
@@ -286,7 +285,6 @@ namespace
     {
         const std::filesystem::path dxbcPath = BuildArtifactPath(options, stage, "dxbc");
         const std::filesystem::path dxilPath = BuildArtifactPath(options, stage, "dxil");
-        const std::filesystem::path spirvPath = BuildArtifactPath(options, stage, "spv");
         const std::filesystem::path metalPath = BuildArtifactPath(options, stage, "metal");
         const std::filesystem::path reflectionPath = BuildArtifactPath(options, stage, "reflect.json");
 
@@ -329,32 +327,11 @@ namespace
                 "-profile",
                 std::string(stage.dxcProfile),
                 "-target",
-                "spirv",
-                "-fvk-use-dx-layout",
-                "-o",
-                spirvPath.string(),
-                "-reflection-json",
-                reflectionPath.string(),
-                options.sourcePath.string(),
-            }) != 0)
-        {
-            return false;
-        }
-
-        const std::filesystem::path slangMetalPath = BuildArtifactPath(options, stage, "slang.metal");
-
-        if (RunProcess({
-                options.slangExecutable.string(),
-                "-stage",
-                std::string(stage.slangStage),
-                "-entry",
-                std::string(stage.entryPoint),
-                "-profile",
-                std::string(stage.dxcProfile),
-                "-target",
                 "metal",
                 "-o",
                 metalPath.string(),
+                "-reflection-json",
+                reflectionPath.string(),
                 options.sourcePath.string(),
             }) != 0)
         {
@@ -367,31 +344,8 @@ namespace
 
     bool CompileStageApple(const CompileOptions& options, const ShaderStage& stage)
     {
-        const std::filesystem::path spirvPath = BuildArtifactPath(options, stage, "spv");
         const std::filesystem::path metalPath = BuildArtifactPath(options, stage, "metal");
-        const std::filesystem::path slangMetalPath = BuildArtifactPath(options, stage, "slang.metal");
         const std::filesystem::path reflectionPath = BuildArtifactPath(options, stage, "reflect.json");
-
-        if (RunProcess({
-                options.slangExecutable.string(),
-                "-stage",
-                std::string(stage.slangStage),
-                "-entry",
-                std::string(stage.entryPoint),
-                "-profile",
-                std::string(stage.dxcProfile),
-                "-target",
-                "spirv",
-                "-fvk-use-dx-layout",
-                "-o",
-                spirvPath.string(),
-                "-reflection-json",
-                reflectionPath.string(),
-                options.sourcePath.string(),
-            }) != 0)
-        {
-            return false;
-        }
 
         if (RunProcess({
                 options.slangExecutable.string(),
@@ -404,29 +358,17 @@ namespace
                 "-target",
                 "metal",
                 "-o",
-                slangMetalPath.string(),
+                metalPath.string(),
+                "-reflection-json",
+                reflectionPath.string(),
                 options.sourcePath.string(),
             }) != 0)
         {
             return false;
         }
 
-        if (RunProcess({
-                options.spirvCrossExecutable.string(),
-                spirvPath.string(),
-                "--msl",
-                "--msl-version",
-                "30000",
-                "--output",
-                metalPath.string(),
-            }) != 0)
-        {
-            return false;
-        }
-
-        std::cout << "  SPIR-V: " << spirvPath << '\n';
-        std::cout << "  Slang MSL: " << slangMetalPath << '\n';
         std::cout << "  Metal MSL: " << metalPath << '\n';
+        std::cout << "  Reflection: " << reflectionPath << '\n';
 
         return true;
     }
@@ -457,7 +399,6 @@ namespace
             output << "      \"artifacts\": {\n";
             output << "        \"d3d11\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxbc").generic_string()) << "\",\n";
             output << "        \"d3d12\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxil").generic_string()) << "\",\n";
-            output << "        \"spirv\": \"" << EscapeJson(BuildArtifactPath(options, stage, "spv").generic_string()) << "\",\n";
             output << "        \"metal\": \"" << EscapeJson(BuildArtifactPath(options, stage, "metal").generic_string()) << "\",\n";
             output << "        \"reflection\": \"" << EscapeJson(BuildArtifactPath(options, stage, "reflect.json").generic_string()) << "\"\n";
             output << "      }\n";

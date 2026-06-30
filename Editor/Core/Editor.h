@@ -118,7 +118,7 @@ namespace ve::editor
         [[nodiscard]] Result<EditorProjectDescriptor> PrepareOpenProjectDescriptor(const Path& projectRoot, const std::string& projectPath);
         [[nodiscard]] ErrorCode InitializeOpenProjectAssetServices(const Path& projectRoot, const std::string& projectPath);
         void ActivateOpenProjectContext(std::string projectPath, const Path& projectRoot, const EditorProjectDescriptor& descriptor);
-        void LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor);
+        [[nodiscard]] Error LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor);
         [[nodiscard]] ErrorCode LoadScriptHostAssembly();
         void EnterProjectEditingView();
         void AddRecentProject(const std::string& projectPath);

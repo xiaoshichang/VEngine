@@ -40,8 +40,9 @@ Prototype:
 HLSL
   -> DXC
     -> DXIL
-    -> SPIR-V
-  -> SPIRV-Cross
+  -> FXC
+    -> DXBC
+  -> Slang
     -> MSL
     -> Reflection
 ```
@@ -149,9 +150,8 @@ full macOS platform backend remains future work.
 
 - Integrate DirectXShaderCompiler.
 - Compile HLSL to DXIL.
-- Compile HLSL to SPIR-V.
-- Integrate SPIRV-Cross.
-- Generate MSL.
+- Compile HLSL to DXBC for D3D11.
+- Generate MSL through Slang.
 - Generate shader reflection metadata.
 - Create `VEngineShaderTool`.
 - Add shader compile smoke tests.

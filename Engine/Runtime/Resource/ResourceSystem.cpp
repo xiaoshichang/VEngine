@@ -107,11 +107,13 @@ namespace ve
             return Result<ResourceObject*>::Failure(resource.GetError());
         }
 
-        const ErrorCode loadResult = resource.GetValue()->Load(context);
-        if (loadResult != ErrorCode::None)
+        const Error loadResult = resource.GetValue()->Load(context);
+        if (!loadResult.IsOk())
         {
             context.requestStack.pop_back();
-            return Result<ResourceObject*>::Failure(Error(loadResult, "Resource dependency load failed."));
+            return Result<ResourceObject*>::Failure(
+                Error(loadResult.GetCode(),
+                      "Resource '" + id.ToString() + "' at '" + record.GetValue().runtimePath.GetString() + "' failed to load: " + loadResult.GetMessage()));
         }
         context.requestStack.pop_back();
 

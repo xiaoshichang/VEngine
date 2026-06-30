@@ -62,8 +62,11 @@ namespace ve
 
             const NSPoint windowPoint = [event locationInWindow];
             NSPoint viewPoint = [view convertPoint:windowPoint fromView:nil];
-            const NSRect bounds = [view bounds];
-            viewPoint.y = bounds.size.height - viewPoint.y;
+            if (![view isFlipped])
+            {
+                const NSRect bounds = [view bounds];
+                viewPoint.y = bounds.size.height - viewPoint.y;
+            }
             return viewPoint;
         }
 
@@ -120,6 +123,7 @@ namespace ve
                 return InputMouseButton::Left;
             }
         }
+
     } // namespace
 
     MacWindow::~MacWindow()
@@ -186,6 +190,11 @@ namespace ve
         }
 
         [window setDelegate:nil];
+        if (pressedMouseButtonCount_ > 0)
+        {
+            [NSEvent stopPeriodicEvents];
+            pressedMouseButtonCount_ = 0;
+        }
         [window close];
         if (metalLayer_ != nullptr)
         {
@@ -365,6 +374,11 @@ namespace ve
     void MacWindow::OnNativeWindowFocusChanged(bool focused)
     {
         focused_ = focused;
+        if (!focused_ && pressedMouseButtonCount_ > 0)
+        {
+            [NSEvent stopPeriodicEvents];
+            pressedMouseButtonCount_ = 0;
+        }
         QueueOSEvent(OSEvent{focused ? OSEventType::WindowFocusGained : OSEventType::WindowFocusLost});
     }
 
@@ -408,6 +422,27 @@ namespace ve
 
     void MacWindow::OnNativeMouseButton(OSEventType type, InputMouseButton button, Int32 x, Int32 y)
     {
+        if (type == OSEventType::MouseButtonDown)
+        {
+            ++pressedMouseButtonCount_;
+            if (pressedMouseButtonCount_ == 1)
+            {
+                [NSEvent startPeriodicEventsAfterDelay:0.0 withPeriod:0.016];
+            }
+        }
+        else if (type == OSEventType::MouseButtonUp)
+        {
+            if (pressedMouseButtonCount_ > 0)
+            {
+                --pressedMouseButtonCount_;
+            }
+
+            if (pressedMouseButtonCount_ == 0)
+            {
+                [NSEvent stopPeriodicEvents];
+            }
+        }
+
         OSEvent event;
         event.type = type;
         event.mouseButton = button;
@@ -576,6 +611,7 @@ namespace ve
 
 - (void)mouseDown:(NSEvent*)event
 {
+    [[self window] makeFirstResponder:self];
     [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonDown];
 }
 
@@ -586,6 +622,7 @@ namespace ve
 
 - (void)rightMouseDown:(NSEvent*)event
 {
+    [[self window] makeFirstResponder:self];
     [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonDown];
 }
 
@@ -596,6 +633,7 @@ namespace ve
 
 - (void)otherMouseDown:(NSEvent*)event
 {
+    [[self window] makeFirstResponder:self];
     [self dispatchMouseButton:event type:ve::OSEventType::MouseButtonDown];
 }
 
@@ -616,6 +654,11 @@ namespace ve
                                static_cast<ve::Float32>([event scrollingDeltaY]),
                                ve::ToInputCoordinate(point.x),
                                ve::ToInputCoordinate(point.y));
+}
+
+- (void)periodic:(NSEvent*)event
+{
+    [self dispatchMouseMove:event];
 }
 
 - (void)keyDown:(NSEvent*)event

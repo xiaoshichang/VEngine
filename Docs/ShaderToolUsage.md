@@ -3,7 +3,7 @@
 ## 1. 用途
 
 `VEngineShaderTool` 是 VEngine 当前阶段的离线 Shader 编译工具。它接收一份 HLSL 源文件，固定编译
-`VSMain` 和 `PSMain` 两个入口，并输出 D3D11、D3D12、SPIR-V、Metal MSL 和反射数据。
+`VSMain` 和 `PSMain` 两个入口，并输出 D3D11、D3D12、Metal MSL 和反射数据。
 
 当前版本的目标是验证 HLSL 到多后端 Shader 产物的基础流程，供 RHI demo、shader pipeline smoke test 和后续
 资源系统接入使用。运行时 Player 不应依赖普通场景下的 shader 跨编译，运行时应加载这个工具提前生成的产物。
@@ -14,7 +14,6 @@
 
 - D3D11 DXBC：通过 `fxc`，目标 profile 为 `vs_5_0` / `ps_5_0`。
 - D3D12 DXIL：通过 `dxc`，目标 profile 为 `vs_6_0` / `ps_6_0`。
-- SPIR-V：通过 `slangc -target spirv` 生成。
 - Metal MSL 源码：通过 `slangc -target metal` 生成。
 - 反射 JSON：通过 `slangc -reflection-json` 生成。
 - VEngine 归一化反射 JSON：每个 shader 一份 `.veshader.json`。
@@ -26,8 +25,8 @@
 - 不支持 shader manifest。
 - 不支持变体、宏定义参数、include search path 参数。
 - 不支持 compute、geometry、tessellation、mesh、ray tracing shader。
-- Windows 路径保留 DXBC / DXIL / SPIR-V / MSL / 反射。
-- macOS 路径使用 `slangc` 生成 SPIR-V，再通过 `spirv-cross` 生成 Metal MSL。
+- Windows 路径保留 DXBC / DXIL / MSL / 反射。
+- macOS 路径使用 `slangc` 直接生成 Metal MSL 和反射。
 - Metal 输出当前是 `.metal` 源码，不是最终 `.metallib`。Apple 平台打包阶段后续再把 `.metal` 编译成 Metal library。
 
 ## 3. 准备工具链
@@ -157,10 +156,8 @@ Bindable shader resource on line 8 must declare an explicit register.
 | `BasicTriangle.PS.dxbc` | Pixel shader 的 D3D11 DXBC。 |
 | `BasicTriangle.VS.dxil` | Vertex shader 的 D3D12 DXIL。 |
 | `BasicTriangle.PS.dxil` | Pixel shader 的 D3D12 DXIL。 |
-| `BasicTriangle.VS.spv` | Vertex shader 的 SPIR-V。 |
-| `BasicTriangle.PS.spv` | Pixel shader 的 SPIR-V。 |
-| `BasicTriangle.VS.metal` | Vertex shader 转换后的 Metal MSL 源码。 |
-| `BasicTriangle.PS.metal` | Pixel shader 转换后的 Metal MSL 源码。 |
+| `BasicTriangle.VS.metal` | Slang 生成的 vertex shader Metal MSL 源码。 |
+| `BasicTriangle.PS.metal` | Slang 生成的 pixel shader Metal MSL 源码。 |
 | `BasicTriangle.VS.reflect.json` | Slang 生成的 vertex stage 原始反射信息。 |
 | `BasicTriangle.PS.reflect.json` | Slang 生成的 pixel stage 原始反射信息。 |
 | `BasicTriangle.veshader.json` | VEngine 归一化反射信息。 |
@@ -178,8 +175,8 @@ Bindable shader resource on line 8 must declare an explicit register.
       "artifacts": {
         "d3d11": "Build/Generated/ShaderExamples/BasicTriangle/BasicTriangle.VS.dxbc",
         "d3d12": "Build/Generated/ShaderExamples/BasicTriangle/BasicTriangle.VS.dxil",
-        "spirv": "Build/Generated/ShaderExamples/BasicTriangle/BasicTriangle.VS.spv",
-        "metal": "Build/Generated/ShaderExamples/BasicTriangle/BasicTriangle.VS.metal"
+        "metal": "Build/Generated/ShaderExamples/BasicTriangle/BasicTriangle.VS.metal",
+        "reflection": "Build/Generated/ShaderExamples/BasicTriangle/BasicTriangle.VS.reflect.json"
       }
     }
   ],

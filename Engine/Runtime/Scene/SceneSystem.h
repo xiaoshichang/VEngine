@@ -103,7 +103,7 @@ namespace ve
         /// Returns the active Scene. The returned pointer remains owned by SceneSystem.
         [[nodiscard]] const Scene* GetScene() const noexcept;
 
-        void LoadScene(const SceneLoadRequest& request);
+        [[nodiscard]] Error LoadScene(const SceneLoadRequest& request);
         void UnloadActiveScene() noexcept;
 
         /// Queues one OS event for Scene Thread processing.

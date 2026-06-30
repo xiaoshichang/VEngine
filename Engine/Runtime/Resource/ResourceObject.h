@@ -31,7 +31,7 @@ namespace ve
         [[nodiscard]] const Path& GetRuntimePath() const noexcept;
         [[nodiscard]] const std::vector<AssetID>& GetDependencies() const noexcept;
 
-        virtual ErrorCode Load(ResourceLoadContext& context);
+        virtual Error Load(ResourceLoadContext& context);
         /// ResourceSystem calls this after dependency render resources have been submitted.
         ///
         /// Implementations should only create or update render-thread proxies through RenderSystem commands. The base
@@ -78,7 +78,7 @@ namespace ve
         [[nodiscard]] bool IsDirty() const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
 
-        ErrorCode Load(ResourceLoadContext& context) override;
+        Error Load(ResourceLoadContext& context) override;
         void InitRenderResource(RenderSystem& renderSystem) override;
         void SyncRenderResource(RenderSystem& renderSystem);
         void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
@@ -108,7 +108,7 @@ namespace ve
         [[nodiscard]] const ShaderMaterialLayout& GetMaterialLayout() const noexcept;
         [[nodiscard]] std::shared_ptr<RTShaderResource> GetRTShaderResource() const noexcept;
 
-        ErrorCode Load(ResourceLoadContext& context) override;
+        Error Load(ResourceLoadContext& context) override;
         void InitRenderResource(RenderSystem& renderSystem) override;
         void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
 

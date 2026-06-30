@@ -4,10 +4,86 @@
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <functional>
+#include <string>
 #include <utility>
 
 namespace ve
 {
+    namespace
+    {
+        [[nodiscard]] const char* ToString(rhi::RhiBackend backend) noexcept
+        {
+            switch (backend)
+            {
+            case rhi::RhiBackend::D3D11:
+                return "D3D11";
+            case rhi::RhiBackend::D3D12:
+                return "D3D12";
+            case rhi::RhiBackend::Metal:
+                return "Metal";
+            }
+
+            return "Unknown";
+        }
+
+        [[nodiscard]] const char* ToString(rhi::RhiShaderStage stage) noexcept
+        {
+            switch (stage)
+            {
+            case rhi::RhiShaderStage::Vertex:
+                return "Vertex";
+            case rhi::RhiShaderStage::Fragment:
+                return "Fragment";
+            }
+
+            return "Unknown";
+        }
+
+        [[nodiscard]] const char* ToString(rhi::RhiShaderCodeFormat format) noexcept
+        {
+            switch (format)
+            {
+            case rhi::RhiShaderCodeFormat::Source:
+                return "Source";
+            case rhi::RhiShaderCodeFormat::Bytecode:
+                return "Bytecode";
+            }
+
+            return "Unknown";
+        }
+
+        [[nodiscard]] std::string BuildShaderCompileFailureMessage(const rhi::RhiDevice& device, const ShaderID& id, const rhi::RhiShaderModuleDesc& desc)
+        {
+            std::string message = "ShaderManager failed to compile shader.";
+            message += " name='";
+            message += id.name.empty() ? "<empty>" : id.name;
+            message += "'";
+            message += " variant=" + std::to_string(id.variant);
+            message += " debugName='";
+            message += desc.debugName != nullptr ? desc.debugName : "<null>";
+            message += "'";
+            message += " stage=";
+            message += ToString(desc.stage);
+            message += " entry='";
+            message += desc.entryPoint != nullptr ? desc.entryPoint : "<null>";
+            message += "'";
+            message += " backend=";
+            message += ToString(device.GetBackend());
+            message += " codeFormat=";
+            message += ToString(desc.codeFormat);
+
+            const char* backendError = device.GetLastErrorMessage();
+            if (backendError != nullptr && backendError[0] != '\0')
+            {
+                message += " backendError='";
+                message += backendError;
+                message += "'";
+            }
+
+            return message;
+        }
+    } // namespace
+
     bool ShaderID::operator==(const ShaderID& other) const noexcept
     {
         return variant == other.variant && name == other.name;
@@ -41,7 +117,12 @@ namespace ve
         }
 
         std::unique_ptr<rhi::RhiShaderModule> shader = device.CreateShaderModule(desc);
-        VE_ASSERT_MESSAGE(shader != nullptr, "ShaderManager failed to compile shader.");
+        if (shader == nullptr)
+        {
+            const std::string message = BuildShaderCompileFailureMessage(device, id, desc);
+            VE_ASSERT_MESSAGE(shader != nullptr, message.c_str());
+            return nullptr;
+        }
 
         rhi::RhiShaderModule* shaderPtr = shader.get();
         shaders_.emplace(id, std::move(shader));

@@ -215,7 +215,7 @@ namespace ve
             SetExpectedSceneThreadId(ThreadId{});
         }
 
-        [[nodiscard]] ErrorCode
+        [[nodiscard]] Error
         BindGameObjectAssetRefs(GameObject& gameObject, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, RenderSystem* renderSystem)
         {
             if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
@@ -226,7 +226,9 @@ namespace ve
                     Result<AssetRef<MeshResource>> meshResource = resourceSystem.Request<MeshResource>(meshID, provider);
                     if (!meshResource)
                     {
-                        return meshResource.GetError().GetCode();
+                        return Error(meshResource.GetError().GetCode(),
+                                     "Failed to bind mesh asset '" + meshID.ToString() + "' on GameObject '" + gameObject.GetName() +
+                                         "': " + meshResource.GetError().GetMessage());
                     }
 
                     if (renderSystem != nullptr && renderSystem->IsInitialized())
@@ -243,7 +245,9 @@ namespace ve
                     Result<AssetRef<MaterialResource>> materialResource = resourceSystem.Request<MaterialResource>(materialID, provider);
                     if (!materialResource)
                     {
-                        return materialResource.GetError().GetCode();
+                        return Error(materialResource.GetError().GetCode(),
+                                     "Failed to bind material asset '" + materialID.ToString() + "' on GameObject '" + gameObject.GetName() +
+                                         "': " + materialResource.GetError().GetMessage());
                     }
 
                     if (renderSystem != nullptr && renderSystem->IsInitialized())
@@ -258,7 +262,7 @@ namespace ve
             TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
             if (transform == nullptr)
             {
-                return ErrorCode::None;
+                return Error();
             }
 
             for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
@@ -269,17 +273,17 @@ namespace ve
                     continue;
                 }
 
-                const ErrorCode result = BindGameObjectAssetRefs(*child, provider, resourceSystem, renderSystem);
-                if (result != ErrorCode::None)
+                Error result = BindGameObjectAssetRefs(*child, provider, resourceSystem, renderSystem);
+                if (!result.IsOk())
                 {
                     return result;
                 }
             }
 
-            return ErrorCode::None;
+            return Error();
         }
 
-        [[nodiscard]] ErrorCode
+        [[nodiscard]] Error
         BindSceneAssetRefs(Scene& scene, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, RenderSystem* renderSystem)
         {
             for (SizeT rootIndex = 0; rootIndex < scene.GetRootGameObjectCount(); ++rootIndex)
@@ -290,14 +294,14 @@ namespace ve
                     continue;
                 }
 
-                const ErrorCode result = BindGameObjectAssetRefs(*root, provider, resourceSystem, renderSystem);
-                if (result != ErrorCode::None)
+                Error result = BindGameObjectAssetRefs(*root, provider, resourceSystem, renderSystem);
+                if (!result.IsOk())
                 {
                     return result;
                 }
             }
 
-            return ErrorCode::None;
+            return Error();
         }
 
         [[nodiscard]] ErrorCode ValidateSceneLoadMode(SceneLoadMode mode)
@@ -358,10 +362,11 @@ namespace ve
                 return scene;
             }
 
-            const ErrorCode bindResult = BindSceneAssetRefs(*scene.GetValue(), provider, resourceSystem, renderSystem);
-            if (bindResult != ErrorCode::None)
+            Error bindResult = BindSceneAssetRefs(*scene.GetValue(), provider, resourceSystem, renderSystem);
+            if (!bindResult.IsOk())
             {
-                return Result<std::unique_ptr<Scene>>::Failure(Error(bindResult, "Failed to bind scene asset references."));
+                return Result<std::unique_ptr<Scene>>::Failure(
+                    Error(bindResult.GetCode(), "Failed to bind scene asset references: " + bindResult.GetMessage()));
             }
 
             return scene;
@@ -533,28 +538,36 @@ namespace ve
         }
     }
 
-     void SceneSystem::LoadScene(const SceneLoadRequest& request)
-     {
-        // 0. clear the current scene if the request is a single load. This is done before validation to ensure that the
-        if (request.mode == SceneLoadMode::Single && impl_->scene != nullptr)
-        {
-            impl_->scene->Clear();
-            impl_->scene = nullptr;
-        }
-
+    Error SceneSystem::LoadScene(const SceneLoadRequest& request)
+    {
         // 1. Validate the requested mode before touching resource state. SceneSystem currently owns a single active
         // Scene, so additive loading is rejected until multiple live Scene ownership is introduced.
         const ErrorCode validateResult = ValidateSceneLoadRequest(request);
         if (validateResult != ErrorCode::None)
         {
-            return;
+            return Error(validateResult, "Invalid scene load request.");
         }
 
         // 2. Build the new Scene from the request. This may involve deserializing a SceneResource or text, and binding
-        impl_->scene = std::move(BuildSceneFromRequest(request).GetValue());
+        // serialized AssetRefs. Keep the previous active Scene alive until the new Scene is fully constructed so load
+        // failures do not cascade into a null active scene on the next render.
+        Result<std::unique_ptr<Scene>> scene = BuildSceneFromRequest(request);
+        if (!scene)
+        {
+            VE_LOG_ERROR_CATEGORY("Scene", "Failed to load scene: " + scene.GetError().GetMessage());
+            return scene.GetError();
+        }
+
+        if (request.mode == SceneLoadMode::Single && impl_->scene != nullptr)
+        {
+            impl_->scene->Clear();
+        }
+
+        impl_->scene = scene.MoveValue();
 
         // 3. If the Scene was successfully built, set it as the active Scene and call its OnLoad() callback.
         impl_->scene->OnLoad();
+        return Error();
     }
 
     void SceneSystem::UnloadActiveScene() noexcept

@@ -116,7 +116,7 @@ namespace ve::editor
                 }
 
                 const boost::json::object& artifacts = artifactsValue->as_object();
-                for (const char* key : {"d3d11", "d3d12", "spirv", "metal", "reflection"})
+                for (const char* key : {"d3d11", "d3d12", "metal", "reflection"})
                 {
                     const std::string artifactPath = ReadString(artifacts, key);
                     if (!artifactPath.empty())

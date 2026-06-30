@@ -6,7 +6,6 @@ function(ve_add_shader_tool)
     endif()
 
     ve_setup_slang()
-    ve_setup_spirv_cross()
 
     if(WIN32)
         ve_setup_directx_shader_compiler()

@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorAssetPath.h"
 #include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorScriptProjectGenerator.h"
+#include "Editor/Core/EditorToolchain.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
@@ -321,15 +322,6 @@ namespace ve::editor
             }
 
             return descriptorPhysicalPath.GetParentPath() / sourcePath;
-        }
-
-        [[nodiscard]] Path GetShaderToolExecutablePath(const Path& executableDirectory)
-        {
-#if VE_PLATFORM_WINDOWS
-            return executableDirectory / "VEngineShaderTool.exe";
-#else
-            return executableDirectory / "VEngineShaderTool";
-#endif
         }
 
         [[nodiscard]] boost::json::array WriteVector3(const std::array<double, 3>& value)
@@ -699,7 +691,7 @@ namespace ve::editor
                 }
 
                 boost::json::object& artifacts = artifactsValue->as_object();
-                for (const char* key : {"d3d11", "d3d12", "spirv", "metal", "reflection"})
+                for (const char* key : {"d3d11", "d3d12", "metal", "reflection"})
                 {
                     boost::json::value* artifactValue = artifacts.if_contains(key);
                     if (artifactValue == nullptr || !artifactValue->is_string())
@@ -764,6 +756,50 @@ namespace ve::editor
             if (force || !FileSystem::IsFile(shaderRuntimePhysicalPath))
             {
                 return true;
+            }
+
+            Result<std::string> runtimeText = FileSystem::ReadTextFile(shaderRuntimePhysicalPath);
+            if (!runtimeText)
+            {
+                return true;
+            }
+
+            Result<boost::json::value> runtimeJson = JsonUtils::Parse(runtimeText.GetValue());
+            if (!runtimeJson || !runtimeJson.GetValue().is_object())
+            {
+                return true;
+            }
+
+            const boost::json::value* stagesValue = runtimeJson.GetValue().as_object().if_contains("stages");
+            if (stagesValue == nullptr || !stagesValue->is_array())
+            {
+                return true;
+            }
+
+            for (const boost::json::value& stageValue : stagesValue->as_array())
+            {
+                if (!stageValue.is_object())
+                {
+                    continue;
+                }
+
+                const boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
+                if (artifactsValue == nullptr || !artifactsValue->is_object())
+                {
+                    return true;
+                }
+
+                const boost::json::object& artifacts = artifactsValue->as_object();
+                if (artifacts.contains("spirv") || artifacts.contains("spirvCrossMetal"))
+                {
+                    return true;
+                }
+
+                const std::string metalPath = ReadString(artifacts, "metal");
+                if (metalPath.ends_with(".slang.metal") || metalPath.ends_with(".spirv-cross.metal"))
+                {
+                    return true;
+                }
             }
 
             return IsFileNewerThan(shaderDescriptorPhysicalPath, shaderRuntimePhysicalPath) || IsFileNewerThan(shaderSourcePhysicalPath, shaderRuntimePhysicalPath);
@@ -1202,15 +1238,15 @@ namespace ve::editor
         }
 
         const Path outputDirectory = projectRoot_ / GetImportedShaderDirectory(guid);
-        const Path executableDirectory = FileSystem::GetExecutableDirectory();
-        const Path shaderToolPath = GetShaderToolExecutablePath(executableDirectory);
-        if (!FileSystem::IsFile(shaderToolPath))
+        Result<EditorShaderToolchain> toolchainResult = ResolveEditorShaderToolchain();
+        if (!toolchainResult)
         {
-            return ErrorCode::NotFound;
+            return toolchainResult.GetError().GetCode();
         }
 
+        EditorShaderToolchain toolchain = toolchainResult.MoveValue();
         std::vector<std::string> arguments = {
-            shaderToolPath.GetString(),
+            toolchain.shaderTool.GetString(),
             "compile",
             "--source",
             sourcePath.GetString(),
@@ -1221,50 +1257,15 @@ namespace ve::editor
         };
 
 #if VE_PLATFORM_WINDOWS
-        const Path repositoryRoot = executableDirectory.GetParentPath().GetParentPath().GetParentPath();
-        const Path dxcPath = repositoryRoot / "ThirdParty/DirectXShaderCompiler/Build/Windows64/1.9.2602.17/Tools/x64/dxc.exe";
-        if (FileSystem::IsFile(dxcPath))
-        {
-            arguments.push_back("--dxc");
-            arguments.push_back(dxcPath.GetString());
-        }
-
-        const Path fxcPath = repositoryRoot / "ThirdParty/WindowsSdkTools/Tools/x64/fxc.exe";
-        if (!FileSystem::IsFile(fxcPath))
-        {
-            VE_LOG_ERROR_CATEGORY("Editor", "Builtin fxc.exe was not found: {}", fxcPath.GetString());
-            return ErrorCode::NotFound;
-        }
-
+        arguments.push_back("--dxc");
+        arguments.push_back(toolchain.dxc.GetString());
         arguments.push_back("--fxc");
-        arguments.push_back(fxcPath.GetString());
-
-        const Path slangPath = repositoryRoot / "ThirdParty/Slang/slang-2026.12-windows-x86_64/bin/slangc.exe";
-        if (FileSystem::IsFile(slangPath))
-        {
-            arguments.push_back("--slang");
-            arguments.push_back(slangPath.GetString());
-        }
-#else
-        const Path repositoryRoot = executableDirectory.GetParentPath().GetParentPath().GetParentPath();
-        const Path slangPath = repositoryRoot / "ThirdParty/Slang/slang-2026.12-macos-aarch64/bin/slangc";
-        if (!FileSystem::IsFile(slangPath))
-        {
-            VE_LOG_ERROR_CATEGORY("Editor", "Slang executable was not found: {}", slangPath.GetString());
-            return ErrorCode::NotFound;
-        }
-
-        const Path spirvCrossPath = repositoryRoot / "ThirdParty/SPIRV-Cross/Build/Mac/SPIRV-Cross-MoltenVK-1.1.5.zip/Release/spirv-cross";
-        if (!FileSystem::IsFile(spirvCrossPath))
-        {
-            VE_LOG_ERROR_CATEGORY("Editor", "SPIRV-Cross executable was not found: {}", spirvCrossPath.GetString());
-            return ErrorCode::NotFound;
-        }
-
+        arguments.push_back(toolchain.fxc.GetString());
         arguments.push_back("--slang");
-        arguments.push_back(slangPath.GetString());
-        arguments.push_back("--spirv-cross");
-        arguments.push_back(spirvCrossPath.GetString());
+        arguments.push_back(toolchain.slang.GetString());
+#else
+        arguments.push_back("--slang");
+        arguments.push_back(toolchain.slang.GetString());
 #endif
 
         const int shaderToolExitCode = RunProcess(arguments);

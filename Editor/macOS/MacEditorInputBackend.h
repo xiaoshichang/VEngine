@@ -26,7 +26,10 @@ namespace ve::editor
         Int32 mouseY_ = 0;
         Int32 mouseDeltaX_ = 0;
         Int32 mouseDeltaY_ = 0;
+        double lastFrameTimeSeconds_ = 0.0;
+        int lastMouseCursor_ = -1;
         bool hasMousePosition_ = false;
+        bool mouseCursorHidden_ = false;
         void* nativeView_ = nullptr;
     };
 } // namespace ve::editor

@@ -53,7 +53,7 @@ function(ve_setup_slang)
             HINTS
                 "${VE_SLANG_PACKAGE_ROOT}/bin"
                 "${VE_SLANG_THIRD_PARTY_ROOT}"
-            DOC "Path to the slangc executable used for SPIR-V generation."
+            DOC "Path to the slangc executable used for shader generation."
         )
 
         if(foundSlangExecutable)

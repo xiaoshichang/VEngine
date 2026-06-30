@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <string>
 #include <utility>
 
 namespace ve
@@ -58,6 +59,41 @@ float4 PSMain(VSOutput input) : SV_TARGET
 }
 )";
 
+        const char* EditorGizmoLineMetalShaderSource = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct EditorGizmoConstants
+{
+    float4x4 worldViewProjection;
+};
+
+struct VSInput
+{
+    float3 position [[attribute(0)]];
+    float3 color [[attribute(1)]];
+};
+
+struct VSOutput
+{
+    float4 position [[position]];
+    float3 color;
+};
+
+[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant EditorGizmoConstants* constants [[buffer(0)]])
+{
+    VSOutput output;
+    output.position = constants->worldViewProjection * float4(input.position, 1.0f);
+    output.color = input.color;
+    return output;
+}
+
+[[fragment]] float4 PSMain(VSOutput input [[stage_in]])
+{
+    return float4(clamp(input.color, 0.0f, 1.0f), 1.0f);
+}
+)";
+
         const char* EditorGizmoIconShaderSource = R"(
 cbuffer EditorGizmoConstants : register(b0)
 {
@@ -97,6 +133,45 @@ float4 PSMain(VSOutput input) : SV_TARGET
 }
 )";
 
+        const char* EditorGizmoIconMetalShaderSource = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct EditorGizmoConstants
+{
+    float4x4 worldViewProjection;
+};
+
+struct VSInput
+{
+    float3 position [[attribute(0)]];
+    float3 uv [[attribute(1)]];
+    float3 color [[attribute(2)]];
+};
+
+struct VSOutput
+{
+    float4 position [[position]];
+    float2 uv;
+    float3 color;
+};
+
+[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant EditorGizmoConstants* constants [[buffer(0)]])
+{
+    VSOutput output;
+    output.position = constants->worldViewProjection * float4(input.position, 1.0f);
+    output.uv = input.uv.xy;
+    output.color = input.color;
+    return output;
+}
+
+[[fragment]] float4 PSMain(VSOutput input [[stage_in]], texture2d<float> iconAtlasTexture [[texture(0)]], sampler iconAtlasSampler [[sampler(0)]])
+{
+    float4 atlas = iconAtlasTexture.sample(iconAtlasSampler, input.uv);
+    return float4(clamp(input.color, 0.0f, 1.0f), atlas.a);
+}
+)";
+
         struct EditorGizmoUniformData
         {
             Float32 worldViewProjection[16] = {};
@@ -113,6 +188,24 @@ float4 PSMain(VSOutput input) : SV_TARGET
             desc.initialData = initialData;
             desc.debugName = debugName;
             return desc;
+        }
+
+        [[nodiscard]] const char* SelectShaderSource(const rhi::RhiDevice& device, const char* hlslSource, const char* metalSource) noexcept
+        {
+            return device.GetBackend() == rhi::RhiBackend::Metal ? metalSource : hlslSource;
+        }
+
+        [[nodiscard]] std::string BuildDeviceFailureMessage(const rhi::RhiDevice& device, const char* message)
+        {
+            std::string result = message;
+            const char* backendError = device.GetLastErrorMessage();
+            if (backendError != nullptr && backendError[0] != '\0')
+            {
+                result += " Backend error: ";
+                result += backendError;
+            }
+
+            return result;
         }
 
         [[nodiscard]] Matrix44 BuildRigidInverse(const Matrix44& localToWorld) noexcept
@@ -259,7 +352,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         rhi::RhiShaderModuleDesc lineVertexShaderDesc = {};
         lineVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-        lineVertexShaderDesc.source = EditorGizmoLineShaderSource;
+        lineVertexShaderDesc.source = SelectShaderSource(context.device, EditorGizmoLineShaderSource, EditorGizmoLineMetalShaderSource);
         lineVertexShaderDesc.entryPoint = "VSMain";
         lineVertexShaderDesc.debugName = "EditorGizmoLineVertexShader";
 
@@ -268,7 +361,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         rhi::RhiShaderModuleDesc lineFragmentShaderDesc = {};
         lineFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-        lineFragmentShaderDesc.source = EditorGizmoLineShaderSource;
+        lineFragmentShaderDesc.source = SelectShaderSource(context.device, EditorGizmoLineShaderSource, EditorGizmoLineMetalShaderSource);
         lineFragmentShaderDesc.entryPoint = "PSMain";
         lineFragmentShaderDesc.debugName = "EditorGizmoLineFragmentShader";
 
@@ -277,7 +370,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         rhi::RhiShaderModuleDesc iconVertexShaderDesc = {};
         iconVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-        iconVertexShaderDesc.source = EditorGizmoIconShaderSource;
+        iconVertexShaderDesc.source = SelectShaderSource(context.device, EditorGizmoIconShaderSource, EditorGizmoIconMetalShaderSource);
         iconVertexShaderDesc.entryPoint = "VSMain";
         iconVertexShaderDesc.debugName = "EditorGizmoIconVertexShader";
 
@@ -286,7 +379,7 @@ float4 PSMain(VSOutput input) : SV_TARGET
 
         rhi::RhiShaderModuleDesc iconFragmentShaderDesc = {};
         iconFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-        iconFragmentShaderDesc.source = EditorGizmoIconShaderSource;
+        iconFragmentShaderDesc.source = SelectShaderSource(context.device, EditorGizmoIconShaderSource, EditorGizmoIconMetalShaderSource);
         iconFragmentShaderDesc.entryPoint = "PSMain";
         iconFragmentShaderDesc.debugName = "EditorGizmoIconFragmentShader";
 
@@ -324,7 +417,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
         linePipelineDesc.debugName = "EditorGizmoLinePipeline";
 
         linePipelineState_ = context.device.CreateGraphicsPipeline(linePipelineDesc);
-        VE_ASSERT_MESSAGE(linePipelineState_ != nullptr, "EditorGizmoRenderPass failed to create line pipeline state.");
+        if (linePipelineState_ == nullptr)
+        {
+            const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create line pipeline state.");
+            VE_ASSERT_MESSAGE(linePipelineState_ != nullptr, message.c_str());
+            return;
+        }
 
         rhi::RhiVertexAttributeDesc iconPositionAttribute = {};
         iconPositionAttribute.semanticName = "POSITION";
@@ -360,7 +458,12 @@ float4 PSMain(VSOutput input) : SV_TARGET
         iconPipelineDesc.debugName = "EditorGizmoIconPipeline";
 
         iconPipelineState_ = context.device.CreateGraphicsPipeline(iconPipelineDesc);
-        VE_ASSERT_MESSAGE(iconPipelineState_ != nullptr, "EditorGizmoRenderPass failed to create icon pipeline state.");
+        if (iconPipelineState_ == nullptr)
+        {
+            const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create icon pipeline state.");
+            VE_ASSERT_MESSAGE(iconPipelineState_ != nullptr, message.c_str());
+            return;
+        }
         pipelineColorFormat_ = targetFormat;
     }
 

@@ -38,6 +38,8 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Core/EditorScriptDatabase.h
     Editor/Core/EditorScriptProjectGenerator.cpp
     Editor/Core/EditorScriptProjectGenerator.h
+    Editor/Core/EditorToolchain.cpp
+    Editor/Core/EditorToolchain.h
     Editor/Core/Gizmos.cpp
     Editor/Core/Gizmos.h
     Editor/Panels/AssetsPanel.cpp
@@ -211,8 +213,9 @@ function(ve_add_mac_editor)
             VEngine::ImGui
     )
 
+    ve_add_shader_tool()
     ve_add_managed_script_host()
-    add_dependencies(VEngineMacEditor VEngineScriptHostManaged)
+    add_dependencies(VEngineMacEditor VEngineShaderTool VEngineScriptHostManaged)
 
     ve_setup_imgui(VEngineMacEditor)
 

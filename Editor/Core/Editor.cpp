@@ -4,6 +4,7 @@
 #include "Editor/Core/EditorProjectEditingView.h"
 #include "Editor/Core/EditorProjectSelectionView.h"
 #include "Editor/Core/EditorRenderBackend.h"
+#include "Editor/Core/EditorToolchain.h"
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 #include "Editor/RenderPass/SceneGridRenderPass.h"
 #include "Engine/Runtime/Core/Assert.h"
@@ -168,6 +169,12 @@ namespace ve::editor
             return ErrorCode::InvalidArgument;
         }
 
+        const ErrorCode toolchainResult = ValidateEditorToolchain();
+        if (toolchainResult != ErrorCode::None)
+        {
+            return toolchainResult;
+        }
+
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "ImGui::CreateContext failed.");
@@ -309,7 +316,7 @@ namespace ve::editor
                                       const EditorFrameRenderViews& views,
                                       const std::shared_ptr<RTScene>& renderScene) const
     {
-        if (views.sceneViewTexture == nullptr)
+        if (views.sceneViewTexture == nullptr || renderScene == nullptr)
         {
             return;
         }
@@ -348,7 +355,7 @@ namespace ve::editor
                                      const EditorFrameRenderViews& views,
                                      const std::shared_ptr<RTScene>& renderScene) const
     {
-        if (views.gameViewTexture == nullptr)
+        if (views.gameViewTexture == nullptr || renderScene == nullptr)
         {
             return;
         }
@@ -637,7 +644,13 @@ namespace ve::editor
         loadRequest.provider = &assetDatabase_;
         loadRequest.resourceSystem = &runtime_->GetResourceSystem();
         loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
-        sceneSystem_->LoadScene(loadRequest);
+        Error loadResult = sceneSystem_->LoadScene(loadRequest);
+        if (!loadResult.IsOk())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to enter Play mode: " + loadResult.GetMessage());
+            return;
+        }
+
         editingSceneSnapshot_ = snapshot.MoveValue();
         playState_ = EditorPlayState::Playing;
         ++playSessionID_;
@@ -664,7 +677,12 @@ namespace ve::editor
         loadRequest.provider = &assetDatabase_;
         loadRequest.resourceSystem = &runtime_->GetResourceSystem();
         loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
-        sceneSystem_->LoadScene(loadRequest);
+        Error loadResult = sceneSystem_->LoadScene(loadRequest);
+        if (!loadResult.IsOk())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to restore editing scene after Play: " + loadResult.GetMessage());
+            return;
+        }
 
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
@@ -847,7 +865,12 @@ namespace ve::editor
             loadRequest.provider = &assetDatabase_;
             loadRequest.resourceSystem = &runtime_->GetResourceSystem();
             loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
-            sceneSystem_->LoadScene(loadRequest);
+            Error loadResult = sceneSystem_->LoadScene(loadRequest);
+            if (!loadResult.IsOk())
+            {
+                VE_LOG_WARN_CATEGORY("Editor", "Failed to reload scene after script compile: " + loadResult.GetMessage());
+                return;
+            }
         }
 
         const ErrorCode refreshResult = scriptDatabase_.RefreshFromScriptingSystem(runtime_->GetScriptingSystem());
@@ -868,30 +891,27 @@ namespace ve::editor
         VE_LOG_INFO_CATEGORY("Editor", "Recompiled scripts. Script type count: {}", scriptDatabase_.GetScriptTypes().size());
     }
 
-    void Editor::LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor)
+    Error Editor::LoadOpenProjectStartScene(const EditorProjectDescriptor& descriptor)
     {
         if (descriptor.startScene.empty())
         {
-            return;
+            return Error();
         }
 
         if (sceneSystem_ == nullptr || runtime_ == nullptr)
         {
-            VE_LOG_WARN_CATEGORY("Editor", "Skipped project start scene '{}' because runtime scene services are not ready.", descriptor.startScene);
-            return;
+            return Error(ErrorCode::InvalidState, "Runtime scene services are not ready for project start scene '" + descriptor.startScene + "'.");
         }
 
         const EditorAssetRecord* sceneAsset = assetDatabase_.FindAsset(Path(descriptor.startScene));
         if (sceneAsset == nullptr)
         {
-            VE_LOG_WARN_CATEGORY("Editor", "Project start scene '{}' was not found in the asset database.", descriptor.startScene);
-            return;
+            return Error(ErrorCode::NotFound, "Project start scene '" + descriptor.startScene + "' was not found in the asset database.");
         }
 
         if (sceneAsset->type != EditorAssetType::Scene)
         {
-            VE_LOG_WARN_CATEGORY("Editor", "Project start scene '{}' is not a scene asset.", descriptor.startScene);
-            return;
+            return Error(ErrorCode::InvalidArgument, "Project start scene '" + descriptor.startScene + "' is not a scene asset.");
         }
 
         SceneLoadRequest loadRequest;
@@ -901,8 +921,14 @@ namespace ve::editor
         loadRequest.provider = &assetDatabase_;
         loadRequest.resourceSystem = &runtime_->GetResourceSystem();
         loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
-        sceneSystem_->LoadScene(loadRequest);
+        Error loadResult = sceneSystem_->LoadScene(loadRequest);
+        if (!loadResult.IsOk())
+        {
+            return loadResult;
+        }
+
         currentScenePath_ = sceneAsset->path;
+        return Error();
     }
 
     void Editor::EnterProjectEditingView()
@@ -957,7 +983,14 @@ namespace ve::editor
         RecompileScripts();
 
         // 6. Construct the live scene through SceneSystem so serialized AssetRefs are requested and bound.
-        LoadOpenProjectStartScene(descriptorResult.GetValue());
+        Error sceneLoadResult = LoadOpenProjectStartScene(descriptorResult.GetValue());
+        if (!sceneLoadResult.IsOk())
+        {
+            VE_LOG_ERROR_CATEGORY("Editor", "Failed to open project start scene: " + sceneLoadResult.GetMessage());
+            ShutdownOpenProjectState();
+            EnqueueMainWindowTitleUpdate();
+            return;
+        }
 
         // 7. Only enter the editing UI after project services and the optional start scene have settled.
         EnterProjectEditingView();
@@ -1008,7 +1041,13 @@ namespace ve::editor
         loadRequest.provider = &assetDatabase_;
         loadRequest.resourceSystem = &runtime_->GetResourceSystem();
         loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
-        sceneSystem_->LoadScene(loadRequest);
+        Error loadResult = sceneSystem_->LoadScene(loadRequest);
+        if (!loadResult.IsOk())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to open scene '" + scenePath.GetString() + "': " + loadResult.GetMessage());
+            return;
+        }
+
         currentScenePath_ = sceneAsset->path;
         ClearSelection();
         CollectUnusedResources();

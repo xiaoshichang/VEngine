@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
+#include "Engine/Runtime/Core/Platform.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
@@ -47,16 +48,6 @@ namespace ve
             return fallback;
         }
 
-        [[nodiscard]] rhi::RhiShaderStage ParseShaderStage(std::string_view text) noexcept
-        {
-            if (text == "Pixel" || text == "Fragment")
-            {
-                return rhi::RhiShaderStage::Fragment;
-            }
-
-            return rhi::RhiShaderStage::Vertex;
-        }
-
         [[nodiscard]] Path ResolveArtifactPath(const Path& projectRoot, const Path& shaderRuntimePath, std::string_view artifactPath)
         {
             Path path(artifactPath);
@@ -72,6 +63,70 @@ namespace ve
             }
 
             return projectRoot / shaderRuntimePath.GetParentPath() / path;
+        }
+
+        [[nodiscard]] Result<std::vector<std::byte>> ReadShaderBinaryArtifact(const boost::json::object& artifacts,
+                                                                              boost::json::string_view key,
+                                                                              std::string_view backendName,
+                                                                              const AssetRecord& record,
+                                                                              const Path& projectRoot)
+        {
+            const std::string artifactPath = ReadString(artifacts, key);
+            if (artifactPath.empty())
+            {
+                return Result<std::vector<std::byte>>::Failure(
+                    Error(ErrorCode::InvalidArgument,
+                          "Shader '" + record.runtimePath.GetString() + "' is missing the " + std::string(backendName) + " artifact path."));
+            }
+
+            const Path resolvedPath = ResolveArtifactPath(projectRoot, record.runtimePath, artifactPath);
+            Result<std::vector<std::byte>> artifactBytes = FileSystem::ReadBinaryFile(resolvedPath);
+            if (!artifactBytes)
+            {
+                return Result<std::vector<std::byte>>::Failure(
+                    Error(artifactBytes.GetError().GetCode(),
+                          "Failed to read " + std::string(backendName) + " shader artifact '" + resolvedPath.GetString() + "' for shader '" +
+                              record.runtimePath.GetString() + "': " + artifactBytes.GetError().GetMessage()));
+            }
+
+            return artifactBytes;
+        }
+
+        [[nodiscard]] Result<std::string> ReadShaderTextArtifact(const boost::json::object& artifacts,
+                                                                 boost::json::string_view key,
+                                                                 std::string_view backendName,
+                                                                 const AssetRecord& record,
+                                                                 const Path& projectRoot)
+        {
+            const std::string artifactPath = ReadString(artifacts, key);
+            if (artifactPath.empty())
+            {
+                return Result<std::string>::Failure(
+                    Error(ErrorCode::InvalidArgument,
+                          "Shader '" + record.runtimePath.GetString() + "' is missing the " + std::string(backendName) + " artifact path."));
+            }
+
+            const Path resolvedPath = ResolveArtifactPath(projectRoot, record.runtimePath, artifactPath);
+            Result<std::string> artifactText = FileSystem::ReadTextFile(resolvedPath);
+            if (!artifactText)
+            {
+                return Result<std::string>::Failure(
+                    Error(artifactText.GetError().GetCode(),
+                          "Failed to read " + std::string(backendName) + " shader artifact '" + resolvedPath.GetString() + "' for shader '" +
+                              record.runtimePath.GetString() + "': " + artifactText.GetError().GetMessage()));
+            }
+
+            return artifactText;
+        }
+
+        [[nodiscard]] rhi::RhiShaderStage ParseShaderStage(std::string_view text) noexcept
+        {
+            if (text == "Pixel" || text == "Fragment")
+            {
+                return rhi::RhiShaderStage::Fragment;
+            }
+
+            return rhi::RhiShaderStage::Vertex;
         }
 
         [[nodiscard]] Result<RTShaderResourceDesc> ParseShaderRenderDesc(const std::string& text, const AssetRecord& record, const Path& projectRoot)
@@ -112,29 +167,30 @@ namespace ve
                 stageDesc.entryPoint = ReadString(stageObject, "entry", stageDesc.stage == rhi::RhiShaderStage::Vertex ? "VSMain" : "PSMain");
                 stageDesc.debugName = desc.name + (stageDesc.stage == rhi::RhiShaderStage::Vertex ? ".Vertex" : ".Fragment");
 
-                const Path d3d11Path = ResolveArtifactPath(projectRoot, record.runtimePath, ReadString(artifacts, "d3d11"));
-                Result<std::vector<std::byte>> d3d11Bytes = FileSystem::ReadBinaryFile(d3d11Path);
+#if VE_PLATFORM_WINDOWS
+                Result<std::vector<std::byte>> d3d11Bytes = ReadShaderBinaryArtifact(artifacts, "d3d11", "D3D11", record, projectRoot);
                 if (!d3d11Bytes)
                 {
                     return Result<RTShaderResourceDesc>::Failure(d3d11Bytes.GetError());
                 }
                 stageDesc.d3d11Bytecode = d3d11Bytes.MoveValue();
 
-                const Path d3d12Path = ResolveArtifactPath(projectRoot, record.runtimePath, ReadString(artifacts, "d3d12"));
-                Result<std::vector<std::byte>> d3d12Bytes = FileSystem::ReadBinaryFile(d3d12Path);
+                Result<std::vector<std::byte>> d3d12Bytes = ReadShaderBinaryArtifact(artifacts, "d3d12", "D3D12", record, projectRoot);
                 if (!d3d12Bytes)
                 {
                     return Result<RTShaderResourceDesc>::Failure(d3d12Bytes.GetError());
                 }
                 stageDesc.d3d12Bytecode = d3d12Bytes.MoveValue();
-
-                const Path metalPath = ResolveArtifactPath(projectRoot, record.runtimePath, ReadString(artifacts, "metal"));
-                Result<std::string> metalSource = FileSystem::ReadTextFile(metalPath);
+#elif VE_PLATFORM_MACOS
+                Result<std::string> metalSource = ReadShaderTextArtifact(artifacts, "metal", "Metal", record, projectRoot);
                 if (!metalSource)
                 {
                     return Result<RTShaderResourceDesc>::Failure(metalSource.GetError());
                 }
                 stageDesc.metalSource = metalSource.MoveValue();
+#else
+                return Result<RTShaderResourceDesc>::Failure(Error(ErrorCode::Unsupported, "Unsupported platform for shader artifact loading."));
+#endif
 
                 desc.stages.push_back(std::move(stageDesc));
             }
@@ -269,18 +325,18 @@ namespace ve
         return record_.dependencies;
     }
 
-    ErrorCode ResourceObject::Load(ResourceLoadContext& context)
+    Error ResourceObject::Load(ResourceLoadContext& context)
     {
         for (const AssetID& dependency : record_.dependencies)
         {
             Result<ResourceObject*> dependencyResource = context.RequestDependency(dependency);
             if (!dependencyResource)
             {
-                return dependencyResource.GetError().GetCode();
+                return dependencyResource.GetError();
             }
         }
 
-        return ErrorCode::None;
+        return Error();
     }
 
     void ResourceObject::InitRenderResource(RenderSystem& renderSystem)
@@ -365,18 +421,18 @@ namespace ve
         return revision_;
     }
 
-    ErrorCode MaterialResource::Load(ResourceLoadContext& context)
+    Error MaterialResource::Load(ResourceLoadContext& context)
     {
         Result<boost::json::object> materialJson = ParseJsonObject(text_, "Material descriptor root must be a JSON object.");
         if (!materialJson)
         {
-            return materialJson.GetError().GetCode();
+            return materialJson.GetError();
         }
 
         const boost::json::value* propertiesValue = materialJson.GetValue().if_contains("properties");
         if (propertiesValue == nullptr || !propertiesValue->is_object())
         {
-            return ErrorCode::InvalidArgument;
+            return Error(ErrorCode::InvalidArgument, "Material descriptor missing properties object: " + GetRuntimePath().GetString());
         }
 
         ShaderResource* shaderResource = nullptr;
@@ -385,7 +441,9 @@ namespace ve
             Result<ResourceObject*> dependencyResource = context.RequestDependency(dependency);
             if (!dependencyResource)
             {
-                return dependencyResource.GetError().GetCode();
+                return Error(dependencyResource.GetError().GetCode(),
+                             "Failed to load dependency '" + dependency.ToString() + "' for material '" + GetRuntimePath().GetString() +
+                                 "': " + dependencyResource.GetError().GetMessage());
             }
 
             if (dependencyResource.GetValue()->GetType() == ResourceType::Shader)
@@ -396,21 +454,21 @@ namespace ve
 
         if (shaderResource == nullptr)
         {
-            return ErrorCode::NotFound;
+            return Error(ErrorCode::NotFound, "Material has no shader dependency: " + GetRuntimePath().GetString());
         }
 
         materialLayout_ = shaderResource->GetMaterialLayout();
         Result<std::vector<MaterialPropertyValue>> values = ResolveMaterialPropertyValues(materialLayout_, propertiesValue->as_object());
         if (!values)
         {
-            return values.GetError().GetCode();
+            return values.GetError();
         }
 
         propertyValues_ = values.MoveValue();
         rtShaderResource_ = shaderResource->GetRTShaderResource();
         rtMaterialResource_ = std::make_shared<RTMaterialResource>(BuildRenderDesc());
         MarkDirty();
-        return ErrorCode::None;
+        return Error();
     }
 
     void MaterialResource::InitRenderResource(RenderSystem& renderSystem)
@@ -516,30 +574,30 @@ namespace ve
         return rtShaderResource_;
     }
 
-    ErrorCode ShaderResource::Load(ResourceLoadContext& context)
+    Error ShaderResource::Load(ResourceLoadContext& context)
     {
         Result<RTShaderResourceDesc> desc = ParseShaderRenderDesc(text_, GetAssetRecord(), context.resourceSystem.GetProjectRoot());
         if (!desc)
         {
-            return desc.GetError().GetCode();
+            return desc.GetError();
         }
 
         reflectionText_ = text_;
         Result<boost::json::object> shaderJson = ParseJsonObject(text_, "Shader descriptor root must be a JSON object.");
         if (!shaderJson)
         {
-            return shaderJson.GetError().GetCode();
+            return shaderJson.GetError();
         }
 
         Result<ShaderMaterialLayout> materialLayout = ReadShaderMaterialLayoutJson(shaderJson.GetValue());
         if (!materialLayout)
         {
-            return materialLayout.GetError().GetCode();
+            return materialLayout.GetError();
         }
 
         materialLayout_ = materialLayout.MoveValue();
         rtShaderResource_ = std::make_shared<RTShaderResource>(desc.MoveValue());
-        return ErrorCode::None;
+        return Error();
     }
 
     void ShaderResource::InitRenderResource(RenderSystem& renderSystem)
