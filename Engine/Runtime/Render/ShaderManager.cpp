@@ -82,6 +82,32 @@ namespace ve
 
             return message;
         }
+
+        [[nodiscard]] std::string BuildGraphicsPipelineCreateFailureMessage(const rhi::RhiDevice& device,
+                                                                            const GraphicsPipelineID& id,
+                                                                            const rhi::RhiGraphicsPipelineDesc& desc)
+        {
+            std::string message = "ShaderManager failed to create graphics pipeline.";
+            message += " name='";
+            message += id.name.empty() ? "<empty>" : id.name;
+            message += "'";
+            message += " variant=" + std::to_string(id.variant);
+            message += " debugName='";
+            message += desc.debugName != nullptr ? desc.debugName : "<null>";
+            message += "'";
+            message += " backend=";
+            message += ToString(device.GetBackend());
+
+            const char* backendError = device.GetLastErrorMessage();
+            if (backendError != nullptr && backendError[0] != '\0')
+            {
+                message += " backendError='";
+                message += backendError;
+                message += "'";
+            }
+
+            return message;
+        }
     } // namespace
 
     bool ShaderID::operator==(const ShaderID& other) const noexcept
@@ -90,6 +116,18 @@ namespace ve
     }
 
     SizeT ShaderIDHash::operator()(const ShaderID& id) const noexcept
+    {
+        const SizeT nameHash = std::hash<std::string>{}(id.name);
+        const SizeT variantHash = std::hash<Int32>{}(id.variant);
+        return nameHash ^ (variantHash + 0x9E3779B97F4A7C15ull + (nameHash << 6) + (nameHash >> 2));
+    }
+
+    bool GraphicsPipelineID::operator==(const GraphicsPipelineID& other) const noexcept
+    {
+        return variant == other.variant && name == other.name;
+    }
+
+    SizeT GraphicsPipelineIDHash::operator()(const GraphicsPipelineID& id) const noexcept
     {
         const SizeT nameHash = std::hash<std::string>{}(id.name);
         const SizeT variantHash = std::hash<Int32>{}(id.variant);
@@ -129,9 +167,45 @@ namespace ve
         return shaderPtr;
     }
 
+    rhi::RhiPipelineState* ShaderManager::GetGraphicsPipeline(GraphicsPipelineID id) noexcept
+    {
+        const auto existing = graphicsPipelines_.find(id);
+        return existing != graphicsPipelines_.end() ? existing->second.get() : nullptr;
+    }
+
+    const rhi::RhiPipelineState* ShaderManager::GetGraphicsPipeline(GraphicsPipelineID id) const noexcept
+    {
+        const auto existing = graphicsPipelines_.find(id);
+        return existing != graphicsPipelines_.end() ? existing->second.get() : nullptr;
+    }
+
+    rhi::RhiPipelineState* ShaderManager::GetOrCreateGraphicsPipeline(rhi::RhiDevice& device,
+                                                                      GraphicsPipelineID id,
+                                                                      const rhi::RhiGraphicsPipelineDesc& desc)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        if (rhi::RhiPipelineState* pipeline = GetGraphicsPipeline(id); pipeline != nullptr)
+        {
+            return pipeline;
+        }
+
+        std::unique_ptr<rhi::RhiPipelineState> pipeline = device.CreateGraphicsPipeline(desc);
+        if (pipeline == nullptr)
+        {
+            const std::string message = BuildGraphicsPipelineCreateFailureMessage(device, id, desc);
+            VE_ASSERT_MESSAGE(pipeline != nullptr, message.c_str());
+            return nullptr;
+        }
+
+        rhi::RhiPipelineState* pipelinePtr = pipeline.get();
+        graphicsPipelines_.emplace(std::move(id), std::move(pipeline));
+        return pipelinePtr;
+    }
+
     void ShaderManager::Clear() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
+        graphicsPipelines_.clear();
         shaders_.clear();
     }
 } // namespace ve

@@ -13,6 +13,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/ScopeExit.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/BaseRenderer.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
@@ -176,6 +177,7 @@ namespace ve
         void ExecuteCommand(RenderCommand& command) noexcept
         {
             VE_ASSERT_RENDER_THREAD();
+            PlatformAutoreleasePool autoreleasePool;
             try
             {
                 command.function();

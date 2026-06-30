@@ -6,12 +6,15 @@
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <string>
 #include <utility>
 
 namespace ve
@@ -190,6 +193,24 @@ namespace ve
             return nullptr;
         }
 
+        [[nodiscard]] Int32 BuildOpaquePipelineVariant(rhi::RhiFormat targetFormat, rhi::RhiFillMode fillMode, bool depthEnabled) noexcept
+        {
+            return static_cast<Int32>(targetFormat) | (static_cast<Int32>(fillMode) << 8) | (depthEnabled ? (1 << 16) : 0);
+        }
+
+        [[nodiscard]] std::string BuildOpaquePipelineName(const RTShaderResource& shaderResource,
+                                                          const rhi::RhiShaderModule& vertexShader,
+                                                          const rhi::RhiShaderModule& fragmentShader)
+        {
+            std::string name = "OpaqueScenePipeline:";
+            name += shaderResource.GetDesc().name;
+            name += ":VS=";
+            name += std::to_string(reinterpret_cast<std::uintptr_t>(&vertexShader));
+            name += ":FS=";
+            name += std::to_string(reinterpret_cast<std::uintptr_t>(&fragmentShader));
+            return name;
+        }
+
         [[nodiscard]] rhi::RhiColor ResolvePassClearColor(const RendererData& rendererData) noexcept
         {
             VE_ASSERT_ALWAYS_MESSAGE(rendererData.resolvedCamera != nullptr, "OpaqueScenePass requires a resolved camera for clear color.");
@@ -323,6 +344,13 @@ namespace ve
             return;
         }
 
+        ShaderManager* shaderManager = context.frameData.shaderManager;
+        VE_ASSERT_MESSAGE(shaderManager != nullptr, "OpaqueScenePass requires a ShaderManager.");
+        if (shaderManager == nullptr)
+        {
+            return;
+        }
+
         rhi::RhiDevice& device = context.device;
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
@@ -353,7 +381,12 @@ namespace ve
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = "OpaqueScenePipeline";
 
-        pipelineState_ = device.CreateGraphicsPipeline(pipelineDesc);
+        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(device,
+                                                                     GraphicsPipelineID{BuildOpaquePipelineName(*shaderResource, *vertexShader, *fragmentShader),
+                                                                                        BuildOpaquePipelineVariant(targetFormat,
+                                                                                                                   initParam_.fillMode,
+                                                                                                                   depthEnabled)},
+                                                                     pipelineDesc);
         VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "OpaqueScenePass failed to create pipeline state.");
         pipelineColorFormat_ = targetFormat;
         pipelineFillMode_ = initParam_.fillMode;

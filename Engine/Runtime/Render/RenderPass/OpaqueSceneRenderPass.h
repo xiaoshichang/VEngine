@@ -36,7 +36,7 @@ namespace ve
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
         OpaqueSceneRenderPassInitParam initParam_;
-        std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
+        rhi::RhiPipelineState* pipelineState_ = nullptr;
         std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;

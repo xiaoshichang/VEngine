@@ -96,6 +96,7 @@ function(ve_add_engine)
             Engine/Runtime/Math/Vector4.h
             Engine/Runtime/Memory/PoolAllocator.h
             Engine/Runtime/Platform/DebugConsole.h
+            Engine/Runtime/Platform/AutoreleasePool.h
             Engine/Runtime/Platform/DebugConsoleBackend.h
             Engine/Runtime/Platform/Window.h
             Engine/Runtime/Render/BaseRenderer.h

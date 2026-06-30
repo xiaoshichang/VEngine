@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Application/Application.h"
 
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Platform/AutoreleasePool.h"
 
 #include <array>
 #include <chrono>
@@ -242,6 +243,8 @@ namespace ve
         sceneSystem.StartLoop();
         while (!mainWindow.ShouldClose())
         {
+            PlatformAutoreleasePool autoreleasePool;
+
             mainWindow.PumpCommands();
 
             // Step 1: pump native window messages. The platform layer mutates the live window state here.

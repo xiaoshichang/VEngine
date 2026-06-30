@@ -57,8 +57,8 @@ namespace ve
         std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
         std::unique_ptr<rhi::RhiTexture> iconAtlasTexture_;
         std::unique_ptr<rhi::RhiSampler> iconSampler_;
-        std::unique_ptr<rhi::RhiPipelineState> linePipelineState_;
-        std::unique_ptr<rhi::RhiPipelineState> iconPipelineState_;
+        rhi::RhiPipelineState* linePipelineState_ = nullptr;
+        rhi::RhiPipelineState* iconPipelineState_ = nullptr;
         SizeT uploadedLineVertexCount_ = 0;
         SizeT uploadedIconVertexCount_ = 0;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;

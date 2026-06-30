@@ -208,6 +208,11 @@ struct VSOutput
             return result;
         }
 
+        [[nodiscard]] Int32 BuildEditorGizmoPipelineVariant(rhi::RhiFormat targetFormat) noexcept
+        {
+            return static_cast<Int32>(targetFormat);
+        }
+
         [[nodiscard]] Matrix44 BuildRigidInverse(const Matrix44& localToWorld) noexcept
         {
             Matrix44 inverse = Matrix44::Identity();
@@ -316,6 +321,10 @@ struct VSOutput
         }
 
         EnsurePipeline(context);
+        if (linePipelineState_ == nullptr || iconPipelineState_ == nullptr)
+        {
+            return;
+        }
         EnsureIconResources(context);
         UploadFrameResources(context);
 
@@ -416,7 +425,8 @@ struct VSOutput
         linePipelineDesc.colorFormat = targetFormat;
         linePipelineDesc.debugName = "EditorGizmoLinePipeline";
 
-        linePipelineState_ = context.device.CreateGraphicsPipeline(linePipelineDesc);
+        linePipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+            context.device, GraphicsPipelineID{"EditorGizmoLinePipeline", BuildEditorGizmoPipelineVariant(targetFormat)}, linePipelineDesc);
         if (linePipelineState_ == nullptr)
         {
             const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create line pipeline state.");
@@ -457,7 +467,8 @@ struct VSOutput
         iconPipelineDesc.colorFormat = targetFormat;
         iconPipelineDesc.debugName = "EditorGizmoIconPipeline";
 
-        iconPipelineState_ = context.device.CreateGraphicsPipeline(iconPipelineDesc);
+        iconPipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+            context.device, GraphicsPipelineID{"EditorGizmoIconPipeline", BuildEditorGizmoPipelineVariant(targetFormat)}, iconPipelineDesc);
         if (iconPipelineState_ == nullptr)
         {
             const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create icon pipeline state.");

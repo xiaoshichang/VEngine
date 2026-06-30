@@ -35,7 +35,7 @@ namespace ve
         SceneGridRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiBuffer> vertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
-        std::unique_ptr<rhi::RhiPipelineState> pipelineState_;
+        rhi::RhiPipelineState* pipelineState_ = nullptr;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         bool pipelineDepthEnabled_ = false;
     };

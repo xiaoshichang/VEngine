@@ -152,6 +152,11 @@ namespace ve::rhi
             }
         }
 
+        MTLClearColor ToMetalClearColor(const RhiColor& color) noexcept
+        {
+            return MTLClearColorMake(color.r, color.g, color.b, color.a);
+        }
+
         MTLCullMode ToMetalCullMode(RhiCullMode cullMode)
         {
             switch (cullMode)
@@ -309,6 +314,11 @@ namespace ve::rhi
             {
             }
 
+            ~MetalBuffer() override
+            {
+                [buffer_ release];
+            }
+
             [[nodiscard]] uint64_t GetSize() const noexcept override
             {
                 return size_;
@@ -331,6 +341,11 @@ namespace ve::rhi
                 : texture_(texture)
                 , desc_(desc)
             {
+            }
+
+            ~MetalTexture() override
+            {
+                [texture_ release];
             }
 
             [[nodiscard]] RhiTextureDimension GetDimension() const noexcept override
@@ -358,6 +373,11 @@ namespace ve::rhi
                 return texture_;
             }
 
+            [[nodiscard]] void* GetNativeSampledViewHandle() const noexcept override
+            {
+                return texture_;
+            }
+
         private:
             id<MTLTexture> texture_ = nil;
             RhiTextureDesc desc_ = {};
@@ -370,6 +390,11 @@ namespace ve::rhi
                 : samplerState_(samplerState)
                 , desc_(desc)
             {
+            }
+
+            ~MetalSampler() override
+            {
+                [samplerState_ release];
             }
 
             [[nodiscard]] RhiSamplerFilter GetFilter() const noexcept override
@@ -432,6 +457,12 @@ namespace ve::rhi
             {
             }
 
+            ~MetalShaderModule() override
+            {
+                [function_ release];
+                [library_ release];
+            }
+
             [[nodiscard]] RhiShaderStage GetStage() const noexcept override
             {
                 return stage_;
@@ -460,6 +491,12 @@ namespace ve::rhi
                 , pipelineState_(pipelineState)
                 , depthStencilState_(depthStencilState)
             {
+            }
+
+            ~MetalPipelineState() override
+            {
+                [depthStencilState_ release];
+                [pipelineState_ release];
             }
 
             [[nodiscard]] RhiPrimitiveTopology GetTopology() const noexcept override
@@ -549,9 +586,18 @@ namespace ve::rhi
             {
             }
 
+            ~MetalCommandList() override
+            {
+                ResetTransientState();
+            }
+
             [[nodiscard]] bool Begin() override
             {
-                commandBuffer_ = [commandQueue_ commandBuffer];
+                ResetTransientState();
+                @autoreleasepool
+                {
+                    commandBuffer_ = [[commandQueue_ commandBuffer] retain];
+                }
                 return commandBuffer_ != nil;
             }
 
@@ -562,43 +608,166 @@ namespace ve::rhi
 
             [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassDesc& desc) override
             {
-                auto* metalSwapchain = dynamic_cast<MetalSwapchain*>(&swapchain);
-
-                if (metalSwapchain == nullptr || commandBuffer_ == nil || desc.colorAttachmentCount == 0)
+                @autoreleasepool
                 {
-                    return false;
+                    auto* metalSwapchain = dynamic_cast<MetalSwapchain*>(&swapchain);
+
+                    if (metalSwapchain == nullptr || commandBuffer_ == nil || desc.colorAttachmentCount == 0)
+                    {
+                        return false;
+                    }
+
+                    const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
+                    const bool targetsSwapchain = colorAttachment.texture == nullptr;
+                    id<MTLTexture> colorTexture = nil;
+                    if (colorAttachment.texture != nullptr)
+                    {
+                        auto* metalTexture = dynamic_cast<MetalTexture*>(colorAttachment.texture);
+                        if (metalTexture == nullptr)
+                        {
+                            return false;
+                        }
+
+                        colorTexture = metalTexture->GetNativeTexture();
+                    }
+                    else
+                    {
+                        if (drawable_ != nil)
+                        {
+                            return false;
+                        }
+
+                        drawable_ = [metalSwapchain->AcquireDrawable() retain];
+
+                        if (drawable_ == nil)
+                        {
+                            return false;
+                        }
+
+                        colorTexture = drawable_.texture;
+                    }
+
+                    if (colorTexture == nil)
+                    {
+                        if (targetsSwapchain)
+                        {
+                            [drawable_ release];
+                            drawable_ = nil;
+                        }
+                        return false;
+                    }
+
+                    id<MTLTexture> depthTexture = nil;
+                    if (desc.hasDepthStencilAttachment)
+                    {
+                        auto* metalDepthTexture = dynamic_cast<MetalTexture*>(desc.depthStencilAttachment.texture);
+                        if (metalDepthTexture == nullptr)
+                        {
+                            if (targetsSwapchain)
+                            {
+                                [drawable_ release];
+                                drawable_ = nil;
+                            }
+                            return false;
+                        }
+
+                        depthTexture = metalDepthTexture->GetNativeTexture();
+                        if (depthTexture == nil)
+                        {
+                            if (targetsSwapchain)
+                            {
+                                [drawable_ release];
+                                drawable_ = nil;
+                            }
+                            return false;
+                        }
+                    }
+
+                    MTLRenderPassDescriptor* renderPassDescriptor = [[MTLRenderPassDescriptor alloc] init];
+                    renderPassDescriptor.colorAttachments[0].texture = colorTexture;
+                    renderPassDescriptor.colorAttachments[0].loadAction = ToMetalLoadAction(colorAttachment.loadAction);
+                    renderPassDescriptor.colorAttachments[0].storeAction = ToMetalStoreAction(colorAttachment.storeAction);
+                    renderPassDescriptor.colorAttachments[0].clearColor = ToMetalClearColor(colorAttachment.clearColor);
+
+                    if (depthTexture != nil)
+                    {
+                        renderPassDescriptor.depthAttachment.texture = depthTexture;
+                        renderPassDescriptor.depthAttachment.loadAction = ToMetalLoadAction(desc.depthStencilAttachment.depthLoadAction);
+                        renderPassDescriptor.depthAttachment.storeAction = ToMetalStoreAction(desc.depthStencilAttachment.depthStoreAction);
+                        renderPassDescriptor.depthAttachment.clearDepth = desc.depthStencilAttachment.clearValue.depth;
+                    }
+
+                    renderCommandEncoder_ = [[commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor] retain];
+                    [renderPassDescriptor release];
+
+                    if (renderCommandEncoder_ == nil)
+                    {
+                        if (targetsSwapchain)
+                        {
+                            [drawable_ release];
+                            drawable_ = nil;
+                        }
+                        return false;
+                    }
+
+                    return true;
                 }
-
-                const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
-                drawable_ = [metalSwapchain->AcquireDrawable() retain];
-
-                if (drawable_ == nil)
-                {
-                    return false;
-                }
-
-                MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
-                renderPassDescriptor.colorAttachments[0].texture = drawable_.texture;
-                renderPassDescriptor.colorAttachments[0].loadAction = ToMetalLoadAction(colorAttachment.loadAction);
-                renderPassDescriptor.colorAttachments[0].storeAction = ToMetalStoreAction(colorAttachment.storeAction);
-                renderPassDescriptor.colorAttachments[0].clearColor =
-                    MTLClearColorMake(colorAttachment.clearColor.r, colorAttachment.clearColor.g, colorAttachment.clearColor.b, colorAttachment.clearColor.a);
-
-                renderCommandEncoder_ = [commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor];
-                return renderCommandEncoder_ != nil;
             }
 
             void EndRenderPass() override
             {
                 [renderCommandEncoder_ endEncoding];
+                [renderCommandEncoder_ release];
                 renderCommandEncoder_ = nil;
             }
 
             [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
             {
-                (void)sourceTexture;
-                (void)swapchain;
-                return false;
+                auto* metalTexture = dynamic_cast<MetalTexture*>(&sourceTexture);
+                auto* metalSwapchain = dynamic_cast<MetalSwapchain*>(&swapchain);
+                if (metalTexture == nullptr || metalSwapchain == nullptr || commandBuffer_ == nil)
+                {
+                    return false;
+                }
+
+                const RhiExtent2D swapchainExtent = metalSwapchain->GetExtent();
+                if (sourceTexture.GetWidth() != swapchainExtent.width || sourceTexture.GetHeight() != swapchainExtent.height ||
+                    sourceTexture.GetFormat() != metalSwapchain->GetColorFormat())
+                {
+                    return false;
+                }
+
+                if (drawable_ != nil)
+                {
+                    return false;
+                }
+
+                drawable_ = [metalSwapchain->AcquireDrawable() retain];
+                if (drawable_ == nil)
+                {
+                    return false;
+                }
+
+                id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer_ blitCommandEncoder];
+                if (blitEncoder == nil)
+                {
+                    [drawable_ release];
+                    drawable_ = nil;
+                    return false;
+                }
+
+                const MTLSize copySize = MTLSizeMake(sourceTexture.GetWidth(), sourceTexture.GetHeight(), 1);
+                [blitEncoder copyFromTexture:metalTexture->GetNativeTexture()
+                                  sourceSlice:0
+                                  sourceLevel:0
+                                 sourceOrigin:MTLOriginMake(0, 0, 0)
+                                   sourceSize:copySize
+                                    toTexture:drawable_.texture
+                             destinationSlice:0
+                             destinationLevel:0
+                            destinationOrigin:MTLOriginMake(0, 0, 0)];
+                [blitEncoder endEncoding];
+                return true;
             }
 
             void SetPipeline(const RhiPipelineState& pipelineState) override
@@ -736,11 +905,27 @@ namespace ve::rhi
 
                 [drawable_ release];
                 drawable_ = nil;
+                [commandBuffer_ release];
                 commandBuffer_ = nil;
                 return true;
             }
 
         private:
+            void ResetTransientState() noexcept
+            {
+                if (renderCommandEncoder_ != nil)
+                {
+                    [renderCommandEncoder_ endEncoding];
+                    [renderCommandEncoder_ release];
+                    renderCommandEncoder_ = nil;
+                }
+
+                [drawable_ release];
+                drawable_ = nil;
+                [commandBuffer_ release];
+                commandBuffer_ = nil;
+            }
+
             id<MTLCommandQueue> commandQueue_ = nil;
             id<MTLCommandBuffer> commandBuffer_ = nil;
             id<MTLRenderCommandEncoder> renderCommandEncoder_ = nil;
@@ -757,6 +942,12 @@ namespace ve::rhi
             explicit MetalDevice(bool enableDebug)
                 : enableDebug_(enableDebug)
             {
+            }
+
+            ~MetalDevice() override
+            {
+                [commandQueue_ release];
+                [device_ release];
             }
 
             [[nodiscard]] bool Initialize()
@@ -867,6 +1058,7 @@ namespace ve::rhi
                     if (desc.mipLevelCount != 1 || desc.initialDataRowPitch == 0)
                     {
                         SetLastError("Metal texture initial upload requires one mip level and a row pitch.");
+                        [texture release];
                         return nullptr;
                     }
 
@@ -910,9 +1102,10 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                NSString* source = [NSString stringWithUTF8String:desc.source];
+                NSString* source = [[NSString alloc] initWithUTF8String:desc.source];
                 NSError* error = nil;
                 id<MTLLibrary> library = [device_ newLibraryWithSource:source options:nil error:&error];
+                [source release];
 
                 if (library == nil)
                 {
@@ -920,12 +1113,14 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                NSString* functionName = [NSString stringWithUTF8String:desc.entryPoint];
+                NSString* functionName = [[NSString alloc] initWithUTF8String:desc.entryPoint];
                 id<MTLFunction> function = [library newFunctionWithName:functionName];
+                [functionName release];
 
                 if (function == nil)
                 {
                     SetLastError("MTLLibrary newFunctionWithName failed.");
+                    [library release];
                     return nullptr;
                 }
 
@@ -1008,6 +1203,7 @@ namespace ve::rhi
                 if (depthStencilState == nil)
                 {
                     SetLastError("MTLDevice newDepthStencilStateWithDescriptor failed.");
+                    [pipelineState release];
                     return nullptr;
                 }
 

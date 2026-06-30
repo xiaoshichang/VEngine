@@ -206,6 +206,11 @@ float AxisLine(float coordinate, float width)
             return result;
         }
 
+        [[nodiscard]] Int32 BuildSceneGridPipelineVariant(rhi::RhiFormat targetFormat, bool depthEnabled) noexcept
+        {
+            return static_cast<Int32>(targetFormat) | (depthEnabled ? (1 << 16) : 0);
+        }
+
         [[nodiscard]] Matrix44 BuildRigidInverse(const Matrix44& localToWorld) noexcept
         {
             Matrix44 inverse = Matrix44::Identity();
@@ -353,6 +358,10 @@ float AxisLine(float coordinate, float width)
 
         EnsureResources(context);
         EnsurePipeline(context);
+        if (pipelineState_ == nullptr)
+        {
+            return;
+        }
         UploadUniforms(context);
 
         rhi::RhiCommandList& commandList = context.commandList;
@@ -434,7 +443,8 @@ float AxisLine(float coordinate, float width)
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = "SceneGridPipeline";
 
-        pipelineState_ = context.device.CreateGraphicsPipeline(pipelineDesc);
+        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+            context.device, GraphicsPipelineID{"SceneGridPipeline", BuildSceneGridPipelineVariant(targetFormat, depthEnabled)}, pipelineDesc);
         if (pipelineState_ == nullptr)
         {
             const std::string message = BuildDeviceFailureMessage(context.device, "SceneGridRenderPass failed to create pipeline state.");

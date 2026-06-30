@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
@@ -187,6 +188,8 @@ namespace ve
 
             while (!impl.stopRequested.load(std::memory_order_acquire))
             {
+                PlatformAutoreleasePool autoreleasePool;
+
                 try
                 {
                     SceneThreadLoop_StartFrame(impl);

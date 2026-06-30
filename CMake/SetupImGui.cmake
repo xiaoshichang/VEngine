@@ -102,10 +102,19 @@ function(ve_add_imgui_library)
                 dxgi
         )
     elseif(APPLE)
+        set(_VE_IMGUI_OSX_BACKEND_SOURCE "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_osx.mm")
+        set(_VE_IMGUI_METAL_BACKEND_SOURCE "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_metal.mm")
+        set_source_files_properties(
+            "${_VE_IMGUI_OSX_BACKEND_SOURCE}"
+            "${_VE_IMGUI_METAL_BACKEND_SOURCE}"
+            PROPERTIES
+                COMPILE_OPTIONS "-fobjc-arc"
+        )
+
         target_sources(VEngineImGui
             PRIVATE
-                "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_osx.mm"
-                "${VE_IMGUI_SOURCE_DIR}/backends/imgui_impl_metal.mm"
+                "${_VE_IMGUI_OSX_BACKEND_SOURCE}"
+                "${_VE_IMGUI_METAL_BACKEND_SOURCE}"
         )
     endif()
 endfunction()

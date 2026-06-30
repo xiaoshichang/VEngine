@@ -14,6 +14,7 @@ namespace ve::editor
 
     private:
         void* nativeDevice_ = nullptr;
+        void* imguiFramebufferTexture_ = nullptr;
         bool initialized_ = false;
     };
 } // namespace ve::editor

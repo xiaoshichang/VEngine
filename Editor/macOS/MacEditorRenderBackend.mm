@@ -87,21 +87,29 @@ namespace ve::editor
             return;
         }
 
-        auto* nativeDevice = static_cast<id<MTLDevice>>(nativeDevice_);
-        MTLTextureDescriptor* textureDescriptor = CreateImGuiFramebufferTextureDescriptor();
-        id<MTLTexture> texture = [nativeDevice newTextureWithDescriptor:textureDescriptor];
-        if (texture == nil)
+        @autoreleasepool
         {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to allocate transient ImGui Metal framebuffer descriptor texture.");
-            return;
-        }
+            auto* nativeDevice = static_cast<id<MTLDevice>>(nativeDevice_);
+            if (imguiFramebufferTexture_ == nullptr)
+            {
+                MTLTextureDescriptor* textureDescriptor = CreateImGuiFramebufferTextureDescriptor();
+                id<MTLTexture> texture = [nativeDevice newTextureWithDescriptor:textureDescriptor];
+                if (texture == nil)
+                {
+                    VE_LOG_WARN_CATEGORY("Editor", "Failed to allocate ImGui Metal framebuffer descriptor texture.");
+                    return;
+                }
+                imguiFramebufferTexture_ = texture;
+            }
 
-        MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
-        renderPassDescriptor.colorAttachments[0].texture = texture;
-        renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionLoad;
-        renderPassDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
-        ImGui_ImplMetal_NewFrame(renderPassDescriptor);
-        [texture release];
+            auto* texture = static_cast<id<MTLTexture>>(imguiFramebufferTexture_);
+            MTLRenderPassDescriptor* renderPassDescriptor = [[MTLRenderPassDescriptor alloc] init];
+            renderPassDescriptor.colorAttachments[0].texture = texture;
+            renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionLoad;
+            renderPassDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+            ImGui_ImplMetal_NewFrame(renderPassDescriptor);
+            [renderPassDescriptor release];
+        }
     }
 
     void MacEditorRenderBackend::Shutdown() noexcept
@@ -113,6 +121,8 @@ namespace ve::editor
 
         VE_ASSERT_MESSAGE(ImGui::GetCurrentContext() != nullptr, "MacEditorRenderBackend::Shutdown requires an active ImGui context.");
         ImGui_ImplMetal_Shutdown();
+        [static_cast<id<MTLTexture>>(imguiFramebufferTexture_) release];
+        imguiFramebufferTexture_ = nullptr;
         nativeDevice_ = nullptr;
         initialized_ = false;
     }
@@ -131,7 +141,10 @@ namespace ve::editor
             return;
         }
 
-        ImGui_ImplMetal_RenderDrawData(&drawData, commandBuffer, renderCommandEncoder);
+        @autoreleasepool
+        {
+            ImGui_ImplMetal_RenderDrawData(&drawData, commandBuffer, renderCommandEncoder);
+        }
     }
 
     std::unique_ptr<EditorRenderBackend> CreateMacEditorRenderBackend()

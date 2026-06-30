@@ -43,13 +43,16 @@ namespace ve::editor
     void GameViewPanel::Init(Editor& editor)
     {
         editor_ = &editor;
-        auto desc = RenderTextureDesc{
-            .name = "EditorGameViewTexture",
-            .extent = {},
-            .colorFormat = rhi::RhiFormat::Bgra8Unorm,
-        };
-        gameViewTexture_ = std::make_shared<RenderTexture>(desc);
-        editor.KeepImGuiTextureAlive(gameViewTexture_);
+        if (gameViewTexture_ == nullptr)
+        {
+            auto desc = RenderTextureDesc{
+                .name = "EditorGameViewTexture",
+                .extent = {},
+                .colorFormat = rhi::RhiFormat::Bgra8Unorm,
+            };
+            gameViewTexture_ = std::make_shared<RenderTexture>(desc);
+            editor.KeepImGuiTextureAlive(gameViewTexture_);
+        }
     }
 
     const RenderTexture& GameViewPanel::GetGameViewTexture() const noexcept
