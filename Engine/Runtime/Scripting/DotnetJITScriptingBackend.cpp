@@ -18,15 +18,21 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#elif VE_PLATFORM_MACOS
+#include <dlfcn.h>
 #endif
 
 namespace ve
 {
     namespace
     {
-#if VE_PLATFORM_WINDOWS
+#if VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS
         using HostFxrHandle = void*;
+#if VE_PLATFORM_WINDOWS
         using CharT = wchar_t;
+#else
+        using CharT = char;
+#endif
 
         struct HostFxrInitializeParameters
         {
@@ -54,12 +60,17 @@ namespace ve
 
         struct HostFxrExports
         {
+#if VE_PLATFORM_WINDOWS
             HMODULE library = nullptr;
+#else
+            void* library = nullptr;
+#endif
             HostFxrInitializeForRuntimeConfigFn initializeForRuntimeConfig = nullptr;
             HostFxrGetRuntimeDelegateFn getRuntimeDelegate = nullptr;
             HostFxrCloseFn close = nullptr;
         };
 
+#if VE_PLATFORM_WINDOWS
         [[nodiscard]] std::wstring Utf8ToWide(std::string_view text)
         {
             if (text.empty())
@@ -77,68 +88,54 @@ namespace ve
             MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(), requiredSize);
             return result;
         }
+#endif
 
         [[nodiscard]] std::filesystem::path ToNativePath(const Path& path)
         {
+#if VE_PLATFORM_WINDOWS
             return std::filesystem::path(Utf8ToWide(path.GetString()));
+#else
+            return std::filesystem::path(path.GetString());
+#endif
         }
 
-        [[nodiscard]] std::filesystem::path FindDotNetRuntimeRootFrom(std::filesystem::path start)
+        [[nodiscard]] std::filesystem::path GetAppLocalRuntimeRoot(const std::filesystem::path& executableDirectory)
         {
-            if (start.empty())
-            {
-                return {};
-            }
+#if VE_PLATFORM_WINDOWS
+            return executableDirectory / "DotNet" / "win-x64" / "10.0.9";
+#else
+            return executableDirectory.parent_path() / "Resources" / "DotNet" / "osx-arm64" / "10.0.9";
+#endif
+        }
 
-            std::error_code error;
-            start = std::filesystem::absolute(start, error);
-            if (error)
-            {
-                return {};
-            }
+        [[nodiscard]] const char* GetDotNetExecutableName() noexcept
+        {
+#if VE_PLATFORM_WINDOWS
+            return "dotnet.exe";
+#else
+            return "dotnet";
+#endif
+        }
 
-            if (std::filesystem::is_regular_file(start, error))
-            {
-                start = start.parent_path();
-            }
-
-            for (std::filesystem::path current = start; !current.empty(); current = current.parent_path())
-            {
-                const std::filesystem::path candidate = current / L"ThirdParty" / L"DotNet" / L"win-x64" / L"10.0.9";
-                if (std::filesystem::exists(candidate / L"dotnet.exe", error) && std::filesystem::is_directory(candidate / L"host" / L"fxr", error))
-                {
-                    return candidate;
-                }
-
-                if (current == current.root_path())
-                {
-                    break;
-                }
-            }
-
-            return {};
+        [[nodiscard]] const char* GetHostFxrLibraryName() noexcept
+        {
+#if VE_PLATFORM_WINDOWS
+            return "hostfxr.dll";
+#else
+            return "libhostfxr.dylib";
+#endif
         }
 
         [[nodiscard]] std::filesystem::path ResolveDefaultRuntimeRoot()
         {
-            const Path& projectRoot = FileSystem::GetProjectRoot();
-            if (!projectRoot.IsEmpty())
-            {
-                std::filesystem::path runtimeRoot = FindDotNetRuntimeRootFrom(ToNativePath(projectRoot));
-                if (!runtimeRoot.empty())
-                {
-                    return runtimeRoot;
-                }
-            }
-
+            const std::filesystem::path runtimeRoot = GetAppLocalRuntimeRoot(ToNativePath(FileSystem::GetExecutableDirectory()));
             std::error_code error;
-            std::filesystem::path runtimeRoot = FindDotNetRuntimeRootFrom(std::filesystem::current_path(error));
-            if (!runtimeRoot.empty())
+            if (std::filesystem::exists(runtimeRoot / GetDotNetExecutableName(), error) && std::filesystem::is_directory(runtimeRoot / "host" / "fxr", error))
             {
                 return runtimeRoot;
             }
 
-            return FindDotNetRuntimeRootFrom(ToNativePath(FileSystem::GetExecutableDirectory()));
+            return {};
         }
 
         [[nodiscard]] std::filesystem::path ResolveDefaultScriptHostRoot()
@@ -150,17 +147,12 @@ namespace ve
             {
                 return windowsRoot;
             }
-#elif VE_PLATFORM_APPLE
-            const std::filesystem::path playerRoot = executableDirectory.parent_path() / "VEngineMacPlayer.Managed" / "VEngine.ScriptHost";
-            if (std::filesystem::exists(playerRoot))
+#elif VE_PLATFORM_MACOS
+            const std::filesystem::path bundleRoot = executableDirectory.parent_path();
+            const std::filesystem::path resourceRoot = bundleRoot / "Resources" / "Managed" / "VEngine.ScriptHost";
+            if (std::filesystem::exists(resourceRoot))
             {
-                return playerRoot;
-            }
-
-            const std::filesystem::path editorRoot = executableDirectory.parent_path() / "VEngineMacEditor.Managed" / "VEngine.ScriptHost";
-            if (std::filesystem::exists(editorRoot))
-            {
-                return editorRoot;
+                return resourceRoot;
             }
 #endif
 
@@ -169,14 +161,14 @@ namespace ve
 
         [[nodiscard]] std::filesystem::path ResolveHostFxrPath(const std::filesystem::path& runtimeRoot)
         {
-            const std::filesystem::path pinnedHostFxrPath = runtimeRoot / L"host" / L"fxr" / L"10.0.9" / L"hostfxr.dll";
+            const std::filesystem::path pinnedHostFxrPath = runtimeRoot / "host" / "fxr" / "10.0.9" / GetHostFxrLibraryName();
             std::error_code error;
             if (std::filesystem::exists(pinnedHostFxrPath, error))
             {
                 return pinnedHostFxrPath;
             }
 
-            const std::filesystem::path hostFxrRoot = runtimeRoot / L"host" / L"fxr";
+            const std::filesystem::path hostFxrRoot = runtimeRoot / "host" / "fxr";
             if (!std::filesystem::is_directory(hostFxrRoot, error))
             {
                 return {};
@@ -190,7 +182,7 @@ namespace ve
                     return {};
                 }
 
-                const std::filesystem::path candidate = entry.path() / L"hostfxr.dll";
+                const std::filesystem::path candidate = entry.path() / GetHostFxrLibraryName();
                 if (std::filesystem::exists(candidate, error))
                 {
                     candidates.push_back(candidate);
@@ -202,9 +194,19 @@ namespace ve
         }
 
         template<typename TFunction>
-        [[nodiscard]] TFunction ResolveHostFxrExport(HMODULE library, const char* name)
+        [[nodiscard]] TFunction ResolveHostFxrExport(
+#if VE_PLATFORM_WINDOWS
+            HMODULE library,
+#else
+            void* library,
+#endif
+            const char* name)
         {
+#if VE_PLATFORM_WINDOWS
             return reinterpret_cast<TFunction>(GetProcAddress(library, name));
+#else
+            return reinterpret_cast<TFunction>(dlsym(library, name));
+#endif
         }
 
         [[nodiscard]] ErrorCode FailHostInitialization(ErrorCode code, const char* assertionMessage)
@@ -219,7 +221,7 @@ namespace ve
             std::filesystem::path runtimeRoot = initParam.dotNetRuntimeRoot.IsEmpty() ? ResolveDefaultRuntimeRoot() : ToNativePath(initParam.dotNetRuntimeRoot);
             std::filesystem::path scriptHostRoot = initParam.scriptHostRoot.IsEmpty() ? ResolveDefaultScriptHostRoot() : ToNativePath(initParam.scriptHostRoot);
             std::error_code error;
-            if (runtimeRoot.empty() || !std::filesystem::exists(runtimeRoot / L"dotnet.exe", error))
+            if (runtimeRoot.empty() || !std::filesystem::exists(runtimeRoot / GetDotNetExecutableName(), error))
             {
                 VE_LOG_ERROR_CATEGORY("Script", "Failed to locate .NET runtime root. Requested root: '{}'.", runtimeRoot.string());
                 return FailHostInitialization(ErrorCode::NotFound, "DotnetJITScriptingBackend requires a valid .NET runtime root.");
@@ -249,8 +251,8 @@ namespace ve
             const std::filesystem::path hostFxrPath = ResolveHostFxrPath(runtimeRoot);
             if (hostFxrPath.empty())
             {
-                VE_LOG_ERROR_CATEGORY("Script", "hostfxr.dll was not found under .NET runtime root '{}'.", runtimeRoot.string());
-                return FailHostInitialization(ErrorCode::NotFound, "DotnetJITScriptingBackend could not find hostfxr.dll.");
+                VE_LOG_ERROR_CATEGORY("Script", "{} was not found under .NET runtime root '{}'.", GetHostFxrLibraryName(), runtimeRoot.string());
+                return FailHostInitialization(ErrorCode::NotFound, "DotnetJITScriptingBackend could not find hostfxr.");
             }
 
             paths.runtimeRoot = std::move(runtimeRoot);
@@ -263,12 +265,21 @@ namespace ve
         [[nodiscard]] ErrorCode LoadHostFxrExports(const std::filesystem::path& hostFxrPath, HostFxrExports& exports)
         {
             // Step 4: load hostfxr and resolve only the exports used by the prescribed hosting flow.
+#if VE_PLATFORM_WINDOWS
             HMODULE library = LoadLibraryW(hostFxrPath.c_str());
             if (library == nullptr)
             {
                 VE_LOG_ERROR_CATEGORY("Script", "Failed to load hostfxr.dll '{}' with Win32 error {}.", hostFxrPath.string(), GetLastError());
                 return FailHostInitialization(ErrorCode::PlatformError, "DotnetJITScriptingBackend failed to load hostfxr.dll.");
             }
+#else
+            void* library = dlopen(hostFxrPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+            if (library == nullptr)
+            {
+                VE_LOG_ERROR_CATEGORY("Script", "Failed to load libhostfxr.dylib '{}': {}.", hostFxrPath.string(), dlerror());
+                return FailHostInitialization(ErrorCode::PlatformError, "DotnetJITScriptingBackend failed to load libhostfxr.dylib.");
+            }
+#endif
 
             HostFxrExports loadedExports;
             loadedExports.library = library;
@@ -278,9 +289,13 @@ namespace ve
             loadedExports.close = ResolveHostFxrExport<HostFxrCloseFn>(library, "hostfxr_close");
             if (loadedExports.initializeForRuntimeConfig == nullptr || loadedExports.getRuntimeDelegate == nullptr || loadedExports.close == nullptr)
             {
-                VE_LOG_ERROR_CATEGORY("Script", "hostfxr.dll '{}' is missing required exports.", hostFxrPath.string());
+                VE_LOG_ERROR_CATEGORY("Script", "{} '{}' is missing required exports.", GetHostFxrLibraryName(), hostFxrPath.string());
+#if VE_PLATFORM_WINDOWS
                 FreeLibrary(library);
-                return FailHostInitialization(ErrorCode::InvalidState, "DotnetJITScriptingBackend hostfxr.dll is missing required exports.");
+#else
+                dlclose(library);
+#endif
+                return FailHostInitialization(ErrorCode::InvalidState, "DotnetJITScriptingBackend hostfxr is missing required exports.");
             }
 
             exports = loadedExports;
@@ -714,7 +729,7 @@ namespace ve
 
     ErrorCode DotnetJITScriptingBackend::InitializeHost(const ScriptingSystemInitParam& initParam)
     {
-#if !VE_PLATFORM_WINDOWS
+#if !(VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS)
         static_cast<void>(initParam);
         return ErrorCode::Unsupported;
 #else
@@ -737,7 +752,11 @@ namespace ve
         result = InitializeRuntimeHost(paths, exports, hostContext, loadAssemblyAndGetFunctionPointer);
         if (result != ErrorCode::None)
         {
+#if VE_PLATFORM_WINDOWS
             FreeLibrary(exports.library);
+#else
+            dlclose(exports.library);
+#endif
             return result;
         }
 
@@ -756,7 +775,7 @@ namespace ve
 
     void DotnetJITScriptingBackend::ShutdownHost() noexcept
     {
-#if VE_PLATFORM_WINDOWS
+#if VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS
         if (hostFxrContext_ != nullptr && closeHostFxr_ != nullptr)
         {
             reinterpret_cast<HostFxrCloseFn>(closeHostFxr_)(hostFxrContext_);
@@ -764,7 +783,11 @@ namespace ve
 
         if (hostFxrLibrary_ != nullptr)
         {
+#if VE_PLATFORM_WINDOWS
             FreeLibrary(reinterpret_cast<HMODULE>(hostFxrLibrary_));
+#else
+            dlclose(hostFxrLibrary_);
+#endif
         }
 #endif
 

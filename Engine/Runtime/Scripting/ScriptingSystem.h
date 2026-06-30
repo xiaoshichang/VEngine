@@ -21,6 +21,7 @@ namespace ve
         [[nodiscard]] ErrorCode Initialize(const ScriptingSystemInitParam& initParam);
         void Shutdown() noexcept;
         [[nodiscard]] ScriptingBackendType GetBackendType() const noexcept;
+        [[nodiscard]] const Path& GetScriptHostRoot() const noexcept;
 
         [[nodiscard]] ErrorCode LoadAssembly(const ScriptingAssemblyLoadDesc& desc);
         [[nodiscard]] ErrorCode LoadProjectAssembly(const ScriptingProjectAssemblyLoadDesc& desc);
@@ -37,6 +38,7 @@ namespace ve
         [[nodiscard]] static std::unique_ptr<ScriptingSystemBackend> CreateBackend(ScriptingBackendType backendType);
 
         std::unique_ptr<ScriptingSystemBackend> backend_;
+        Path scriptHostRoot_;
         bool initialized_ = false;
     };
 } // namespace ve

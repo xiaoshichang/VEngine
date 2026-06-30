@@ -18,12 +18,22 @@
 #include <Windows.h>
 #endif
 
+#if VE_PLATFORM_WINDOWS
+#define VE_HOSTFXR_TEXT(value) L##value
+#else
+#define VE_HOSTFXR_TEXT(value) value
+#endif
+
 namespace ve
 {
     namespace
     {
+#if VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS
 #if VE_PLATFORM_WINDOWS
         using CharT = wchar_t;
+#else
+        using CharT = char;
+#endif
         using LoadAssemblyAndGetFunctionPointerFn = int (*)(const CharT* assemblyPath,
                                                             const CharT* typeName,
                                                             const CharT* methodName,
@@ -36,6 +46,7 @@ namespace ve
             return reinterpret_cast<const CharT*>(-1);
         }
 
+#if VE_PLATFORM_WINDOWS
         [[nodiscard]] std::wstring Utf8ToWide(std::string_view text)
         {
             if (text.empty())
@@ -58,12 +69,36 @@ namespace ve
         {
             return std::filesystem::path(Utf8ToWide(path.GetString()));
         }
+#else
+        [[nodiscard]] std::filesystem::path ToNativePath(const Path& path)
+        {
+            return std::filesystem::path(path.GetString());
+        }
+#endif
+
+        [[nodiscard]] std::basic_string<CharT> ToHostFxrString(std::string_view text)
+        {
+#if VE_PLATFORM_WINDOWS
+            return Utf8ToWide(text);
+#else
+            return std::string(text);
+#endif
+        }
+
+        [[nodiscard]] std::basic_string<CharT> ToHostFxrPathString(const std::filesystem::path& path)
+        {
+#if VE_PLATFORM_WINDOWS
+            return path.wstring();
+#else
+            return path.string();
+#endif
+        }
 
         template<typename TDelegate>
         [[nodiscard]] ErrorCode LoadEntryPoint(LoadAssemblyAndGetFunctionPointerFn loadFunction,
-                                               const std::wstring& assemblyPath,
-                                               const std::wstring& typeName,
-                                               const wchar_t* methodName,
+                                               const std::basic_string<CharT>& assemblyPath,
+                                               const std::basic_string<CharT>& typeName,
+                                               const CharT* methodName,
                                                TDelegate& output)
         {
             void* function = nullptr;
@@ -422,7 +457,7 @@ namespace ve
                                      const ManagedScriptBindingInitParam& initParam,
                                      ManagedScriptEntryPoints& entryPoints)
     {
-#if !VE_PLATFORM_WINDOWS
+#if !(VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS)
         static_cast<void>(desc);
         static_cast<void>(initParam);
         static_cast<void>(entryPoints);
@@ -440,7 +475,8 @@ namespace ve
             return ErrorCode::NotFound;
         }
 
-        const std::wstring bridgeTypeName = Utf8ToWide(desc.bridgeTypeName);
+        const std::basic_string<CharT> assemblyPathText = ToHostFxrPathString(assemblyPath);
+        const std::basic_string<CharT> bridgeTypeName = ToHostFxrString(desc.bridgeTypeName);
         if (bridgeTypeName.empty())
         {
             return ErrorCode::InvalidArgument;
@@ -449,76 +485,76 @@ namespace ve
         auto loadFunction = reinterpret_cast<LoadAssemblyAndGetFunctionPointerFn>(initParam.loadAssemblyAndGetFunctionPointer);
         ManagedScriptEntryPoints loadedEntryPoints;
 
-        ErrorCode result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"RegisterNativeApi", loadedEntryPoints.registerNativeApi);
+        ErrorCode result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("RegisterNativeApi"), loadedEntryPoints.registerNativeApi);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"LoadProjectAssembly", loadedEntryPoints.loadProjectAssembly);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("LoadProjectAssembly"), loadedEntryPoints.loadProjectAssembly);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"UnloadProjectAssembly", loadedEntryPoints.unloadProjectAssembly);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("UnloadProjectAssembly"), loadedEntryPoints.unloadProjectAssembly);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"GetScriptTypesJson", loadedEntryPoints.getScriptTypesJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("GetScriptTypesJson"), loadedEntryPoints.getScriptTypesJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"FreeString", loadedEntryPoints.freeString);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("FreeString"), loadedEntryPoints.freeString);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"CreateScript", loadedEntryPoints.create);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("CreateScript"), loadedEntryPoints.create);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"DestroyScript", loadedEntryPoints.destroy);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("DestroyScript"), loadedEntryPoints.destroy);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnCreate", loadedEntryPoints.createEvent);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnCreate"), loadedEntryPoints.createEvent);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"GetScriptFieldsJson", loadedEntryPoints.getFieldsJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("GetScriptFieldsJson"), loadedEntryPoints.getFieldsJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"SetScriptFieldsJson", loadedEntryPoints.setFieldsJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("SetScriptFieldsJson"), loadedEntryPoints.setFieldsJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"SetScriptFieldJson", loadedEntryPoints.setFieldJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("SetScriptFieldJson"), loadedEntryPoints.setFieldJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnUpdate", loadedEntryPoints.update));
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnLateUpdate", loadedEntryPoints.lateUpdate));
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnEnable", loadedEntryPoints.enable));
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPath.wstring(), bridgeTypeName, L"OnDisable", loadedEntryPoints.disable));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnUpdate"), loadedEntryPoints.update));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnLateUpdate"), loadedEntryPoints.lateUpdate));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnEnable"), loadedEntryPoints.enable));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnDisable"), loadedEntryPoints.disable));
 
         entryPoints = loadedEntryPoints;
         return ErrorCode::None;

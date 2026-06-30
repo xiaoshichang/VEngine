@@ -268,7 +268,7 @@ namespace ve
             return false;
         }
 
-        const Path hostRoot = FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
+        const Path& hostRoot = GetRuntime().GetScriptingSystem().GetScriptHostRoot();
         const Path hostAssemblyPath = hostRoot / "VEngine.ScriptHost.dll";
         const ErrorCode hostResult = GetRuntime().GetScriptingSystem().LoadAssembly(
             ScriptingAssemblyLoadDesc{hostAssemblyPath, "VEngine.Scripting.NativeScriptBridge, VEngine.ScriptHost"});

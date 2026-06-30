@@ -565,22 +565,21 @@ namespace ve::editor
             return ErrorCode::IOError;
         }
 
-        const Path dotNetSource = executableDirectory.GetParentPath().GetParentPath().GetParentPath() / "ThirdParty" / DotNetRuntimeRelativePath;
+        const Path dotNetSource = executableDirectory / DotNetRuntimeRelativePath;
         const Path dotNetDestination = packageBinRoot_ / DotNetRuntimeRelativePath;
-        if (FileSystem::IsDirectory(dotNetSource))
+        if (!FileSystem::IsDirectory(dotNetSource))
         {
-            if (!CopyDirectory(dotNetSource, dotNetDestination, errorCode))
-            {
-                LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", dotNetSource, errorCode));
-                return ErrorCode::IOError;
-            }
-            LogLine("Copied app-local .NET runtime: " + dotNetSource.GetString() + " -> " + dotNetDestination.GetString());
-        }
-        else
-        {
-            LogLine("App-local .NET runtime source was not found. Packaged player may require repository-local runtime discovery: " + dotNetSource.GetString());
+            LogError(ErrorCode::NotFound, "App-local .NET runtime source was not found: " + dotNetSource.GetString());
+            return ErrorCode::NotFound;
         }
 
+        if (!CopyDirectory(dotNetSource, dotNetDestination, errorCode))
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", dotNetSource, errorCode));
+            return ErrorCode::IOError;
+        }
+
+        LogLine("Copied app-local .NET runtime: " + dotNetSource.GetString() + " -> " + dotNetDestination.GetString());
         LogLine("Copied Windows player managed runtime files.");
         return ErrorCode::None;
     }

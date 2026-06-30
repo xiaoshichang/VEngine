@@ -60,6 +60,42 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/RenderPass/SceneGridRenderPass.h
 )
 
+function(ve_copy_windows_scripting_payload target_name)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:${target_name}>/Managed/VEngine.ScriptHost"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+            "$<TARGET_FILE_DIR:${target_name}>/Managed/VEngine.ScriptHost"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:${target_name}>/DotNet"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_DOTNET_RUNTIME_ROOT}"
+            "$<TARGET_FILE_DIR:${target_name}>/DotNet/win-x64/10.0.9"
+        COMMENT "Copying app-local .NET scripting payload"
+    )
+endfunction()
+
+function(ve_copy_mac_scripting_payload target_name)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/Frameworks/DotNet"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:${target_name}>/../../../${target_name}.Managed"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/Resources/Managed/VEngine.ScriptHost"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
+            "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/Resources/Managed/VEngine.ScriptHost"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/Resources/DotNet"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${VE_DOTNET_RUNTIME_ROOT}"
+            "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/Resources/DotNet/osx-arm64/10.0.9"
+        COMMENT "Copying bundled .NET scripting payload"
+    )
+endfunction()
+
 function(ve_add_windows_player)
     add_executable(VEngineWinPlayer WIN32
         Player/Windows/main.cpp
@@ -75,12 +111,7 @@ function(ve_add_windows_player)
     ve_add_managed_script_host()
     add_dependencies(VEngineWinPlayer VEngineScriptHostManaged)
 
-    add_custom_command(TARGET VEngineWinPlayer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-            "$<TARGET_FILE_DIR:VEngineWinPlayer>/Managed/VEngine.ScriptHost"
-        COMMENT "Copying VEngine.ScriptHost managed assembly"
-    )
+    ve_copy_windows_scripting_payload(VEngineWinPlayer)
 
     ve_configure_target(VEngineWinPlayer)
 endfunction()
@@ -117,12 +148,7 @@ function(ve_add_windows_editor)
         COMMENT "Copying VEngine editor asset roots"
     )
 
-    add_custom_command(TARGET VEngineWinEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-            "$<TARGET_FILE_DIR:VEngineWinEditor>/Managed/VEngine.ScriptHost"
-        COMMENT "Copying VEngine.ScriptHost managed assembly"
-    )
+    ve_copy_windows_scripting_payload(VEngineWinEditor)
 
     ve_configure_target(VEngineWinEditor)
 endfunction()
@@ -158,16 +184,7 @@ function(ve_add_mac_player)
 
     ve_setup_imgui(VEngineMacPlayer)
 
-    add_custom_command(TARGET VEngineMacPlayer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove_directory
-            "$<TARGET_FILE_DIR:VEngineMacPlayer>/../../VEngineMacPlayer.Managed"
-        COMMAND ${CMAKE_COMMAND} -E remove_directory
-            "$<TARGET_FILE_DIR:VEngineMacPlayer>/../VEngineMacPlayer.Managed"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-            "$<TARGET_FILE_DIR:VEngineMacPlayer>/../../../VEngineMacPlayer.Managed/VEngine.ScriptHost"
-        COMMENT "Copying VEngine.ScriptHost managed assembly"
-    )
+    ve_copy_mac_scripting_payload(VEngineMacPlayer)
 
     set_target_properties(VEngineMacPlayer
         PROPERTIES
@@ -221,16 +238,7 @@ function(ve_add_mac_editor)
 
     ve_setup_imgui(VEngineMacEditor)
 
-    add_custom_command(TARGET VEngineMacEditor POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove_directory
-            "$<TARGET_FILE_DIR:VEngineMacEditor>/../../VEngineMacEditor.Managed"
-        COMMAND ${CMAKE_COMMAND} -E remove_directory
-            "$<TARGET_FILE_DIR:VEngineMacEditor>/../VEngineMacEditor.Managed"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
-            "$<TARGET_FILE_DIR:VEngineMacEditor>/../../../VEngineMacEditor.Managed/VEngine.ScriptHost"
-        COMMENT "Copying VEngine.ScriptHost managed assembly"
-    )
+    ve_copy_mac_scripting_payload(VEngineMacEditor)
 
     set_target_properties(VEngineMacEditor
         PROPERTIES

@@ -2,10 +2,11 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Platform.h"
-#include "Engine/Runtime/Scripting/NullScriptingBackend.h"
 #include "Engine/Runtime/Scripting/IOSAOTScriptingBackend.h"
-#if VE_PLATFORM_WINDOWS
+#if VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS
 #include "Engine/Runtime/Scripting/DotnetJITScriptingBackend.h"
+#else
+#include "Engine/Runtime/Scripting/NullScriptingBackend.h"
 #endif
 
 #include <utility>
@@ -39,6 +40,7 @@ namespace ve
             return result;
         }
 
+        scriptHostRoot_ = initParam.scriptHostRoot;
         initialized_ = true;
         return ErrorCode::None;
     }
@@ -52,12 +54,18 @@ namespace ve
         }
 
         initialized_ = false;
+        scriptHostRoot_ = {};
     }
 
     ScriptingBackendType ScriptingSystem::GetBackendType() const noexcept
     {
         VE_ASSERT_MESSAGE(initialized_ && backend_ != nullptr, "ScriptingSystem::GetBackendType requires an initialized scripting system.");
         return backend_->GetBackendType();
+    }
+
+    const Path& ScriptingSystem::GetScriptHostRoot() const noexcept
+    {
+        return scriptHostRoot_;
     }
 
     ErrorCode ScriptingSystem::LoadAssembly(const ScriptingAssemblyLoadDesc& desc)
@@ -125,7 +133,7 @@ namespace ve
         ScriptingBackendType resolvedBackend = backendType;
         if (resolvedBackend == ScriptingBackendType::Auto)
         {
-#if VE_PLATFORM_WINDOWS
+#if VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS
             resolvedBackend = ScriptingBackendType::DotnetJIT;
 #else
             return std::make_unique<NullScriptingBackend>();
@@ -135,12 +143,14 @@ namespace ve
         switch (resolvedBackend)
         {
         case ScriptingBackendType::DotnetJIT:
-#if VE_PLATFORM_WINDOWS
+#if VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS
             return std::make_unique<DotnetJITScriptingBackend>();
 #else
             return nullptr;
 #endif
         case ScriptingBackendType::Auto:
+            return nullptr;
+        case ScriptingBackendType::IOSAOT:
             return nullptr;
         }
 

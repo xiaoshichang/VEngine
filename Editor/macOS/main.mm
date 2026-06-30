@@ -43,7 +43,11 @@ int main(int argc, char* argv[])
         initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
 
         const ve::Path executableDirectory = ve::FileSystem::GetExecutableDirectory();
-        initParam.runtime.scriptingSystem.scriptHostRoot = executableDirectory.GetParentPath() / "VEngineMacEditor.Managed" / "VEngine.ScriptHost";
+        const ve::Path bundleContentsDirectory = executableDirectory.GetParentPath();
+        initParam.runtime.scriptingSystem.scriptHostRoot = bundleContentsDirectory / "Resources" / "Managed" / "VEngine.ScriptHost";
+        initParam.runtime.scriptingSystem.runtimeConfigPath =
+            initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
+        initParam.runtime.scriptingSystem.dotNetRuntimeRoot = bundleContentsDirectory / "Resources" / "DotNet" / "osx-arm64" / "10.0.9";
 
         ve::editor::MacEditorApplication application(std::move(initParam));
         int exitCode = application.Init();

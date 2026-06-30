@@ -39,8 +39,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.ioSystem.threadName = "VEngineWinEditorIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineWinEditorRenderThread";
     initParam.runtime.renderSystem.device.backend = ve::RenderBackend::D3D11;
-    initParam.runtime.scriptingSystem.runtimeConfigPath =
-        ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost" / "VEngine.ScriptHost.runtimeconfig.json";
+    initParam.runtime.scriptingSystem.scriptHostRoot = ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
+    initParam.runtime.scriptingSystem.runtimeConfigPath = initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
     const ve::Path editorLocalDotNetRoot = ve::FileSystem::GetExecutableDirectory() / "DotNet" / "win-x64" / "10.0.9";
     if (ve::FileSystem::IsFile(editorLocalDotNetRoot / "dotnet.exe"))
     {

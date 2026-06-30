@@ -218,15 +218,17 @@ function(ve_add_engine)
             PRIVATE
                 Engine/Runtime/Platform/MacOS/MacDebugConsoleBackend.mm
                 Engine/Runtime/Platform/MacOS/MacWindow.mm
-                Engine/Runtime/Scripting/NullScriptingBackend.cpp
+                Engine/Runtime/Scripting/DotnetJITScriptingBackend.cpp
             PUBLIC
                 Engine/Runtime/Platform/MacOS/MacDebugConsoleBackend.h
                 Engine/Runtime/Platform/MacOS/MacWindow.h
+                Engine/Runtime/Scripting/DotnetJITScriptingBackend.h
         )
 
         target_link_libraries(VEngine
             PUBLIC
                 "-framework AppKit"
+                dl
         )
     endif()
 

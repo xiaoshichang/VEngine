@@ -96,6 +96,7 @@ function(ve_add_managed_script_host)
     message(STATUS "Managed scripting runtime root: ${dotnetRuntimeRoot}")
 
     add_custom_target(VEngineScriptHostManaged
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
         COMMAND "${dotnetSdkExecutable}" publish
             "${PROJECT_SOURCE_DIR}/Engine/Managed/VEngine.ScriptHost/VEngine.ScriptHost.csproj"
@@ -103,6 +104,8 @@ function(ve_add_managed_script_host)
             --framework net10.0
             --output "${VE_SCRIPT_HOST_MANAGED_OUTPUT_DIR}"
             -p:BaseIntermediateOutputPath="${VE_SCRIPT_HOST_MANAGED_OBJ_DIR}"
+            -p:AssemblyName=VEngine.ScriptHost
+            -p:TargetName=VEngine.ScriptHost
             -p:PublishSingleFile=false
             --nologo
         BYPRODUCTS

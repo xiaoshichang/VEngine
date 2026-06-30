@@ -774,7 +774,7 @@ namespace ve::editor
             return ErrorCode::InvalidState;
         }
 
-        const Path hostRoot = FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
+        const Path& hostRoot = runtime_->GetScriptingSystem().GetScriptHostRoot();
         const Path hostAssemblyPath = hostRoot / "VEngine.ScriptHost.dll";
         if (!FileSystem::IsFile(hostAssemblyPath))
         {
@@ -823,7 +823,7 @@ namespace ve::editor
             return;
         }
 
-        const Path scriptHostAssemblyPath = FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost" / "VEngine.ScriptHost.dll";
+        const Path scriptHostAssemblyPath = runtime_->GetScriptingSystem().GetScriptHostRoot() / "VEngine.ScriptHost.dll";
         Result<EditorScriptCompileResult> compileResult = scriptCompiler_.CompileProjectScripts(EditorScriptCompileDesc{
             .projectRoot = Path(currentProjectPath_),
             .projectName = currentProjectName_,
