@@ -697,13 +697,16 @@ The initial engine-facing API covers:
 - Sphere and box rigid body creation.
 - Body destruction.
 - Body transform and linear velocity read/write.
+- Scene-facing `ColliderComponent` and `RigidbodyComponent` stored as fixed `GameObject` component fields.
+- Component `Desc` structs for serialized Unity-style Collider and Rigidbody authoring data, separated from non-serialized
+  runtime `ColliderBackend` and `RigidbodyBackend` state such as physics body handles and velocities.
 
 Future lightweight physics and scene-facing features:
 
 - `AABB`.
 - `Sphere`.
 - `Raycast`.
-- Basic `ColliderComponent`.
+- Component-to-PhysicsSystem synchronization.
 - Simple overlap tests.
 
 Scene synchronization, render/debug visualization, editor inspection, and the component model remain separate future
@@ -1047,6 +1050,7 @@ Recommended built-in first-stage components:
 - `DotnetScriptableComponent`.
 - `CanvasComponent`.
 - `ColliderComponent`.
+- `RigidbodyComponent`.
 
 Reflection should support:
 

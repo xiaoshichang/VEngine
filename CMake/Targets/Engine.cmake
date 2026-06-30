@@ -47,10 +47,12 @@ function(ve_add_engine)
             Engine/Runtime/Resource/ResourceSystem.cpp
             Engine/Runtime/Resource/RuntimeAssetLoader.cpp
             Engine/Runtime/Scene/CameraComponent.cpp
+            Engine/Runtime/Scene/ColliderComponent.cpp
             Engine/Runtime/Scene/Component.cpp
             Engine/Runtime/Scene/GameObject.cpp
             Engine/Runtime/Scene/LightComponent.cpp
             Engine/Runtime/Scene/MeshRenderComponent.cpp
+            Engine/Runtime/Scene/RigidbodyComponent.cpp
             Engine/Runtime/Scene/Scene.cpp
             Engine/Runtime/Scene/SceneSerialization.cpp
             Engine/Runtime/Scene/SceneSystem.cpp
@@ -125,10 +127,12 @@ function(ve_add_engine)
             Engine/Runtime/Resource/ResourceSystem.h
             Engine/Runtime/Resource/RuntimeAssetLoader.h
             Engine/Runtime/Scene/CameraComponent.h
+            Engine/Runtime/Scene/ColliderComponent.h
             Engine/Runtime/Scene/Component.h
             Engine/Runtime/Scene/GameObject.h
             Engine/Runtime/Scene/LightComponent.h
             Engine/Runtime/Scene/MeshRenderComponent.h
+            Engine/Runtime/Scene/RigidbodyComponent.h
             Engine/Runtime/Scene/Scene.h
             Engine/Runtime/Scene/SceneSerialization.h
             Engine/Runtime/Scene/SceneSystem.h

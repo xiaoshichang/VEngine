@@ -6,9 +6,11 @@
 #include "Engine/Runtime/Math/Quaternion.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
+#include "Engine/Runtime/Scene/ColliderComponent.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/LightComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
+#include "Engine/Runtime/Scene/RigidbodyComponent.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Scripting/DotnetScriptableComponent.h"
@@ -311,6 +313,243 @@ namespace ve
             return LightType::Directional;
         }
 
+        [[nodiscard]] const char* ToString(ColliderShapeType type) noexcept
+        {
+            switch (type)
+            {
+            case ColliderShapeType::Box:
+                return "Box";
+            case ColliderShapeType::Sphere:
+                return "Sphere";
+            case ColliderShapeType::Capsule:
+                return "Capsule";
+            }
+
+            return "Box";
+        }
+
+        [[nodiscard]] ColliderShapeType ParseColliderShapeType(std::string_view text) noexcept
+        {
+            if (text == "Sphere")
+            {
+                return ColliderShapeType::Sphere;
+            }
+
+            if (text == "Capsule")
+            {
+                return ColliderShapeType::Capsule;
+            }
+
+            return ColliderShapeType::Box;
+        }
+
+        [[nodiscard]] const char* ToString(ColliderDirectionAxis direction) noexcept
+        {
+            switch (direction)
+            {
+            case ColliderDirectionAxis::X:
+                return "X";
+            case ColliderDirectionAxis::Y:
+                return "Y";
+            case ColliderDirectionAxis::Z:
+                return "Z";
+            }
+
+            return "Y";
+        }
+
+        [[nodiscard]] ColliderDirectionAxis ParseColliderDirectionAxis(std::string_view text) noexcept
+        {
+            if (text == "X")
+            {
+                return ColliderDirectionAxis::X;
+            }
+
+            if (text == "Z")
+            {
+                return ColliderDirectionAxis::Z;
+            }
+
+            return ColliderDirectionAxis::Y;
+        }
+
+        [[nodiscard]] const char* ToString(RigidbodyInterpolationMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case RigidbodyInterpolationMode::None:
+                return "None";
+            case RigidbodyInterpolationMode::Interpolate:
+                return "Interpolate";
+            case RigidbodyInterpolationMode::Extrapolate:
+                return "Extrapolate";
+            }
+
+            return "None";
+        }
+
+        [[nodiscard]] RigidbodyInterpolationMode ParseRigidbodyInterpolationMode(std::string_view text) noexcept
+        {
+            if (text == "Interpolate")
+            {
+                return RigidbodyInterpolationMode::Interpolate;
+            }
+
+            if (text == "Extrapolate")
+            {
+                return RigidbodyInterpolationMode::Extrapolate;
+            }
+
+            return RigidbodyInterpolationMode::None;
+        }
+
+        [[nodiscard]] const char* ToString(RigidbodyCollisionDetectionMode mode) noexcept
+        {
+            switch (mode)
+            {
+            case RigidbodyCollisionDetectionMode::Discrete:
+                return "Discrete";
+            case RigidbodyCollisionDetectionMode::Continuous:
+                return "Continuous";
+            case RigidbodyCollisionDetectionMode::ContinuousDynamic:
+                return "ContinuousDynamic";
+            case RigidbodyCollisionDetectionMode::ContinuousSpeculative:
+                return "ContinuousSpeculative";
+            }
+
+            return "Discrete";
+        }
+
+        [[nodiscard]] RigidbodyCollisionDetectionMode ParseRigidbodyCollisionDetectionMode(std::string_view text) noexcept
+        {
+            if (text == "Continuous")
+            {
+                return RigidbodyCollisionDetectionMode::Continuous;
+            }
+
+            if (text == "ContinuousDynamic")
+            {
+                return RigidbodyCollisionDetectionMode::ContinuousDynamic;
+            }
+
+            if (text == "ContinuousSpeculative")
+            {
+                return RigidbodyCollisionDetectionMode::ContinuousSpeculative;
+            }
+
+            return RigidbodyCollisionDetectionMode::Discrete;
+        }
+
+        [[nodiscard]] bool HasConstraint(RigidbodyConstraintFlags flags, RigidbodyConstraintFlags flag) noexcept
+        {
+            return (ToUnderlying(flags) & ToUnderlying(flag)) != 0;
+        }
+
+        void PushConstraintName(boost::json::array& array, RigidbodyConstraintFlags flags, RigidbodyConstraintFlags flag, const char* name)
+        {
+            if (HasConstraint(flags, flag))
+            {
+                array.push_back(name);
+            }
+        }
+
+        [[nodiscard]] boost::json::array WriteRigidbodyConstraints(RigidbodyConstraintFlags constraints)
+        {
+            boost::json::array array;
+            PushConstraintName(array, constraints, RigidbodyConstraintFlags::FreezePositionX, "FreezePositionX");
+            PushConstraintName(array, constraints, RigidbodyConstraintFlags::FreezePositionY, "FreezePositionY");
+            PushConstraintName(array, constraints, RigidbodyConstraintFlags::FreezePositionZ, "FreezePositionZ");
+            PushConstraintName(array, constraints, RigidbodyConstraintFlags::FreezeRotationX, "FreezeRotationX");
+            PushConstraintName(array, constraints, RigidbodyConstraintFlags::FreezeRotationY, "FreezeRotationY");
+            PushConstraintName(array, constraints, RigidbodyConstraintFlags::FreezeRotationZ, "FreezeRotationZ");
+            return array;
+        }
+
+        [[nodiscard]] RigidbodyConstraintFlags ParseRigidbodyConstraintName(std::string_view text) noexcept
+        {
+            if (text == "FreezePositionX")
+            {
+                return RigidbodyConstraintFlags::FreezePositionX;
+            }
+
+            if (text == "FreezePositionY")
+            {
+                return RigidbodyConstraintFlags::FreezePositionY;
+            }
+
+            if (text == "FreezePositionZ")
+            {
+                return RigidbodyConstraintFlags::FreezePositionZ;
+            }
+
+            if (text == "FreezeRotationX")
+            {
+                return RigidbodyConstraintFlags::FreezeRotationX;
+            }
+
+            if (text == "FreezeRotationY")
+            {
+                return RigidbodyConstraintFlags::FreezeRotationY;
+            }
+
+            if (text == "FreezeRotationZ")
+            {
+                return RigidbodyConstraintFlags::FreezeRotationZ;
+            }
+
+            if (text == "FreezePosition")
+            {
+                return RigidbodyConstraintFlags::FreezePosition;
+            }
+
+            if (text == "FreezeRotation")
+            {
+                return RigidbodyConstraintFlags::FreezeRotation;
+            }
+
+            if (text == "FreezeAll")
+            {
+                return RigidbodyConstraintFlags::FreezeAll;
+            }
+
+            return RigidbodyConstraintFlags::None;
+        }
+
+        [[nodiscard]] RigidbodyConstraintFlags
+        ReadRigidbodyConstraints(const boost::json::object& object, boost::json::string_view key, RigidbodyConstraintFlags fallback)
+        {
+            const boost::json::value* value = object.if_contains(key);
+            if (value == nullptr)
+            {
+                return fallback;
+            }
+
+            if (value->is_string())
+            {
+                const boost::json::string& text = value->as_string();
+                return ParseRigidbodyConstraintName(std::string_view(text.data(), text.size()));
+            }
+
+            if (!value->is_array())
+            {
+                return fallback;
+            }
+
+            RigidbodyConstraintFlags constraints = RigidbodyConstraintFlags::None;
+            for (const boost::json::value& constraintValue : value->as_array())
+            {
+                if (!constraintValue.is_string())
+                {
+                    continue;
+                }
+
+                const boost::json::string& text = constraintValue.as_string();
+                constraints |= ParseRigidbodyConstraintName(std::string_view(text.data(), text.size()));
+            }
+
+            return constraints;
+        }
+
         [[nodiscard]] boost::json::object WriteTransformComponent(const TransformComponent& transform)
         {
             boost::json::object object;
@@ -365,6 +604,45 @@ namespace ve
             return object;
         }
 
+        [[nodiscard]] boost::json::object WriteColliderComponent(const ColliderComponent& collider)
+        {
+            const ColliderDesc& desc = collider.GetDesc();
+
+            boost::json::object object;
+            object["type"] = "ColliderComponent";
+            object["enabled"] = collider.IsEnabled();
+            object["shapeType"] = ToString(desc.shapeType);
+            object["isTrigger"] = desc.trigger;
+            object["center"] = WriteVector3(desc.center);
+            object["size"] = WriteVector3(desc.size);
+            object["radius"] = desc.radius;
+            object["height"] = desc.height;
+            object["direction"] = ToString(desc.direction);
+            object["staticFriction"] = desc.staticFriction;
+            object["dynamicFriction"] = desc.dynamicFriction;
+            object["bounciness"] = desc.bounciness;
+            return object;
+        }
+
+        [[nodiscard]] boost::json::object WriteRigidbodyComponent(const RigidbodyComponent& rigidbody)
+        {
+            const RigidbodyDesc& desc = rigidbody.GetDesc();
+
+            boost::json::object object;
+            object["type"] = "RigidbodyComponent";
+            object["enabled"] = rigidbody.IsEnabled();
+            object["mass"] = desc.mass;
+            object["linearDamping"] = desc.linearDamping;
+            object["angularDamping"] = desc.angularDamping;
+            object["useGravity"] = desc.useGravity;
+            object["isKinematic"] = desc.kinematic;
+            object["detectCollisions"] = desc.detectCollisions;
+            object["interpolation"] = ToString(desc.interpolationMode);
+            object["collisionDetection"] = ToString(desc.collisionDetectionMode);
+            object["constraints"] = WriteRigidbodyConstraints(desc.constraints);
+            return object;
+        }
+
         [[nodiscard]] boost::json::object WriteDotnetScriptableComponent(const DotnetScriptableComponent& script)
         {
             boost::json::object object;
@@ -408,6 +686,16 @@ namespace ve
             if (const LightComponent* light = gameObject.GetComponent<LightComponent>(); light != nullptr)
             {
                 components.push_back(WriteLightComponent(*light));
+            }
+
+            if (const ColliderComponent* collider = gameObject.GetComponent<ColliderComponent>(); collider != nullptr)
+            {
+                components.push_back(WriteColliderComponent(*collider));
+            }
+
+            if (const RigidbodyComponent* rigidbody = gameObject.GetComponent<RigidbodyComponent>(); rigidbody != nullptr)
+            {
+                components.push_back(WriteRigidbodyComponent(*rigidbody));
             }
 
             for (SizeT scriptIndex = 0; scriptIndex < gameObject.GetScriptableComponentCount(); ++scriptIndex)
@@ -605,10 +893,88 @@ namespace ve
             return ErrorCode::None;
         }
 
+        [[nodiscard]] ErrorCode ApplyColliderComponent(GameObject& gameObject, const boost::json::object& object)
+        {
+            ColliderComponent* collider = gameObject.GetComponent<ColliderComponent>();
+            if (collider == nullptr)
+            {
+                Result<ColliderComponent*> result = gameObject.AddComponentWithoutRenderRegistration<ColliderComponent>();
+                if (!result)
+                {
+                    return result.GetError().GetCode();
+                }
+                collider = result.GetValue();
+            }
+
+            ColliderDesc desc = collider->GetDesc();
+            desc.shapeType = ParseColliderShapeType(ReadString(object, "shapeType", ToString(desc.shapeType)));
+            desc.trigger = ReadBool(object, "isTrigger", desc.trigger);
+
+            if (const boost::json::value* value = object.if_contains("center"); value != nullptr)
+            {
+                Result<Vector3> result = ReadVector3(*value, "ColliderComponent.center");
+                if (!result)
+                {
+                    return result.GetError().GetCode();
+                }
+                desc.center = result.GetValue();
+            }
+
+            if (const boost::json::value* value = object.if_contains("size"); value != nullptr)
+            {
+                Result<Vector3> result = ReadVector3(*value, "ColliderComponent.size");
+                if (!result)
+                {
+                    return result.GetError().GetCode();
+                }
+                desc.size = result.GetValue();
+            }
+
+            desc.radius = ReadFloat(object, "radius", desc.radius);
+            desc.height = ReadFloat(object, "height", desc.height);
+            desc.direction = ParseColliderDirectionAxis(ReadString(object, "direction", ToString(desc.direction)));
+            desc.staticFriction = ReadFloat(object, "staticFriction", desc.staticFriction);
+            desc.dynamicFriction = ReadFloat(object, "dynamicFriction", desc.dynamicFriction);
+            desc.bounciness = ReadFloat(object, "bounciness", desc.bounciness);
+            collider->SetDesc(desc);
+            collider->SetEnabled(ReadBool(object, "enabled", collider->IsEnabled()));
+            return ErrorCode::None;
+        }
+
+        [[nodiscard]] ErrorCode ApplyRigidbodyComponent(GameObject& gameObject, const boost::json::object& object)
+        {
+            RigidbodyComponent* rigidbody = gameObject.GetComponent<RigidbodyComponent>();
+            if (rigidbody == nullptr)
+            {
+                Result<RigidbodyComponent*> result = gameObject.AddComponentWithoutRenderRegistration<RigidbodyComponent>();
+                if (!result)
+                {
+                    return result.GetError().GetCode();
+                }
+                rigidbody = result.GetValue();
+            }
+
+            RigidbodyDesc desc = rigidbody->GetDesc();
+            desc.mass = ReadFloat(object, "mass", desc.mass);
+            desc.linearDamping = ReadFloat(object, "linearDamping", desc.linearDamping);
+            desc.angularDamping = ReadFloat(object, "angularDamping", desc.angularDamping);
+            desc.useGravity = ReadBool(object, "useGravity", desc.useGravity);
+            desc.kinematic = ReadBool(object, "isKinematic", desc.kinematic);
+            desc.detectCollisions = ReadBool(object, "detectCollisions", desc.detectCollisions);
+            desc.interpolationMode = ParseRigidbodyInterpolationMode(ReadString(object, "interpolation", ToString(desc.interpolationMode)));
+            desc.collisionDetectionMode =
+                ParseRigidbodyCollisionDetectionMode(ReadString(object, "collisionDetection", ToString(desc.collisionDetectionMode)));
+            desc.constraints = ReadRigidbodyConstraints(object, "constraints", desc.constraints);
+            rigidbody->SetDesc(desc);
+            rigidbody->SetEnabled(ReadBool(object, "enabled", rigidbody->IsEnabled()));
+            return ErrorCode::None;
+        }
+
         [[nodiscard]] ErrorCode ApplyDotnetScriptableComponent(GameObject& gameObject, const boost::json::object& object, ScriptingSystem& scriptingSystem)
         {
             const std::string scriptTypeName = ReadString(object, "scriptTypeName");
-            Result<DotnetScriptableComponent*> result = gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptTypeName, scriptingSystem);
+            Result<DotnetScriptableComponent*> result =
+                gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptTypeName, scriptingSystem);
             if (!result)
             {
                 return result.GetError().GetCode();
@@ -669,6 +1035,24 @@ namespace ve
             if (const boost::json::object* light = FindComponent(components, "LightComponent"); light != nullptr)
             {
                 const ErrorCode result = ApplyLightComponent(gameObject, *light);
+                if (result != ErrorCode::None)
+                {
+                    return result;
+                }
+            }
+
+            if (const boost::json::object* collider = FindComponent(components, "ColliderComponent"); collider != nullptr)
+            {
+                const ErrorCode result = ApplyColliderComponent(gameObject, *collider);
+                if (result != ErrorCode::None)
+                {
+                    return result;
+                }
+            }
+
+            if (const boost::json::object* rigidbody = FindComponent(components, "RigidbodyComponent"); rigidbody != nullptr)
+            {
+                const ErrorCode result = ApplyRigidbodyComponent(gameObject, *rigidbody);
                 if (result != ErrorCode::None)
                 {
                     return result;

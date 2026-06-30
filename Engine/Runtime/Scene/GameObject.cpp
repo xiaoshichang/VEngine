@@ -31,6 +31,18 @@ namespace ve
         }
         scriptableComponents_.clear();
 
+        if (rigidbodyCmpt_ != nullptr)
+        {
+            DispatchComponentDestroyCallbacks(*rigidbodyCmpt_);
+            rigidbodyCmpt_->ClearOwner();
+        }
+
+        if (colliderCmpt_ != nullptr)
+        {
+            DispatchComponentDestroyCallbacks(*colliderCmpt_);
+            colliderCmpt_->ClearOwner();
+        }
+
         if (lightCmpt_ != nullptr)
         {
             DispatchComponentDestroyCallbacks(*lightCmpt_);
@@ -90,6 +102,16 @@ namespace ve
             ++count;
         }
 
+        if (colliderCmpt_ != nullptr)
+        {
+            ++count;
+        }
+
+        if (rigidbodyCmpt_ != nullptr)
+        {
+            ++count;
+        }
+
         return count + scriptableComponents_.size();
     }
 
@@ -101,6 +123,8 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            colliderCmpt_.get(),
+            rigidbodyCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -134,6 +158,8 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            colliderCmpt_.get(),
+            rigidbodyCmpt_.get(),
         };
 
         for (const Component* component : componentSlots)
@@ -199,6 +225,8 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            colliderCmpt_.get(),
+            rigidbodyCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -237,6 +265,8 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            colliderCmpt_.get(),
+            rigidbodyCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {
@@ -314,6 +344,8 @@ namespace ve
             meshRenderCmpt_.get(),
             cameraCmpt_.get(),
             lightCmpt_.get(),
+            colliderCmpt_.get(),
+            rigidbodyCmpt_.get(),
         };
         for (Component* component : componentSlots)
         {

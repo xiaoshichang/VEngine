@@ -5,9 +5,11 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
+#include "Engine/Runtime/Scene/ColliderComponent.h"
 #include "Engine/Runtime/Scene/Component.h"
 #include "Engine/Runtime/Scene/LightComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
+#include "Engine/Runtime/Scene/RigidbodyComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Scripting/DotnetScriptableComponent.h"
 #include "Engine/Runtime/Scripting/ScriptableComponent.h"
@@ -51,7 +53,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
+                          "LightComponent, ColliderComponent, RigidbodyComponent, ScriptableComponent, or DotnetScriptableComponent.");
             static_assert(!std::is_same_v<TComponent, ScriptableComponent>, "Add a concrete script component such as DotnetScriptableComponent.");
 
             if constexpr (std::is_same_v<TComponent, DotnetScriptableComponent>)
@@ -87,7 +89,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
+                          "LightComponent, ColliderComponent, RigidbodyComponent, ScriptableComponent, or DotnetScriptableComponent.");
 
             if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
             {
@@ -119,7 +121,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
+                          "LightComponent, ColliderComponent, RigidbodyComponent, ScriptableComponent, or DotnetScriptableComponent.");
 
             if constexpr (std::is_same_v<TComponent, ScriptableComponent>)
             {
@@ -151,7 +153,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
+                          "LightComponent, ColliderComponent, RigidbodyComponent, ScriptableComponent, or DotnetScriptableComponent.");
 
             // Transform drives hierarchy and cannot be removed from a live GameObject.
             if constexpr (std::is_same_v<TComponent, TransformComponent>)
@@ -213,7 +215,7 @@ namespace ve
             static_assert(std::is_base_of_v<Component, TComponent>, "TComponent must derive from ve::Component.");
             static_assert(IsSupportedComponentTypeV<TComponent>,
                           "TComponent must be one of: TransformComponent, MeshRenderComponent, CameraComponent, or "
-                          "LightComponent, ScriptableComponent, or DotnetScriptableComponent.");
+                          "LightComponent, ColliderComponent, RigidbodyComponent, ScriptableComponent, or DotnetScriptableComponent.");
             static_assert(!std::is_same_v<TComponent, ScriptableComponent>, "Add a concrete script component such as DotnetScriptableComponent.");
 
             return AddComponentInternal<TComponent>(false, std::forward<TArgs>(args)...);
@@ -226,8 +228,8 @@ namespace ve
         template<typename TComponent>
         static constexpr bool IsSupportedComponentTypeV =
             std::is_same_v<TComponent, TransformComponent> || std::is_same_v<TComponent, MeshRenderComponent> || std::is_same_v<TComponent, CameraComponent> ||
-            std::is_same_v<TComponent, LightComponent> || std::is_same_v<TComponent, ScriptableComponent> ||
-            std::is_same_v<TComponent, DotnetScriptableComponent>;
+            std::is_same_v<TComponent, LightComponent> || std::is_same_v<TComponent, ColliderComponent> || std::is_same_v<TComponent, RigidbodyComponent> ||
+            std::is_same_v<TComponent, ScriptableComponent> || std::is_same_v<TComponent, DotnetScriptableComponent>;
 
         template<typename TComponent>
         [[nodiscard]] std::unique_ptr<TComponent>* ResolveComponentSlot() noexcept
@@ -247,6 +249,14 @@ namespace ve
             else if constexpr (std::is_same_v<TComponent, LightComponent>)
             {
                 return &lightCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, ColliderComponent>)
+            {
+                return &colliderCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, RigidbodyComponent>)
+            {
+                return &rigidbodyCmpt_;
             }
             else
             {
@@ -272,6 +282,14 @@ namespace ve
             else if constexpr (std::is_same_v<TComponent, LightComponent>)
             {
                 return &lightCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, ColliderComponent>)
+            {
+                return &colliderCmpt_;
+            }
+            else if constexpr (std::is_same_v<TComponent, RigidbodyComponent>)
+            {
+                return &rigidbodyCmpt_;
             }
             else
             {
@@ -354,6 +372,8 @@ namespace ve
         std::unique_ptr<MeshRenderComponent> meshRenderCmpt_;
         std::unique_ptr<CameraComponent> cameraCmpt_;
         std::unique_ptr<LightComponent> lightCmpt_;
+        std::unique_ptr<ColliderComponent> colliderCmpt_;
+        std::unique_ptr<RigidbodyComponent> rigidbodyCmpt_;
         std::vector<std::unique_ptr<ScriptableComponent>> scriptableComponents_;
     };
 } // namespace ve

@@ -217,7 +217,7 @@ target and a separate Metal triangle demo, but not a complete iOS Player engine 
 - Implement Button.
 - Implement UI event routing.
 - Implement AABB, Sphere, and Raycast for picking and lightweight physics.
-- Implement ColliderComponent.
+- Implement ColliderComponent and RigidbodyComponent.
 - Add simple UI and picking demo.
 
 ### Milestone 10: iOS Simulator Demo
