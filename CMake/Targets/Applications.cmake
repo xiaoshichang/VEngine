@@ -92,6 +92,9 @@ function(ve_copy_mac_scripting_payload target_name)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${VE_DOTNET_RUNTIME_ROOT}"
             "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/Resources/DotNet/osx-arm64/10.0.9"
+        COMMAND /bin/sh
+            "${PROJECT_SOURCE_DIR}/CMake/Scripts/CodeSignMacBundleAfterPostBuild.sh"
+            "$<TARGET_BUNDLE_DIR:${target_name}>"
         COMMENT "Copying bundled .NET scripting payload"
     )
 endfunction()
