@@ -274,7 +274,7 @@ Later services should connect through this layer as their modules land:
 
 - Scripting.
 - Runtime UI.
-- Lightweight physics.
+- PhysicsSystem integration.
 
 RenderSystem now owns the Render Thread and the RHI device/swapchain lifecycle through this service boundary. Future
 rendering work should continue to attach render-resource and viewport state through the same model.

@@ -25,6 +25,8 @@ function(ve_add_engine)
             Engine/Runtime/Logging/Log.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Platform/Window.cpp
+            Engine/Runtime/Physics/PhysicsSystem.cpp
+            Engine/Runtime/Physics/PhysicsSystemBackendJolt.cpp
             Engine/Runtime/Render/BaseRenderer.cpp
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
@@ -97,6 +99,10 @@ function(ve_add_engine)
             Engine/Runtime/Math/Vector4.h
             Engine/Runtime/Memory/PoolAllocator.h
             Engine/Runtime/Platform/Window.h
+            Engine/Runtime/Physics/PhysicsSystem.h
+            Engine/Runtime/Physics/PhysicsSystemBackend.h
+            Engine/Runtime/Physics/PhysicsSystemBackendJolt.h
+            Engine/Runtime/Physics/PhysicsTypes.h
             Engine/Runtime/Render/BaseRenderer.h
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h

@@ -684,9 +684,21 @@ The iOS C# path should be treated as a separate research milestone because iOS h
 
 ### 7.17 Physics
 
-First-stage physics is intentionally lightweight.
+First-stage physics is intentionally lightweight. The current runtime code exposes a `PhysicsSystem` facade with a
+`PhysicsSystemBackend` boundary and a first concrete `PhysicsSystemBackendJolt` implementation backed by Jolt Physics.
+This facade is compiled into the `VEngine` static library, but it is intentionally not owned by `EngineRuntime` yet and
+does not synchronize with Scene or Component state.
 
-Supported features:
+The initial engine-facing API covers:
+
+- Backend selection.
+- Physics world initialization and shutdown.
+- Fixed-step simulation calls.
+- Sphere and box rigid body creation.
+- Body destruction.
+- Body transform and linear velocity read/write.
+
+Future lightweight physics and scene-facing features:
 
 - `AABB`.
 - `Sphere`.
@@ -694,9 +706,9 @@ Supported features:
 - Basic `ColliderComponent`.
 - Simple overlap tests.
 
-Full rigid body simulation can be added later, either through a dedicated physics library or a custom lightweight physics layer.
-Jolt Physics is prepared as the first project-owned third-party candidate for that later full rigid body backend, but
-the engine-facing Physics facade, scene synchronization, and component model remain separate future work.
+Scene synchronization, render/debug visualization, editor inspection, and the component model remain separate future
+work. Game Thread code should still treat physics simulation as a dedicated system boundary rather than reaching through
+to Jolt types directly.
 
 ## 8. Multithreaded Runtime Model
 
