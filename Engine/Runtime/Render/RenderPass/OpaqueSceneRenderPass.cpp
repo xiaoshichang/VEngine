@@ -243,7 +243,7 @@ namespace ve
             if (initParam_.target.colorTexture->GetDepthTexture() != nullptr)
             {
                 builder.SetDepthStencilAttachment(
-                    *initParam_.target.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
+                    *initParam_.target.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::Store, rhi::RhiDepthStencilClearValue{});
             }
             return;
         }
