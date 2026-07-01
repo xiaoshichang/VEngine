@@ -173,10 +173,10 @@ namespace ve
             mainThreadCommandQueue_.Clear();
             mainWindow_->PumpCommands();
             mainWindow_->SetCommandHandler({});
-            mainWindow_.reset();
         }
 
         ShutdownEngineRuntime(engineRuntime_);
+        mainWindow_.reset();
         initialized_ = false;
         VE_LOG_INFO("{} stopped with exit code {}", initParam_.name, finalExitCode);
     }

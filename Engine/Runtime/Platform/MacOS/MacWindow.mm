@@ -320,6 +320,7 @@ namespace ve
         }
 
         [window setTitle:[NSString stringWithUTF8String:title_.c_str()]];
+        [window setReleasedWhenClosed:NO];
 
         VEngineMacContentView* view = [[VEngineMacContentView alloc] initWithFrame:frame];
         if (view == nil)
@@ -363,12 +364,22 @@ namespace ve
         pendingOSEvents_.push_back(event);
     }
 
-    void MacWindow::OnNativeWindowWillClose()
+    void MacWindow::RequestClose()
     {
+        if (shouldClose_)
+        {
+            return;
+        }
+
         shouldClose_ = true;
         visible_ = false;
         focused_ = false;
         QueueOSEvent(OSEvent{OSEventType::WindowHidden});
+    }
+
+    void MacWindow::OnNativeWindowWillClose()
+    {
+        RequestClose();
     }
 
     void MacWindow::OnNativeWindowFocusChanged(bool focused)
@@ -483,6 +494,16 @@ namespace ve
 } // namespace ve
 
 @implementation VEngineMacWindowDelegate
+
+- (BOOL)windowShouldClose:(id)sender
+{
+    (void)sender;
+    if (_owner != nullptr)
+    {
+        _owner->RequestClose();
+    }
+    return NO;
+}
 
 - (void)windowWillClose:(NSNotification*)notification
 {

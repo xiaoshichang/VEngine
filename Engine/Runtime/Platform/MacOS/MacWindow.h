@@ -34,6 +34,7 @@ namespace ve
         [[nodiscard]] void* GetNativeHandle() const noexcept override;
         [[nodiscard]] void* GetNativeLayer() const noexcept override;
 
+        void RequestClose();
         void OnNativeWindowWillClose();
         void OnNativeWindowFocusChanged(bool focused);
         void OnNativeWindowMiniaturized(bool minimized);
