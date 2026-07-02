@@ -1,6 +1,7 @@
 #include "Editor/Core/EditorBuildPackageDialog.h"
 
 #include "Editor/Core/Editor.h"
+#include "Engine/Runtime/Core/Platform.h"
 
 #include <imgui.h>
 
@@ -16,41 +17,45 @@ namespace ve::editor
     {
         isOpen_ = true;
         hasStarted_ = false;
-        packager_.Reset();
+        packer_ = CreateEditorProjectPackerForHostPlatform();
+        if (packer_ != nullptr)
+        {
+            packer_->Reset();
+        }
     }
 
     void EditorBuildPackageDialog::Render(Editor& editor)
     {
-        if (!isOpen_)
+        if (!isOpen_ || packer_ == nullptr)
         {
             return;
         }
 
-        ImGui::OpenPopup("Package Windows");
-        if (!ImGui::BeginPopupModal("Package Windows", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        ImGui::OpenPopup("Package Project");
+        if (!ImGui::BeginPopupModal("Package Project", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             return;
         }
 
         if (!hasStarted_)
         {
-            packager_.StartWindowsPackage(editor);
+            packer_->Start(editor);
             hasStarted_ = true;
         }
 
-        if (packager_.GetStatus() == PackageRunStatus::Running)
+        if (packer_->GetStatus() == PackageRunStatus::Running)
         {
-            packager_.Advance(editor);
+            packer_->Advance(editor);
         }
 
         ImGui::SetNextItemWidth(BuildPackageDialogWidth);
-        ImGui::TextUnformatted("Windows");
-        ImGui::TextWrapped("%s", packager_.GetStatusMessage().c_str());
+        ImGui::TextUnformatted(GetHostPlatformText());
+        ImGui::TextWrapped("%s", packer_->GetStatusMessage().c_str());
 
-        ImGui::ProgressBar(packager_.GetProgress(), ImVec2(BuildPackageProgressWidth, 0.0F));
+        ImGui::ProgressBar(packer_->GetProgress(), ImVec2(BuildPackageProgressWidth, 0.0F));
         ImGui::Separator();
 
-        for (const PackageStepState& step : packager_.GetSteps())
+        for (const PackageStepState& step : packer_->GetSteps())
         {
             ImGui::Text("%s", ToStatusText(step.status));
             ImGui::SameLine(110.0F);
@@ -64,17 +69,17 @@ namespace ve::editor
         }
 
         ImGui::Separator();
-        if (!packager_.GetOutputPath().empty())
+        if (!packer_->GetOutputPath().empty())
         {
-            ImGui::TextWrapped("Output: %s", packager_.GetOutputPath().c_str());
+            ImGui::TextWrapped("Output: %s", packer_->GetOutputPath().c_str());
         }
 
-        if (!packager_.GetLogPath().empty())
+        if (!packer_->GetLogPath().empty())
         {
-            ImGui::TextWrapped("Log: %s", packager_.GetLogPath().c_str());
+            ImGui::TextWrapped("Log: %s", packer_->GetLogPath().c_str());
         }
 
-        const bool canClose = packager_.GetStatus() != PackageRunStatus::Running;
+        const bool canClose = packer_->GetStatus() != PackageRunStatus::Running;
         if (!canClose)
         {
             ImGui::BeginDisabled();
@@ -84,6 +89,7 @@ namespace ve::editor
         {
             isOpen_ = false;
             hasStarted_ = false;
+            packer_.reset();
             ImGui::CloseCurrentPopup();
         }
 
@@ -110,5 +116,16 @@ namespace ve::editor
         }
 
         return "Unknown";
+    }
+
+    const char* EditorBuildPackageDialog::GetHostPlatformText() noexcept
+    {
+#if VE_PLATFORM_MACOS
+        return "macOS";
+#elif VE_PLATFORM_WINDOWS
+        return "Windows";
+#else
+        return "Unsupported";
+#endif
     }
 } // namespace ve::editor

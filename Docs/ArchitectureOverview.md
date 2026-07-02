@@ -154,8 +154,9 @@ VEngineEditor
   Windows editor executable.
 
 VEngineMacPlayer
-  macOS player app target. The current implementation is an early AppKit shell that initializes the shared runtime path
-  but does not yet provide a complete macOS window/application backend.
+  macOS player executable target. The current implementation is an early AppKit shell that initializes the shared runtime
+  path but does not yet provide a complete macOS window/application backend. Editor packaging wraps this executable and
+  its resources into a generated `.app` bundle.
 
 VEngineAssetTool
   Command line asset import and cook tool target. The current executable is a lightweight placeholder while the Editor
@@ -181,7 +182,7 @@ out of this high-level target list so new module tests can be added without chan
 Planned macOS first-stage outputs:
 
 ```text
-VEngineMacPlayer.app
+VEngineMacPlayer
 VEngineMacEditor.app
 ```
 
@@ -661,9 +662,9 @@ Dear ImGui is used only for Editor and debug UI, not as the game runtime UI syst
 
 ### 7.16 Script
 
-`Script` hosts C# scripts on Windows.
+`Script` hosts C# scripts on Windows and macOS through the JIT backend.
 
-First-stage Windows scope:
+First-stage Windows and macOS JIT scope:
 
 - Use `.NET` native hosting through `nethost` and `hostfxr`.
 - Load a managed script assembly.
@@ -672,14 +673,11 @@ First-stage Windows scope:
 - Support a `ScriptableComponent` interface with `DotnetScriptableComponent` as the first concrete script component.
 - Dispatch lifecycle methods such as `OnCreate`, `OnDestroy`, `OnUpdate`, `OnLateUpdate`, `OnEnable`, and `OnDisable`.
 - Support reloading after stopping the scene in Editor.
+- Use app-local `.NET` runtime payloads. macOS Editor keeps the payload under bundle `Contents/Resources`; packaged
+  macOS Player apps place the same JIT payload under the generated `.app` bundle. `VEngineMacPlayer` is a build input for
+  the packaged app and does not maintain a separate executable-local JIT payload layout.
 
-First-stage macOS scope:
-
-- Do not run C# scripts.
-- Run native demo logic.
-- Keep the architecture open for future AOT-based investigation.
-
-The macOS C# path should be treated as a separate research milestone because Apple platform runtime constraints still shape the implementation.
+iOS C# scripting remains a future AOT feasibility milestone.
 
 ### 7.17 Physics
 
@@ -1099,9 +1097,10 @@ Editor reload policy:
 
 macOS first-stage policy:
 
-- C# scripting is disabled.
-- Demo logic is native.
-- Future support requires a separate AOT and runtime feasibility milestone.
+- C# scripting uses the same `.NET` JIT hosting path as Windows for macOS Editor and macOS Player.
+- Packaged macOS apps copy the managed script host, project script DLLs, and app-local `.NET` runtime into the generated
+  `.app` bundle.
+- iOS support still requires a separate AOT feasibility milestone.
 
 ## 15. Editor Architecture
 
@@ -1186,7 +1185,10 @@ Windows platform layer:
 Current macOS platform status:
 
 - Uses Objective-C++ for native bridge files.
-- Provides an early AppKit player shell in `VEngineMacPlayer`.
+- Provides an early AppKit player shell in the ordinary executable target `VEngineMacPlayer`.
+- Provides a `VEngineMacEditor.app` target that can package the current project into a generated macOS `.app` by
+  exporting/updating the CMake Xcode project, building `VEngineMacPlayer`, and copying player/data/JIT scripting payloads
+  into the package bundle.
 - Provides a separate `VEngineRhiMetalTriangleDemo` that creates a Metal-backed view and exercises the Metal RHI.
 
 Remaining macOS platform work:
@@ -1274,7 +1276,9 @@ mac-test
 The Windows presets are the Visual Studio 2022/v143 lane. If the project adds a Visual Studio 2026 or later lane, keep it
 as an explicit new preset and rebuild or revalidate the third-party payloads against that compiler baseline.
 
-macOS may be generated through CMake/Xcode, while keeping a small amount of macOS-specific template content such as `Info.plist`, app delegate, view controller, and entitlement files.
+macOS may be generated through CMake/Xcode, while keeping a small amount of macOS-specific template content such as
+`Info.plist`, app delegate, view controller, and entitlement files. The macOS Editor packaging flow also runs CMake's
+Xcode configure and build steps for `VEngineMacPlayer`; package progress only completes after that build succeeds.
 
 ## 20. Development Plan
 

@@ -1,11 +1,10 @@
-#include "Player/Windows/VEnginePlayer.h"
 #include "Engine/Runtime/Core/Version.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/DebugConsole.h"
+#include "Player/Windows/VEnginePlayer.h"
 
 #import <AppKit/AppKit.h>
-
 #include <cstdlib>
 #include <filesystem>
 
@@ -48,9 +47,8 @@ int main(int argc, char* argv[])
         const ve::Path executableDirectory = ve::FileSystem::GetExecutableDirectory();
         const ve::Path bundleContentsDirectory = executableDirectory.GetParentPath();
         initParam.runtime.scriptingSystem.scriptHostRoot = bundleContentsDirectory / "Resources" / "Managed" / "VEngine.ScriptHost";
-        initParam.runtime.scriptingSystem.runtimeConfigPath =
-            initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
         initParam.runtime.scriptingSystem.dotNetRuntimeRoot = bundleContentsDirectory / "Resources" / "DotNet" / "osx-arm64" / "10.0.9";
+        initParam.runtime.scriptingSystem.runtimeConfigPath = initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
 
         ve::VEnginePlayer engineApplication(std::move(initParam));
         int exitCode = engineApplication.Init();

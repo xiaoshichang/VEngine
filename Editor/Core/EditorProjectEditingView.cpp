@@ -2,6 +2,7 @@
 
 #include "Editor/Core/Editor.h"
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Core/Platform.h"
 
 #include <algorithm>
 #include <imgui.h>
@@ -167,7 +168,11 @@ namespace ve::editor
 
         if (ImGui::BeginMenu("Build"))
         {
+#if VE_PLATFORM_MACOS
+            if (ImGui::MenuItem("Package macOS...", nullptr, false, !editor.IsPlaying()))
+#else
             if (ImGui::MenuItem("Package Windows...", nullptr, false, !editor.IsPlaying()))
+#endif
             {
                 buildPackageDialog_.RequestOpen();
             }

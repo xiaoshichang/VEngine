@@ -98,8 +98,9 @@ VE_LOG_INFO
 
 Current status: Milestones 0-2 are broadly implemented. Milestones 3-7 are partially implemented through the common
 RHI, D3D11/D3D12/Metal backend slices, RenderSystem, ShaderTool, Scene/Resource systems, Editor asset database, Editor
-viewport/panels, and Windows packaging flow. Mac targets currently use minimal placeholder player/editor shells while the
-full macOS platform backend remains future work.
+viewport/panels, Windows packaging flow, and a first macOS packaging path. Mac targets currently use early player/editor
+shells while the full macOS platform backend remains future work; the macOS player is built as a normal executable and
+the macOS Editor packages it into a generated `.app` with app-local .NET JIT scripting payloads.
 
 ### Milestone 0: Project Skeleton
 

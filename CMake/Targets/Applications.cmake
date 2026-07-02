@@ -22,8 +22,8 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Core/EditorProjectDirectoryDialog.h
     Editor/Core/EditorProjectEditingView.cpp
     Editor/Core/EditorProjectEditingView.h
-    Editor/Core/EditorProjectPackager.cpp
-    Editor/Core/EditorProjectPackager.h
+    Editor/Core/EditorProjectPacker.cpp
+    Editor/Core/EditorProjectPacker.h
     Editor/Core/EditorProjectRegistry.cpp
     Editor/Core/EditorProjectRegistry.h
     Editor/Core/EditorProjectRegistryBackend.h
@@ -76,6 +76,15 @@ function(ve_copy_windows_scripting_payload target_name)
     )
 endfunction()
 
+function(ve_add_editor_packaging_definitions target_name)
+    target_compile_definitions(${target_name}
+        PRIVATE
+            VE_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+            VE_CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
+            VE_CMAKE_BUILD_CONFIG="$<CONFIG>"
+    )
+endfunction()
+
 function(ve_copy_mac_scripting_payload target_name)
     add_custom_command(TARGET ${target_name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E remove_directory
@@ -125,6 +134,8 @@ function(ve_add_windows_editor)
         Editor/Windows/main.cpp
         Editor/Windows/WinEditorInputBackend.cpp
         Editor/Windows/WinEditorInputBackend.h
+        Editor/Windows/WinEditorProjectPacker.cpp
+        Editor/Windows/WinEditorProjectPacker.h
         Editor/Windows/WinEditorProjectRegistryBackend.cpp
         Editor/Windows/WinEditorProjectRegistryBackend.h
         Editor/Windows/WinEditorRenderBackend.cpp
@@ -143,6 +154,7 @@ function(ve_add_windows_editor)
     add_dependencies(VEngineWinEditor VEngineShaderTool VEngineScriptHostManaged)
 
     ve_setup_imgui(VEngineWinEditor)
+    ve_add_editor_packaging_definitions(VEngineWinEditor)
 
     add_custom_command(TARGET VEngineWinEditor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -159,7 +171,7 @@ endfunction()
 function(ve_add_mac_player)
     enable_language(OBJCXX)
 
-    add_executable(VEngineMacPlayer MACOSX_BUNDLE
+    add_executable(VEngineMacPlayer
         Player/Windows/VEnginePlayer.cpp
         Player/Windows/VEnginePlayer.h
         Player/macOS/MacPlayer.mm
@@ -182,17 +194,10 @@ function(ve_add_mac_player)
             VEngine::ImGui
     )
 
-    ve_add_managed_script_host()
-    add_dependencies(VEngineMacPlayer VEngineScriptHostManaged)
-
     ve_setup_imgui(VEngineMacPlayer)
-
-    ve_copy_mac_scripting_payload(VEngineMacPlayer)
 
     set_target_properties(VEngineMacPlayer
         PROPERTIES
-            MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/macOS/Info.plist.in
-            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER ${VE_MAC_BUNDLE_IDENTIFIER}
             XCODE_ATTRIBUTE_SUPPORTED_PLATFORMS "macosx"
             XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "YES"
     )
@@ -209,6 +214,8 @@ function(ve_add_mac_editor)
         Editor/macOS/MacEditorApplication.h
         Editor/macOS/MacEditorInputBackend.h
         Editor/macOS/MacEditorInputBackend.mm
+        Editor/macOS/MacEditorProjectPacker.cpp
+        Editor/macOS/MacEditorProjectPacker.h
         Editor/macOS/MacEditorProjectRegistryBackend.h
         Editor/macOS/MacEditorProjectRegistryBackend.mm
         Editor/macOS/MacEditorRenderBackend.h
@@ -240,6 +247,7 @@ function(ve_add_mac_editor)
     add_dependencies(VEngineMacEditor VEngineShaderTool VEngineScriptHostManaged)
 
     ve_setup_imgui(VEngineMacEditor)
+    ve_add_editor_packaging_definitions(VEngineMacEditor)
 
     ve_copy_mac_scripting_payload(VEngineMacEditor)
 

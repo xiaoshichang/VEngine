@@ -1,7 +1,9 @@
 #pragma once
 
-#include "Editor/Core/EditorProjectPackager.h"
+#include "Editor/Core/EditorProjectPacker.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
+
+#include <memory>
 
 namespace ve::editor
 {
@@ -17,8 +19,9 @@ namespace ve::editor
 
     private:
         [[nodiscard]] static const char* ToStatusText(PackageStepStatus status) noexcept;
+        [[nodiscard]] static const char* GetHostPlatformText() noexcept;
 
-        EditorProjectPackager packager_;
+        std::unique_ptr<EditorProjectPacker> packer_;
         bool isOpen_ = false;
         bool hasStarted_ = false;
     };

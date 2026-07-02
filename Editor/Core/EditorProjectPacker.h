@@ -4,7 +4,10 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 
+#include <cstddef>
+#include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -35,14 +38,23 @@ namespace ve::editor
         std::string message;
     };
 
-    class EditorProjectPackager : public NonMovable
+    struct PackageInfoDesc
+    {
+        Path packageInfoPath;
+        std::string platform;
+        std::string playerExecutable;
+        std::string dataRoot;
+        std::string appBundle;
+    };
+
+    class EditorProjectPacker : public NonMovable
     {
     public:
-        EditorProjectPackager() = default;
-        ~EditorProjectPackager();
+        EditorProjectPacker() = default;
+        virtual ~EditorProjectPacker();
 
         void Reset();
-        void StartWindowsPackage(Editor& editor);
+        void Start(Editor& editor);
         void Advance(Editor& editor);
 
         [[nodiscard]] PackageRunStatus GetStatus() const noexcept;
@@ -52,17 +64,25 @@ namespace ve::editor
         [[nodiscard]] const std::string& GetLogPath() const noexcept;
         [[nodiscard]] const std::string& GetOutputPath() const noexcept;
 
-    private:
-        [[nodiscard]] ErrorCode PrepareDirectories();
+    protected:
+        [[nodiscard]] virtual const char* GetPlatformName() const noexcept = 0;
+        [[nodiscard]] virtual std::string GetRunningStatusMessage() const = 0;
+        [[nodiscard]] virtual std::string GetSucceededStatusMessage() const = 0;
+        virtual void ConfigurePackagePaths() = 0;
+        virtual void InitializeSteps() = 0;
+        [[nodiscard]] virtual ErrorCode RunStep(size_t stepIndex, Editor& editor) = 0;
+        virtual void ResetPlatformState();
+
+        [[nodiscard]] ErrorCode PreparePackageDirectories();
         [[nodiscard]] ErrorCode RefreshAssetDatabase(Editor& editor);
         [[nodiscard]] ErrorCode ExportAssetManifest(Editor& editor);
         [[nodiscard]] ErrorCode CopyRuntimeAssets(Editor& editor);
         [[nodiscard]] ErrorCode CopyManagedScripts();
-        [[nodiscard]] ErrorCode CopyWindowsPlayerExecutable();
-        [[nodiscard]] ErrorCode CopyWindowsPlayerManagedRuntime();
-        [[nodiscard]] ErrorCode WritePackageInfo();
+        [[nodiscard]] ErrorCode WritePackageInfo(const PackageInfoDesc& desc);
+        [[nodiscard]] ErrorCode CreateDirectory(const Path& path);
+        [[nodiscard]] ErrorCode CopyFileWithDirectories(const Path& sourcePath, const Path& destinationPath);
+        [[nodiscard]] ErrorCode CopyDirectory(const Path& sourcePath, const Path& destinationPath);
 
-        void InitializeSteps();
         void CompleteCurrentStep(std::string message);
         void FailCurrentStep(ErrorCode code, std::string message);
         void OpenLogFile();
@@ -74,6 +94,7 @@ namespace ve::editor
         [[nodiscard]] static std::string MakePackageDirectoryName(const std::string& projectName, const std::string& timestamp);
         [[nodiscard]] static std::string SanitizePathSegment(std::string text);
         [[nodiscard]] static std::string PathToString(const Path& path);
+        [[nodiscard]] static std::filesystem::path ToNativePath(const Path& path);
 
         PackageRunStatus status_ = PackageRunStatus::Idle;
         std::vector<PackageStepState> steps_;
@@ -88,8 +109,11 @@ namespace ve::editor
         Path outputRoot_;
         Path packageBinRoot_;
         Path packageDataRoot_;
+        Path packageRuntimeLogRoot_;
         std::string logPathText_;
         std::string outputPathText_;
         std::ofstream logFile_;
     };
+
+    [[nodiscard]] std::unique_ptr<EditorProjectPacker> CreateEditorProjectPackerForHostPlatform();
 } // namespace ve::editor

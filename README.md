@@ -108,8 +108,10 @@ cmake --preset mac-debug
 cmake --build --preset mac-debug
 ```
 
-The first-stage macOS path builds `VEngineMacPlayer`, `VEngineMacEditor`, and the Metal triangle demo target when
-Metal RHI demos are enabled.
+The first-stage macOS path builds `VEngineMacPlayer` as a normal executable, `VEngineMacEditor` as an app bundle, and the
+Metal triangle demo target when Metal RHI demos are enabled. The macOS Editor's package entry updates the CMake/Xcode
+project, builds `VEngineMacPlayer`, then wraps the player executable, project data, managed scripts, and app-local .NET
+runtime payload into a generated `.app`.
 
 ## Clean Regeneration
 

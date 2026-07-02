@@ -1,4 +1,4 @@
-#include "Editor/Core/EditorProjectPackager.h"
+#include "Editor/Core/EditorProjectPacker.h"
 
 #include "Editor/Core/Editor.h"
 #include "Editor/Core/EditorAssetDatabase.h"
@@ -10,9 +10,10 @@
 
 #include <algorithm>
 #include <boost/json.hpp>
-#include <chrono>
 #include <cctype>
+#include <chrono>
 #include <ctime>
+#include <exception>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
@@ -23,48 +24,8 @@ namespace ve::editor
 {
     namespace
     {
-        constexpr const char* WindowsPlatformName = "Windows";
-        constexpr const char* PlayerExecutableName = "VEngineWinPlayer.exe";
         constexpr const char* PackageManifestFilename = "AssetManifest.json";
-        constexpr const char* PackageInfoFilename = "PackageInfo.json";
         constexpr const char* ScriptAssemblyManifestFilename = "ScriptAssembly.json";
-        constexpr const char* DotNetRuntimeRelativePath = "DotNet/win-x64/10.0.9";
-
-        [[nodiscard]] std::filesystem::path ToNativePath(const Path& path)
-        {
-            return std::filesystem::path(path.GetString());
-        }
-
-        [[nodiscard]] bool CopyFileWithDirectories(const Path& sourcePath, const Path& destinationPath, std::error_code& errorCode)
-        {
-            const std::filesystem::path nativeSource = ToNativePath(sourcePath);
-            const std::filesystem::path nativeDestination = ToNativePath(destinationPath);
-            std::filesystem::create_directories(nativeDestination.parent_path(), errorCode);
-            if (errorCode)
-            {
-                return false;
-            }
-
-            std::filesystem::copy_file(nativeSource, nativeDestination, std::filesystem::copy_options::overwrite_existing, errorCode);
-            return !errorCode;
-        }
-
-        [[nodiscard]] bool CopyDirectory(const Path& sourcePath, const Path& destinationPath, std::error_code& errorCode)
-        {
-            const std::filesystem::path nativeSource = ToNativePath(sourcePath);
-            const std::filesystem::path nativeDestination = ToNativePath(destinationPath);
-            std::filesystem::create_directories(nativeDestination, errorCode);
-            if (errorCode)
-            {
-                return false;
-            }
-
-            std::filesystem::copy(nativeSource,
-                                  nativeDestination,
-                                  std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing,
-                                  errorCode);
-            return !errorCode;
-        }
 
         [[nodiscard]] std::string MakeErrorMessage(const char* operation, const Path& path, const std::error_code& errorCode)
         {
@@ -130,12 +91,12 @@ namespace ve::editor
         }
     } // namespace
 
-    EditorProjectPackager::~EditorProjectPackager()
+    EditorProjectPacker::~EditorProjectPacker()
     {
         CloseLogFile();
     }
 
-    void EditorProjectPackager::Reset()
+    void EditorProjectPacker::Reset()
     {
         CloseLogFile();
         status_ = PackageRunStatus::Idle;
@@ -151,11 +112,13 @@ namespace ve::editor
         outputRoot_ = Path();
         packageBinRoot_ = Path();
         packageDataRoot_ = Path();
+        packageRuntimeLogRoot_ = Path();
         logPathText_.clear();
         outputPathText_.clear();
+        ResetPlatformState();
     }
 
-    void EditorProjectPackager::StartWindowsPackage(Editor& editor)
+    void EditorProjectPacker::Start(Editor& editor)
     {
         Reset();
 
@@ -171,10 +134,8 @@ namespace ve::editor
         projectRoot_ = Path(editor.GetCurrentProjectPath());
         buildRoot_ = projectRoot_ / "Build";
         logDirectory_ = buildRoot_ / "Logs";
-        logPath_ = logDirectory_ / ("Package_Windows_" + timestamp_ + ".log");
-        outputRoot_ = buildRoot_ / WindowsPlatformName / MakePackageDirectoryName(projectName_, timestamp_);
-        packageBinRoot_ = outputRoot_ / "Bin";
-        packageDataRoot_ = outputRoot_ / "Data";
+
+        ConfigurePackagePaths();
         logPathText_ = PathToString(logPath_);
         outputPathText_ = PathToString(outputRoot_);
 
@@ -186,13 +147,13 @@ namespace ve::editor
         }
 
         status_ = PackageRunStatus::Running;
-        statusMessage_ = "Packaging Windows build.";
-        LogLine("Started Windows packaging.");
+        statusMessage_ = GetRunningStatusMessage();
+        LogLine(std::string("Started ") + GetPlatformName() + " packaging.");
         LogLine("Project: " + projectRoot_.GetString());
         LogLine("Output: " + outputRoot_.GetString());
     }
 
-    void EditorProjectPackager::Advance(Editor& editor)
+    void EditorProjectPacker::Advance(Editor& editor)
     {
         if (status_ != PackageRunStatus::Running || currentStepIndex_ >= steps_.size())
         {
@@ -208,36 +169,7 @@ namespace ve::editor
         ErrorCode result = ErrorCode::Unknown;
         try
         {
-            switch (currentStepIndex_)
-            {
-            case 0:
-                result = PrepareDirectories();
-                break;
-            case 1:
-                result = RefreshAssetDatabase(editor);
-                break;
-            case 2:
-                result = ExportAssetManifest(editor);
-                break;
-            case 3:
-                result = CopyRuntimeAssets(editor);
-                break;
-            case 4:
-                result = CopyManagedScripts();
-                break;
-            case 5:
-                result = CopyWindowsPlayerExecutable();
-                break;
-            case 6:
-                result = CopyWindowsPlayerManagedRuntime();
-                break;
-            case 7:
-                result = WritePackageInfo();
-                break;
-            default:
-                result = ErrorCode::InvalidState;
-                break;
-            }
+            result = RunStep(currentStepIndex_, editor);
         }
         catch (const std::filesystem::filesystem_error& exception)
         {
@@ -261,18 +193,18 @@ namespace ve::editor
         if (currentStepIndex_ >= steps_.size())
         {
             status_ = PackageRunStatus::Succeeded;
-            statusMessage_ = "Windows package completed.";
+            statusMessage_ = GetSucceededStatusMessage();
             LogLine("Packaging completed successfully.");
             CloseLogFile();
         }
     }
 
-    PackageRunStatus EditorProjectPackager::GetStatus() const noexcept
+    PackageRunStatus EditorProjectPacker::GetStatus() const noexcept
     {
         return status_;
     }
 
-    float EditorProjectPackager::GetProgress() const noexcept
+    float EditorProjectPacker::GetProgress() const noexcept
     {
         if (steps_.empty())
         {
@@ -283,70 +215,70 @@ namespace ve::editor
         return static_cast<float>(completedCount) / static_cast<float>(steps_.size());
     }
 
-    const std::vector<PackageStepState>& EditorProjectPackager::GetSteps() const noexcept
+    const std::vector<PackageStepState>& EditorProjectPacker::GetSteps() const noexcept
     {
         return steps_;
     }
 
-    const std::string& EditorProjectPackager::GetStatusMessage() const noexcept
+    const std::string& EditorProjectPacker::GetStatusMessage() const noexcept
     {
         return statusMessage_;
     }
 
-    const std::string& EditorProjectPackager::GetLogPath() const noexcept
+    const std::string& EditorProjectPacker::GetLogPath() const noexcept
     {
         return logPathText_;
     }
 
-    const std::string& EditorProjectPackager::GetOutputPath() const noexcept
+    const std::string& EditorProjectPacker::GetOutputPath() const noexcept
     {
         return outputPathText_;
     }
 
-    ErrorCode EditorProjectPackager::PrepareDirectories()
+    void EditorProjectPacker::ResetPlatformState() {}
+
+    ErrorCode EditorProjectPacker::PreparePackageDirectories()
     {
-        std::error_code errorCode;
-        std::filesystem::create_directories(ToNativePath(logDirectory_), errorCode);
-        if (errorCode)
+        ErrorCode result = CreateDirectory(logDirectory_);
+        if (result != ErrorCode::None)
         {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", logDirectory_, errorCode));
-            return ErrorCode::IOError;
+            return result;
         }
 
-        std::filesystem::create_directories(ToNativePath(packageBinRoot_), errorCode);
-        if (errorCode)
+        result = CreateDirectory(packageBinRoot_);
+        if (result != ErrorCode::None)
         {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", packageBinRoot_, errorCode));
-            return ErrorCode::IOError;
+            return result;
         }
 
-        std::filesystem::create_directories(ToNativePath(packageDataRoot_), errorCode);
-        if (errorCode)
+        result = CreateDirectory(packageDataRoot_);
+        if (result != ErrorCode::None)
         {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", packageDataRoot_, errorCode));
-            return ErrorCode::IOError;
+            return result;
         }
 
-        const Path packageRuntimeLogRoot = outputRoot_ / "Logs";
-        std::filesystem::create_directories(ToNativePath(packageRuntimeLogRoot), errorCode);
-        if (errorCode)
+        if (!packageRuntimeLogRoot_.IsEmpty())
         {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", packageRuntimeLogRoot, errorCode));
-            return ErrorCode::IOError;
+            result = CreateDirectory(packageRuntimeLogRoot_);
+            if (result != ErrorCode::None)
+            {
+                return result;
+            }
         }
 
         const Path sourceDescriptor = EditorProject::GetDescriptorPath(projectRoot_);
         const Path destinationDescriptor = packageDataRoot_ / EditorProject::DescriptorFilename;
-        if (!CopyFileWithDirectories(sourceDescriptor, destinationDescriptor, errorCode))
+        result = CopyFileWithDirectories(sourceDescriptor, destinationDescriptor);
+        if (result != ErrorCode::None)
         {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", sourceDescriptor, errorCode));
-            return ErrorCode::IOError;
+            return result;
         }
+
         LogLine("Copied project descriptor: " + sourceDescriptor.GetString() + " -> " + destinationDescriptor.GetString());
         return ErrorCode::None;
     }
 
-    ErrorCode EditorProjectPackager::RefreshAssetDatabase(Editor& editor)
+    ErrorCode EditorProjectPacker::RefreshAssetDatabase(Editor& editor)
     {
         const ErrorCode result = editor.GetAssetDatabase().Refresh();
         if (result != ErrorCode::None)
@@ -359,7 +291,7 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    ErrorCode EditorProjectPackager::ExportAssetManifest(Editor& editor)
+    ErrorCode EditorProjectPacker::ExportAssetManifest(Editor& editor)
     {
         AssetManifest manifest;
         for (const auto& pair : editor.GetAssetDatabase().GetAssetsByID())
@@ -388,7 +320,7 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    ErrorCode EditorProjectPackager::CopyRuntimeAssets(Editor& editor)
+    ErrorCode EditorProjectPacker::CopyRuntimeAssets(Editor& editor)
     {
         size_t copiedCount = 0;
         for (const auto& pair : editor.GetAssetDatabase().GetAssetsByID())
@@ -401,11 +333,10 @@ namespace ve::editor
 
             const Path sourcePath = ResolveEditorContentPath(projectRoot_, runtimePath);
             const Path destinationPath = packageDataRoot_ / runtimePath;
-            std::error_code errorCode;
-            if (!CopyFileWithDirectories(sourcePath, destinationPath, errorCode))
+            ErrorCode result = CopyFileWithDirectories(sourcePath, destinationPath);
+            if (result != ErrorCode::None)
             {
-                LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", sourcePath, errorCode));
-                return ErrorCode::IOError;
+                return result;
             }
 
             ++copiedCount;
@@ -433,10 +364,10 @@ namespace ve::editor
 
                 const Path artifactSourcePath = ResolveEditorContentPath(projectRoot_, artifactRuntimePath);
                 const Path artifactDestinationPath = packageDataRoot_ / artifactRuntimePath;
-                if (!CopyFileWithDirectories(artifactSourcePath, artifactDestinationPath, errorCode))
+                result = CopyFileWithDirectories(artifactSourcePath, artifactDestinationPath);
+                if (result != ErrorCode::None)
                 {
-                    LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", artifactSourcePath, errorCode));
-                    return ErrorCode::IOError;
+                    return result;
                 }
 
                 ++copiedCount;
@@ -448,7 +379,7 @@ namespace ve::editor
         return ErrorCode::None;
     }
 
-    ErrorCode EditorProjectPackager::CopyManagedScripts()
+    ErrorCode EditorProjectPacker::CopyManagedScripts()
     {
         const Path sourceRoot = projectRoot_ / "Library" / "Scripting" / "output";
         if (!FileSystem::IsDirectory(sourceRoot))
@@ -465,15 +396,14 @@ namespace ve::editor
         }
 
         const Path destinationRoot = packageDataRoot_ / "Scripts";
-        std::error_code errorCode;
-        std::filesystem::create_directories(ToNativePath(destinationRoot), errorCode);
-        if (errorCode)
+        ErrorCode result = CreateDirectory(destinationRoot);
+        if (result != ErrorCode::None)
         {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", destinationRoot, errorCode));
-            return ErrorCode::IOError;
+            return result;
         }
 
         size_t copiedFileCount = 0;
+        std::error_code errorCode;
         for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(ToNativePath(sourceRoot), errorCode))
         {
             if (errorCode)
@@ -490,10 +420,10 @@ namespace ve::editor
 
             const Path sourceFile(entry.path().generic_string());
             const Path destinationFile = destinationRoot / entry.path().filename().generic_string();
-            if (!CopyFileWithDirectories(sourceFile, destinationFile, errorCode))
+            result = CopyFileWithDirectories(sourceFile, destinationFile);
+            if (result != ErrorCode::None)
             {
-                LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", sourceFile, errorCode));
-                return ErrorCode::IOError;
+                return result;
             }
 
             ++copiedFileCount;
@@ -526,105 +456,154 @@ namespace ve::editor
             }
         }
 
-        LogLine("Copied managed scripts: " + sourceRoot.GetString() + " -> " + destinationRoot.GetString() + ". File count: " + std::to_string(copiedFileCount));
+        LogLine("Copied managed scripts: " + sourceRoot.GetString() + " -> " + destinationRoot.GetString() +
+                ". File count: " + std::to_string(copiedFileCount));
         return ErrorCode::None;
     }
 
-    ErrorCode EditorProjectPackager::CopyWindowsPlayerExecutable()
-    {
-        const Path playerSourcePath = FileSystem::GetExecutableDirectory() / PlayerExecutableName;
-        const Path playerDestinationPath = packageBinRoot_ / PlayerExecutableName;
-
-        if (!FileSystem::IsFile(playerSourcePath))
-        {
-            LogError(ErrorCode::NotFound, "Windows player executable was not found: " + playerSourcePath.GetString());
-            return ErrorCode::NotFound;
-        }
-
-        std::error_code errorCode;
-        if (!CopyFileWithDirectories(playerSourcePath, playerDestinationPath, errorCode))
-        {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", playerSourcePath, errorCode));
-            return ErrorCode::IOError;
-        }
-
-        LogLine("Copied Windows player: " + playerSourcePath.GetString() + " -> " + playerDestinationPath.GetString());
-        return ErrorCode::None;
-    }
-
-    ErrorCode EditorProjectPackager::CopyWindowsPlayerManagedRuntime()
-    {
-        const Path executableDirectory = FileSystem::GetExecutableDirectory();
-        const Path scriptHostSource = executableDirectory / "Managed" / "VEngine.ScriptHost";
-        const Path scriptHostDestination = packageBinRoot_ / "Managed" / "VEngine.ScriptHost";
-
-        std::error_code errorCode;
-        if (!CopyDirectory(scriptHostSource, scriptHostDestination, errorCode))
-        {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", scriptHostSource, errorCode));
-            return ErrorCode::IOError;
-        }
-
-        const Path dotNetSource = executableDirectory / DotNetRuntimeRelativePath;
-        const Path dotNetDestination = packageBinRoot_ / DotNetRuntimeRelativePath;
-        if (!FileSystem::IsDirectory(dotNetSource))
-        {
-            LogError(ErrorCode::NotFound, "App-local .NET runtime source was not found: " + dotNetSource.GetString());
-            return ErrorCode::NotFound;
-        }
-
-        if (!CopyDirectory(dotNetSource, dotNetDestination, errorCode))
-        {
-            LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", dotNetSource, errorCode));
-            return ErrorCode::IOError;
-        }
-
-        LogLine("Copied app-local .NET runtime: " + dotNetSource.GetString() + " -> " + dotNetDestination.GetString());
-        LogLine("Copied Windows player managed runtime files.");
-        return ErrorCode::None;
-    }
-
-    ErrorCode EditorProjectPackager::WritePackageInfo()
+    ErrorCode EditorProjectPacker::WritePackageInfo(const PackageInfoDesc& desc)
     {
         boost::json::object object;
         object["schemaVersion"] = 1;
-        object["platform"] = WindowsPlatformName;
+        object["platform"] = desc.platform;
         object["projectName"] = projectName_;
         object["projectRoot"] = projectRoot_.GetString();
         object["outputPath"] = outputRoot_.GetString();
         object["generatedAt"] = timestamp_;
-        object["playerExecutable"] = std::string("Bin/") + PlayerExecutableName;
-        object["dataRoot"] = "Data";
-        object["assetManifest"] = std::string("Data/") + PackageManifestFilename;
+        object["playerExecutable"] = desc.playerExecutable;
+        object["dataRoot"] = desc.dataRoot;
+        object["assetManifest"] = desc.dataRoot + "/" + PackageManifestFilename;
         object["packagingLog"] = logPath_.GetString();
+        if (!desc.appBundle.empty())
+        {
+            object["appBundle"] = desc.appBundle;
+        }
 
-        const Path packageInfoPath = outputRoot_ / PackageInfoFilename;
-        const ErrorCode writeResult = FileSystem::WriteTextFile(packageInfoPath, JsonUtils::SerializePretty(object));
+        const ErrorCode writeResult = FileSystem::WriteTextFile(desc.packageInfoPath, JsonUtils::SerializePretty(object));
         if (writeResult != ErrorCode::None)
         {
-            LogError(writeResult, "Failed to write package info: " + packageInfoPath.GetString());
+            LogError(writeResult, "Failed to write package info: " + desc.packageInfoPath.GetString());
             return writeResult;
         }
 
-        LogLine("Wrote package info: " + packageInfoPath.GetString());
+        LogLine("Wrote package info: " + desc.packageInfoPath.GetString());
         return ErrorCode::None;
     }
 
-    void EditorProjectPackager::InitializeSteps()
+    ErrorCode EditorProjectPacker::CreateDirectory(const Path& path)
     {
-        steps_ = {
-            PackageStepState{.name = "Prepare package directories"},
-            PackageStepState{.name = "Refresh asset database"},
-            PackageStepState{.name = "Export asset manifest"},
-            PackageStepState{.name = "Copy runtime assets"},
-            PackageStepState{.name = "Copy managed scripts"},
-            PackageStepState{.name = "Copy Windows player"},
-            PackageStepState{.name = "Copy Windows managed runtime"},
-            PackageStepState{.name = "Write package info"},
-        };
+        std::error_code errorCode;
+        std::filesystem::create_directories(ToNativePath(path), errorCode);
+        if (errorCode)
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", path, errorCode));
+            return ErrorCode::IOError;
+        }
+
+        return ErrorCode::None;
     }
 
-    void EditorProjectPackager::CompleteCurrentStep(std::string message)
+    ErrorCode EditorProjectPacker::CopyFileWithDirectories(const Path& sourcePath, const Path& destinationPath)
+    {
+        const std::filesystem::path nativeSource = ToNativePath(sourcePath);
+        const std::filesystem::path nativeDestination = ToNativePath(destinationPath);
+
+        std::error_code errorCode;
+        std::filesystem::create_directories(nativeDestination.parent_path(), errorCode);
+        if (errorCode)
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", Path(nativeDestination.parent_path().generic_string()), errorCode));
+            return ErrorCode::IOError;
+        }
+
+        std::filesystem::copy_file(nativeSource, nativeDestination, std::filesystem::copy_options::overwrite_existing, errorCode);
+        if (errorCode)
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", sourcePath, errorCode));
+            return ErrorCode::IOError;
+        }
+
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectPacker::CopyDirectory(const Path& sourcePath, const Path& destinationPath)
+    {
+        const std::filesystem::path nativeSource = ToNativePath(sourcePath);
+        const std::filesystem::path nativeDestination = ToNativePath(destinationPath);
+
+        std::error_code errorCode;
+        if (!std::filesystem::is_directory(nativeSource, errorCode))
+        {
+            LogError(ErrorCode::NotFound, "Directory was not found: " + sourcePath.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        std::filesystem::create_directories(nativeDestination, errorCode);
+        if (errorCode)
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", destinationPath, errorCode));
+            return ErrorCode::IOError;
+        }
+
+        for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(nativeSource, errorCode))
+        {
+            if (errorCode)
+            {
+                LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", sourcePath, errorCode));
+                return ErrorCode::IOError;
+            }
+
+            const std::filesystem::path relativePath = std::filesystem::relative(entry.path(), nativeSource, errorCode);
+            if (errorCode)
+            {
+                LogError(ErrorCode::IOError, MakeErrorMessage("Resolve relative path", sourcePath, errorCode));
+                return ErrorCode::IOError;
+            }
+
+            const std::filesystem::path targetPath = nativeDestination / relativePath;
+            if (entry.is_directory(errorCode))
+            {
+                std::filesystem::create_directories(targetPath, errorCode);
+                if (errorCode)
+                {
+                    LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", Path(targetPath.generic_string()), errorCode));
+                    return ErrorCode::IOError;
+                }
+
+                continue;
+            }
+
+            if (!entry.is_regular_file(errorCode))
+            {
+                errorCode.clear();
+                continue;
+            }
+
+            std::filesystem::create_directories(targetPath.parent_path(), errorCode);
+            if (errorCode)
+            {
+                LogError(ErrorCode::IOError, MakeErrorMessage("Create directory", Path(targetPath.parent_path().generic_string()), errorCode));
+                return ErrorCode::IOError;
+            }
+
+            std::filesystem::copy_file(entry.path(), targetPath, std::filesystem::copy_options::overwrite_existing, errorCode);
+            if (errorCode)
+            {
+                LogError(ErrorCode::IOError, MakeErrorMessage("Copy file", Path(entry.path().generic_string()), errorCode));
+                return ErrorCode::IOError;
+            }
+        }
+
+        if (errorCode)
+        {
+            LogError(ErrorCode::IOError, MakeErrorMessage("Copy directory", sourcePath, errorCode));
+            return ErrorCode::IOError;
+        }
+
+        return ErrorCode::None;
+    }
+
+    void EditorProjectPacker::CompleteCurrentStep(std::string message)
     {
         PackageStepState& step = steps_[currentStepIndex_];
         step.status = PackageStepStatus::Succeeded;
@@ -632,7 +611,7 @@ namespace ve::editor
         LogLine("Step completed: " + step.name);
     }
 
-    void EditorProjectPackager::FailCurrentStep(ErrorCode code, std::string message)
+    void EditorProjectPacker::FailCurrentStep(ErrorCode code, std::string message)
     {
         PackageStepState& step = steps_[currentStepIndex_];
         step.status = PackageStepStatus::Failed;
@@ -644,7 +623,7 @@ namespace ve::editor
         CloseLogFile();
     }
 
-    void EditorProjectPackager::OpenLogFile()
+    void EditorProjectPacker::OpenLogFile()
     {
         std::error_code errorCode;
         std::filesystem::create_directories(ToNativePath(logDirectory_), errorCode);
@@ -663,7 +642,7 @@ namespace ve::editor
         }
     }
 
-    void EditorProjectPackager::CloseLogFile()
+    void EditorProjectPacker::CloseLogFile()
     {
         if (logFile_.is_open())
         {
@@ -672,7 +651,7 @@ namespace ve::editor
         }
     }
 
-    void EditorProjectPackager::LogLine(const std::string& message)
+    void EditorProjectPacker::LogLine(const std::string& message)
     {
         if (logFile_.is_open())
         {
@@ -681,12 +660,12 @@ namespace ve::editor
         }
     }
 
-    void EditorProjectPackager::LogError(ErrorCode code, const std::string& message)
+    void EditorProjectPacker::LogError(ErrorCode code, const std::string& message)
     {
         LogLine(std::string("[Error] ") + ToString(code) + ": " + message);
     }
 
-    std::string EditorProjectPackager::MakeTimestamp()
+    std::string EditorProjectPacker::MakeTimestamp()
     {
         const auto now = std::chrono::system_clock::now();
         const std::time_t timeValue = std::chrono::system_clock::to_time_t(now);
@@ -702,12 +681,12 @@ namespace ve::editor
         return stream.str();
     }
 
-    std::string EditorProjectPackager::MakePackageDirectoryName(const std::string& projectName, const std::string& timestamp)
+    std::string EditorProjectPacker::MakePackageDirectoryName(const std::string& projectName, const std::string& timestamp)
     {
         return SanitizePathSegment(projectName.empty() ? "VEngineProject" : projectName) + "_" + timestamp;
     }
 
-    std::string EditorProjectPackager::SanitizePathSegment(std::string text)
+    std::string EditorProjectPacker::SanitizePathSegment(std::string text)
     {
         for (char& value : text)
         {
@@ -727,8 +706,13 @@ namespace ve::editor
         return text;
     }
 
-    std::string EditorProjectPackager::PathToString(const Path& path)
+    std::string EditorProjectPacker::PathToString(const Path& path)
     {
         return path.GetString();
+    }
+
+    std::filesystem::path EditorProjectPacker::ToNativePath(const Path& path)
+    {
+        return std::filesystem::path(path.GetString());
     }
 } // namespace ve::editor
