@@ -5,6 +5,7 @@
 #include "Editor/Core/EditorAssetPath.h"
 #include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
+#include "Engine/Runtime/Core/Platform.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Resource/AssetManifest.h"
 
@@ -77,14 +78,20 @@ namespace ve::editor
                 }
 
                 const boost::json::object& artifacts = artifactsValue->as_object();
-                for (const char* key : {"d3d11", "d3d12", "metal", "reflection"})
+                const auto collectArtifactPath = [&artifacts, &paths](const char* key)
                 {
                     const std::string artifactPath = ReadString(artifacts, key);
                     if (!artifactPath.empty())
                     {
                         paths.emplace_back(artifactPath);
                     }
-                }
+                };
+#if VE_PLATFORM_WINDOWS
+                collectArtifactPath("d3d11");
+                collectArtifactPath("d3d12");
+#elif VE_PLATFORM_MACOS
+                collectArtifactPath("metal");
+#endif
             }
 
             return Result<std::vector<Path>>::Success(std::move(paths));

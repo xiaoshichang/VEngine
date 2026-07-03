@@ -21,7 +21,6 @@ namespace ve::editor
         void ResetPlatformState() override;
 
         [[nodiscard]] ErrorCode PrepareMacBundleDirectories();
-        [[nodiscard]] ErrorCode ConfigureMacXcodeProject();
         [[nodiscard]] ErrorCode BuildMacPlayer();
         [[nodiscard]] ErrorCode CopyMacPlayerExecutable();
         [[nodiscard]] ErrorCode CopyMacPlayerManagedRuntime();
@@ -29,15 +28,14 @@ namespace ve::editor
         [[nodiscard]] ErrorCode SignMacAppBundle();
         [[nodiscard]] ErrorCode WriteMacPackageInfo();
         [[nodiscard]] ErrorCode RunShellCommand(const std::string& command);
-        [[nodiscard]] std::string BuildCMakeConfigureCommand() const;
         [[nodiscard]] std::string BuildCMakeBuildCommand() const;
         [[nodiscard]] Path GetMacPlayerBuildOutputPath() const;
 
         [[nodiscard]] static std::string ShellQuote(std::string_view text);
 
+        Path appBundleRoot_;
         Path appContentsRoot_;
         Path appResourcesRoot_;
-        Path cmakeSourceRoot_;
         Path cmakeBinaryRoot_;
         std::string cmakeBuildConfig_;
     };

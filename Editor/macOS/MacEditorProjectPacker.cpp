@@ -20,12 +20,6 @@ namespace ve::editor
         constexpr const char* MacDotNetRuntimeRelativePath = "DotNet/osx-arm64/10.0.9";
         constexpr const char* MacManagedHostRelativePath = "Managed/VEngine.ScriptHost";
 
-#if defined(VE_PROJECT_SOURCE_DIR)
-        constexpr const char* CMakeSourceDirectory = VE_PROJECT_SOURCE_DIR;
-#else
-        constexpr const char* CMakeSourceDirectory = "";
-#endif
-
 #if defined(VE_CMAKE_BINARY_DIR)
         constexpr const char* CMakeBinaryDirectory = VE_CMAKE_BINARY_DIR;
 #else
@@ -128,24 +122,25 @@ namespace ve::editor
 
     void EditorProjectPackerMac::ConfigurePackagePaths()
     {
+        const std::string packageDirectoryName = MakePackageDirectoryName(projectName_, timestamp_);
+        outputRoot_ = buildRoot_ / MacPlatformName / packageDirectoryName;
+        logDirectory_ = outputRoot_;
         logPath_ = logDirectory_ / ("Package_Mac_" + timestamp_ + ".log");
-        outputRoot_ = buildRoot_ / MacPlatformName / (MakePackageDirectoryName(projectName_, timestamp_) + ".app");
-        appContentsRoot_ = outputRoot_ / "Contents";
+        appBundleRoot_ = outputRoot_ / (packageDirectoryName + ".app");
+        appContentsRoot_ = appBundleRoot_ / "Contents";
         appResourcesRoot_ = appContentsRoot_ / "Resources";
         packageBinRoot_ = appContentsRoot_ / "MacOS";
         packageDataRoot_ = appContentsRoot_ / "Data";
         packageRuntimeLogRoot_ = appContentsRoot_ / "Logs";
 
-        cmakeSourceRoot_ = Path(CMakeSourceDirectory);
         cmakeBinaryRoot_ = Path(CMakeBinaryDirectory);
         cmakeBuildConfig_ = CMakeBuildConfig;
 
-        if (cmakeSourceRoot_.IsEmpty() || cmakeBinaryRoot_.IsEmpty())
+        if (cmakeBinaryRoot_.IsEmpty())
         {
             const Path executableDirectory = FileSystem::GetExecutableDirectory();
             const Path buildConfigDirectory = executableDirectory.GetParentPath().GetParentPath().GetParentPath();
             cmakeBinaryRoot_ = buildConfigDirectory.GetParentPath();
-            cmakeSourceRoot_ = cmakeBinaryRoot_.GetParentPath().GetParentPath();
         }
 
         if (cmakeBuildConfig_.empty())
@@ -157,12 +152,11 @@ namespace ve::editor
     void EditorProjectPackerMac::InitializeSteps()
     {
         steps_ = {
-            PackageStepState{.name = "Prepare macOS app directories"},
+            PackageStepState{.name = "Prepare macOS package directories"},
             PackageStepState{.name = "Refresh asset database"},
             PackageStepState{.name = "Export asset manifest"},
             PackageStepState{.name = "Copy runtime assets"},
             PackageStepState{.name = "Copy managed scripts"},
-            PackageStepState{.name = "Export Xcode project"},
             PackageStepState{.name = "Build macOS player"},
             PackageStepState{.name = "Copy macOS player"},
             PackageStepState{.name = "Copy macOS managed runtime"},
@@ -187,18 +181,16 @@ namespace ve::editor
         case 4:
             return CopyManagedScripts();
         case 5:
-            return ConfigureMacXcodeProject();
-        case 6:
             return BuildMacPlayer();
-        case 7:
+        case 6:
             return CopyMacPlayerExecutable();
-        case 8:
+        case 7:
             return CopyMacPlayerManagedRuntime();
-        case 9:
+        case 8:
             return WriteMacInfoPlist();
-        case 10:
+        case 9:
             return SignMacAppBundle();
-        case 11:
+        case 10:
             return WriteMacPackageInfo();
         default:
             return ErrorCode::InvalidState;
@@ -207,9 +199,9 @@ namespace ve::editor
 
     void EditorProjectPackerMac::ResetPlatformState()
     {
+        appBundleRoot_ = Path();
         appContentsRoot_ = Path();
         appResourcesRoot_ = Path();
-        cmakeSourceRoot_ = Path();
         cmakeBinaryRoot_ = Path();
         cmakeBuildConfig_.clear();
     }
@@ -231,21 +223,15 @@ namespace ve::editor
         return PreparePackageDirectories();
     }
 
-    ErrorCode EditorProjectPackerMac::ConfigureMacXcodeProject()
+    ErrorCode EditorProjectPackerMac::BuildMacPlayer()
     {
-        if (cmakeSourceRoot_.IsEmpty() || !FileSystem::IsDirectory(cmakeSourceRoot_))
+        if (cmakeBinaryRoot_.IsEmpty() || !FileSystem::IsDirectory(cmakeBinaryRoot_))
         {
-            LogError(ErrorCode::NotFound, "CMake source root was not found: " + cmakeSourceRoot_.GetString());
+            LogError(ErrorCode::NotFound, "CMake binary root was not found: " + cmakeBinaryRoot_.GetString());
             return ErrorCode::NotFound;
         }
 
-        LogLine("CMake source root: " + cmakeSourceRoot_.GetString());
         LogLine("CMake binary root: " + cmakeBinaryRoot_.GetString());
-        return RunShellCommand(BuildCMakeConfigureCommand());
-    }
-
-    ErrorCode EditorProjectPackerMac::BuildMacPlayer()
-    {
         ErrorCode result = RunShellCommand(BuildCMakeBuildCommand());
         if (result != ErrorCode::None)
         {
@@ -411,7 +397,7 @@ namespace ve::editor
 
     ErrorCode EditorProjectPackerMac::SignMacAppBundle()
     {
-        return RunShellCommand(std::string("/usr/bin/codesign --force --deep --sign - ") + ShellQuote(outputRoot_.GetString()));
+        return RunShellCommand(std::string("/usr/bin/codesign --force --deep --sign - ") + ShellQuote(appBundleRoot_.GetString()));
     }
 
     ErrorCode EditorProjectPackerMac::WriteMacPackageInfo()
@@ -421,7 +407,7 @@ namespace ve::editor
             .platform = MacPlatformName,
             .playerExecutable = std::string("Contents/MacOS/") + MacPlayerExecutableName,
             .dataRoot = "Contents/Data",
-            .appBundle = outputRoot_.GetString(),
+            .appBundle = appBundleRoot_.GetString(),
         });
     }
 
@@ -436,23 +422,6 @@ namespace ve::editor
         }
 
         return ErrorCode::None;
-    }
-
-    std::string EditorProjectPackerMac::BuildCMakeConfigureCommand() const
-    {
-        std::ostringstream stream;
-        stream << "cmake"
-               << " -S " << ShellQuote(cmakeSourceRoot_.GetString()) << " -B " << ShellQuote(cmakeBinaryRoot_.GetString()) << " -G Xcode"
-               << " -DVE_MAC_PLATFORM=MACOS"
-               << " -DVE_BUILD_PLAYER=ON"
-               << " -DVE_BUILD_EDITOR=ON"
-               << " -DVE_BUILD_TESTS=OFF"
-               << " -DVE_BUILD_TOOLS=ON"
-               << " -DVE_BUILD_MAC_PLAYER=ON"
-               << " -DVE_ENABLE_D3D11=OFF"
-               << " -DVE_ENABLE_D3D12=OFF"
-               << " -DVE_ENABLE_METAL=ON";
-        return stream.str();
     }
 
     std::string EditorProjectPackerMac::BuildCMakeBuildCommand() const
