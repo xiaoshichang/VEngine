@@ -61,6 +61,31 @@ function(ve_detect_boost_compiler boostRoot outVariable)
     endif()
 endfunction()
 
+function(ve_register_boost_config_dirs boostRoot)
+    if(NOT boostRoot)
+        return()
+    endif()
+
+    file(GLOB boostPackageConfigDirs LIST_DIRECTORIES true
+        "${boostRoot}/lib/cmake/Boost-*"
+    )
+    list(SORT boostPackageConfigDirs)
+    if(boostPackageConfigDirs)
+        list(GET boostPackageConfigDirs -1 boostPackageConfigDir)
+        set(Boost_DIR "${boostPackageConfigDir}" PARENT_SCOPE)
+    endif()
+
+    file(GLOB boostComponentConfigDirs LIST_DIRECTORIES true
+        "${boostRoot}/lib/cmake/boost_*-*"
+    )
+    foreach(boostComponentConfigDir IN LISTS boostComponentConfigDirs)
+        get_filename_component(boostComponentConfigName "${boostComponentConfigDir}" NAME)
+        if(boostComponentConfigName MATCHES "^(boost_[A-Za-z0-9_]+)-[0-9].*$")
+            set("${CMAKE_MATCH_1}_DIR" "${boostComponentConfigDir}" PARENT_SCOPE)
+        endif()
+    endforeach()
+endfunction()
+
 function(ve_setup_boost_library targetName)
     if(NOT TARGET ${targetName})
         message(FATAL_ERROR "ve_setup_boost_library target does not exist: ${targetName}")
@@ -90,6 +115,7 @@ function(ve_setup_boost_library targetName)
         list(PREPEND CMAKE_PREFIX_PATH "${boostRoot}")
         set(BOOST_ROOT "${boostRoot}")
         set(Boost_ROOT "${boostRoot}")
+        ve_register_boost_config_dirs("${boostRoot}")
     endif()
 
     set(Boost_USE_MULTITHREADED ON)
@@ -117,7 +143,15 @@ function(ve_setup_boost_library targetName)
         endif()
     endif()
 
-    find_package(Boost CONFIG REQUIRED COMPONENTS ${VE_BOOST_COMPONENTS})
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND boostRoot)
+        find_package(Boost CONFIG REQUIRED COMPONENTS ${VE_BOOST_COMPONENTS}
+            PATHS "${boostRoot}"
+            NO_DEFAULT_PATH
+            NO_CMAKE_FIND_ROOT_PATH
+        )
+    else()
+        find_package(Boost CONFIG REQUIRED COMPONENTS ${VE_BOOST_COMPONENTS})
+    endif()
 
     if(NOT TARGET VEngineBoost)
         add_library(VEngineBoost INTERFACE)

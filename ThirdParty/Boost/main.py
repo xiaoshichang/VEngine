@@ -6,6 +6,7 @@ import shutil
 import ssl
 import subprocess
 import sys
+import tempfile
 import zipfile
 import wget
 
@@ -161,7 +162,7 @@ def unzip_files_mac():
     print_step("unzip files")
     if not os.path.exists(boost_zip_file):
         raise Exception("boost_zip_file not exist: %s" % boost_zip_file)
-    subprocess.run(["tar", "xjf", boost_zip_file, "--verbose"], check=True)
+    subprocess.run(["tar", "xjf", boost_zip_file], check=True)
 
 
 def build_boost_mac():
@@ -254,6 +255,63 @@ def get_ios_sdk_path(config):
     except subprocess.CalledProcessError:
         raise Exception("find sdk failed")
 
+
+def get_mach_o_platform(object_file_path):
+    output = subprocess.check_output([
+        "vtool",
+        "-show-build",
+        object_file_path,
+    ], text=True, stderr=subprocess.STDOUT)
+
+    versionMinPlatformMap = {
+        "LC_VERSION_MIN_IPHONEOS": "IOS",
+        "LC_VERSION_MIN_IPHONEOS_SIMULATOR": "IOSSIMULATOR",
+        "LC_VERSION_MIN_MACOSX": "MACOS",
+        "LC_VERSION_MIN_WATCHOS": "WATCHOS",
+        "LC_VERSION_MIN_TVOS": "TVOS",
+    }
+
+    for line in output.splitlines():
+        strippedLine = line.strip()
+        if strippedLine.startswith("cmd "):
+            commandName = strippedLine[len("cmd "):]
+            if commandName in versionMinPlatformMap:
+                return versionMinPlatformMap[commandName]
+        if strippedLine.startswith("platform "):
+            return strippedLine[len("platform "):].strip()
+
+    raise Exception(f"Unable to determine Mach-O platform for: {object_file_path}")
+
+
+def validate_boost_ios_archive_platform(archive_path, expected_platform):
+    with tempfile.TemporaryDirectory(prefix="vengine-boost-validate-") as temp_dir:
+        members = subprocess.check_output([
+            "ar",
+            "-t",
+            archive_path,
+        ], text=True).splitlines()
+
+        object_members = [member for member in members if member.endswith(".o")]
+        if not object_members:
+            raise Exception(f"No object files found in archive: {archive_path}")
+
+        subprocess.run([
+            "ar",
+            "-x",
+            archive_path,
+            *object_members,
+        ], cwd=temp_dir, check=True)
+
+        for object_member in object_members:
+            object_file_path = os.path.join(temp_dir, object_member)
+            actual_platform = get_mach_o_platform(object_file_path)
+            if actual_platform != expected_platform:
+                raise Exception(
+                    f"Boost archive has wrong Mach-O platform: {archive_path} "
+                    f"member {object_member} expected {expected_platform}, got {actual_platform}"
+                )
+
+
 def build_boost_ios_lib(config):
     print_step("build_boost_ios_lib")
     sdk_path = get_ios_sdk_path(config)
@@ -261,17 +319,25 @@ def build_boost_ios_lib(config):
     if config["sdk"] == "iphoneos":
         target = "arm64-apple-ios"
         version = f"-miphoneos-version-min={ios_min_version}"
+        expected_platform = "IOS"
     else:
         target = "arm64-apple-ios-simulator"
         version = f"-miphonesimulator-version-min={ios_min_version}"
+        expected_platform = "IOSSIMULATOR"
 
-    cxxflags = [
+    common_flags = [
         f"-target {target}",
         f"-arch {config['arch']}",
         f"-isysroot {sdk_path}",
         f"-fvisibility=hidden", # to avoid boost log weak symbols warning
         f"-fvisibility-inlines-hidden", # to avoid boost log weak symbols warning
         version,
+    ]
+    cflags = [
+        *common_flags,
+    ]
+    cxxflags = [
+        *common_flags,
     ]
     linkflags = [
         f"-target {target}",
@@ -291,6 +357,7 @@ def build_boost_ios_lib(config):
         "variant=debug,release",
         f"--prefix={os.path.join(boost_install_path, config['install_path'])}",
         f"toolset=clang",
+        f"cflags={' '.join(cflags)}",
         f"cxxflags={' '.join(cxxflags)}",
         f"linkflags={' '.join(linkflags)}",
         f"--sysroot={sdk_path}",
@@ -298,6 +365,11 @@ def build_boost_ios_lib(config):
     ]
     print("cmd: %s" % cmd)
     subprocess.run(cmd, check=True)
+
+    install_root = os.path.join(boost_install_path, config["install_path"])
+    lib_dir = os.path.join(install_root, "lib")
+    for library in sorted(f for f in os.listdir(lib_dir) if f.endswith(".a")):
+        validate_boost_ios_archive_platform(os.path.join(lib_dir, library), expected_platform)
 
 
 def get_required_boost_component_names():
