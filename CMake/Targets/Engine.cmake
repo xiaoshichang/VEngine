@@ -56,6 +56,7 @@ function(ve_add_engine)
             Engine/Runtime/Scene/TransformComponent.cpp
             Engine/Runtime/Scripting/Binding/NativeScriptBinding.cpp
             Engine/Runtime/Scripting/DotnetScriptableComponent.cpp
+            Engine/Runtime/Scripting/NativeAOTScriptBridgeSymbols.cpp
             Engine/Runtime/Scripting/ScriptableComponent.cpp
             Engine/Runtime/Scripting/ScriptingSystem.cpp
             Engine/Runtime/Threading/Synchronization.cpp
@@ -132,6 +133,7 @@ function(ve_add_engine)
             Engine/Runtime/Scripting/Binding/NativeScriptBinding.h
             Engine/Runtime/Scripting/DotNetScriptingBackend.h
             Engine/Runtime/Scripting/DotnetScriptableComponent.h
+            Engine/Runtime/Scripting/NativeAOTScriptBridgeSymbols.h
             Engine/Runtime/Scripting/NullScriptingBackend.h
             Engine/Runtime/Scripting/ScriptableComponent.h
             Engine/Runtime/Scripting/ScriptingSystem.h
@@ -172,13 +174,23 @@ function(ve_add_engine)
             PUBLIC
                 VE_PLATFORM_WINDOWS=1
                 VE_PLATFORM_MACOS=0
+                VE_PLATFORM_IOS=0
                 VE_PLATFORM_APPLE=0
+        )
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        target_compile_definitions(VEngine
+            PUBLIC
+                VE_PLATFORM_WINDOWS=0
+                VE_PLATFORM_MACOS=0
+                VE_PLATFORM_IOS=1
+                VE_PLATFORM_APPLE=1
         )
     elseif(APPLE)
         target_compile_definitions(VEngine
             PUBLIC
                 VE_PLATFORM_WINDOWS=0
                 VE_PLATFORM_MACOS=1
+                VE_PLATFORM_IOS=0
                 VE_PLATFORM_APPLE=1
         )
     else()
@@ -186,6 +198,7 @@ function(ve_add_engine)
             PUBLIC
                 VE_PLATFORM_WINDOWS=0
                 VE_PLATFORM_MACOS=0
+                VE_PLATFORM_IOS=0
                 VE_PLATFORM_APPLE=0
         )
     endif()
@@ -213,7 +226,20 @@ function(ve_add_engine)
         )
     endif()
 
-    if(APPLE AND NOT WIN32)
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        target_sources(VEngine
+            PRIVATE
+                Engine/Runtime/Scripting/IOSAOTScriptingBackend.cpp
+            PUBLIC
+                Engine/Runtime/Scripting/IOSAOTScriptingBackend.h
+        )
+
+        target_link_libraries(VEngine
+            PUBLIC
+                "-framework Foundation"
+                "-framework UIKit"
+        )
+    elseif(APPLE AND NOT WIN32)
         target_sources(VEngine
             PRIVATE
                 Engine/Runtime/Platform/MacOS/MacDebugConsoleBackend.mm

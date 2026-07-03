@@ -34,3 +34,22 @@ recommended for a predictable clone-to-build workflow.
 
 The .NET runtime payload is app-local infrastructure for the future Windows C# scripting host. Its version is pinned in
 `DotNet/main.py` and is not selected through command line arguments.
+
+On macOS hosts that will build iOS players, prepare the iOS runtime dependency payloads with:
+
+```sh
+ThirdParty/Build_IOS.sh
+```
+
+The iOS setup entry point fails before downloading or cleaning dependency directories when `VE_IOS_DEPLOYMENT_TARGET`
+is malformed, when it is not running on macOS, or when `xcodebuild` is not available. Install Xcode and select it with
+`xcode-select` before running the script.
+
+The iOS setup path builds Boost 1.85.0 static libraries for `iphoneos` and `iphonesimulator`, including Debug and
+Release variants, and extracts the Jolt Physics source tree used by the embedded CMake target. Boost uses
+`VE_IOS_DEPLOYMENT_TARGET` when it is set, and otherwise uses the engine iOS default of `17.0`. The value must be a
+numeric dotted version such as `17.0`. Device and simulator Boost outputs stay split under `Boost/Build/IOS/device` and
+`Boost/Build/IOS/simulator`; they are not merged with `lipo` because modern Apple device and simulator libraries may
+both contain `arm64` slices for different platforms. Jolt is not prebuilt by `Build_IOS.sh`; it is compiled inside the
+iOS Xcode project so it inherits the app SDK, architecture, and `CMAKE_OSX_DEPLOYMENT_TARGET`. Host-side tools such as
+Slang, SPIRV-Cross, and the .NET SDK stay host tools; they are not copied into the iOS app bundle.

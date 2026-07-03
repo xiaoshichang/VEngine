@@ -9,6 +9,7 @@
 namespace ve
 {
     class ScriptableComponent;
+    struct ManagedScriptEntryPoints;
 
     enum class ScriptingBackendType
     {
@@ -33,6 +34,7 @@ namespace ve
         Path dotNetRuntimeRoot;
         Path scriptHostRoot;
         Path runtimeConfigPath;
+        const ManagedScriptEntryPoints* nativeAotEntryPoints = nullptr;
     };
 
     struct ScriptingAssemblyLoadDesc

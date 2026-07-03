@@ -30,6 +30,12 @@ macOS
   - Player
   - Editor placeholder
   - Metal RHI
+
+iOS
+  - Player
+  - Metal RHI
+  - UIKit platform shell
+  - .NET NativeAOT scripting path
 ```
 
 ## 2. Non-Goals For The First Stage
@@ -158,6 +164,10 @@ VEngineMacPlayer
   path but does not yet provide a complete macOS window/application backend. Editor packaging wraps this executable and
   its resources into a generated `.app` bundle.
 
+VEngineIOSPlayer
+  iOS player app bundle target. The current implementation is a UIKit shell with a Metal-backed root view. It is the
+  first iOS build target and does not yet run the full shared Player scene/render loop.
+
 VEngineAssetTool
   Command line asset import and cook tool target. The current executable is a lightweight placeholder while the Editor
   owns the implemented project asset database and package flow.
@@ -184,6 +194,13 @@ Planned macOS first-stage outputs:
 ```text
 VEngineMacPlayer
 VEngineMacEditor.app
+```
+
+Planned iOS first-stage outputs:
+
+```text
+VEngineIOSPlayer.app
+Packaged .ipa through Xcode archive/export
 ```
 
 The cross-platform `Application` window backend is still Windows-only because `Window::Create()` only has a Win32
@@ -677,7 +694,9 @@ First-stage Windows and macOS JIT scope:
   macOS Player apps place the same JIT payload under the generated `.app` bundle. `VEngineMacPlayer` is a build input for
   the packaged app and does not maintain a separate executable-local JIT payload layout.
 
-iOS C# scripting remains a future AOT feasibility milestone.
+iOS C# scripting uses a separate .NET NativeAOT direction. The native runtime side receives a linked
+`ManagedScriptEntryPoints` table instead of loading a desktop JIT host through `hostfxr`; the iOS backend can also build
+that table automatically from weak-linked `VEngine_*` NativeAOT exports when the script static library is present.
 
 ### 7.17 Physics
 
@@ -1100,7 +1119,9 @@ macOS first-stage policy:
 - C# scripting uses the same `.NET` JIT hosting path as Windows for macOS Editor and macOS Player.
 - Packaged macOS apps copy the managed script host, project script DLLs, and app-local `.NET` runtime into the generated
   `.app` bundle.
-- iOS support still requires a separate AOT feasibility milestone.
+- iOS support uses a separate NativeAOT path. The first native boundary is present through `IOSAOTScriptingBackend`, and
+  the macOS Editor iOS packer can publish project scripts as a NativeAOT static library and pass it into the generated
+  Xcode project. End-to-end device verification remains future work.
 
 ## 15. Editor Architecture
 
@@ -1189,6 +1210,8 @@ Current macOS platform status:
 - Provides a `VEngineMacEditor.app` target that can package the current project into a generated macOS `.app` by
   exporting/updating the CMake Xcode project, building `VEngineMacPlayer`, and copying player/data/JIT scripting payloads
   into the package bundle.
+- Provides an initial macOS-hosted iOS packaging path that stages runtime data, publishes project scripts as a
+  NativeAOT static library when available, configures the iOS Xcode project, and runs Xcode archive/export commands.
 - Provides a separate `VEngineRhiMetalTriangleDemo` that creates a Metal-backed view and exercises the Metal RHI.
 
 Remaining macOS platform work:

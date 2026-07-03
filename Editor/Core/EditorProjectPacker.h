@@ -31,6 +31,19 @@ namespace ve::editor
         Failed,
     };
 
+    enum class PackageTargetPlatform
+    {
+        Windows,
+        Mac,
+        IOS,
+    };
+
+    struct PackageTargetPlatformDesc
+    {
+        PackageTargetPlatform platform = PackageTargetPlatform::Windows;
+        const char* displayName = "";
+    };
+
     struct PackageStepState
     {
         std::string name;
@@ -115,5 +128,7 @@ namespace ve::editor
         std::ofstream logFile_;
     };
 
+    [[nodiscard]] std::vector<PackageTargetPlatformDesc> GetAvailableEditorPackageTargets();
+    [[nodiscard]] std::unique_ptr<EditorProjectPacker> CreateEditorProjectPacker(PackageTargetPlatform platform);
     [[nodiscard]] std::unique_ptr<EditorProjectPacker> CreateEditorProjectPackerForHostPlatform();
 } // namespace ve::editor

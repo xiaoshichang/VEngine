@@ -24,13 +24,8 @@ include(CMake/Targets/Demos.cmake)
 
 ve_add_engine()
 
-if(WIN32)
-    ve_add_windows_player()
-    ve_add_windows_editor()
-elseif(APPLE)
-    ve_add_mac_player()
-    ve_add_mac_editor()
-endif()
+ve_add_player()
+ve_add_editor()
 
 if(VE_BUILD_TESTS)
     enable_testing()

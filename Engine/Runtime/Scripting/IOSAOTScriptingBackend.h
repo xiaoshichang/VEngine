@@ -23,6 +23,8 @@ namespace ve
         [[nodiscard]] ErrorCode SetScriptFieldJson(ScriptInstanceHandle script, std::string_view fieldName, std::string_view valueJson) override;
 
     private:
+        ManagedScriptEntryPoints entryPoints_;
         bool initialized_ = false;
+        bool bridgeLoaded_ = false;
     };
 } // namespace ve

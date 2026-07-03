@@ -10,6 +10,16 @@
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(VEngineEnableIOSNativeAOT)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+    <NativeLib>Static</NativeLib>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsAotCompatible>true</IsAotCompatible>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <DefineConstants>$(DefineConstants);VENGINE_IOS_NATIVEAOT</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="**/*.cs" Exclude="bin/**;obj/**" />
   </ItemGroup>

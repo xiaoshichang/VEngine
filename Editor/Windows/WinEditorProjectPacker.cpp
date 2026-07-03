@@ -140,8 +140,25 @@ namespace ve::editor
         });
     }
 
+    std::vector<PackageTargetPlatformDesc> GetAvailableEditorPackageTargets()
+    {
+        return {
+            PackageTargetPlatformDesc{PackageTargetPlatform::Windows, "Windows"},
+        };
+    }
+
+    std::unique_ptr<EditorProjectPacker> CreateEditorProjectPacker(PackageTargetPlatform platform)
+    {
+        if (platform == PackageTargetPlatform::Windows)
+        {
+            return std::make_unique<EditorProjectPackerWin>();
+        }
+
+        return nullptr;
+    }
+
     std::unique_ptr<EditorProjectPacker> CreateEditorProjectPackerForHostPlatform()
     {
-        return std::make_unique<EditorProjectPackerWin>();
+        return CreateEditorProjectPacker(PackageTargetPlatform::Windows);
     }
 } // namespace ve::editor

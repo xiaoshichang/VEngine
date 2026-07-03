@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
 function(ve_add_rhi_demos)
-    if(APPLE AND VE_ENABLE_METAL)
+    if(APPLE AND VE_ENABLE_METAL AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS"))
         enable_language(OBJCXX)
 
         find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)

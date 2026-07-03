@@ -29,11 +29,17 @@ function(ve_prepare_jolt_source)
         return()
     endif()
 
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(joltSetupHint "Run ThirdParty/Build_IOS.sh on macOS or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout.")
+    else()
+        set(joltSetupHint "Run ThirdParty/Jolt/Build_Windows64.bat or ThirdParty/Build_Mac.sh, or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout.")
+    endif()
+
     foreach(requiredJoltFile IN LISTS requiredJoltFiles)
         if(NOT EXISTS "${requiredJoltFile}")
             message(FATAL_ERROR
                 "Jolt Physics source is missing required file: ${requiredJoltFile}\n"
-                "Run ThirdParty/Jolt/Build_Windows64.bat or ThirdParty/Build_Mac.sh, or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout."
+                "${joltSetupHint}"
             )
         endif()
     endforeach()

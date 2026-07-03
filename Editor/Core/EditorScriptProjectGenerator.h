@@ -22,5 +22,6 @@ namespace ve::editor
     public:
         [[nodiscard]] static Result<Path> GenerateProject(const EditorScriptProjectGenerateDesc& desc);
         [[nodiscard]] static Path GetGeneratedProjectPath(const Path& projectRoot, std::string_view projectName);
+        [[nodiscard]] static Path GetNativeAOTRegistryPath(const Path& projectRoot);
     };
 } // namespace ve::editor

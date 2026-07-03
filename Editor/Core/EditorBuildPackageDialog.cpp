@@ -5,6 +5,8 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+
 namespace ve::editor
 {
     namespace
@@ -17,16 +19,14 @@ namespace ve::editor
     {
         isOpen_ = true;
         hasStarted_ = false;
-        packer_ = CreateEditorProjectPackerForHostPlatform();
-        if (packer_ != nullptr)
-        {
-            packer_->Reset();
-        }
+        availableTargets_ = GetAvailableEditorPackageTargets();
+        selectedTargetIndex_ = 0;
+        packer_.reset();
     }
 
     void EditorBuildPackageDialog::Render(Editor& editor)
     {
-        if (!isOpen_ || packer_ == nullptr)
+        if (!isOpen_)
         {
             return;
         }
@@ -39,8 +39,59 @@ namespace ve::editor
 
         if (!hasStarted_)
         {
-            packer_->Start(editor);
-            hasStarted_ = true;
+            if (availableTargets_.empty())
+            {
+                ImGui::TextUnformatted("No package targets are available.");
+            }
+            else
+            {
+                selectedTargetIndex_ = (std::min)(selectedTargetIndex_, availableTargets_.size() - 1);
+                ImGui::SetNextItemWidth(240.0F);
+                if (ImGui::BeginCombo("Target", availableTargets_[selectedTargetIndex_].displayName))
+                {
+                    for (size_t targetIndex = 0; targetIndex < availableTargets_.size(); ++targetIndex)
+                    {
+                        const bool selected = targetIndex == selectedTargetIndex_;
+                        if (ImGui::Selectable(availableTargets_[targetIndex].displayName, selected))
+                        {
+                            selectedTargetIndex_ = targetIndex;
+                        }
+
+                        if (selected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                if (ImGui::Button("Start Package", ImVec2(140.0F, 0.0F)))
+                {
+                    packer_ = CreateEditorProjectPacker(availableTargets_[selectedTargetIndex_].platform);
+                    if (packer_ != nullptr)
+                    {
+                        packer_->Start(editor);
+                    }
+                    hasStarted_ = true;
+                }
+            }
+
+            ImGui::EndPopup();
+            return;
+        }
+
+        if (packer_ == nullptr)
+        {
+            ImGui::TextUnformatted("Package target is not supported on this host.");
+            if (ImGui::Button("Close", ImVec2(120.0F, 0.0F)))
+            {
+                isOpen_ = false;
+                hasStarted_ = false;
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+            return;
         }
 
         if (packer_->GetStatus() == PackageRunStatus::Running)

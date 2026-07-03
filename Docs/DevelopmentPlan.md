@@ -100,7 +100,11 @@ Current status: Milestones 0-2 are broadly implemented. Milestones 3-7 are parti
 RHI, D3D11/D3D12/Metal backend slices, RenderSystem, ShaderTool, Scene/Resource systems, Editor asset database, Editor
 viewport/panels, Windows packaging flow, and a first macOS packaging path. Mac targets currently use early player/editor
 shells while the full macOS platform backend remains future work; the macOS player is built as a normal executable and
-the macOS Editor packages it into a generated `.app` with app-local .NET JIT scripting payloads.
+the macOS Editor packages it into a generated `.app` with app-local .NET JIT scripting payloads. The iOS track now has
+an initial `VEngineIOSPlayer` target, iOS CMake presets, UIKit/Metal app shell, a NativeAOT-oriented scripting backend
+boundary with weak-symbol bridge discovery, and a first macOS Editor iOS packer that stages data, publishes NativeAOT
+project scripts, configures Xcode, archives, and exports through `xcodebuild`. Runtime scene loading, touch input,
+device verification, and production signing UX remain future work.
 
 ### Milestone 0: Project Skeleton
 
@@ -230,6 +234,18 @@ the macOS Editor packages it into a generated `.app` with app-local .NET JIT scr
 - Use HLSL to MSL shader flow.
 - Draw simple 3D demo in macOS.
 - Add input demo.
+
+### Milestone 11: iOS Player And Packaging
+
+- Add iOS CMake/Xcode presets.
+- Add `VEngineIOSPlayer` as a UIKit app bundle target.
+- Split iOS and macOS platform macros, target sources, and framework links.
+- Add a UIKit-backed Metal surface and route it through the shared RenderSystem path.
+- Add touch input and lifecycle pause/resume handling.
+- Load packaged runtime assets from the iOS app bundle.
+- Use .NET NativeAOT for iOS scripting instead of the desktop JIT host.
+- Add an Editor iOS packer that drives Xcode archive/export and produces a signed `.ipa`.
+- Add iOS third-party dependency setup for runtime libraries that need platform-specific static builds.
 
 ## 4. Recommended Implementation Order
 

@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 
 #include <memory>
+#include <vector>
 
 namespace ve::editor
 {
@@ -22,6 +23,8 @@ namespace ve::editor
         [[nodiscard]] static const char* GetHostPlatformText() noexcept;
 
         std::unique_ptr<EditorProjectPacker> packer_;
+        std::vector<PackageTargetPlatformDesc> availableTargets_;
+        size_t selectedTargetIndex_ = 0;
         bool isOpen_ = false;
         bool hasStarted_ = false;
     };

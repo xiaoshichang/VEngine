@@ -135,6 +135,8 @@ namespace ve
         {
 #if VE_PLATFORM_WINDOWS || VE_PLATFORM_MACOS
             resolvedBackend = ScriptingBackendType::DotnetJIT;
+#elif VE_PLATFORM_IOS
+            resolvedBackend = ScriptingBackendType::IOSAOT;
 #else
             return std::make_unique<NullScriptingBackend>();
 #endif
@@ -151,7 +153,11 @@ namespace ve
         case ScriptingBackendType::Auto:
             return nullptr;
         case ScriptingBackendType::IOSAOT:
+#if VE_PLATFORM_IOS
+            return std::make_unique<IOSAOTScriptingBackend>();
+#else
             return nullptr;
+#endif
         }
 
         return nullptr;

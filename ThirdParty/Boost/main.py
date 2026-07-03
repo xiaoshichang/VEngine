@@ -1,11 +1,59 @@
 #!/usr/local/bin/python3
+import json
 import os
+import platform
+import shutil
+import ssl
 import subprocess
 import sys
-import shutil
 import zipfile
 import wget
-import ssl
+
+
+def require_ios_host_if_needed(target):
+    if target != "IOS":
+        return
+
+    if platform.system() != "Darwin":
+        raise SystemExit("Boost iOS build must run on macOS because it requires Xcode and Apple iOS SDKs.")
+
+    if shutil.which("xcodebuild") is None:
+        raise SystemExit("Boost iOS build requires xcodebuild. Install Xcode and select it with xcode-select before running ThirdParty/Build_IOS.sh.")
+
+
+def is_valid_ios_deployment_target(value):
+    if not value or value.startswith(".") or value.endswith("."):
+        return False
+
+    has_dot = False
+    previous_dot = False
+    for character in value:
+        if character == ".":
+            if previous_dot:
+                return False
+
+            has_dot = True
+            previous_dot = True
+            continue
+
+        if character < "0" or character > "9":
+            return False
+
+        previous_dot = False
+
+    return has_dot
+
+
+def get_ios_min_version():
+    return os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "17.0") or "17.0"
+
+
+def validate_ios_deployment_target_if_needed(target, value):
+    if target != "IOS":
+        return
+
+    if not is_valid_ios_deployment_target(value):
+        raise SystemExit("Invalid VE_IOS_DEPLOYMENT_TARGET for Boost iOS build: %s. Use a numeric version such as 17.0." % value)
 
 
 script_file_path = sys.argv[0]
@@ -16,6 +64,11 @@ print("boost_version: %s" % boost_version)
 
 target_platform = sys.argv[2]
 print("target_platform: %s" % target_platform)
+
+ios_min_version = get_ios_min_version()
+print("ios_min_version: %s" % ios_min_version)
+validate_ios_deployment_target_if_needed(target_platform, ios_min_version)
+require_ios_host_if_needed(target_platform)
 
 script_file_dir = os.path.abspath(os.path.dirname(script_file_path))
 print("script_file_dir: %s" % script_file_dir)
@@ -28,9 +81,6 @@ required_boost_components = [
     "--with-log",
     "--with-system",
 ]
-
-ios_min_version = "13.0"
-print("ios_min_version: %s" % ios_min_version)
 
 ios_architectures ={
     "device":
@@ -223,6 +273,12 @@ def build_boost_ios_lib(config):
         f"-fvisibility-inlines-hidden", # to avoid boost log weak symbols warning
         version,
     ]
+    linkflags = [
+        f"-target {target}",
+        f"-arch {config['arch']}",
+        f"-isysroot {sdk_path}",
+        version,
+    ]
 
     cmd = [
         "./b2",
@@ -230,11 +286,13 @@ def build_boost_ios_lib(config):
         "link=static",
         "target-os=iphone",
         "architecture=arm",
+        "address-model=64",
         "threading=multi",
+        "variant=debug,release",
         f"--prefix={os.path.join(boost_install_path, config['install_path'])}",
         f"toolset=clang",
         f"cxxflags={' '.join(cxxflags)}",
-        f"linkflags=-arch arm64",
+        f"linkflags={' '.join(linkflags)}",
         f"--sysroot={sdk_path}",
         *required_boost_components,
     ]
@@ -242,37 +300,55 @@ def build_boost_ios_lib(config):
     subprocess.run(cmd, check=True)
 
 
-def merge_libs_to_universal():
-    print_step("merge_libs_to_universal")
-    libs_dir = {}
+def get_required_boost_component_names():
+    prefix = "--with-"
+    return [component[len(prefix):] if component.startswith(prefix) else component for component in required_boost_components]
+
+
+def verify_ios_boost_build_outputs():
+    print_step("verify_ios_boost_build_outputs")
+    build_info = {
+        "boostVersion": boost_version,
+        "deploymentTarget": ios_min_version,
+        "platforms": {},
+    }
+    library_sets = []
+
     for key, val in ios_architectures.items():
-        lib_dir = os.path.join(boost_install_path, val['install_path'])
-        lib_dir = os.path.join(lib_dir, "lib")
-        libs_dir[key] = [f for f in os.listdir(lib_dir) if f.endswith(".a")]
+        install_root = os.path.join(boost_install_path, val["install_path"])
+        include_dir = os.path.join(install_root, "include")
+        lib_dir = os.path.join(install_root, "lib")
+        if not os.path.isdir(include_dir):
+            raise Exception(f"Boost iOS include directory missing: {include_dir}")
+        if not os.path.isdir(lib_dir):
+            raise Exception(f"Boost iOS library directory missing: {lib_dir}")
 
-    base_set = set(libs_dir["device"])
-    if not all(set(v) == base_set for v in libs_dir.values()):
-        raise Exception()
+        libraries = sorted(f for f in os.listdir(lib_dir) if f.endswith(".a"))
+        if not libraries:
+            raise Exception(f"No Boost iOS static libraries were produced under: {lib_dir}")
 
-    universal_dir = os.path.join(boost_install_path, "universal")
-    os.makedirs(universal_dir, exist_ok=True)
+        for component in get_required_boost_component_names():
+            if not any(library.startswith(f"libboost_{component}") for library in libraries):
+                raise Exception(f"Boost iOS component library missing for {component}: {lib_dir}")
 
+        library_sets.append(set(libraries))
+        build_info["platforms"][key] = {
+            "sdk": val["sdk"],
+            "architecture": val["arch"],
+            "installPath": val["install_path"],
+            "libraries": libraries,
+        }
 
-    for lib in base_set:
-        device_dir = os.path.join(boost_install_path, ios_architectures["device"]['install_path'])
-        device_dir = os.path.join(device_dir, "lib")
-        device_lib = os.path.join(device_dir, lib)
-        simulator_dir = os.path.join(boost_install_path, ios_architectures["simulator"]['install_path'])
-        simulator_dir = os.path.join(simulator_dir, "lib")
-        simulator_lib = os.path.join(simulator_dir, lib)
+    base_set = library_sets[0]
+    if not all(libraries == base_set for libraries in library_sets):
+        raise Exception("Boost iOS device and simulator builds produced different library sets.")
 
-        universal_lib_dir = os.path.join(universal_dir, "lib")
-        os.makedirs(universal_lib_dir, exist_ok=True)
-        output_lib = os.path.join(universal_lib_dir, lib)
-        try:
-            subprocess.run(["lipo", "-create", device_lib, simulator_lib, "-output", output_lib], check=True)
-        except subprocess.CalledProcessError:
-            sys.exit(f"lipo create {lib} failed.")
+    manifest_path = os.path.join(boost_install_path, "BuildInfo.json")
+    with open(manifest_path, "w", encoding="utf-8") as manifest:
+        json.dump(build_info, manifest, indent=4)
+        manifest.write("\n")
+
+    print("Boost iOS build outputs verified: %s" % manifest_path)
 
 
 
@@ -303,7 +379,7 @@ def main():
         build_ios_b2()
         build_boost_ios_lib(ios_architectures["simulator"])
 
-        merge_libs_to_universal()
+        verify_ios_boost_build_outputs()
 
 
 

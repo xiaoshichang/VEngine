@@ -84,6 +84,42 @@
                 "VE_BUILD_TESTS": "ON",
                 "VE_BUILD_TOOLS": "OFF"
             }
+        },
+        {
+            "name": "ios-device-debug",
+            "displayName": "iOS Device Debug",
+            "generator": "Xcode",
+            "toolchainFile": "${sourceDir}/CMake/Toolchains/IOS.cmake",
+            "binaryDir": "${sourceDir}/Build/ios-device-debug",
+            "cacheVariables": {
+                "VE_IOS_SDK": "iphoneos",
+                "VE_IOS_ARCHITECTURES": "arm64",
+                "VE_BUILD_PLAYER": "ON",
+                "VE_BUILD_EDITOR": "OFF",
+                "VE_BUILD_TESTS": "OFF",
+                "VE_BUILD_TOOLS": "OFF",
+                "VE_BUILD_MAC_PLAYER": "OFF",
+                "VE_BUILD_IOS_PLAYER": "ON",
+                "VE_ENABLE_D3D11": "OFF",
+                "VE_ENABLE_D3D12": "OFF",
+                "VE_ENABLE_METAL": "ON"
+            }
+        },
+        {
+            "name": "ios-device-release",
+            "displayName": "iOS Device Release",
+            "inherits": "ios-device-debug",
+            "binaryDir": "${sourceDir}/Build/ios-device-release"
+        },
+        {
+            "name": "ios-simulator-debug",
+            "displayName": "iOS Simulator Debug",
+            "inherits": "ios-device-debug",
+            "binaryDir": "${sourceDir}/Build/ios-simulator-debug",
+            "cacheVariables": {
+                "VE_IOS_SDK": "iphonesimulator",
+                "VE_IOS_ARCHITECTURES": "arm64"
+            }
         }
     ],
     "buildPresets": [
@@ -115,6 +151,21 @@
         {
             "name": "mac-test",
             "configurePreset": "mac-test",
+            "configuration": "Debug"
+        },
+        {
+            "name": "ios-device-debug",
+            "configurePreset": "ios-device-debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "ios-device-release",
+            "configurePreset": "ios-device-release",
+            "configuration": "Release"
+        },
+        {
+            "name": "ios-simulator-debug",
+            "configurePreset": "ios-simulator-debug",
             "configuration": "Debug"
         }
     ],

@@ -34,6 +34,14 @@
 #endif
 #endif
 
+#if !defined(VE_PLATFORM_IOS)
+#if defined(__APPLE__) && defined(TARGET_OS_IOS) && TARGET_OS_IOS
+#define VE_PLATFORM_IOS 1
+#else
+#define VE_PLATFORM_IOS 0
+#endif
+#endif
+
 #if !defined(VE_DEBUG_BREAK)
 #if VE_COMPILER_MSVC
 #define VE_DEBUG_BREAK() __debugbreak()

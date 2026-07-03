@@ -32,3 +32,7 @@ ThirdParty\Jolt\Build_Windows64.bat -Targets UnitTests,HelloWorld -Configuration
 
 The Windows build script is pinned to the same Visual Studio 2022 / MSVC v143 x64 baseline as the VEngine Windows CMake
 presets. Downloaded source and standalone build output are ignored by git.
+
+For iOS packaging, `ThirdParty/Build_IOS.sh` only prepares the Jolt source tree. The actual Jolt static library is built
+inside the VEngine iOS CMake/Xcode graph so it uses the same SDK, `CMAKE_OSX_DEPLOYMENT_TARGET`, and architecture as
+`VEngineIOSPlayer`.

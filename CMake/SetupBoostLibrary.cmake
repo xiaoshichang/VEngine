@@ -19,8 +19,13 @@ function(ve_get_default_boost_root outVariable)
 
     if(WIN32)
         set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/Windows64")
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-        set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/Mac")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        string(TOLOWER "${CMAKE_OSX_SYSROOT}" veBoostSysroot)
+        if(veBoostSysroot MATCHES "iphonesimulator")
+            set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/IOS/simulator")
+        else()
+            set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/IOS/device")
+        endif()
     elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         set(boostRoot "${_VE_BOOST_REPOSITORY_ROOT}/ThirdParty/Boost/Build/Mac")
     endif()
@@ -69,10 +74,17 @@ function(ve_setup_boost_library targetName)
 
     if(boostRoot)
         if(NOT EXISTS "${boostRoot}")
-            message(FATAL_ERROR
-                "Boost root does not exist: ${boostRoot}\n"
-                "Build Boost with the script under ThirdParty/Boost or set VE_BOOST_ROOT to a valid installation."
-            )
+            if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+                message(FATAL_ERROR
+                    "Boost root does not exist: ${boostRoot}\n"
+                    "Run ThirdParty/Build_IOS.sh on macOS or set VE_BOOST_ROOT to a valid iOS Boost installation."
+                )
+            else()
+                message(FATAL_ERROR
+                    "Boost root does not exist: ${boostRoot}\n"
+                    "Build Boost with the script under ThirdParty/Boost or set VE_BOOST_ROOT to a valid installation."
+                )
+            endif()
         endif()
 
         list(PREPEND CMAKE_PREFIX_PATH "${boostRoot}")

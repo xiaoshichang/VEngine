@@ -1,5 +1,6 @@
 #include "Editor/macOS/MacEditorProjectPacker.h"
 
+#include "Editor/macOS/IOSEditorProjectPacker.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 
 #include <cctype>
@@ -456,8 +457,31 @@ namespace ve::editor
         return result;
     }
 
+    std::vector<PackageTargetPlatformDesc> GetAvailableEditorPackageTargets()
+    {
+        return {
+            PackageTargetPlatformDesc{PackageTargetPlatform::Mac, "macOS"},
+            PackageTargetPlatformDesc{PackageTargetPlatform::IOS, "iOS"},
+        };
+    }
+
+    std::unique_ptr<EditorProjectPacker> CreateEditorProjectPacker(PackageTargetPlatform platform)
+    {
+        switch (platform)
+        {
+        case PackageTargetPlatform::Mac:
+            return std::make_unique<EditorProjectPackerMac>();
+        case PackageTargetPlatform::IOS:
+            return std::make_unique<EditorProjectPackerIOS>();
+        case PackageTargetPlatform::Windows:
+            return nullptr;
+        }
+
+        return nullptr;
+    }
+
     std::unique_ptr<EditorProjectPacker> CreateEditorProjectPackerForHostPlatform()
     {
-        return std::make_unique<EditorProjectPackerMac>();
+        return CreateEditorProjectPacker(PackageTargetPlatform::Mac);
     }
 } // namespace ve::editor
