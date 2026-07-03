@@ -8,8 +8,29 @@ set_property(CACHE VE_APPLE_PLATFORM PROPERTY STRINGS IOS)
 set_property(CACHE VE_IOS_SDK PROPERTY STRINGS iphoneos iphonesimulator)
 
 set(CMAKE_SYSTEM_NAME iOS CACHE STRING "Target system name" FORCE)
-set(CMAKE_OSX_SYSROOT "${VE_IOS_SDK}" CACHE STRING "iOS SDK root" FORCE)
 set(CMAKE_OSX_ARCHITECTURES "${VE_IOS_ARCHITECTURES}" CACHE STRING "iOS architectures" FORCE)
+
+function(ve_resolve_ios_sdk_path sdkName outVariable)
+    execute_process(
+        COMMAND xcrun --sdk "${sdkName}" --show-sdk-path
+        OUTPUT_VARIABLE sdkPath
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE sdkResult
+        ERROR_VARIABLE sdkError
+    )
+
+    if(NOT sdkResult EQUAL 0 OR NOT sdkPath)
+        message(FATAL_ERROR
+            "Failed to resolve iOS SDK path for ${sdkName}.\n"
+            "xcrun output: ${sdkError}"
+        )
+    endif()
+
+    set(${outVariable} "${sdkPath}" PARENT_SCOPE)
+endfunction()
+
+ve_resolve_ios_sdk_path("${VE_IOS_SDK}" veIosSdkPath)
+set(CMAKE_OSX_SYSROOT "${veIosSdkPath}" CACHE PATH "iOS SDK root" FORCE)
 
 if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "${VE_IOS_DEPLOYMENT_TARGET}" CACHE STRING "Minimum iOS deployment target")
