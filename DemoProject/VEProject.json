@@ -9,13 +9,13 @@
             "cmakeBuildConfig": "Debug"
         },
         "ios": {
-            "sdk": "iphonesimulator",
-            "bundleIdentifier": "com.vengine.packaged.demoproject",
+            "sdk": "iphoneos",
+            "bundleIdentifier": "com.xiao.packaged.demoproject",
             "developmentTeam": "Auto",
             "codeSignStyle": "Automatic",
             "provisioningProfileSpecifier": "Automatic",
             "codeSignIdentity": "Apple Development",
-            "deploymentTarget": "16.4",
+            "deploymentTarget": "26.5",
             "exportMethod": "development",
             "orientation": "Landscape"
         },
