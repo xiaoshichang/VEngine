@@ -20,6 +20,7 @@ namespace ve::editor
         constexpr const char* IOSSDKOptions[] = {"iphoneos", "iphonesimulator"};
         constexpr const char* IOSCodeSignStyles[] = {"Automatic", "Manual"};
         constexpr const char* IOSExportMethods[] = {"development", "ad-hoc", "app-store", "enterprise"};
+        constexpr const char* IOSOrientationOptions[] = {"Landscape", "Portrait", "Adaptive"};
 
         [[nodiscard]] int FindOptionIndex(const char* const* options, int optionCount, const std::string& value, int fallback)
         {
@@ -151,6 +152,7 @@ namespace ve::editor
         iosSDKIndex_ = FindOptionIndex(IOSSDKOptions, IM_ARRAYSIZE(IOSSDKOptions), buildSettings_.ios.sdk, 0);
         iosCodeSignStyleIndex_ = FindOptionIndex(IOSCodeSignStyles, IM_ARRAYSIZE(IOSCodeSignStyles), buildSettings_.ios.codeSignStyle, 0);
         iosExportMethodIndex_ = FindOptionIndex(IOSExportMethods, IM_ARRAYSIZE(IOSExportMethods), buildSettings_.ios.exportMethod, 0);
+        iosOrientationIndex_ = FindOptionIndex(IOSOrientationOptions, IM_ARRAYSIZE(IOSOrientationOptions), buildSettings_.ios.orientation, 0);
     }
 
     void EditorBuildPackageDialog::ApplyInputsToSettings()
@@ -165,6 +167,7 @@ namespace ve::editor
         buildSettings_.ios.codeSignIdentity = BufferToString(iosCodeSignIdentityBuffer_);
         buildSettings_.ios.deploymentTarget = BufferToString(iosDeploymentTargetBuffer_);
         buildSettings_.ios.exportMethod = IOSExportMethods[(std::clamp)(iosExportMethodIndex_, 0, IM_ARRAYSIZE(IOSExportMethods) - 1)];
+        buildSettings_.ios.orientation = IOSOrientationOptions[(std::clamp)(iosOrientationIndex_, 0, IM_ARRAYSIZE(IOSOrientationOptions) - 1)];
         buildSettings_.windows.configuration = BufferToString(windowsConfigurationBuffer_);
     }
 
@@ -313,6 +316,8 @@ namespace ve::editor
             ImGui::InputText("Deployment Target", iosDeploymentTargetBuffer_.data(), iosDeploymentTargetBuffer_.size());
             ImGui::SetNextItemWidth(BuildPackageDialogWidth);
             ImGui::Combo("Export Method", &iosExportMethodIndex_, IOSExportMethods, IM_ARRAYSIZE(IOSExportMethods));
+            ImGui::SetNextItemWidth(BuildPackageDialogWidth);
+            ImGui::Combo("Orientation", &iosOrientationIndex_, IOSOrientationOptions, IM_ARRAYSIZE(IOSOrientationOptions));
             break;
         case PackageTargetPlatform::Windows:
             ImGui::SetNextItemWidth(BuildPackageDialogWidth);

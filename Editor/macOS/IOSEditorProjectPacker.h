@@ -56,6 +56,7 @@ namespace ve::editor
         [[nodiscard]] static bool IsValidCodeSignStyle(std::string_view text) noexcept;
         [[nodiscard]] static bool IsValidExportMethod(std::string_view text) noexcept;
         [[nodiscard]] static bool IsValidIOSSDK(std::string_view text) noexcept;
+        [[nodiscard]] static bool IsValidOrientation(std::string_view text) noexcept;
         [[nodiscard]] static bool IsValidDeploymentTarget(std::string_view text) noexcept;
         [[nodiscard]] static std::string NormalizeCodeSignStyle(std::string text);
 
@@ -76,5 +77,6 @@ namespace ve::editor
         std::string codeSignIdentity_;
         std::string deploymentTarget_;
         std::string exportMethod_;
+        std::string orientation_;
     };
 } // namespace ve::editor

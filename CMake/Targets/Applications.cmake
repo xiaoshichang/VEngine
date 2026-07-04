@@ -365,9 +365,28 @@ function(ve_add_ios_player)
             COMPILE_OPTIONS "-fobjc-arc"
     )
 
+    if(VE_IOS_ORIENTATION STREQUAL "Portrait")
+        set(VE_IOS_SUPPORTED_INTERFACE_ORIENTATIONS_PLIST
+"<array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>")
+    else()
+        set(VE_IOS_SUPPORTED_INTERFACE_ORIENTATIONS_PLIST
+"<array>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>")
+    endif()
+    set(VE_IOS_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Generated/Player/iOS/Info.plist")
+    configure_file(
+        ${PROJECT_SOURCE_DIR}/Player/iOS/Info.plist.in
+        ${VE_IOS_INFO_PLIST}
+        @ONLY
+    )
+
     set_target_properties(VEngineIOSPlayer
         PROPERTIES
-            MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/Player/iOS/Info.plist.in
+            MACOSX_BUNDLE_INFO_PLIST ${VE_IOS_INFO_PLIST}
             XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${VE_IOS_BUNDLE_IDENTIFIER}"
             XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${VE_IOS_DEVELOPMENT_TEAM}"
             XCODE_ATTRIBUTE_CODE_SIGN_STYLE "${VE_IOS_CODE_SIGN_STYLE}"

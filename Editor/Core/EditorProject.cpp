@@ -130,6 +130,11 @@ namespace ve::editor
                 descriptor.buildSettings.ios.exportMethod = ReadEnvironmentString("VE_IOS_EXPORT_METHOD", "development");
             }
 
+            if (descriptor.buildSettings.ios.orientation.empty())
+            {
+                descriptor.buildSettings.ios.orientation = ReadEnvironmentString("VE_IOS_ORIENTATION", "Landscape");
+            }
+
             if (descriptor.buildSettings.windows.configuration.empty())
             {
                 descriptor.buildSettings.windows.configuration = "Release";
@@ -155,6 +160,7 @@ namespace ve::editor
             object["codeSignIdentity"] = settings.codeSignIdentity;
             object["deploymentTarget"] = settings.deploymentTarget;
             object["exportMethod"] = settings.exportMethod;
+            object["orientation"] = settings.orientation;
             return object;
         }
 
@@ -203,6 +209,7 @@ namespace ve::editor
             settings.codeSignIdentity = ReadString(*object, "codeSignIdentity");
             settings.deploymentTarget = ReadString(*object, "deploymentTarget", settings.deploymentTarget);
             settings.exportMethod = ReadString(*object, "exportMethod", settings.exportMethod);
+            settings.orientation = ReadString(*object, "orientation", settings.orientation);
             return settings;
         }
 

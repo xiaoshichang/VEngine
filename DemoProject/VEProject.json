@@ -16,7 +16,8 @@
             "provisioningProfileSpecifier": "Automatic",
             "codeSignIdentity": "Apple Development",
             "deploymentTarget": "16.4",
-            "exportMethod": "development"
+            "exportMethod": "development",
+            "orientation": "Landscape"
         },
         "windows": {
             "configuration": "Release"

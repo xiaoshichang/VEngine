@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Scene/CameraComponent.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
 #include "Engine/Runtime/Scripting/ScriptingSystem.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -301,6 +302,26 @@ namespace ve
         pendingPackagedStartupSceneLoad_ = true;
     }
 
+    void VEnginePlayer::SynchronizeMainCameraAspectRatio()
+    {
+        VE_ASSERT_SCENE_THREAD();
+
+        const WindowExtent extent = viewportClient_.GetExtent();
+        if (extent.width == 0 || extent.height == 0)
+        {
+            return;
+        }
+
+        Scene* scene = GetRuntime().GetSceneSystem().GetScene();
+        CameraComponent* camera = scene != nullptr ? scene->GetMainCamera() : nullptr;
+        if (camera == nullptr)
+        {
+            return;
+        }
+
+        camera->SetAspectRatio(static_cast<Float32>(extent.width) / static_cast<Float32>(extent.height));
+    }
+
     void VEnginePlayer::LoadPendingPackagedStartupScene()
     {
         VE_ASSERT_SCENE_THREAD();
@@ -338,5 +359,6 @@ namespace ve
         }
 
         VE_LOG_INFO_CATEGORY("Player", "Loaded packaged start scene '{}'.", packagedStartScene_);
+        SynchronizeMainCameraAspectRatio();
     }
 } // namespace ve

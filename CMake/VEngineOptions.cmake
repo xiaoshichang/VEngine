@@ -18,10 +18,12 @@ set(VE_IOS_CODE_SIGN_STYLE "Automatic" CACHE STRING "iOS Xcode code signing styl
 set(VE_IOS_PROVISIONING_PROFILE_SPECIFIER "" CACHE STRING "Optional iOS provisioning profile specifier for manual signing")
 set(VE_IOS_CODE_SIGN_IDENTITY "" CACHE STRING "Optional iOS code signing identity, such as Apple Development or Apple Distribution")
 set(VE_IOS_DEPLOYMENT_TARGET "16.4" CACHE STRING "Minimum supported iOS version")
+set(VE_IOS_ORIENTATION "Landscape" CACHE STRING "iOS interface orientation mode: Landscape, Portrait, or Adaptive")
 set(VE_IOS_PACKAGE_DATA_ROOT "" CACHE PATH "Optional packaged Data directory copied into the iOS app bundle")
 set(VE_IOS_NATIVEAOT_LIBRARY "" CACHE FILEPATH "Optional .NET NativeAOT static library linked into the iOS player")
 set(VE_IOS_NATIVEAOT_RUNTIME_NATIVE_DIR "" CACHE PATH "Optional .NET NativeAOT iOS runtime native library directory")
 set_property(CACHE VE_IOS_CODE_SIGN_STYLE PROPERTY STRINGS Automatic Manual)
+set_property(CACHE VE_IOS_ORIENTATION PROPERTY STRINGS Landscape Portrait Adaptive)
 
 function(ve_is_valid_ios_bundle_identifier value outVariable)
     if(value MATCHES "^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$")
@@ -62,6 +64,14 @@ function(ve_validate_ios_options)
 
     if(NOT VE_IOS_CODE_SIGN_STYLE STREQUAL "Automatic" AND NOT VE_IOS_CODE_SIGN_STYLE STREQUAL "Manual")
         message(FATAL_ERROR "Invalid VE_IOS_CODE_SIGN_STYLE: ${VE_IOS_CODE_SIGN_STYLE}. Use Automatic or Manual.")
+    endif()
+
+    if(NOT VE_IOS_ORIENTATION STREQUAL "Landscape" AND NOT VE_IOS_ORIENTATION STREQUAL "Portrait" AND NOT VE_IOS_ORIENTATION STREQUAL "Adaptive")
+        message(FATAL_ERROR "Invalid VE_IOS_ORIENTATION: ${VE_IOS_ORIENTATION}. Use Landscape, Portrait, or Adaptive.")
+    endif()
+
+    if(VE_IOS_ORIENTATION STREQUAL "Adaptive")
+        message(FATAL_ERROR "VE_IOS_ORIENTATION=Adaptive is reserved but not supported yet. Use Landscape or Portrait.")
     endif()
 
     if(VE_IOS_CODE_SIGN_STYLE STREQUAL "Manual" AND NOT VE_IOS_PROVISIONING_PROFILE_SPECIFIER)

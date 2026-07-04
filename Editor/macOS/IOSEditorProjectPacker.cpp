@@ -219,6 +219,7 @@ namespace ve::editor
         codeSignIdentity_ = buildSettings_.ios.codeSignIdentity.empty() ? "Apple Development" : buildSettings_.ios.codeSignIdentity;
         deploymentTarget_ = buildSettings_.ios.deploymentTarget.empty() ? "16.4" : buildSettings_.ios.deploymentTarget;
         exportMethod_ = buildSettings_.ios.exportMethod.empty() ? "development" : buildSettings_.ios.exportMethod;
+        orientation_ = buildSettings_.ios.orientation.empty() ? "Landscape" : buildSettings_.ios.orientation;
     }
 
     void EditorProjectPackerIOS::InitializeSteps()
@@ -285,6 +286,7 @@ namespace ve::editor
         codeSignIdentity_.clear();
         deploymentTarget_.clear();
         exportMethod_.clear();
+        orientation_.clear();
     }
 
     ErrorCode EditorProjectPackerIOS::ValidateIOSPackagingEnvironment()
@@ -336,6 +338,18 @@ namespace ve::editor
             LogError(ErrorCode::InvalidArgument,
                      "Invalid iOS deployment target: " + deploymentTarget_ + ". Use a numeric version such as VE_IOS_DEPLOYMENT_TARGET=16.4.");
             return ErrorCode::InvalidArgument;
+        }
+
+        if (!IsValidOrientation(orientation_))
+        {
+            LogError(ErrorCode::InvalidArgument, "Invalid iOS orientation: " + orientation_ + ". Use Landscape, Portrait, or Adaptive.");
+            return ErrorCode::InvalidArgument;
+        }
+
+        if (orientation_ == "Adaptive")
+        {
+            LogError(ErrorCode::Unsupported, "Adaptive iOS orientation is not supported yet. Use Landscape or Portrait.");
+            return ErrorCode::Unsupported;
         }
 
         ErrorCode result = RunPreflightCommand("cmake --version >/dev/null", "CMake was not found. Install CMake or make it available on PATH before packaging for iOS.");
@@ -648,6 +662,7 @@ namespace ve::editor
                << " -DVE_IOS_BUNDLE_IDENTIFIER=" << ShellQuote(bundleIdentifier_)
                << " -DVE_IOS_CODE_SIGN_STYLE=" << ShellQuote(codeSignStyle_)
                << " -DVE_IOS_DEPLOYMENT_TARGET=" << ShellQuote(deploymentTarget_)
+               << " -DVE_IOS_ORIENTATION=" << ShellQuote(orientation_)
                << " -DCMAKE_OSX_DEPLOYMENT_TARGET=" << ShellQuote(deploymentTarget_)
                << " -DVE_IOS_PACKAGE_DATA_ROOT=" << ShellQuote(packageDataRoot_.GetString());
 
@@ -1018,6 +1033,11 @@ namespace ve::editor
     bool EditorProjectPackerIOS::IsValidIOSSDK(std::string_view text) noexcept
     {
         return text == "iphoneos" || text == "iphonesimulator";
+    }
+
+    bool EditorProjectPackerIOS::IsValidOrientation(std::string_view text) noexcept
+    {
+        return text == "Landscape" || text == "Portrait" || text == "Adaptive";
     }
 
     bool EditorProjectPackerIOS::IsValidDeploymentTarget(std::string_view text) noexcept

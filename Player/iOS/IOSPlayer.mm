@@ -22,6 +22,17 @@ namespace
 
         NSLog(@"[VEngine][%s][%@] %@", ve::ToString(record.severity), category, message);
     }
+
+    UIInterfaceOrientationMask GetConfiguredInterfaceOrientationMask()
+    {
+        NSString* orientation = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"VEngineIOSOrientation"];
+        if ([orientation isEqualToString:@"Portrait"])
+        {
+            return UIInterfaceOrientationMaskPortrait;
+        }
+
+        return UIInterfaceOrientationMaskLandscape;
+    }
 } // namespace
 
 @interface VEngineIOSMetalView : UIView
@@ -79,6 +90,21 @@ namespace
     return YES;
 }
 
+- (BOOL)prefersStatusBarHidden
+{
+    return YES;
+}
+
+- (UIStatusBarStyle)preferredStatusBarStyle
+{
+    return UIStatusBarStyleLightContent;
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations
+{
+    return GetConfiguredInterfaceOrientationMask();
+}
+
 @end
 
 @interface VEngineIOSAppDelegate : UIResponder <UIApplicationDelegate>
@@ -110,6 +136,7 @@ namespace
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     self.window.rootViewController = [[VEngineIOSViewController alloc] init];
     [self.window makeKeyAndVisible];
+    [self.window.rootViewController setNeedsStatusBarAppearanceUpdate];
 
     if (![self startEngine])
     {
@@ -127,6 +154,7 @@ namespace
         return NO;
     }
 
+    [rootView layoutIfNeeded];
     ve::IOSWindow::RegisterMainView((__bridge void*)rootView);
 
     ve::ApplicationInitParam initParam;
@@ -206,6 +234,13 @@ namespace
 {
     (void)application;
     self.displayLink.paused = NO;
+}
+
+- (UIInterfaceOrientationMask)application:(UIApplication*)application supportedInterfaceOrientationsForWindow:(UIWindow*)window
+{
+    (void)application;
+    (void)window;
+    return GetConfiguredInterfaceOrientationMask();
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application

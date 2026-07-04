@@ -30,6 +30,7 @@ namespace ve::editor
             std::string codeSignIdentity = "Apple Development";
             std::string deploymentTarget = "16.4";
             std::string exportMethod = "development";
+            std::string orientation = "Landscape";
         };
 
         struct WindowsBuildSettings

@@ -59,5 +59,6 @@ namespace ve::editor
         int iosSDKIndex_ = 0;
         int iosCodeSignStyleIndex_ = 0;
         int iosExportMethodIndex_ = 0;
+        int iosOrientationIndex_ = 0;
     };
 } // namespace ve::editor
