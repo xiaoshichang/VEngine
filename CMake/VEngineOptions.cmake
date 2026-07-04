@@ -17,7 +17,7 @@ set(VE_IOS_DEVELOPMENT_TEAM "" CACHE STRING "Apple development team identifier u
 set(VE_IOS_CODE_SIGN_STYLE "Automatic" CACHE STRING "iOS Xcode code signing style")
 set(VE_IOS_PROVISIONING_PROFILE_SPECIFIER "" CACHE STRING "Optional iOS provisioning profile specifier for manual signing")
 set(VE_IOS_CODE_SIGN_IDENTITY "" CACHE STRING "Optional iOS code signing identity, such as Apple Development or Apple Distribution")
-set(VE_IOS_DEPLOYMENT_TARGET "17.0" CACHE STRING "Minimum supported iOS version")
+set(VE_IOS_DEPLOYMENT_TARGET "16.4" CACHE STRING "Minimum supported iOS version")
 set(VE_IOS_PACKAGE_DATA_ROOT "" CACHE PATH "Optional packaged Data directory copied into the iOS app bundle")
 set(VE_IOS_NATIVEAOT_LIBRARY "" CACHE FILEPATH "Optional .NET NativeAOT static library linked into the iOS player")
 set(VE_IOS_NATIVEAOT_RUNTIME_NATIVE_DIR "" CACHE PATH "Optional .NET NativeAOT iOS runtime native library directory")
@@ -70,7 +70,7 @@ function(ve_validate_ios_options)
 
     ve_is_valid_ios_deployment_target("${VE_IOS_DEPLOYMENT_TARGET}" ve_valid_ios_deployment_target)
     if(NOT ve_valid_ios_deployment_target)
-        message(FATAL_ERROR "Invalid VE_IOS_DEPLOYMENT_TARGET: ${VE_IOS_DEPLOYMENT_TARGET}. Use a numeric version such as 17.0.")
+        message(FATAL_ERROR "Invalid VE_IOS_DEPLOYMENT_TARGET: ${VE_IOS_DEPLOYMENT_TARGET}. Use a numeric version such as 16.4.")
     endif()
 
     if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND NOT (CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL VE_IOS_DEPLOYMENT_TARGET))

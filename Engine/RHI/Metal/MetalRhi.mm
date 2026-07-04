@@ -546,7 +546,7 @@ namespace ve::rhi
 
                 layer_.device = device_;
                 layer_.pixelFormat = ToMetalPixelFormat(colorFormat_);
-                layer_.framebufferOnly = YES;
+                layer_.framebufferOnly = NO;
                 layer_.drawableSize = CGSizeMake(extent_.width, extent_.height);
                 return true;
             }

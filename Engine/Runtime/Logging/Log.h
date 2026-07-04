@@ -74,12 +74,31 @@ namespace ve
 
     namespace detail
     {
+        inline void AppendFormattedLogMessage(std::ostringstream& stream, std::string_view remaining)
+        {
+            stream << remaining;
+        }
+
+        template<typename TArg, typename... TArgs>
+        void AppendFormattedLogMessage(std::ostringstream& stream, std::string_view remaining, TArg&& arg, TArgs&&... args)
+        {
+            const std::size_t placeholder = remaining.find("{}");
+            if (placeholder == std::string_view::npos)
+            {
+                stream << remaining << ' ' << std::forward<TArg>(arg);
+                ((stream << ' ' << std::forward<TArgs>(args)), ...);
+                return;
+            }
+
+            stream << remaining.substr(0, placeholder) << std::forward<TArg>(arg);
+            AppendFormattedLogMessage(stream, remaining.substr(placeholder + 2), std::forward<TArgs>(args)...);
+        }
+
         template<typename... TArgs>
         [[nodiscard]] std::string FormatLogMessage(std::string_view formatString, TArgs&&... args)
         {
             std::ostringstream stream;
-            stream << formatString;
-            ((stream << ' ' << std::forward<TArgs>(args)), ...);
+            AppendFormattedLogMessage(stream, formatString, std::forward<TArgs>(args)...);
             return stream.str();
         }
 

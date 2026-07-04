@@ -3,13 +3,16 @@
 #include "Editor/macOS/IOSEditorProjectPacker.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 
+#include <array>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <sys/wait.h>
 
 namespace ve::editor
 {
@@ -147,6 +150,11 @@ namespace ve::editor
         if (cmakeBuildConfig_.empty())
         {
             cmakeBuildConfig_ = "Debug";
+        }
+
+        if (!buildSettings_.mac.cmakeBuildConfig.empty())
+        {
+            cmakeBuildConfig_ = buildSettings_.mac.cmakeBuildConfig;
         }
     }
 
@@ -358,7 +366,8 @@ namespace ve::editor
     ErrorCode EditorProjectPackerMac::WriteMacInfoPlist()
     {
         const std::string bundleName = projectName_.empty() ? "VEngineProject" : projectName_;
-        const std::string bundleIdentifier = "com.vengine.packaged." + SanitizeBundleIdentifierSegment(bundleName);
+        const std::string bundleIdentifier =
+            buildSettings_.mac.bundleIdentifier.empty() ? "com.vengine.packaged." + SanitizeBundleIdentifierSegment(bundleName) : buildSettings_.mac.bundleIdentifier;
 
         std::ostringstream stream;
         stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
@@ -415,10 +424,31 @@ namespace ve::editor
     ErrorCode EditorProjectPackerMac::RunShellCommand(const std::string& command)
     {
         LogLine("Running command: " + command);
-        const int result = std::system(command.c_str());
+        const std::string loggedCommand = command + " 2>&1";
+        FILE* pipe = popen(loggedCommand.c_str(), "r");
+        if (pipe == nullptr)
+        {
+            LogError(ErrorCode::PlatformError, "Failed to launch command: " + command);
+            return ErrorCode::PlatformError;
+        }
+
+        std::array<char, 4096> buffer{};
+        while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        {
+            std::string line(buffer.data());
+            while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+            {
+                line.pop_back();
+            }
+
+            LogLine(line);
+        }
+
+        const int result = pclose(pipe);
         if (result != 0)
         {
-            LogError(ErrorCode::PlatformError, "Command failed with exit code " + std::to_string(result) + ": " + command);
+            const int exitCode = WIFEXITED(result) ? WEXITSTATUS(result) : result;
+            LogError(ErrorCode::PlatformError, "Command failed with exit code " + std::to_string(exitCode) + ": " + command);
             return ErrorCode::PlatformError;
         }
 

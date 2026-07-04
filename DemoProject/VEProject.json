@@ -2,5 +2,24 @@
     "schemaVersion": 1,
     "name": "DemoProject",
     "engineVersion": "0.1.0",
-    "startScene": "Assets/Scenes/SampleScene.vescene"
+    "startScene": "Assets/Scenes/SampleScene.vescene",
+    "buildSettings": {
+        "mac": {
+            "bundleIdentifier": "com.vengine.packaged.demoproject",
+            "cmakeBuildConfig": "Debug"
+        },
+        "ios": {
+            "sdk": "iphonesimulator",
+            "bundleIdentifier": "com.vengine.packaged.demoproject",
+            "developmentTeam": "Auto",
+            "codeSignStyle": "Automatic",
+            "provisioningProfileSpecifier": "Automatic",
+            "codeSignIdentity": "Apple Development",
+            "deploymentTarget": "16.4",
+            "exportMethod": "development"
+        },
+        "windows": {
+            "configuration": "Release"
+        }
+    }
 }

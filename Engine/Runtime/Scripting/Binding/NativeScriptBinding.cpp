@@ -485,76 +485,85 @@ namespace ve
         auto loadFunction = reinterpret_cast<LoadAssemblyAndGetFunctionPointerFn>(initParam.loadAssemblyAndGetFunctionPointer);
         ManagedScriptEntryPoints loadedEntryPoints;
 
-        ErrorCode result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("RegisterNativeApi"), loadedEntryPoints.registerNativeApi);
+        ErrorCode result =
+            LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("RegisterNativeApiExport"), loadedEntryPoints.registerNativeApi);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("LoadProjectAssembly"), loadedEntryPoints.loadProjectAssembly);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("LoadProjectAssemblyExport"),
+                                loadedEntryPoints.loadProjectAssembly);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("UnloadProjectAssembly"), loadedEntryPoints.unloadProjectAssembly);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("UnloadProjectAssemblyExport"),
+                                loadedEntryPoints.unloadProjectAssembly);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("GetScriptTypesJson"), loadedEntryPoints.getScriptTypesJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("GetScriptTypesJsonExport"),
+                                loadedEntryPoints.getScriptTypesJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("FreeString"), loadedEntryPoints.freeString);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("FreeStringExport"), loadedEntryPoints.freeString);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("CreateScript"), loadedEntryPoints.create);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("CreateScriptExport"), loadedEntryPoints.create);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("DestroyScript"), loadedEntryPoints.destroy);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("DestroyScriptExport"), loadedEntryPoints.destroy);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnCreate"), loadedEntryPoints.createEvent);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnCreateExport"), loadedEntryPoints.createEvent);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("GetScriptFieldsJson"), loadedEntryPoints.getFieldsJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("GetScriptFieldsJsonExport"),
+                                loadedEntryPoints.getFieldsJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("SetScriptFieldsJson"), loadedEntryPoints.setFieldsJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("SetScriptFieldsJsonExport"),
+                                loadedEntryPoints.setFieldsJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("SetScriptFieldJson"), loadedEntryPoints.setFieldJson);
+        result = LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("SetScriptFieldJsonExport"),
+                                loadedEntryPoints.setFieldJson);
         if (result != ErrorCode::None)
         {
             return result;
         }
 
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnUpdate"), loadedEntryPoints.update));
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnLateUpdate"), loadedEntryPoints.lateUpdate));
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnEnable"), loadedEntryPoints.enable));
-        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnDisable"), loadedEntryPoints.disable));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnUpdateExport"), loadedEntryPoints.update));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnLateUpdateExport"),
+                                         loadedEntryPoints.lateUpdate));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnEnableExport"), loadedEntryPoints.enable));
+        static_cast<void>(LoadEntryPoint(loadFunction, assemblyPathText, bridgeTypeName, VE_HOSTFXR_TEXT("OnDisableExport"),
+                                         loadedEntryPoints.disable));
 
         entryPoints = loadedEntryPoints;
         return ErrorCode::None;

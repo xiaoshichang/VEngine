@@ -6,6 +6,8 @@
 #include "Engine/Runtime/Platform/Windows/Win32Window.h"
 #elif VE_PLATFORM_MACOS
 #include "Engine/Runtime/Platform/MacOS/MacWindow.h"
+#elif VE_PLATFORM_IOS
+#include "Engine/Runtime/Platform/iOS/IOSWindow.h"
 #endif
 
 namespace ve
@@ -16,6 +18,8 @@ namespace ve
         return Win32Window::CreatePlatformWindow(desc);
 #elif VE_PLATFORM_MACOS
         return MacWindow::CreatePlatformWindow(desc);
+#elif VE_PLATFORM_IOS
+        return IOSWindow::CreatePlatformWindow(desc);
 #else
         return Result<std::unique_ptr<Window>>::Failure(Error(ErrorCode::Unsupported, "This platform does not have a Window backend yet."));
 #endif

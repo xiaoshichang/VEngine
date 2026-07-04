@@ -112,6 +112,7 @@ namespace ve::editor
         statusMessage_.clear();
         timestamp_.clear();
         projectName_.clear();
+        buildSettings_ = EditorProjectDescriptor::BuildSettings{};
         projectRoot_ = Path();
         buildRoot_ = Path();
         logDirectory_ = Path();
@@ -125,7 +126,7 @@ namespace ve::editor
         ResetPlatformState();
     }
 
-    void EditorProjectPacker::Start(Editor& editor)
+    void EditorProjectPacker::Start(Editor& editor, const EditorProjectDescriptor::BuildSettings& buildSettings)
     {
         Reset();
 
@@ -138,6 +139,7 @@ namespace ve::editor
 
         timestamp_ = MakeTimestamp();
         projectName_ = editor.GetCurrentProjectName().empty() ? Editor::GetProjectDisplayName(editor.GetCurrentProjectPath()) : editor.GetCurrentProjectName();
+        buildSettings_ = buildSettings;
         projectRoot_ = Path(editor.GetCurrentProjectPath());
         buildRoot_ = projectRoot_ / "Build";
         logDirectory_ = buildRoot_ / "Logs";

@@ -36,7 +36,12 @@ namespace ve
             return fallback;
         }
 
-        [[nodiscard]] Path GetDefaultPackagedDataRoot()
+        [[nodiscard]] bool IsPackagedDataRoot(const Path& path)
+        {
+            return !path.IsEmpty() && FileSystem::IsFile(path / PackageManifestFilename) && FileSystem::IsFile(path / ProjectDescriptorFilename);
+        }
+
+        [[nodiscard]] Path FindDefaultPackagedDataRoot()
         {
             const Path executableDirectory = FileSystem::GetExecutableDirectory();
             if (executableDirectory.IsEmpty())
@@ -44,12 +49,19 @@ namespace ve
                 return Path();
             }
 
-            return executableDirectory.GetParentPath() / PackageDataDirectoryName;
-        }
+            const Path executableLocalDataRoot = executableDirectory / PackageDataDirectoryName;
+            if (IsPackagedDataRoot(executableLocalDataRoot))
+            {
+                return executableLocalDataRoot;
+            }
 
-        [[nodiscard]] bool IsPackagedDataRoot(const Path& path)
-        {
-            return !path.IsEmpty() && FileSystem::IsFile(path / PackageManifestFilename) && FileSystem::IsFile(path / ProjectDescriptorFilename);
+            const Path bundleContentsDataRoot = executableDirectory.GetParentPath() / PackageDataDirectoryName;
+            if (IsPackagedDataRoot(bundleContentsDataRoot))
+            {
+                return bundleContentsDataRoot;
+            }
+
+            return Path();
         }
 
         [[nodiscard]] Path FindPackagedDataRoot()
@@ -60,13 +72,7 @@ namespace ve
                 return configuredProjectRoot;
             }
 
-            const Path defaultPackagedDataRoot = GetDefaultPackagedDataRoot();
-            if (IsPackagedDataRoot(defaultPackagedDataRoot))
-            {
-                return defaultPackagedDataRoot;
-            }
-
-            return Path();
+            return FindDefaultPackagedDataRoot();
         }
 
         [[nodiscard]] Result<PackagedProjectDescriptor> LoadPackagedProjectDescriptor(const Path& dataRoot)
@@ -324,7 +330,13 @@ namespace ve
         loadRequest.provider = &runtimeAssetLoader_;
         loadRequest.resourceSystem = &GetRuntime().GetResourceSystem();
         loadRequest.scriptingSystem = &GetRuntime().GetScriptingSystem();
-        GetRuntime().GetSceneSystem().LoadScene(loadRequest);
+        const Error loadResult = GetRuntime().GetSceneSystem().LoadScene(loadRequest);
+        if (!loadResult.IsOk())
+        {
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to load packaged start scene '{}': {}", packagedStartScene_, loadResult.GetMessage());
+            return;
+        }
+
         VE_LOG_INFO_CATEGORY("Player", "Loaded packaged start scene '{}'.", packagedStartScene_);
     }
 } // namespace ve

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Editor/Core/EditorProject.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/FileSystem/Path.h"
@@ -67,7 +68,7 @@ namespace ve::editor
         virtual ~EditorProjectPacker();
 
         void Reset();
-        void Start(Editor& editor);
+        void Start(Editor& editor, const EditorProjectDescriptor::BuildSettings& buildSettings);
         void Advance(Editor& editor);
 
         [[nodiscard]] PackageRunStatus GetStatus() const noexcept;
@@ -115,6 +116,7 @@ namespace ve::editor
         std::string statusMessage_;
         std::string timestamp_;
         std::string projectName_;
+        EditorProjectDescriptor::BuildSettings buildSettings_;
         Path projectRoot_;
         Path buildRoot_;
         Path logDirectory_;

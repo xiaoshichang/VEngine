@@ -432,7 +432,7 @@ namespace ve::editor
         project << "    <NativeLib Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">Static</NativeLib>\n";
         project << "    <SelfContained Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</SelfContained>\n";
         project << "    <InvariantGlobalization Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</InvariantGlobalization>\n";
-        project << "    <AppleMinOSVersion Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true' and '$(AppleMinOSVersion)' == ''\">17.0</AppleMinOSVersion>\n";
+        project << "    <AppleMinOSVersion Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true' and '$(AppleMinOSVersion)' == ''\">16.4</AppleMinOSVersion>\n";
         project << "    <IsAotCompatible Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</IsAotCompatible>\n";
         project << "    <JsonSerializerIsReflectionEnabledByDefault Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">false</JsonSerializerIsReflectionEnabledByDefault>\n";
         project << "    <DefineConstants Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">"

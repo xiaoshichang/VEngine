@@ -28,6 +28,8 @@ namespace ve
         [[nodiscard]] virtual int Init();
         virtual void Run();
         virtual void UnInit();
+        void StartMainLoop();
+        [[nodiscard]] bool TickMainLoopFrame();
 
         [[nodiscard]] const std::string& GetName() const noexcept;
         [[nodiscard]] int GetExitCode() const noexcept;
@@ -49,6 +51,11 @@ namespace ve
         EngineRuntime engineRuntime_;
         ApplicationCommandQueue mainThreadCommandQueue_;
         std::unique_ptr<Window> mainWindow_;
+        bool mainLoopStarted_ = false;
+        bool previousWindowVisible_ = false;
+        bool previousWindowFocused_ = false;
+        bool previousWindowMinimized_ = false;
+        WindowExtent previousWindowExtent_ = {};
         bool initialized_ = false;
         int exitCode_ = 0;
     };

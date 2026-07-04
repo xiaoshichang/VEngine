@@ -5,13 +5,16 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 
 #include <algorithm>
+#include <array>
 #include <boost/json.hpp>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <sys/wait.h>
 #include <vector>
 
 namespace ve::editor
@@ -59,6 +62,16 @@ namespace ve::editor
             }
 
             return result;
+        }
+
+        [[nodiscard]] bool IsDefaultIOSDevelopmentTeamOption(std::string_view text) noexcept
+        {
+            return text.empty() || text == "Auto";
+        }
+
+        [[nodiscard]] bool IsDefaultIOSProvisioningProfileOption(std::string_view text) noexcept
+        {
+            return text.empty() || text == "Automatic";
         }
 
         struct ParsedNuGetVersion
@@ -194,50 +207,18 @@ namespace ve::editor
         ipaExportRoot_ = outputRoot_ / "Export";
         exportOptionsPlistPath_ = outputRoot_ / "ExportOptions.plist";
         nativeAOTOutputRoot_ = outputRoot_ / "NativeAOT";
-        bundleIdentifier_ = "com.vengine.packaged." + SanitizeBundleIdentifierSegment(projectName_);
+        bundleIdentifier_ = buildSettings_.ios.bundleIdentifier.empty() ? "com.vengine.packaged." + SanitizeBundleIdentifierSegment(projectName_)
+                                                                         : buildSettings_.ios.bundleIdentifier;
+        iosSDK_ = buildSettings_.ios.sdk.empty() ? "iphoneos" : buildSettings_.ios.sdk;
         buildConfiguration_ = "Release";
-        developmentTeam_.clear();
-        codeSignStyle_ = "Automatic";
-        provisioningProfileSpecifier_.clear();
-        codeSignIdentity_.clear();
-        deploymentTarget_ = "17.0";
-        exportMethod_ = "development";
-
-        if (const char* bundleIdentifier = std::getenv("VE_IOS_BUNDLE_IDENTIFIER"); bundleIdentifier != nullptr && bundleIdentifier[0] != '\0')
-        {
-            bundleIdentifier_ = bundleIdentifier;
-        }
-
-        if (const char* developmentTeam = std::getenv("VE_IOS_DEVELOPMENT_TEAM"); developmentTeam != nullptr && developmentTeam[0] != '\0')
-        {
-            developmentTeam_ = developmentTeam;
-        }
-
-        if (const char* codeSignStyle = std::getenv("VE_IOS_CODE_SIGN_STYLE"); codeSignStyle != nullptr && codeSignStyle[0] != '\0')
-        {
-            codeSignStyle_ = NormalizeCodeSignStyle(codeSignStyle);
-        }
-
-        if (const char* provisioningProfileSpecifier = std::getenv("VE_IOS_PROVISIONING_PROFILE_SPECIFIER");
-            provisioningProfileSpecifier != nullptr && provisioningProfileSpecifier[0] != '\0')
-        {
-            provisioningProfileSpecifier_ = provisioningProfileSpecifier;
-        }
-
-        if (const char* codeSignIdentity = std::getenv("VE_IOS_CODE_SIGN_IDENTITY"); codeSignIdentity != nullptr && codeSignIdentity[0] != '\0')
-        {
-            codeSignIdentity_ = codeSignIdentity;
-        }
-
-        if (const char* deploymentTarget = std::getenv("VE_IOS_DEPLOYMENT_TARGET"); deploymentTarget != nullptr && deploymentTarget[0] != '\0')
-        {
-            deploymentTarget_ = deploymentTarget;
-        }
-
-        if (const char* exportMethod = std::getenv("VE_IOS_EXPORT_METHOD"); exportMethod != nullptr && exportMethod[0] != '\0')
-        {
-            exportMethod_ = exportMethod;
-        }
+        developmentTeam_ = IsDefaultIOSDevelopmentTeamOption(buildSettings_.ios.developmentTeam) ? std::string{} : buildSettings_.ios.developmentTeam;
+        codeSignStyle_ = buildSettings_.ios.codeSignStyle.empty() ? "Automatic" : NormalizeCodeSignStyle(buildSettings_.ios.codeSignStyle);
+        provisioningProfileSpecifier_ = IsDefaultIOSProvisioningProfileOption(buildSettings_.ios.provisioningProfileSpecifier)
+            ? std::string{}
+            : buildSettings_.ios.provisioningProfileSpecifier;
+        codeSignIdentity_ = buildSettings_.ios.codeSignIdentity.empty() ? "Apple Development" : buildSettings_.ios.codeSignIdentity;
+        deploymentTarget_ = buildSettings_.ios.deploymentTarget.empty() ? "16.4" : buildSettings_.ios.deploymentTarget;
+        exportMethod_ = buildSettings_.ios.exportMethod.empty() ? "development" : buildSettings_.ios.exportMethod;
     }
 
     void EditorProjectPackerIOS::InitializeSteps()
@@ -250,8 +231,8 @@ namespace ve::editor
             PackageStepState{.name = "Copy runtime assets"},
             PackageStepState{.name = "Publish iOS NativeAOT scripts"},
             PackageStepState{.name = "Configure iOS Xcode project"},
-            PackageStepState{.name = "Archive iOS player"},
-            PackageStepState{.name = "Export iOS ipa"},
+            PackageStepState{.name = IsSimulatorBuild() ? "Build iOS simulator player" : "Archive iOS player"},
+            PackageStepState{.name = IsSimulatorBuild() ? "Prepare iOS simulator app" : "Export iOS ipa"},
             PackageStepState{.name = "Write package info"},
         };
     }
@@ -296,6 +277,7 @@ namespace ve::editor
         nativeAOTLibraryPath_ = Path();
         nativeAOTRuntimeNativeRoot_ = Path();
         bundleIdentifier_.clear();
+        iosSDK_.clear();
         buildConfiguration_.clear();
         developmentTeam_.clear();
         codeSignStyle_.clear();
@@ -321,6 +303,12 @@ namespace ve::editor
             return ErrorCode::InvalidArgument;
         }
 
+        if (!IsValidIOSSDK(iosSDK_))
+        {
+            LogError(ErrorCode::InvalidArgument, "Invalid iOS SDK: " + iosSDK_ + ". Use iphoneos or iphonesimulator.");
+            return ErrorCode::InvalidArgument;
+        }
+
         if (!IsValidCodeSignStyle(codeSignStyle_))
         {
             LogError(ErrorCode::InvalidArgument,
@@ -328,7 +316,7 @@ namespace ve::editor
             return ErrorCode::InvalidArgument;
         }
 
-        if (codeSignStyle_ == "Manual" && provisioningProfileSpecifier_.empty())
+        if (!IsSimulatorBuild() && codeSignStyle_ == "Manual" && provisioningProfileSpecifier_.empty())
         {
             LogError(ErrorCode::InvalidArgument,
                      "Manual iOS code signing requires VE_IOS_PROVISIONING_PROFILE_SPECIFIER so Xcode archive/export can select a provisioning profile.");
@@ -346,7 +334,7 @@ namespace ve::editor
         if (!IsValidDeploymentTarget(deploymentTarget_))
         {
             LogError(ErrorCode::InvalidArgument,
-                     "Invalid iOS deployment target: " + deploymentTarget_ + ". Use a numeric version such as VE_IOS_DEPLOYMENT_TARGET=17.0.");
+                     "Invalid iOS deployment target: " + deploymentTarget_ + ". Use a numeric version such as VE_IOS_DEPLOYMENT_TARGET=16.4.");
             return ErrorCode::InvalidArgument;
         }
 
@@ -486,11 +474,21 @@ namespace ve::editor
 
     ErrorCode EditorProjectPackerIOS::ArchiveIOSPlayer()
     {
+        if (IsSimulatorBuild())
+        {
+            return RunShellCommand(BuildXcodeSimulatorBuildCommand());
+        }
+
         return RunShellCommand(BuildXcodeArchiveCommand());
     }
 
     ErrorCode EditorProjectPackerIOS::ExportIOSArchive()
     {
+        if (IsSimulatorBuild())
+        {
+            return PrepareIOSSimulatorPackage();
+        }
+
         ErrorCode result = WriteIOSExportOptionsPlist();
         if (result != ErrorCode::None)
         {
@@ -498,6 +496,26 @@ namespace ve::editor
         }
 
         return RunShellCommand(BuildXcodeExportCommand());
+    }
+
+    ErrorCode EditorProjectPackerIOS::PrepareIOSSimulatorPackage()
+    {
+        const Path simulatorAppSource = GetIOSSimulatorAppBundlePath();
+        if (!FileSystem::IsDirectory(simulatorAppSource))
+        {
+            LogError(ErrorCode::NotFound, "Built iOS simulator app was not found: " + simulatorAppSource.GetString());
+            return ErrorCode::NotFound;
+        }
+
+        const Path simulatorAppDestination = outputRoot_ / (MakePackageDirectoryName(projectName_, timestamp_) + ".app");
+        ErrorCode result = CopyDirectory(simulatorAppSource, simulatorAppDestination);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        LogLine("Copied iOS simulator app: " + simulatorAppSource.GetString() + " -> " + simulatorAppDestination.GetString());
+        return ErrorCode::None;
     }
 
     ErrorCode EditorProjectPackerIOS::WriteIOSExportOptionsPlist()
@@ -552,19 +570,43 @@ namespace ve::editor
         return WritePackageInfo(PackageInfoDesc{
             .packageInfoPath = outputRoot_ / PackageInfoFilename,
             .platform = IOSPlatformName,
-            .playerExecutable = std::string("Payload/") + IOSPlayerTargetName + ".app/" + IOSPlayerTargetName,
-            .dataRoot = std::string("Payload/") + IOSPlayerTargetName + ".app/Data",
-            .appBundle = archivePath_.GetString(),
+            .playerExecutable = IsSimulatorBuild() ? std::string(MakePackageDirectoryName(projectName_, timestamp_) + ".app/" + IOSPlayerTargetName)
+                                                   : std::string("Payload/") + IOSPlayerTargetName + ".app/" + IOSPlayerTargetName,
+            .dataRoot = IsSimulatorBuild() ? std::string(MakePackageDirectoryName(projectName_, timestamp_) + ".app/Data")
+                                           : std::string("Payload/") + IOSPlayerTargetName + ".app/Data",
+            .appBundle = IsSimulatorBuild() ? (outputRoot_ / (MakePackageDirectoryName(projectName_, timestamp_) + ".app")).GetString()
+                                            : archivePath_.GetString(),
         });
     }
 
     ErrorCode EditorProjectPackerIOS::RunShellCommand(const std::string& command)
     {
         LogLine("Running command: " + command);
-        const int result = std::system(command.c_str());
+        const std::string loggedCommand = command + " 2>&1";
+        FILE* pipe = popen(loggedCommand.c_str(), "r");
+        if (pipe == nullptr)
+        {
+            LogError(ErrorCode::PlatformError, "Failed to launch command: " + command);
+            return ErrorCode::PlatformError;
+        }
+
+        std::array<char, 4096> buffer{};
+        while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+        {
+            std::string line(buffer.data());
+            while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+            {
+                line.pop_back();
+            }
+
+            LogLine(line);
+        }
+
+        const int result = pclose(pipe);
         if (result != 0)
         {
-            LogError(ErrorCode::PlatformError, "Command failed with exit code " + std::to_string(result) + ": " + command);
+            const int exitCode = WIFEXITED(result) ? WEXITSTATUS(result) : result;
+            LogError(ErrorCode::PlatformError, "Command failed with exit code " + std::to_string(exitCode) + ": " + command);
             return ErrorCode::PlatformError;
         }
 
@@ -592,7 +634,7 @@ namespace ve::editor
                << " -B " << ShellQuote(xcodeBinaryRoot_.GetString())
                << " -G Xcode"
                << " -DCMAKE_TOOLCHAIN_FILE=" << ShellQuote(std::string(EngineSourceDirectory) + "/CMake/Toolchains/IOS.cmake")
-               << " -DVE_IOS_SDK=iphoneos"
+               << " -DVE_IOS_SDK=" << ShellQuote(iosSDK_)
                << " -DVE_IOS_ARCHITECTURES=arm64"
                << " -DVE_BUILD_PLAYER=ON"
                << " -DVE_BUILD_EDITOR=OFF"
@@ -643,7 +685,7 @@ namespace ve::editor
         stream << "dotnet publish " << ShellQuote(GetGeneratedScriptProjectPath().GetString())
                << " --configuration " << ShellQuote(buildConfiguration_)
                << " --framework net10.0"
-               << " --runtime ios-arm64"
+               << " --runtime " << ShellQuote(GetNativeAOTRuntimeIdentifier())
                << " --output " << ShellQuote(nativeAOTOutputRoot_.GetString())
                << " -p:VEngineEnableIOSNativeAOT=true"
                << " -p:VEngineScriptHostProject=" << ShellQuote(GetScriptHostProjectPath().GetString())
@@ -689,6 +731,22 @@ namespace ve::editor
         }
 
         stream << " archive";
+        return stream.str();
+    }
+
+    std::string EditorProjectPackerIOS::BuildXcodeSimulatorBuildCommand() const
+    {
+        std::ostringstream stream;
+        stream << "xcodebuild"
+               << " -project " << ShellQuote(xcodeBinaryRoot_.GetString() + "/VEngine.xcodeproj")
+               << " -scheme " << ShellQuote(IOSPlayerTargetName)
+               << " -configuration " << ShellQuote(buildConfiguration_)
+               << " -sdk iphonesimulator"
+               << " -destination " << ShellQuote("generic/platform=iOS Simulator")
+               << " CODE_SIGNING_ALLOWED=NO"
+               << " CODE_SIGNING_REQUIRED=NO"
+               << " CODE_SIGN_IDENTITY="
+               << " build";
         return stream.str();
     }
 
@@ -784,8 +842,7 @@ namespace ve::editor
             return Path();
         }
 
-        const std::filesystem::path packageDirectory =
-            std::filesystem::path(packageRoot) / "microsoft.netcore.app.runtime.nativeaot.ios-arm64";
+        const std::filesystem::path packageDirectory = std::filesystem::path(packageRoot) / GetNativeAOTRuntimePackageName();
         std::error_code errorCode;
         if (!std::filesystem::is_directory(packageDirectory, errorCode))
         {
@@ -807,7 +864,7 @@ namespace ve::editor
                 continue;
             }
 
-            const std::filesystem::path candidate = entry.path() / "runtimes" / "ios-arm64" / "native";
+            const std::filesystem::path candidate = entry.path() / "runtimes" / GetNativeAOTRuntimeIdentifier() / "native";
             const std::string versionName = entry.path().filename().generic_string();
             if (std::filesystem::exists(candidate / "libRuntime.WorkstationGC.a", errorCode) &&
                 (bestVersion.empty() || CompareNuGetVersionNames(versionName, bestVersion) > 0))
@@ -825,6 +882,26 @@ namespace ve::editor
     std::string EditorProjectPackerIOS::GetNativeAOTAssemblyName() const
     {
         return projectName_ + ".Scripts";
+    }
+
+    std::string EditorProjectPackerIOS::GetNativeAOTRuntimeIdentifier() const
+    {
+        return IsSimulatorBuild() ? "iossimulator-arm64" : "ios-arm64";
+    }
+
+    std::string EditorProjectPackerIOS::GetNativeAOTRuntimePackageName() const
+    {
+        return "microsoft.netcore.app.runtime.nativeaot." + GetNativeAOTRuntimeIdentifier();
+    }
+
+    Path EditorProjectPackerIOS::GetIOSSimulatorAppBundlePath() const
+    {
+        return xcodeBinaryRoot_ / (buildConfiguration_ + "-iphonesimulator") / (std::string(IOSPlayerTargetName) + ".app");
+    }
+
+    bool EditorProjectPackerIOS::IsSimulatorBuild() const noexcept
+    {
+        return iosSDK_ == "iphonesimulator";
     }
 
     bool EditorProjectPackerIOS::ShouldAllowProvisioningUpdates() const noexcept
@@ -936,6 +1013,11 @@ namespace ve::editor
     bool EditorProjectPackerIOS::IsValidExportMethod(std::string_view text) noexcept
     {
         return text == "development" || text == "ad-hoc" || text == "app-store" || text == "enterprise";
+    }
+
+    bool EditorProjectPackerIOS::IsValidIOSSDK(std::string_view text) noexcept
+    {
+        return text == "iphoneos" || text == "iphonesimulator";
     }
 
     bool EditorProjectPackerIOS::IsValidDeploymentTarget(std::string_view text) noexcept

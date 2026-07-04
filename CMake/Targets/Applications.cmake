@@ -272,6 +272,8 @@ function(ve_add_ios_player)
     enable_language(OBJCXX)
 
     add_executable(VEngineIOSPlayer MACOSX_BUNDLE
+        Player/Windows/VEnginePlayer.cpp
+        Player/Windows/VEnginePlayer.h
         Player/iOS/IOSPlayer.mm
         Player/iOS/LaunchScreen.storyboard
     )

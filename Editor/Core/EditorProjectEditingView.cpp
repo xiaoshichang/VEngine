@@ -169,13 +169,23 @@ namespace ve::editor
         if (ImGui::BeginMenu("Build"))
         {
 #if VE_PLATFORM_MACOS
-            if (ImGui::MenuItem("Package macOS...", nullptr, false, !editor.IsPlaying()))
-#else
-            if (ImGui::MenuItem("Package Windows...", nullptr, false, !editor.IsPlaying()))
-#endif
+            if (ImGui::MenuItem("Build Mac...", nullptr, false, !editor.IsPlaying()))
             {
-                buildPackageDialog_.RequestOpen();
+                buildPackageDialog_.RequestOpen(PackageTargetPlatform::Mac);
             }
+
+            if (ImGui::MenuItem("Build IOS...", nullptr, false, !editor.IsPlaying()))
+            {
+                buildPackageDialog_.RequestOpen(PackageTargetPlatform::IOS);
+            }
+#elif VE_PLATFORM_WINDOWS
+            if (ImGui::MenuItem("Build Windows...", nullptr, false, !editor.IsPlaying()))
+            {
+                buildPackageDialog_.RequestOpen(PackageTargetPlatform::Windows);
+            }
+#else
+            ImGui::MenuItem("Build Project...", nullptr, false, false);
+#endif
 
             ImGui::EndMenu();
         }

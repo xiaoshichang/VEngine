@@ -181,7 +181,7 @@ namespace ve
                     return Result<RTShaderResourceDesc>::Failure(d3d12Bytes.GetError());
                 }
                 stageDesc.d3d12Bytecode = d3d12Bytes.MoveValue();
-#elif VE_PLATFORM_MACOS
+#elif VE_PLATFORM_MACOS || VE_PLATFORM_IOS
                 Result<std::string> metalSource = ReadShaderTextArtifact(artifacts, "metal", "Metal", record, projectRoot);
                 if (!metalSource)
                 {

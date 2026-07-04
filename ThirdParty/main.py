@@ -20,7 +20,7 @@ def get_host_platform() -> str:
 
 
 def get_ios_deployment_target() -> str:
-    return os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "17.0") or "17.0"
+    return os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "16.4") or "16.4"
 
 
 def is_valid_ios_deployment_target(value: str) -> bool:
@@ -51,7 +51,7 @@ def validate_ios_deployment_target() -> int:
     if is_valid_ios_deployment_target(deployment_target):
         return 0
 
-    print(f"Invalid VE_IOS_DEPLOYMENT_TARGET for iOS third-party setup: {deployment_target}. Use a numeric version such as 17.0.")
+    print(f"Invalid VE_IOS_DEPLOYMENT_TARGET for iOS third-party setup: {deployment_target}. Use a numeric version such as 16.4.")
     return 1
 
 

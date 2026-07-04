@@ -46,7 +46,7 @@ def is_valid_ios_deployment_target(value):
 
 
 def get_ios_min_version():
-    return os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "17.0") or "17.0"
+    return os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "16.4") or "16.4"
 
 
 def validate_ios_deployment_target_if_needed(target, value):
@@ -54,7 +54,7 @@ def validate_ios_deployment_target_if_needed(target, value):
         return
 
     if not is_valid_ios_deployment_target(value):
-        raise SystemExit("Invalid VE_IOS_DEPLOYMENT_TARGET for Boost iOS build: %s. Use a numeric version such as 17.0." % value)
+        raise SystemExit("Invalid VE_IOS_DEPLOYMENT_TARGET for Boost iOS build: %s. Use a numeric version such as 16.4." % value)
 
 
 script_file_path = sys.argv[0]

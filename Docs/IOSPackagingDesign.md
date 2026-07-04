@@ -48,7 +48,7 @@ The iOS presets disable Editor, tests, tools, D3D11, and D3D12. They enable Meta
 `CMake/VEngineOptions.cmake` performs the same first-line validation for direct CMake users that the macOS Editor packer
 performs during package preflight: bundle identifiers must be reverse-DNS compatible, code signing style must be
 `Automatic` or `Manual`, manual signing requires `VE_IOS_PROVISIONING_PROFILE_SPECIFIER`, deployment targets must be
-numeric dotted versions such as `17.0`, and NativeAOT project/runtime paths must exist when supplied. `CMake/Toolchains/IOS.cmake`
+numeric dotted versions such as `16.4`, and NativeAOT project/runtime paths must exist when supplied. `CMake/Toolchains/IOS.cmake`
 uses `VE_IOS_DEPLOYMENT_TARGET` as the default `CMAKE_OSX_DEPLOYMENT_TARGET`, and the options layer forces the two values
 back into sync so Jolt, engine code, Xcode target settings, and NativeAOT publish inputs use the same minimum OS version.
 
@@ -106,7 +106,7 @@ Generated script projects use two different ScriptHost references:
   the `ios-arm64` runtime identifier instead of depending on desktop-style `hostfxr` or the iOS workload app model.
   The ProjectReference is intentionally copy-local for the AOT publish closure; desktop generated projects keep the
   ScriptHost DLL reference non-copy-local because the player/editor already carry the managed host payload.
-- Generated iOS NativeAOT script projects default `AppleMinOSVersion` to `17.0` when the caller does not provide an
+- Generated iOS NativeAOT script projects default `AppleMinOSVersion` to `16.4` when the caller does not provide an
   override. The macOS Editor iOS packer still passes `AppleMinOSVersion` explicitly from `VE_IOS_DEPLOYMENT_TARGET`, so
   package builds can raise or lower the deployment target in one place.
 
@@ -162,14 +162,14 @@ VE_IOS_BUNDLE_IDENTIFIER=<explicit app bundle identifier>
 VE_IOS_CODE_SIGN_STYLE=Automatic|Manual
 VE_IOS_PROVISIONING_PROFILE_SPECIFIER=<profile name or UUID for manual signing>
 VE_IOS_CODE_SIGN_IDENTITY=<optional signing identity, such as Apple Development or Apple Distribution>
-VE_IOS_DEPLOYMENT_TARGET=17.0
+VE_IOS_DEPLOYMENT_TARGET=16.4
 VE_IOS_EXPORT_METHOD=development|ad-hoc|app-store|enterprise
 VE_IOS_NATIVEAOT_RUNTIME_NATIVE_DIR=<optional NuGet runtime/native override>
 ```
 
 `VE_IOS_DEPLOYMENT_TARGET` is passed to the iOS player target settings, `CMAKE_OSX_DEPLOYMENT_TARGET`, and the .NET
 NativeAOT `AppleMinOSVersion` property so project code, engine code, and the NativeAOT object agree on the same minimum
-OS version; the packer validates that it is a numeric dotted version such as `17.0` before invoking CMake or dotnet.
+OS version; the packer validates that it is a numeric dotted version such as `16.4` before invoking CMake or dotnet.
 `VE_IOS_BUNDLE_IDENTIFIER` overrides the generated `com.vengine.packaged.<project>` identifier and is validated during
 the preflight step before staging starts. The preflight step also rejects unknown `VE_IOS_CODE_SIGN_STYLE` and
 `VE_IOS_EXPORT_METHOD` values before running CMake or Xcode. Manual signing requires
@@ -196,8 +196,8 @@ The script prepares:
 - Boost 1.85.0 Debug and Release static libraries for `iphonesimulator` under `ThirdParty/Boost/Build/IOS/simulator`.
 - Jolt source under `ThirdParty/Jolt/Source`.
 
-The Boost iOS script uses `VE_IOS_DEPLOYMENT_TARGET` when it is present, and defaults to `17.0` to match the engine iOS
-CMake default. The value must be a numeric dotted version such as `17.0`, matching the macOS Editor packer validation.
+The Boost iOS script uses `VE_IOS_DEPLOYMENT_TARGET` when it is present, and defaults to `16.4` to match the engine iOS
+CMake default. The value must be a numeric dotted version such as `16.4`, matching the macOS Editor packer validation.
 Device and simulator outputs remain separate instead of being combined with `lipo`, because current Apple device and
 simulator static libraries can both contain `arm64` slices that target different platforms. `CMake/SetupBoostLibrary.cmake`
 selects the correct Boost root from `CMAKE_OSX_SYSROOT`. Jolt builds inside the generated VEngine Xcode graph, so it

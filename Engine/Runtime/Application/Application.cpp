@@ -161,6 +161,11 @@ namespace ve
 
     void Application::Run()
     {
+        if (mainWindow_ == nullptr)
+        {
+            return;
+        }
+
         exitCode_ = RunMainLoop(*mainWindow_);
     }
 
@@ -177,8 +182,78 @@ namespace ve
 
         ShutdownEngineRuntime(engineRuntime_);
         mainWindow_.reset();
+        mainLoopStarted_ = false;
+        previousWindowVisible_ = false;
+        previousWindowFocused_ = false;
+        previousWindowMinimized_ = false;
+        previousWindowExtent_ = {};
         initialized_ = false;
         VE_LOG_INFO("{} stopped with exit code {}", initParam_.name, finalExitCode);
+    }
+
+    void Application::StartMainLoop()
+    {
+        if (!initialized_ || mainWindow_ == nullptr || mainLoopStarted_)
+        {
+            return;
+        }
+
+        const WindowStateSnapshot snapshot = CaptureWindowState(*mainWindow_);
+        previousWindowVisible_ = snapshot.visible;
+        previousWindowFocused_ = snapshot.focused;
+        previousWindowMinimized_ = snapshot.minimized;
+        previousWindowExtent_ = snapshot.extent;
+
+        engineRuntime_.GetSceneSystem().StartLoop();
+        mainLoopStarted_ = true;
+    }
+
+    bool Application::TickMainLoopFrame()
+    {
+        if (!initialized_ || mainWindow_ == nullptr)
+        {
+            return false;
+        }
+
+        if (!mainLoopStarted_)
+        {
+            StartMainLoop();
+        }
+
+        Window& mainWindow = *mainWindow_;
+        WindowStateSnapshot previousState;
+        previousState.visible = previousWindowVisible_;
+        previousState.focused = previousWindowFocused_;
+        previousState.minimized = previousWindowMinimized_;
+        previousState.extent = previousWindowExtent_;
+
+        mainWindow.PumpCommands();
+
+        const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
+        const WindowStateSnapshot currentState = CaptureWindowState(mainWindow);
+
+        std::array<OSEvent, MaxWindowOSEventChangesPerFrame> windowStateDeltaEvents = {};
+        const SizeT windowStateDeltaEventCount = CollectWindowStateDeltaEvents(windowStateDeltaEvents, previousState, currentState);
+
+        SceneSystem& sceneSystem = engineRuntime_.GetSceneSystem();
+        EnqueueWindowStateDeltaEventsToSceneThread(sceneSystem, windowStateDeltaEvents, windowStateDeltaEventCount);
+        EnqueuePendingWindowOSEventsToSceneThread(sceneSystem, mainWindow);
+
+        previousWindowVisible_ = currentState.visible;
+        previousWindowFocused_ = currentState.focused;
+        previousWindowMinimized_ = currentState.minimized;
+        previousWindowExtent_ = currentState.extent;
+
+        mainThreadCommandQueue_.ExecutePending();
+
+        if (pumpStatus.result == WindowPumpResult::Quit)
+        {
+            exitCode_ = pumpStatus.exitCode;
+            return false;
+        }
+
+        sceneSystem.NotifyMainThreadFrameEnd();
+        return !mainWindow.ShouldClose();
     }
 
     ErrorCode Application::InitializeEngineRuntime()
@@ -237,40 +312,15 @@ namespace ve
     int Application::RunMainLoop(Window& mainWindow)
     {
         int exitCode = 0;
-        WindowStateSnapshot previousState = CaptureWindowState(mainWindow);
-
-        SceneSystem& sceneSystem = engineRuntime_.GetSceneSystem();
-        sceneSystem.StartLoop();
+        StartMainLoop();
         while (!mainWindow.ShouldClose())
         {
             PlatformAutoreleasePool autoreleasePool;
-
-            mainWindow.PumpCommands();
-
-            // Step 1: pump native window messages. The platform layer mutates the live window state here.
-            const WindowPumpStatus pumpStatus = mainWindow.PumpEvents();
-            const WindowStateSnapshot currentState = CaptureWindowState(mainWindow);
-
-            // Step 2: detect the window state changes that should be forwarded to the Scene Thread.
-            std::array<OSEvent, MaxWindowOSEventChangesPerFrame> windowStateDeltaEvents = {};
-            const SizeT windowStateDeltaEventCount = CollectWindowStateDeltaEvents(windowStateDeltaEvents, previousState, currentState);
-
-            // Step 3: publish window delta events to the Scene Thread. Viewport, input, and future render-facing
-            // state updates are handled there so rendering-related state is not mutated from the Main Thread.
-            EnqueueWindowStateDeltaEventsToSceneThread(sceneSystem, windowStateDeltaEvents, windowStateDeltaEventCount);
-            EnqueuePendingWindowOSEventsToSceneThread(sceneSystem, mainWindow);
-            previousState = currentState;
-            mainThreadCommandQueue_.ExecutePending();
-
-            // Step 4: honor WM_QUIT / platform exit requests after the current frame's Main Thread work completes.
-            if (pumpStatus.result == WindowPumpResult::Quit)
+            if (!TickMainLoopFrame())
             {
-                exitCode = pumpStatus.exitCode;
+                exitCode = exitCode_;
                 break;
             }
-
-            // Step 5: hand off the completed Main Thread frame to the Scene Thread.
-            sceneSystem.NotifyMainThreadFrameEnd();
         }
 
         return exitCode;

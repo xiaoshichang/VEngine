@@ -324,7 +324,13 @@ namespace ve
         loadRequest.provider = &runtimeAssetLoader_;
         loadRequest.resourceSystem = &GetRuntime().GetResourceSystem();
         loadRequest.scriptingSystem = &GetRuntime().GetScriptingSystem();
-        GetRuntime().GetSceneSystem().LoadScene(loadRequest);
+        const Error loadResult = GetRuntime().GetSceneSystem().LoadScene(loadRequest);
+        if (!loadResult.IsOk())
+        {
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to load packaged start scene '{}': {}", packagedStartScene_, loadResult.GetMessage());
+            return;
+        }
+
         VE_LOG_INFO_CATEGORY("Player", "Loaded packaged start scene '{}'.", packagedStartScene_);
     }
 } // namespace ve

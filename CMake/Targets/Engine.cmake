@@ -229,8 +229,10 @@ function(ve_add_engine)
     if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
         target_sources(VEngine
             PRIVATE
+                Engine/Runtime/Platform/iOS/IOSWindow.mm
                 Engine/Runtime/Scripting/IOSAOTScriptingBackend.cpp
             PUBLIC
+                Engine/Runtime/Platform/iOS/IOSWindow.h
                 Engine/Runtime/Scripting/IOSAOTScriptingBackend.h
         )
 

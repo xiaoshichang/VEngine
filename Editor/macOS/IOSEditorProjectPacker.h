@@ -28,6 +28,7 @@ namespace ve::editor
         [[nodiscard]] ErrorCode ConfigureIOSXcodeProject();
         [[nodiscard]] ErrorCode ArchiveIOSPlayer();
         [[nodiscard]] ErrorCode ExportIOSArchive();
+        [[nodiscard]] ErrorCode PrepareIOSSimulatorPackage();
         [[nodiscard]] ErrorCode WriteIOSExportOptionsPlist();
         [[nodiscard]] ErrorCode WriteIOSPackageInfo();
         [[nodiscard]] ErrorCode RunShellCommand(const std::string& command);
@@ -35,12 +36,17 @@ namespace ve::editor
         [[nodiscard]] std::string BuildCMakeConfigureCommand() const;
         [[nodiscard]] std::string BuildNativeAOTPublishCommand() const;
         [[nodiscard]] std::string BuildXcodeArchiveCommand() const;
+        [[nodiscard]] std::string BuildXcodeSimulatorBuildCommand() const;
         [[nodiscard]] std::string BuildXcodeExportCommand() const;
         [[nodiscard]] Path GetGeneratedScriptProjectPath() const;
         [[nodiscard]] Path GetScriptHostProjectPath() const;
         [[nodiscard]] Path FindPublishedNativeAOTLibrary() const;
         [[nodiscard]] Path FindNativeAOTRuntimeNativeDirectory() const;
         [[nodiscard]] std::string GetNativeAOTAssemblyName() const;
+        [[nodiscard]] std::string GetNativeAOTRuntimeIdentifier() const;
+        [[nodiscard]] std::string GetNativeAOTRuntimePackageName() const;
+        [[nodiscard]] Path GetIOSSimulatorAppBundlePath() const;
+        [[nodiscard]] bool IsSimulatorBuild() const noexcept;
         [[nodiscard]] bool ShouldAllowProvisioningUpdates() const noexcept;
         [[nodiscard]] std::string GetExportSigningStyle() const;
 
@@ -49,6 +55,7 @@ namespace ve::editor
         [[nodiscard]] static bool IsValidBundleIdentifier(std::string_view text) noexcept;
         [[nodiscard]] static bool IsValidCodeSignStyle(std::string_view text) noexcept;
         [[nodiscard]] static bool IsValidExportMethod(std::string_view text) noexcept;
+        [[nodiscard]] static bool IsValidIOSSDK(std::string_view text) noexcept;
         [[nodiscard]] static bool IsValidDeploymentTarget(std::string_view text) noexcept;
         [[nodiscard]] static std::string NormalizeCodeSignStyle(std::string text);
 
@@ -61,6 +68,7 @@ namespace ve::editor
         Path nativeAOTLibraryPath_;
         Path nativeAOTRuntimeNativeRoot_;
         std::string bundleIdentifier_;
+        std::string iosSDK_;
         std::string buildConfiguration_;
         std::string developmentTeam_;
         std::string codeSignStyle_;
