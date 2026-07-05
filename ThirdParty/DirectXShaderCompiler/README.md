@@ -1,11 +1,12 @@
 # DirectXShaderCompiler
 
-VEngine uses `Microsoft.Direct3D.DXC` as the SPIR-V-capable DXC package for shader compilation.
+VEngine uses `Microsoft.Direct3D.DXC` as the DXIL-capable DXC package for shader compilation.
 
-To prepare it explicitly after cloning the repository:
+The package version and hash are defined by `CMake/ThirdParty/SetupDirectXShaderCompiler.cmake` and passed to this setup
+script by CMake configure. To prepare it explicitly, pass the same values:
 
 ```bat
-ThirdParty\DirectXShaderCompiler\Build_Windows64.bat
+ThirdParty\DirectXShaderCompiler\Build_Windows64.bat --version <version> --sha256 <sha256>
 ```
 
 The script downloads and verifies the pinned NuGet package, then copies the DXC tool files to

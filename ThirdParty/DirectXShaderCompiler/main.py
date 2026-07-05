@@ -10,11 +10,6 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-
-VERSION = "1.9.2602.17"
-SHA256 = "95703CA504F1C42B8FC3F0D1C4A7FED56BAE16299CF253D432BC90C24A86AE9A"
-
-
 def sha256_hex(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as file:
@@ -31,8 +26,8 @@ def run(*args: str) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--version", "-Version", default=VERSION)
-    parser.add_argument("--sha256", "-Sha256", default=SHA256)
+    parser.add_argument("--version", "-Version", required=True)
+    parser.add_argument("--sha256", "-Sha256", required=True)
     args = parser.parse_args(argv[1:])
 
     root = Path(__file__).resolve().parent

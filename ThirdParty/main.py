@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,12 @@ def get_host_platform() -> str:
 
 
 def get_ios_deployment_target() -> str:
-    return os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "16.4") or "16.4"
+    configured_target = os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "")
+    if configured_target:
+        return configured_target
+
+    detected_target = detect_latest_ios_sdk_version()
+    return detected_target or "16.4"
 
 
 def is_valid_ios_deployment_target(value: str) -> bool:
@@ -55,6 +61,53 @@ def validate_ios_deployment_target() -> int:
     return 1
 
 
+def parse_version_parts(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in value.split(".") if part.isdigit())
+
+
+def pick_latest_version(versions: list[str]) -> str:
+    if not versions:
+        return ""
+
+    return max(versions, key=parse_version_parts)
+
+
+def run_capture(*args: str) -> str:
+    result = subprocess.run(args, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        return ""
+
+    return result.stdout.strip()
+
+
+def detect_latest_ios_sdk_version() -> str:
+    if get_host_platform() != "Darwin":
+        return ""
+
+    version = run_capture("xcrun", "--sdk", "iphoneos", "--show-sdk-version")
+    if is_valid_ios_deployment_target(version):
+        return version
+
+    sdk_text = run_capture("xcodebuild", "-showsdks")
+    versions = re.findall(r"-sdk\s+iphoneos([0-9]+(?:\.[0-9]+)+)", sdk_text)
+    versions = [value for value in versions if is_valid_ios_deployment_target(value)]
+    return pick_latest_version(versions)
+
+
+def write_ios_settings(root: Path, deployment_target: str) -> None:
+    settings_path = root / "IOSSettings.json"
+    settings = {
+        "schemaVersion": 1,
+        "deploymentTarget": deployment_target,
+        "source": "xcode-iphoneos-sdk",
+    }
+
+    import json
+
+    settings_path.write_text(json.dumps(settings, indent=4) + "\n", encoding="utf-8")
+    print(f"iOS settings: {settings_path}")
+
+
 def build_default_steps(root: Path) -> list[tuple[str, list[Path | str]]]:
     host_platform = get_host_platform()
 
@@ -66,7 +119,6 @@ def build_default_steps(root: Path) -> list[tuple[str, list[Path | str]]]:
     steps: list[tuple[str, list[Path | str]]] = [
         ("boost", [root / "Boost" / "main.py", "1.85.0", boost_target]),
         ("slang", [root / "Slang" / "main.py"]),
-        ("spirv-cross", [root / "SPIRV-Cross" / "main.py"]),
         ("jolt", [root / "Jolt" / "main.py", "--build-tests-and-demos"]),
     ]
 
@@ -125,6 +177,10 @@ def main(argv: list[str]) -> int:
         if validation_result != 0:
             return validation_result
 
+        deployment_target = get_ios_deployment_target()
+        os.environ["VE_IOS_DEPLOYMENT_TARGET"] = deployment_target
+        write_ios_settings(root, deployment_target)
+
         for name, command in build_ios_steps(root):
             print(f"==> {name}")
             code = subprocess.call([sys.executable, *map(str, command)], cwd=command[0].parent)
@@ -146,8 +202,6 @@ def main(argv: list[str]) -> int:
         return run(root / "WindowsSdkTools" / "main.py", *args)
     if dependency == "slang":
         return run(root / "Slang" / "main.py", *args)
-    if dependency == "spirv-cross":
-        return run(root / "SPIRV-Cross" / "main.py", *args)
 
     print(f"Unknown dependency: {argv[1]}")
     return 1

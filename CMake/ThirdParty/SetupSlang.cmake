@@ -1,6 +1,6 @@
 include_guard(GLOBAL)
 
-get_filename_component(_VE_SLANG_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+get_filename_component(_VE_SLANG_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 set(VE_SLANG_PACKAGE_NAME "" CACHE STRING "Slang package directory name.")
 set(VE_SLANG_THIRD_PARTY_ROOT "${_VE_SLANG_REPOSITORY_ROOT}/ThirdParty/Slang" CACHE PATH "Slang third-party root.")
@@ -61,11 +61,40 @@ function(ve_setup_slang)
         endif()
     endif()
 
+    if(NOT VE_SLANG_EXECUTABLE AND COMMAND ve_run_third_party_setup)
+        ve_run_third_party_setup(slang)
+
+        if(EXISTS "${defaultPackageRoot}")
+            set(VE_SLANG_PACKAGE_ROOT "${defaultPackageRoot}" CACHE PATH "Extracted Slang package root." FORCE)
+        endif()
+
+        if(EXISTS "${VE_SLANG_PACKAGE_ROOT}/bin/slangc.exe")
+            set(VE_SLANG_EXECUTABLE "${VE_SLANG_PACKAGE_ROOT}/bin/slangc.exe" CACHE FILEPATH "Path to the slangc executable." FORCE)
+        elseif(EXISTS "${VE_SLANG_PACKAGE_ROOT}/bin/slangc")
+            set(VE_SLANG_EXECUTABLE "${VE_SLANG_PACKAGE_ROOT}/bin/slangc" CACHE FILEPATH "Path to the slangc executable." FORCE)
+        endif()
+
+        if(NOT VE_SLANG_EXECUTABLE)
+            find_program(foundSlangExecutableAfterSetup
+                NAMES slangc slangc.exe
+                HINTS
+                    "${VE_SLANG_PACKAGE_ROOT}/bin"
+                    "${VE_SLANG_THIRD_PARTY_ROOT}"
+                DOC "Path to the slangc executable used for shader generation."
+            )
+
+            if(foundSlangExecutableAfterSetup)
+                set(VE_SLANG_EXECUTABLE "${foundSlangExecutableAfterSetup}" CACHE FILEPATH "Path to the slangc executable." FORCE)
+            endif()
+        endif()
+    endif()
+
     if(NOT VE_SLANG_EXECUTABLE)
         message(FATAL_ERROR
-            "slangc was not found. Run ThirdParty/Build_Mac.sh or ThirdParty/Build_Windows64.bat, or set VE_SLANG_EXECUTABLE."
+            "slangc was not found. CMake could not prepare Slang. Run ThirdParty/Build_Mac.sh or ThirdParty/Build_Windows64.bat, or set VE_SLANG_EXECUTABLE."
         )
     endif()
 
+    ve_add_third_party_marker_target(VEngineThirdPartySlang)
     message(STATUS "Slang executable: ${VE_SLANG_EXECUTABLE}")
 endfunction()

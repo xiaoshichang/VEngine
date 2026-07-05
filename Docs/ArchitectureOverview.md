@@ -877,13 +877,12 @@ Recommended shader flow:
 
 ```text
 HLSL Source
-  -> DirectXShaderCompiler
+  -> DirectXShaderCompiler / D3DCompile
     -> DXIL for D3D12
     -> DXBC-compatible output or fallback path for D3D11
-    -> SPIR-V
-      -> SPIRV-Cross
-        -> MSL for Metal
-        -> Reflection metadata
+  -> Slang
+    -> MSL for Metal
+    -> Reflection metadata
 ```
 
 `VEngineShaderTool` responsibilities:
@@ -891,8 +890,7 @@ HLSL Source
 - Compile HLSL.
 - Generate DXIL for D3D12.
 - Support D3D11 shader output path.
-- Generate SPIR-V.
-- Convert SPIR-V to MSL.
+- Generate MSL for Metal through Slang.
 - Export shader reflection metadata.
 - Report compile errors in a format consumable by Editor.
 - Generate shader variants when needed.

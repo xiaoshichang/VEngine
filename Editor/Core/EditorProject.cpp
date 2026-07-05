@@ -120,11 +120,6 @@ namespace ve::editor
                 descriptor.buildSettings.ios.codeSignIdentity = ReadEnvironmentString("VE_IOS_CODE_SIGN_IDENTITY", "Apple Development");
             }
 
-            if (descriptor.buildSettings.ios.deploymentTarget.empty())
-            {
-                descriptor.buildSettings.ios.deploymentTarget = ReadEnvironmentString("VE_IOS_DEPLOYMENT_TARGET", "16.4");
-            }
-
             if (descriptor.buildSettings.ios.exportMethod.empty())
             {
                 descriptor.buildSettings.ios.exportMethod = ReadEnvironmentString("VE_IOS_EXPORT_METHOD", "development");
@@ -158,7 +153,6 @@ namespace ve::editor
             object["codeSignStyle"] = settings.codeSignStyle;
             object["provisioningProfileSpecifier"] = settings.provisioningProfileSpecifier;
             object["codeSignIdentity"] = settings.codeSignIdentity;
-            object["deploymentTarget"] = settings.deploymentTarget;
             object["exportMethod"] = settings.exportMethod;
             object["orientation"] = settings.orientation;
             return object;
@@ -207,7 +201,6 @@ namespace ve::editor
             settings.codeSignStyle = ReadString(*object, "codeSignStyle", settings.codeSignStyle);
             settings.provisioningProfileSpecifier = ReadString(*object, "provisioningProfileSpecifier");
             settings.codeSignIdentity = ReadString(*object, "codeSignIdentity");
-            settings.deploymentTarget = ReadString(*object, "deploymentTarget", settings.deploymentTarget);
             settings.exportMethod = ReadString(*object, "exportMethod", settings.exportMethod);
             settings.orientation = ReadString(*object, "orientation", settings.orientation);
             return settings;

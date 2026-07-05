@@ -1,43 +1,13 @@
 include_guard(GLOBAL)
 
-function(ve_add_shader_tool)
-    if(TARGET VEngineShaderTool)
-        return()
-    endif()
-
-    ve_setup_slang()
-
-    if(WIN32)
-        ve_setup_directx_shader_compiler()
-    endif()
-
-    add_executable(VEngineShaderTool
-        Tools/ShaderTool/ShaderTool.cpp
-    )
-
-    target_link_libraries(VEngineShaderTool
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineShaderTool)
-endfunction()
+include(CMake/Targets/Tools/AssetTool.cmake)
+include(CMake/Targets/Tools/ShaderTool.cmake)
 
 function(ve_add_tools)
     if(NOT VE_BUILD_TOOLS)
         return()
     endif()
 
-    add_executable(VEngineAssetTool
-        Tools/AssetTool/AssetTool.cpp
-    )
-
-    target_link_libraries(VEngineAssetTool
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineAssetTool)
-
+    ve_add_asset_tool()
     ve_add_shader_tool()
 endfunction()

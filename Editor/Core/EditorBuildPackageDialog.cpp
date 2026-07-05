@@ -2,11 +2,16 @@
 
 #include "Editor/Core/Editor.h"
 #include "Editor/Core/EditorProject.h"
+#include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/Core/Platform.h"
+#include "Engine/Runtime/FileSystem/FileSystem.h"
 
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
+#include <boost/json.hpp>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -21,6 +26,12 @@ namespace ve::editor
         constexpr const char* IOSCodeSignStyles[] = {"Automatic", "Manual"};
         constexpr const char* IOSExportMethods[] = {"development", "ad-hoc", "app-store", "enterprise"};
         constexpr const char* IOSOrientationOptions[] = {"Landscape", "Portrait", "Adaptive"};
+
+#if defined(VE_PROJECT_SOURCE_DIR)
+        constexpr const char* EngineSourceDirectory = VE_PROJECT_SOURCE_DIR;
+#else
+        constexpr const char* EngineSourceDirectory = "";
+#endif
 
         [[nodiscard]] int FindOptionIndex(const char* const* options, int optionCount, const std::string& value, int fallback)
         {
@@ -40,6 +51,127 @@ namespace ve::editor
             std::vector<char> buffer(text.begin(), text.end());
             buffer.push_back('\0');
             return buffer;
+        }
+
+        [[nodiscard]] std::string Trim(std::string text)
+        {
+            while (!text.empty() && (text.back() == '\n' || text.back() == '\r' || text.back() == ' ' || text.back() == '\t'))
+            {
+                text.pop_back();
+            }
+
+            size_t first = 0;
+            while (first < text.size() && (text[first] == ' ' || text[first] == '\t' || text[first] == '\n' || text[first] == '\r'))
+            {
+                ++first;
+            }
+
+            return first == 0 ? text : text.substr(first);
+        }
+
+        [[nodiscard]] bool IsValidIOSDeploymentTarget(std::string_view text) noexcept
+        {
+            if (text.empty() || text.front() == '.' || text.back() == '.')
+            {
+                return false;
+            }
+
+            bool hasDot = false;
+            bool previousDot = false;
+            for (const char value : text)
+            {
+                if (value == '.')
+                {
+                    if (previousDot)
+                    {
+                        return false;
+                    }
+
+                    hasDot = true;
+                    previousDot = true;
+                    continue;
+                }
+
+                if (value < '0' || value > '9')
+                {
+                    return false;
+                }
+
+                previousDot = false;
+            }
+
+            return hasDot;
+        }
+
+        [[nodiscard]] std::string ReadIOSDeploymentTargetFromSetup()
+        {
+            if (std::string(EngineSourceDirectory).empty())
+            {
+                return {};
+            }
+
+            const Path settingsPath = Path(std::string(EngineSourceDirectory)) / "ThirdParty" / "IOSSettings.json";
+            Result<std::string> textResult = FileSystem::ReadTextFile(settingsPath);
+            if (!textResult)
+            {
+                return {};
+            }
+
+            Result<boost::json::value> jsonResult = JsonUtils::Parse(textResult.GetValue());
+            if (!jsonResult || !jsonResult.GetValue().is_object())
+            {
+                return {};
+            }
+
+            const boost::json::value* deploymentTargetValue = jsonResult.GetValue().as_object().if_contains("deploymentTarget");
+            if (deploymentTargetValue == nullptr || !deploymentTargetValue->is_string())
+            {
+                return {};
+            }
+
+            std::string deploymentTarget(deploymentTargetValue->as_string());
+            return IsValidIOSDeploymentTarget(deploymentTarget) ? deploymentTarget : std::string{};
+        }
+
+        [[nodiscard]] std::string DetectIOSDeploymentTargetFromXcode()
+        {
+#if VE_PLATFORM_MACOS
+            FILE* pipe = popen("xcrun --sdk iphoneos --show-sdk-version 2>/dev/null", "r");
+            if (pipe == nullptr)
+            {
+                return {};
+            }
+
+            std::array<char, 128> buffer{};
+            std::string text;
+            while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+            {
+                text += buffer.data();
+            }
+
+            pclose(pipe);
+            text = Trim(std::move(text));
+            return IsValidIOSDeploymentTarget(text) ? text : std::string{};
+#else
+            return {};
+#endif
+        }
+
+        [[nodiscard]] std::string ResolveIOSDeploymentTargetText()
+        {
+            std::string deploymentTarget = ReadIOSDeploymentTargetFromSetup();
+            if (!deploymentTarget.empty())
+            {
+                return deploymentTarget;
+            }
+
+            deploymentTarget = DetectIOSDeploymentTargetFromXcode();
+            if (!deploymentTarget.empty())
+            {
+                return deploymentTarget;
+            }
+
+            return "Detected during iOS setup";
         }
     } // namespace
 
@@ -146,8 +278,8 @@ namespace ve::editor
         CopyToBuffer(iosDevelopmentTeamBuffer_, buildSettings_.ios.developmentTeam);
         CopyToBuffer(iosProvisioningProfileSpecifierBuffer_, buildSettings_.ios.provisioningProfileSpecifier);
         CopyToBuffer(iosCodeSignIdentityBuffer_, buildSettings_.ios.codeSignIdentity);
-        CopyToBuffer(iosDeploymentTargetBuffer_, buildSettings_.ios.deploymentTarget);
         CopyToBuffer(windowsConfigurationBuffer_, buildSettings_.windows.configuration);
+        iosDeploymentTargetText_ = ResolveIOSDeploymentTargetText();
 
         iosSDKIndex_ = FindOptionIndex(IOSSDKOptions, IM_ARRAYSIZE(IOSSDKOptions), buildSettings_.ios.sdk, 0);
         iosCodeSignStyleIndex_ = FindOptionIndex(IOSCodeSignStyles, IM_ARRAYSIZE(IOSCodeSignStyles), buildSettings_.ios.codeSignStyle, 0);
@@ -165,7 +297,6 @@ namespace ve::editor
         buildSettings_.ios.codeSignStyle = IOSCodeSignStyles[(std::clamp)(iosCodeSignStyleIndex_, 0, IM_ARRAYSIZE(IOSCodeSignStyles) - 1)];
         buildSettings_.ios.provisioningProfileSpecifier = BufferToString(iosProvisioningProfileSpecifierBuffer_);
         buildSettings_.ios.codeSignIdentity = BufferToString(iosCodeSignIdentityBuffer_);
-        buildSettings_.ios.deploymentTarget = BufferToString(iosDeploymentTargetBuffer_);
         buildSettings_.ios.exportMethod = IOSExportMethods[(std::clamp)(iosExportMethodIndex_, 0, IM_ARRAYSIZE(IOSExportMethods) - 1)];
         buildSettings_.ios.orientation = IOSOrientationOptions[(std::clamp)(iosOrientationIndex_, 0, IM_ARRAYSIZE(IOSOrientationOptions) - 1)];
         buildSettings_.windows.configuration = BufferToString(windowsConfigurationBuffer_);
@@ -312,8 +443,7 @@ namespace ve::editor
             ImGui::InputText("Provisioning Profile", iosProvisioningProfileSpecifierBuffer_.data(), iosProvisioningProfileSpecifierBuffer_.size());
             ImGui::SetNextItemWidth(BuildPackageDialogWidth);
             ImGui::InputText("Code Sign Identity", iosCodeSignIdentityBuffer_.data(), iosCodeSignIdentityBuffer_.size());
-            ImGui::SetNextItemWidth(BuildPackageDialogWidth);
-            ImGui::InputText("Deployment Target", iosDeploymentTargetBuffer_.data(), iosDeploymentTargetBuffer_.size());
+            RenderReadonlyField("Deployment Target", iosDeploymentTargetText_, BuildPackageDialogWidth);
             ImGui::SetNextItemWidth(BuildPackageDialogWidth);
             ImGui::Combo("Export Method", &iosExportMethodIndex_, IOSExportMethods, IM_ARRAYSIZE(IOSExportMethods));
             ImGui::SetNextItemWidth(BuildPackageDialogWidth);

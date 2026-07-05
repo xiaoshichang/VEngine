@@ -42,7 +42,6 @@ The setup script downloads and builds the project-owned third-party payloads use
 - Boost.
 - DirectXShaderCompiler.
 - Slang.
-- SPIRV-Cross.
 
 Generated dependency source checkouts, build directories, archives, and binaries are not committed to git. Re-run the
 setup script when dependency payloads are missing or after deleting generated third-party directories.

@@ -1,6 +1,6 @@
 include_guard(GLOBAL)
 
-get_filename_component(_VE_IMGUI_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+get_filename_component(_VE_IMGUI_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 set(VE_IMGUI_THIRD_PARTY_ROOT "${_VE_IMGUI_REPOSITORY_ROOT}/ThirdParty/ImGui" CACHE PATH "Dear ImGui third-party root.")
 set(VE_IMGUI_VERSION "1.92.8" CACHE STRING "Vendored Dear ImGui version.")
@@ -30,11 +30,22 @@ function(ve_validate_imgui_source)
         )
     endif()
 
+    set(imguiSourceReady ON)
+    foreach(requiredImGuiFile IN LISTS requiredImGuiFiles)
+        if(NOT EXISTS "${requiredImGuiFile}")
+            set(imguiSourceReady OFF)
+        endif()
+    endforeach()
+
+    if(NOT imguiSourceReady AND COMMAND ve_run_third_party_setup)
+        ve_run_third_party_setup(imgui)
+    endif()
+
     foreach(requiredImGuiFile IN LISTS requiredImGuiFiles)
         if(NOT EXISTS "${requiredImGuiFile}")
             message(FATAL_ERROR
                 "Dear ImGui vendored source is missing required file: ${requiredImGuiFile}\n"
-                "Restore ThirdParty/ImGui/imgui-${VE_IMGUI_VERSION} or set VE_IMGUI_SOURCE_DIR to a complete ImGui checkout."
+                "CMake could not prepare ImGui. Restore ThirdParty/ImGui/imgui-${VE_IMGUI_VERSION} or set VE_IMGUI_SOURCE_DIR to a complete ImGui checkout."
             )
         endif()
     endforeach()
@@ -46,6 +57,7 @@ function(ve_add_imgui_library)
     endif()
 
     ve_validate_imgui_source()
+    ve_add_third_party_marker_target(VEngineThirdPartyImGui)
 
     message(STATUS "Dear ImGui source: ${VE_IMGUI_SOURCE_DIR}")
     message(STATUS "Dear ImGui version: ${VE_IMGUI_VERSION}")

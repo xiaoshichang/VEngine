@@ -50,8 +50,8 @@ namespace ve::editor
         std::array<char, 256> iosDevelopmentTeamBuffer_{};
         std::array<char, 256> iosProvisioningProfileSpecifierBuffer_{};
         std::array<char, 256> iosCodeSignIdentityBuffer_{};
-        std::array<char, 256> iosDeploymentTargetBuffer_{};
         std::array<char, 256> windowsConfigurationBuffer_{};
+        std::string iosDeploymentTargetText_;
         std::string settingsMessage_;
         bool isOpen_ = false;
         bool hasStarted_ = false;

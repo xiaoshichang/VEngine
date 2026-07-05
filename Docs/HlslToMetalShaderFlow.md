@@ -421,7 +421,7 @@ Rules:
 - Use project-standard matrix packing. The initial recommendation is `row_major` in HLSL because it is easy to align
   with typical C++ math storage, but this must be validated once the math library lands.
 - Keep include paths deterministic and rooted under `Shaders/HLSL`.
-- Every shader that is part of the first-stage runtime must pass D3D11, D3D12, SPIR-V, MSL, and reflection generation.
+- Every shader that is part of the first-stage runtime must pass D3D11, D3D12, MSL, and reflection generation.
 
 ## 10. VEngineShaderTool Responsibilities
 
@@ -434,7 +434,7 @@ Responsibilities:
 - Resolve includes.
 - Invoke DXC.
 - Invoke `D3DCompile` for D3D11 output on Windows.
-- Invoke Slang for SPIR-V, MSL, and reflection.
+- Invoke Slang for MSL and reflection.
 - Emit normalized reflection metadata.
 - Validate required resource bindings.
 - Validate generated MSL on Apple hosts.
@@ -470,7 +470,7 @@ set(VE_SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Generated/Shaders" CACHE PATH "Gen
 
 Host behavior:
 
-- Windows host: build and run D3D11, D3D12, SPIR-V, MSL text generation, and reflection tests.
+- Windows host: build and run D3D11, D3D12, MSL text generation, and reflection tests.
 - Apple host: additionally compile generated MSL to `.metallib` for macOS validation and validate Metal pipeline creation.
 - Non-Apple host: do not require `xcrun metal`; produce MSL text and defer `.metallib` packaging.
 
@@ -480,12 +480,11 @@ Minimum shader tests:
 
 1. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D11 DXBC.
 2. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D12 DXIL.
-3. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to SPIR-V.
-4. Convert SPIR-V to MSL.
-5. Generate reflection JSON.
-6. Validate that `CameraConstants : register(b0, space0)` maps to the expected binding metadata.
-7. On Apple host, compile generated MSL to `.metallib`.
-8. On macOS, create `MTLLibrary`, retrieve vertex and fragment functions, and render a triangle.
+3. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to MSL.
+4. Generate reflection JSON.
+5. Validate that `CameraConstants : register(b0, space0)` maps to the expected binding metadata.
+6. On Apple host, compile generated MSL to `.metallib`.
+7. On macOS, create `MTLLibrary`, retrieve vertex and fragment functions, and render a triangle.
 
 Runtime smoke tests:
 
@@ -515,7 +514,7 @@ Negative tests:
 - Add D3D12 DXIL generation through DXC.
 - Add Windows shader compile smoke tests.
 
-### Phase 3: SPIR-V, MSL, And Reflection
+### Phase 3: MSL And Reflection
 
 - Add Slang MSL generation.
 - Add Slang reflection extraction.
@@ -610,8 +609,8 @@ Mitigation:
 
 The 2.2 milestone is complete when:
 
-- `VEngineShaderTool` can compile one HLSL triangle shader to D3D11 DXBC, D3D12 DXIL, SPIR-V, MSL, and reflection JSON.
-- Windows shader tests validate D3D11, D3D12, SPIR-V, MSL text generation, and metadata.
+- `VEngineShaderTool` can compile one HLSL triangle shader to D3D11 DXBC, D3D12 DXIL, MSL, and reflection JSON.
+- Windows shader tests validate D3D11, D3D12, MSL text generation, and metadata.
 - Apple-host validation compiles generated MSL to `.metallib`.
 - The D3D11, D3D12, and macOS Metal triangle demos can use artifacts generated from the same HLSL source.
 - Reflection metadata drives at least one constant buffer binding and one texture/sampler binding.
@@ -620,7 +619,6 @@ The 2.2 milestone is complete when:
 ## 16. Reference Sources
 
 - Microsoft DirectXShaderCompiler README: https://github.com/microsoft/DirectXShaderCompiler/blob/main/README.md
-- Microsoft DirectXShaderCompiler HLSL to SPIR-V mapping: https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/SPIR-V.rst?plain=1
 - Microsoft D3DCompile documentation: https://learn.microsoft.com/en-us/windows/win32/api/d3dcompiler/nf-d3dcompiler-d3dcompile
 - Slang README: https://github.com/shader-slang/slang
 - Apple Metal Shader Converter: https://developer.apple.com/metal/shader-converter/

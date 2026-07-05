@@ -1,5 +1,11 @@
 include_guard(GLOBAL)
 
+include(CMake/Targets/Tests/MemoryTests.cmake)
+include(CMake/Targets/Tests/MathTests.cmake)
+include(CMake/Targets/Tests/ViewportTests.cmake)
+include(CMake/Targets/Tests/ResourceRenderTests.cmake)
+include(CMake/Targets/Tests/JoltIntegrationTests.cmake)
+
 function(ve_add_tests)
     if(NOT VE_BUILD_TESTS)
         return()
@@ -10,85 +16,9 @@ function(ve_add_tests)
         return()
     endif()
 
-    add_executable(VEngineMemoryTests
-        Tests/Unit/MemoryTests.cpp
-    )
-
-    target_link_libraries(VEngineMemoryTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineMemoryTests)
-
-    add_test(
-        NAME VEngineMemoryTests
-        COMMAND $<TARGET_FILE:VEngineMemoryTests>
-    )
-
-    add_executable(VEngineMathTests
-        Tests/Unit/MathTests.cpp
-    )
-
-    target_link_libraries(VEngineMathTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineMathTests)
-
-    add_test(
-        NAME VEngineMathTests
-        COMMAND $<TARGET_FILE:VEngineMathTests>
-    )
-
-    add_executable(VEngineViewportTests
-        Tests/Unit/ViewportTests.cpp
-    )
-
-    target_link_libraries(VEngineViewportTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineViewportTests)
-
-    add_test(
-        NAME VEngineViewportTests
-        COMMAND $<TARGET_FILE:VEngineViewportTests>
-    )
-
-    add_executable(VEngineResourceRenderTests
-        Tests/Unit/ResourceRenderTests.cpp
-    )
-
-    target_link_libraries(VEngineResourceRenderTests
-        PRIVATE
-            VEngine
-    )
-
-    ve_configure_target(VEngineResourceRenderTests)
-
-    add_test(
-        NAME VEngineResourceRenderTests
-        COMMAND $<TARGET_FILE:VEngineResourceRenderTests>
-    )
-
-    add_executable(VEngineJoltIntegrationTests
-        Tests/Unit/JoltIntegrationTests.cpp
-    )
-
-    target_link_libraries(VEngineJoltIntegrationTests
-        PRIVATE
-            VEngine
-            VEngine::Jolt
-    )
-
-    ve_configure_target(VEngineJoltIntegrationTests)
-
-    add_test(
-        NAME VEngineJoltIntegrationTests
-        COMMAND $<TARGET_FILE:VEngineJoltIntegrationTests>
-    )
-
+    ve_add_memory_tests()
+    ve_add_math_tests()
+    ve_add_viewport_tests()
+    ve_add_resource_render_tests()
+    ve_add_jolt_integration_tests()
 endfunction()

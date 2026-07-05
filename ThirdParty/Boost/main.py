@@ -2,6 +2,7 @@
 import json
 import os
 import platform
+import re
 import shutil
 import ssl
 import subprocess
@@ -46,7 +47,12 @@ def is_valid_ios_deployment_target(value):
 
 
 def get_ios_min_version():
-    return os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "16.4") or "16.4"
+    configured_target = os.environ.get("VE_IOS_DEPLOYMENT_TARGET", "")
+    if configured_target:
+        return configured_target
+
+    detected_target = detect_latest_ios_sdk_version()
+    return detected_target or "16.4"
 
 
 def validate_ios_deployment_target_if_needed(target, value):
@@ -55,6 +61,34 @@ def validate_ios_deployment_target_if_needed(target, value):
 
     if not is_valid_ios_deployment_target(value):
         raise SystemExit("Invalid VE_IOS_DEPLOYMENT_TARGET for Boost iOS build: %s. Use a numeric version such as 16.4." % value)
+
+
+def parse_version_parts(value):
+    return tuple(int(part) for part in value.split(".") if part.isdigit())
+
+
+def run_capture(*args):
+    result = subprocess.run(args, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        return ""
+
+    return result.stdout.strip()
+
+
+def detect_latest_ios_sdk_version():
+    if platform.system() != "Darwin":
+        return ""
+
+    version = run_capture("xcrun", "--sdk", "iphoneos", "--show-sdk-version")
+    if is_valid_ios_deployment_target(version):
+        return version
+
+    sdk_text = run_capture("xcodebuild", "-showsdks")
+    versions = [value for value in re.findall(r"-sdk\s+iphoneos([0-9]+(?:\.[0-9]+)+)", sdk_text) if is_valid_ios_deployment_target(value)]
+    if not versions:
+        return ""
+
+    return max(versions, key=parse_version_parts)
 
 
 script_file_path = sys.argv[0]

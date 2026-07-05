@@ -59,6 +59,7 @@ namespace ve::editor
         std::string playerExecutable;
         std::string dataRoot;
         std::string appBundle;
+        std::string xcodeProject;
     };
 
     class EditorProjectPacker : public NonMovable

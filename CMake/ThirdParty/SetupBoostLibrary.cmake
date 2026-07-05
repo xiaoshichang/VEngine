@@ -8,7 +8,7 @@ if(POLICY CMP0167)
     cmake_policy(SET CMP0167 NEW)
 endif()
 
-get_filename_component(_VE_BOOST_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+get_filename_component(_VE_BOOST_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 set(VE_BOOST_ROOT "" CACHE PATH "Optional Boost installation root override.")
 set(VE_BOOST_COMPILER "" CACHE STRING "Optional Boost compiler tag override, such as vc142 or clang-darwin.")
@@ -86,28 +86,88 @@ function(ve_register_boost_config_dirs boostRoot)
     endforeach()
 endfunction()
 
+function(ve_is_boost_root_ready boostRoot outVariable)
+    if(NOT boostRoot OR NOT EXISTS "${boostRoot}")
+        set(${outVariable} OFF PARENT_SCOPE)
+        return()
+    endif()
+
+    file(GLOB boostPackageConfigDirs LIST_DIRECTORIES true
+        "${boostRoot}/lib/cmake/Boost-*"
+    )
+    if(NOT boostPackageConfigDirs)
+        set(${outVariable} OFF PARENT_SCOPE)
+        return()
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        get_filename_component(boostIOSBuildRoot "${boostRoot}" DIRECTORY)
+        set(boostIOSBuildInfoPath "${boostIOSBuildRoot}/BuildInfo.json")
+        if(NOT EXISTS "${boostIOSBuildInfoPath}")
+            set(${outVariable} OFF PARENT_SCOPE)
+            return()
+        endif()
+
+        file(READ "${boostIOSBuildInfoPath}" boostIOSBuildInfo)
+        set(boostIOSDeploymentTarget "")
+        if(boostIOSBuildInfo MATCHES "\"deploymentTarget\"[ \t\r\n]*:[ \t\r\n]*\"([^\"]+)\"")
+            set(boostIOSDeploymentTarget "${CMAKE_MATCH_1}")
+        endif()
+
+        if(NOT "${boostIOSDeploymentTarget}" STREQUAL "${VE_IOS_DEPLOYMENT_TARGET}")
+            message(STATUS "Boost iOS deployment target mismatch: built '${boostIOSDeploymentTarget}', current '${VE_IOS_DEPLOYMENT_TARGET}'")
+            set(${outVariable} OFF PARENT_SCOPE)
+            return()
+        endif()
+    endif()
+
+    set(${outVariable} ON PARENT_SCOPE)
+endfunction()
+
+function(ve_prepare_default_boost_root boostRoot)
+    if(NOT COMMAND ve_run_third_party_setup)
+        return()
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        ve_run_third_party_setup(ios)
+    elseif(WIN32)
+        ve_run_third_party_setup(boost 1.85.0 Windows64)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        ve_run_third_party_setup(boost 1.85.0 Mac)
+    endif()
+endfunction()
+
 function(ve_setup_boost_library targetName)
     if(NOT TARGET ${targetName})
         message(FATAL_ERROR "ve_setup_boost_library target does not exist: ${targetName}")
     endif()
 
+    set(isDefaultBoostRoot OFF)
     if(VE_BOOST_ROOT)
         set(boostRoot "${VE_BOOST_ROOT}")
     else()
         ve_get_default_boost_root(boostRoot)
+        set(isDefaultBoostRoot ON)
     endif()
 
     if(boostRoot)
-        if(NOT EXISTS "${boostRoot}")
+        ve_is_boost_root_ready("${boostRoot}" boostRootReady)
+        if(NOT boostRootReady AND isDefaultBoostRoot)
+            ve_prepare_default_boost_root("${boostRoot}")
+            ve_is_boost_root_ready("${boostRoot}" boostRootReady)
+        endif()
+
+        if(NOT boostRootReady)
             if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
                 message(FATAL_ERROR
                     "Boost root does not exist: ${boostRoot}\n"
-                    "Run ThirdParty/Build_IOS.sh on macOS or set VE_BOOST_ROOT to a valid iOS Boost installation."
+                    "CMake could not prepare the default iOS Boost payload. Run ThirdParty/Build_IOS.sh on macOS or set VE_BOOST_ROOT to a valid iOS Boost installation."
                 )
             else()
                 message(FATAL_ERROR
                     "Boost root does not exist: ${boostRoot}\n"
-                    "Build Boost with the script under ThirdParty/Boost or set VE_BOOST_ROOT to a valid installation."
+                    "CMake could not prepare the default Boost payload. Build Boost with the script under ThirdParty/Boost or set VE_BOOST_ROOT to a valid installation."
                 )
             endif()
         endif()
@@ -154,6 +214,7 @@ function(ve_setup_boost_library targetName)
     endif()
 
     if(NOT TARGET VEngineBoost)
+        ve_add_third_party_marker_target(VEngineThirdPartyBoost)
         add_library(VEngineBoost INTERFACE)
         add_library(VEngine::Boost ALIAS VEngineBoost)
 

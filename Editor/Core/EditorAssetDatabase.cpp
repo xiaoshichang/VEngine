@@ -790,13 +790,8 @@ namespace ve::editor
                 }
 
                 const boost::json::object& artifacts = artifactsValue->as_object();
-                if (artifacts.contains("spirv") || artifacts.contains("spirvCrossMetal"))
-                {
-                    return true;
-                }
-
                 const std::string metalPath = ReadString(artifacts, "metal");
-                if (metalPath.ends_with(".slang.metal") || metalPath.ends_with(".spirv-cross.metal"))
+                if (metalPath.ends_with(".slang.metal"))
                 {
                     return true;
                 }

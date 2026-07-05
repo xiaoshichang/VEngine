@@ -1,6 +1,6 @@
 include_guard(GLOBAL)
 
-get_filename_component(_VE_JOLT_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+get_filename_component(_VE_JOLT_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 set(VE_JOLT_GIT_TAG "v5.5.0" CACHE STRING "Jolt Physics git tag used by the setup script.")
 set(VE_JOLT_THIRD_PARTY_ROOT "${_VE_JOLT_REPOSITORY_ROOT}/ThirdParty/Jolt" CACHE PATH "Jolt Physics third-party root.")
@@ -29,10 +29,25 @@ function(ve_prepare_jolt_source)
         return()
     endif()
 
+    if(COMMAND ve_run_third_party_setup)
+        ve_run_third_party_setup(jolt)
+
+        set(joltSourceReady ON)
+        foreach(requiredJoltFile IN LISTS requiredJoltFiles)
+            if(NOT EXISTS "${requiredJoltFile}")
+                set(joltSourceReady OFF)
+            endif()
+        endforeach()
+
+        if(joltSourceReady)
+            return()
+        endif()
+    endif()
+
     if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        set(joltSetupHint "Run ThirdParty/Build_IOS.sh on macOS or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout.")
+        set(joltSetupHint "CMake could not prepare Jolt. Run ThirdParty/Build_IOS.sh on macOS or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout.")
     else()
-        set(joltSetupHint "Run ThirdParty/Jolt/Build_Windows64.bat or ThirdParty/Build_Mac.sh, or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout.")
+        set(joltSetupHint "CMake could not prepare Jolt. Run ThirdParty/Jolt/Build_Windows64.bat or ThirdParty/Build_Mac.sh, or set VE_JOLT_SOURCE_DIR to a complete Jolt Physics checkout.")
     endif()
 
     foreach(requiredJoltFile IN LISTS requiredJoltFiles)

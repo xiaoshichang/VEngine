@@ -69,7 +69,7 @@ Approved first-stage dependencies:
 - Dear ImGui for the Windows Editor only.
 - FreeType for runtime UI font rendering.
 - DirectXShaderCompiler for HLSL compilation.
-- SPIRV-Cross for SPIR-V to MSL conversion and shader reflection.
+- Slang for HLSL to Metal MSL generation and shader reflection.
 
 Logging must use Boost.Log through a VEngine logging facade. Do not add spdlog.
 
@@ -143,13 +143,12 @@ Expected pipeline:
 
 ```text
 HLSL
-  -> DirectXShaderCompiler
+  -> DirectXShaderCompiler / D3DCompile
     -> DXIL for D3D12
     -> D3D11-compatible output path
-    -> SPIR-V
-      -> SPIRV-Cross
-        -> MSL for Metal
-        -> reflection metadata
+  -> Slang
+    -> MSL for Metal
+    -> reflection metadata
 ```
 
 Prefer offline shader compilation through `VEngineShaderTool`. Runtime should load compiled shader artifacts and reflection metadata rather than performing full cross-compilation.

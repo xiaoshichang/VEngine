@@ -488,6 +488,11 @@ namespace ve::editor
             object["appBundle"] = desc.appBundle;
         }
 
+        if (!desc.xcodeProject.empty())
+        {
+            object["xcodeProject"] = desc.xcodeProject;
+        }
+
         const ErrorCode writeResult = FileSystem::WriteTextFile(desc.packageInfoPath, JsonUtils::SerializePretty(object));
         if (writeResult != ErrorCode::None)
         {

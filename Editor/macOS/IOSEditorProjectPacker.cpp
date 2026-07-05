@@ -74,6 +74,123 @@ namespace ve::editor
             return text.empty() || text == "Automatic";
         }
 
+        [[nodiscard]] std::string Trim(std::string text)
+        {
+            while (!text.empty() && (text.back() == '\n' || text.back() == '\r' || text.back() == ' ' || text.back() == '\t'))
+            {
+                text.pop_back();
+            }
+
+            size_t first = 0;
+            while (first < text.size() && (text[first] == ' ' || text[first] == '\t' || text[first] == '\n' || text[first] == '\r'))
+            {
+                ++first;
+            }
+
+            return first == 0 ? text : text.substr(first);
+        }
+
+        [[nodiscard]] bool IsValidIOSDeploymentTargetText(std::string_view text) noexcept
+        {
+            if (text.empty() || text.front() == '.' || text.back() == '.')
+            {
+                return false;
+            }
+
+            bool hasDot = false;
+            bool previousDot = false;
+            for (const char value : text)
+            {
+                if (value == '.')
+                {
+                    if (previousDot)
+                    {
+                        return false;
+                    }
+
+                    hasDot = true;
+                    previousDot = true;
+                    continue;
+                }
+
+                if (value < '0' || value > '9')
+                {
+                    return false;
+                }
+
+                previousDot = false;
+            }
+
+            return hasDot;
+        }
+
+        [[nodiscard]] std::string ReadIOSDeploymentTargetFromSetup()
+        {
+            if (std::string(EngineSourceDirectory).empty())
+            {
+                return {};
+            }
+
+            const Path settingsPath = Path(std::string(EngineSourceDirectory)) / "ThirdParty" / "IOSSettings.json";
+            Result<std::string> textResult = FileSystem::ReadTextFile(settingsPath);
+            if (!textResult)
+            {
+                return {};
+            }
+
+            Result<boost::json::value> jsonResult = JsonUtils::Parse(textResult.GetValue());
+            if (!jsonResult || !jsonResult.GetValue().is_object())
+            {
+                return {};
+            }
+
+            const boost::json::value* deploymentTargetValue = jsonResult.GetValue().as_object().if_contains("deploymentTarget");
+            if (deploymentTargetValue == nullptr || !deploymentTargetValue->is_string())
+            {
+                return {};
+            }
+
+            std::string deploymentTarget(deploymentTargetValue->as_string());
+            return IsValidIOSDeploymentTargetText(deploymentTarget) ? deploymentTarget : std::string{};
+        }
+
+        [[nodiscard]] std::string DetectIOSDeploymentTargetFromXcode()
+        {
+            FILE* pipe = popen("xcrun --sdk iphoneos --show-sdk-version 2>/dev/null", "r");
+            if (pipe == nullptr)
+            {
+                return {};
+            }
+
+            std::array<char, 128> buffer{};
+            std::string text;
+            while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+            {
+                text += buffer.data();
+            }
+
+            pclose(pipe);
+            text = Trim(std::move(text));
+            return IsValidIOSDeploymentTargetText(text) ? text : std::string{};
+        }
+
+        [[nodiscard]] std::string ResolveIOSDeploymentTarget()
+        {
+            std::string deploymentTarget = ReadIOSDeploymentTargetFromSetup();
+            if (!deploymentTarget.empty())
+            {
+                return deploymentTarget;
+            }
+
+            deploymentTarget = DetectIOSDeploymentTargetFromXcode();
+            if (!deploymentTarget.empty())
+            {
+                return deploymentTarget;
+            }
+
+            return "16.4";
+        }
+
         struct ParsedNuGetVersion
         {
             std::vector<unsigned long long> numericParts;
@@ -184,12 +301,12 @@ namespace ve::editor
 
     std::string EditorProjectPackerIOS::GetRunningStatusMessage() const
     {
-        return "Packaging iOS app.";
+        return "Exporting iOS Xcode project.";
     }
 
     std::string EditorProjectPackerIOS::GetSucceededStatusMessage() const
     {
-        return "iOS package completed.";
+        return "iOS Xcode project exported.";
     }
 
     void EditorProjectPackerIOS::ConfigurePackagePaths()
@@ -217,7 +334,7 @@ namespace ve::editor
             ? std::string{}
             : buildSettings_.ios.provisioningProfileSpecifier;
         codeSignIdentity_ = buildSettings_.ios.codeSignIdentity.empty() ? "Apple Development" : buildSettings_.ios.codeSignIdentity;
-        deploymentTarget_ = buildSettings_.ios.deploymentTarget.empty() ? "16.4" : buildSettings_.ios.deploymentTarget;
+        deploymentTarget_ = ResolveIOSDeploymentTarget();
         exportMethod_ = buildSettings_.ios.exportMethod.empty() ? "development" : buildSettings_.ios.exportMethod;
         orientation_ = buildSettings_.ios.orientation.empty() ? "Landscape" : buildSettings_.ios.orientation;
     }
@@ -232,8 +349,6 @@ namespace ve::editor
             PackageStepState{.name = "Copy runtime assets"},
             PackageStepState{.name = "Publish iOS NativeAOT scripts"},
             PackageStepState{.name = "Configure iOS Xcode project"},
-            PackageStepState{.name = IsSimulatorBuild() ? "Build iOS simulator player" : "Archive iOS player"},
-            PackageStepState{.name = IsSimulatorBuild() ? "Prepare iOS simulator app" : "Export iOS ipa"},
             PackageStepState{.name = "Write package info"},
         };
     }
@@ -257,10 +372,6 @@ namespace ve::editor
         case 6:
             return ConfigureIOSXcodeProject();
         case 7:
-            return ArchiveIOSPlayer();
-        case 8:
-            return ExportIOSArchive();
-        case 9:
             return WriteIOSPackageInfo();
         default:
             return ErrorCode::InvalidState;
@@ -581,15 +692,14 @@ namespace ve::editor
 
     ErrorCode EditorProjectPackerIOS::WriteIOSPackageInfo()
     {
+        const Path xcodeProjectPath = xcodeBinaryRoot_ / "VEngine.xcodeproj";
         return WritePackageInfo(PackageInfoDesc{
             .packageInfoPath = outputRoot_ / PackageInfoFilename,
             .platform = IOSPlatformName,
-            .playerExecutable = IsSimulatorBuild() ? std::string(MakePackageDirectoryName(projectName_, timestamp_) + ".app/" + IOSPlayerTargetName)
-                                                   : std::string("Payload/") + IOSPlayerTargetName + ".app/" + IOSPlayerTargetName,
-            .dataRoot = IsSimulatorBuild() ? std::string(MakePackageDirectoryName(projectName_, timestamp_) + ".app/Data")
-                                           : std::string("Payload/") + IOSPlayerTargetName + ".app/Data",
-            .appBundle = IsSimulatorBuild() ? (outputRoot_ / (MakePackageDirectoryName(projectName_, timestamp_) + ".app")).GetString()
-                                            : archivePath_.GetString(),
+            .playerExecutable = std::string(IOSPlayerTargetName),
+            .dataRoot = packageDataRoot_.GetString(),
+            .appBundle = {},
+            .xcodeProject = xcodeProjectPath.GetString(),
         });
     }
 
