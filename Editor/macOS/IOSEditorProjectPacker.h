@@ -21,9 +21,9 @@ namespace ve::editor
         [[nodiscard]] ErrorCode RunStep(size_t stepIndex, Editor& editor) override;
         void ResetPlatformState() override;
 
-        [[nodiscard]] ErrorCode ValidateIOSPackagingEnvironment();
+        [[nodiscard]] ErrorCode ValidateIOSPackagingEnvironment(Editor& editor);
         [[nodiscard]] ErrorCode PrepareIOSPackageDirectories();
-        [[nodiscard]] ErrorCode PublishIOSNativeAOTScripts();
+        [[nodiscard]] ErrorCode PublishIOSNativeAOTScripts(Editor& editor);
         [[nodiscard]] ErrorCode WriteIOSNativeAOTScriptManifest();
         [[nodiscard]] ErrorCode ConfigureIOSXcodeProject();
         [[nodiscard]] ErrorCode ArchiveIOSPlayer();
@@ -38,7 +38,7 @@ namespace ve::editor
         [[nodiscard]] std::string BuildXcodeArchiveCommand() const;
         [[nodiscard]] std::string BuildXcodeSimulatorBuildCommand() const;
         [[nodiscard]] std::string BuildXcodeExportCommand() const;
-        [[nodiscard]] Path GetGeneratedScriptProjectPath() const;
+        [[nodiscard]] Path GetGeneratedIOSNativeAOTScriptProjectPath() const;
         [[nodiscard]] Path GetScriptHostProjectPath() const;
         [[nodiscard]] Path FindPublishedNativeAOTLibrary() const;
         [[nodiscard]] Path FindNativeAOTRuntimeNativeDirectory() const;
@@ -65,6 +65,7 @@ namespace ve::editor
         Path archivePath_;
         Path ipaExportRoot_;
         Path exportOptionsPlistPath_;
+        Path nativeAOTProjectRoot_;
         Path nativeAOTOutputRoot_;
         Path nativeAOTLibraryPath_;
         Path nativeAOTRuntimeNativeRoot_;

@@ -1,5 +1,7 @@
 #include "Editor/macOS/IOSEditorProjectPacker.h"
 
+#include "Editor/Core/Editor.h"
+#include "Editor/Core/EditorAssetDatabase.h"
 #include "Editor/Core/EditorScriptProjectGenerator.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
@@ -191,6 +193,23 @@ namespace ve::editor
             return "16.4";
         }
 
+        [[nodiscard]] std::vector<Path> CollectProjectScriptAssetPaths(const EditorAssetDatabase& assetDatabase)
+        {
+            std::vector<Path> scriptAssetPaths;
+            for (const auto& pair : assetDatabase.GetAssetsByID())
+            {
+                const EditorAssetRecord& record = pair.second;
+                if (record.type != EditorAssetType::Script || !record.path.GetString().starts_with("Assets/"))
+                {
+                    continue;
+                }
+
+                scriptAssetPaths.push_back(record.path);
+            }
+
+            return scriptAssetPaths;
+        }
+
         struct ParsedNuGetVersion
         {
             std::vector<unsigned long long> numericParts;
@@ -323,7 +342,8 @@ namespace ve::editor
         archivePath_ = outputRoot_ / (packageDirectoryName + ".xcarchive");
         ipaExportRoot_ = outputRoot_ / "Export";
         exportOptionsPlistPath_ = outputRoot_ / "ExportOptions.plist";
-        nativeAOTOutputRoot_ = outputRoot_ / "NativeAOT";
+        nativeAOTProjectRoot_ = outputRoot_ / "NativeAOT" / "Project";
+        nativeAOTOutputRoot_ = outputRoot_ / "NativeAOT" / "Output";
         bundleIdentifier_ = buildSettings_.ios.bundleIdentifier.empty() ? "com.vengine.packaged." + SanitizeBundleIdentifierSegment(projectName_)
                                                                          : buildSettings_.ios.bundleIdentifier;
         iosSDK_ = buildSettings_.ios.sdk.empty() ? "iphoneos" : buildSettings_.ios.sdk;
@@ -358,7 +378,7 @@ namespace ve::editor
         switch (stepIndex)
         {
         case 0:
-            return ValidateIOSPackagingEnvironment();
+            return ValidateIOSPackagingEnvironment(editor);
         case 1:
             return PrepareIOSPackageDirectories();
         case 2:
@@ -368,7 +388,7 @@ namespace ve::editor
         case 4:
             return CopyRuntimeAssets(editor);
         case 5:
-            return PublishIOSNativeAOTScripts();
+            return PublishIOSNativeAOTScripts(editor);
         case 6:
             return ConfigureIOSXcodeProject();
         case 7:
@@ -385,6 +405,7 @@ namespace ve::editor
         archivePath_ = Path();
         ipaExportRoot_ = Path();
         exportOptionsPlistPath_ = Path();
+        nativeAOTProjectRoot_ = Path();
         nativeAOTOutputRoot_ = Path();
         nativeAOTLibraryPath_ = Path();
         nativeAOTRuntimeNativeRoot_ = Path();
@@ -400,7 +421,7 @@ namespace ve::editor
         orientation_.clear();
     }
 
-    ErrorCode EditorProjectPackerIOS::ValidateIOSPackagingEnvironment()
+    ErrorCode EditorProjectPackerIOS::ValidateIOSPackagingEnvironment(Editor& editor)
     {
         if (std::string(EngineSourceDirectory).empty())
         {
@@ -463,7 +484,8 @@ namespace ve::editor
             return ErrorCode::Unsupported;
         }
 
-        ErrorCode result = RunPreflightCommand("cmake --version >/dev/null", "CMake was not found. Install CMake or make it available on PATH before packaging for iOS.");
+        ErrorCode result = RunPreflightCommand("cmake --version >/dev/null",
+                                               "CMake was not found. Install CMake or make it available on PATH before packaging for iOS.");
         if (result != ErrorCode::None)
         {
             return result;
@@ -476,10 +498,10 @@ namespace ve::editor
             return result;
         }
 
-        const Path projectFile = GetGeneratedScriptProjectPath();
-        if (!FileSystem::IsFile(projectFile))
+        const std::vector<Path> scriptAssetPaths = CollectProjectScriptAssetPaths(editor.GetAssetDatabase());
+        if (scriptAssetPaths.empty())
         {
-            LogLine("No generated script project found. Skipping dotnet preflight for iOS NativeAOT scripts: " + projectFile.GetString());
+            LogLine("No script assets found. Skipping dotnet preflight for iOS NativeAOT scripts.");
             return ErrorCode::None;
         }
 
@@ -508,6 +530,12 @@ namespace ve::editor
             return result;
         }
 
+        result = CreateDirectory(nativeAOTProjectRoot_);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
         result = CreateDirectory(nativeAOTOutputRoot_);
         if (result != ErrorCode::None)
         {
@@ -517,12 +545,12 @@ namespace ve::editor
         return PreparePackageDirectories();
     }
 
-    ErrorCode EditorProjectPackerIOS::PublishIOSNativeAOTScripts()
+    ErrorCode EditorProjectPackerIOS::PublishIOSNativeAOTScripts(Editor& editor)
     {
-        const Path projectFile = GetGeneratedScriptProjectPath();
-        if (!FileSystem::IsFile(projectFile))
+        std::vector<Path> scriptAssetPaths = CollectProjectScriptAssetPaths(editor.GetAssetDatabase());
+        if (scriptAssetPaths.empty())
         {
-            LogLine("No generated script project found. Skipping iOS NativeAOT script publish: " + projectFile.GetString());
+            LogLine("No script assets found. Skipping iOS NativeAOT script publish.");
             return ErrorCode::None;
         }
 
@@ -532,6 +560,23 @@ namespace ve::editor
             LogError(ErrorCode::NotFound, "VEngine.ScriptHost project was not found for iOS NativeAOT publish: " + scriptHostProjectPath.GetString());
             return ErrorCode::NotFound;
         }
+
+        Result<Path> generatedProjectResult = EditorScriptProjectGenerator::GenerateIOSNativeAOTProject(EditorIOSNativeAOTScriptProjectGenerateDesc{
+            .projectRoot = projectRoot_,
+            .outputDirectory = nativeAOTProjectRoot_,
+            .projectName = projectName_,
+            .scriptAssetPaths = std::move(scriptAssetPaths),
+            .scriptHostProjectPath = scriptHostProjectPath,
+            .appleMinOSVersion = deploymentTarget_,
+        });
+        if (!generatedProjectResult)
+        {
+            LogError(generatedProjectResult.GetError().GetCode(),
+                     "Failed to generate iOS NativeAOT script project: " + generatedProjectResult.GetError().GetMessage());
+            return generatedProjectResult.GetError().GetCode();
+        }
+
+        LogLine("Generated iOS NativeAOT script project: " + generatedProjectResult.GetValue().GetString());
 
         ErrorCode result = RunShellCommand(BuildNativeAOTPublishCommand());
         if (result != ErrorCode::None)
@@ -552,7 +597,8 @@ namespace ve::editor
         if (nativeAOTRuntimeNativeRoot_.IsEmpty())
         {
             LogError(ErrorCode::NotFound,
-                     "iOS NativeAOT runtime native library directory was not found. Set VE_IOS_NATIVEAOT_RUNTIME_NATIVE_DIR if NuGet packages are not under the default cache.");
+                     "iOS NativeAOT runtime native library directory was not found. Set VE_IOS_NATIVEAOT_RUNTIME_NATIVE_DIR if NuGet packages are not under "
+                     "the default cache.");
             return ErrorCode::NotFound;
         }
 
@@ -807,18 +853,11 @@ namespace ve::editor
     std::string EditorProjectPackerIOS::BuildNativeAOTPublishCommand() const
     {
         std::ostringstream stream;
-        stream << "dotnet publish " << ShellQuote(GetGeneratedScriptProjectPath().GetString())
+        stream << "dotnet publish " << ShellQuote(GetGeneratedIOSNativeAOTScriptProjectPath().GetString())
                << " --configuration " << ShellQuote(buildConfiguration_)
                << " --framework net10.0"
                << " --runtime " << ShellQuote(GetNativeAOTRuntimeIdentifier())
                << " --output " << ShellQuote(nativeAOTOutputRoot_.GetString())
-               << " -p:VEngineEnableIOSNativeAOT=true"
-               << " -p:VEngineScriptHostProject=" << ShellQuote(GetScriptHostProjectPath().GetString())
-               << " -p:PublishAot=true"
-               << " -p:PublishAotUsingRuntimePack=true"
-               << " -p:NativeLib=Static"
-               << " -p:SelfContained=true"
-               << " -p:AppleMinOSVersion=" << ShellQuote(deploymentTarget_)
                << " --nologo";
         return stream.str();
     }
@@ -892,9 +931,9 @@ namespace ve::editor
         return stream.str();
     }
 
-    Path EditorProjectPackerIOS::GetGeneratedScriptProjectPath() const
+    Path EditorProjectPackerIOS::GetGeneratedIOSNativeAOTScriptProjectPath() const
     {
-        return EditorScriptProjectGenerator::GetGeneratedProjectPath(projectRoot_, projectName_);
+        return EditorScriptProjectGenerator::GetGeneratedIOSNativeAOTProjectPath(nativeAOTProjectRoot_, projectName_);
     }
 
     Path EditorProjectPackerIOS::GetScriptHostProjectPath() const

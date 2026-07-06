@@ -88,8 +88,13 @@ The native bridge boundary is:
       -> ScriptingSystem
 ```
 
-The package flow generates a `VEngineNativeAOTScriptRegistry.g.cs` file beside the generated script project. The registry
-uses direct generic references and a module initializer to call
+The desktop/editor script project remains `Library/Scripting/<Project>.Scripts.csproj` and is JIT-only. It references
+the bundled `VEngine.ScriptHost.dll` through `VEngineScriptHostAssembly` and does not contain iOS NativeAOT publish
+properties, project references, trimmer roots, or generated NativeAOT registry sources.
+
+The iOS package flow generates a separate temporary `<Project>.Scripts.iOS.NativeAOT.csproj` under the package
+intermediate output, with the matching `VEngineNativeAOTScriptRegistry.g.cs` under that temporary project's `Generated`
+directory. The registry uses direct generic references and a module initializer to call
 `NativeScriptBridge.RegisterLinkedScriptType<Project.ScriptType>()` for each discovered script type. This keeps user
 script types visible to NativeAOT trimming, preserves public fields and parameterless constructors, and avoids loading
 project DLLs at runtime. The generated file also emits the `VEngine_*` `[UnmanagedCallersOnly]` export forwarders inside
@@ -97,18 +102,14 @@ the project script assembly, because NativeAOT native-library exports are select
 Those forwarders call public methods on `NativeScriptBridge`; the ScriptHost assembly keeps its own export wrappers for
 the case where it is published directly.
 
-Generated script projects use two different ScriptHost references:
-
-- Desktop/JIT builds reference the bundled `VEngine.ScriptHost.dll` through `VEngineScriptHostAssembly`.
-- iOS NativeAOT builds reference `Engine/Managed/VEngine.ScriptHost/VEngine.ScriptHost.csproj` through
-  `VEngineScriptHostProject`, so ScriptHost is compiled into the NativeAOT static library with the project scripts.
-  The managed payload stays on the plain `net10.0` target framework and uses the iOS NativeAOT runtime pack selected by
-  the `ios-arm64` runtime identifier instead of depending on desktop-style `hostfxr` or the iOS workload app model.
-  The ProjectReference is intentionally copy-local for the AOT publish closure; desktop generated projects keep the
-  ScriptHost DLL reference non-copy-local because the player/editor already carry the managed host payload.
-- Generated iOS NativeAOT script projects default `AppleMinOSVersion` to `16.4` when the caller does not provide an
-  override. The macOS Editor iOS packer still passes `AppleMinOSVersion` explicitly from `VE_IOS_DEPLOYMENT_TARGET`, so
-  package builds can raise or lower the deployment target in one place.
+The temporary iOS NativeAOT project references `Engine/Managed/VEngine.ScriptHost/VEngine.ScriptHost.csproj` directly,
+so ScriptHost is compiled into the NativeAOT static library with the project scripts. The managed payload stays on the
+plain `net10.0` target framework and uses the iOS NativeAOT runtime pack selected by the `ios-arm64` runtime identifier
+instead of depending on desktop-style `hostfxr` or the iOS workload app model. The ProjectReference is intentionally
+copy-local for the AOT publish closure; desktop generated projects keep the ScriptHost DLL reference non-copy-local
+because the player/editor already carry the managed host payload. Generated iOS NativeAOT script projects write
+`AppleMinOSVersion` from `VE_IOS_DEPLOYMENT_TARGET`, defaulting to `16.4` when no override is available, so project code,
+engine code, and the NativeAOT object agree on the same minimum OS version.
 
 The iOS backend first honors an explicit `ScriptingSystemInitParam::nativeAotEntryPoints` table. When that table is not
 provided, it attempts to discover the standard `VEngine_*` NativeAOT exports as weak-linked iOS symbols and builds the
@@ -122,14 +123,10 @@ runtime bridge with missing editor/runtime script features.
 The initial packer publishes generated project scripts with:
 
 ```text
-dotnet publish <Project>.Scripts.csproj
+dotnet publish <PackageOutput>/NativeAOT/Project/<Project>.Scripts.iOS.NativeAOT.csproj
   --framework net10.0
   --runtime ios-arm64
-  -p:VEngineEnableIOSNativeAOT=true
-  -p:VEngineScriptHostProject=<repo>/Engine/Managed/VEngine.ScriptHost/VEngine.ScriptHost.csproj
-  -p:PublishAotUsingRuntimePack=true
-  -p:NativeLib=Static
-  -p:AppleMinOSVersion=<VE_IOS_DEPLOYMENT_TARGET>
+  --output <PackageOutput>/NativeAOT/Output
 ```
 
 When a static library is produced, it is passed to the iOS CMake configure step as `VE_IOS_NATIVEAOT_LIBRARY` and linked

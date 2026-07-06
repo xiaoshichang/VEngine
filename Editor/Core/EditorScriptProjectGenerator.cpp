@@ -252,14 +252,14 @@ namespace ve::editor
             return std::vector<std::string>(uniqueTypeNames.begin(), uniqueTypeNames.end());
         }
 
-        [[nodiscard]] Path GetGeneratedSourceDirectory(const Path& projectRoot)
+        [[nodiscard]] Path GetNativeAOTGeneratedSourceDirectory(const Path& outputDirectory)
         {
-            return projectRoot / EditorProject::LibraryDirectoryName / "Scripting" / "Generated";
+            return outputDirectory / "Generated";
         }
 
-        [[nodiscard]] Path MakeNativeAOTRegistryPath(const Path& projectRoot)
+        [[nodiscard]] Path MakeNativeAOTRegistryPath(const Path& outputDirectory)
         {
-            return GetGeneratedSourceDirectory(projectRoot) / "VEngineNativeAOTScriptRegistry.g.cs";
+            return GetNativeAOTGeneratedSourceDirectory(outputDirectory) / "VEngineNativeAOTScriptRegistry.g.cs";
         }
 
         [[nodiscard]] std::string MakeGlobalTypeName(std::string_view typeName)
@@ -393,22 +393,6 @@ namespace ve::editor
 
         const std::string assemblyName = desc.projectName + ".Scripts";
         const std::string rootNamespace = MakeRootNamespace(desc.projectName);
-        const std::vector<std::string> nativeAOTScriptTypeNames = CollectScriptTypeNames(desc.projectRoot, scriptAssetPaths);
-
-        const Path generatedSourceDirectory = GetGeneratedSourceDirectory(desc.projectRoot);
-        ErrorCode directoryResult = FileSystem::CreateDirectories(generatedSourceDirectory);
-        if (directoryResult != ErrorCode::None)
-        {
-            return Result<Path>::Failure(Error(directoryResult, "Failed to create generated script source directory."));
-        }
-
-        const Path nativeAOTRegistryPath = MakeNativeAOTRegistryPath(desc.projectRoot);
-        ErrorCode registryWriteResult = FileSystem::WriteTextFile(nativeAOTRegistryPath, BuildNativeAOTRegistrySource(nativeAOTScriptTypeNames));
-        if (registryWriteResult != ErrorCode::None)
-        {
-            return Result<Path>::Failure(Error(registryWriteResult, "Failed to write NativeAOT script registry source."));
-        }
-
         std::ostringstream project;
         project << "<Project>\n";
         project << "  <PropertyGroup>\n";
@@ -427,26 +411,10 @@ namespace ve::editor
         project << "    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>\n";
         project << "    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>\n";
         project << "    <OutputType>Library</OutputType>\n";
-        project << "    <PublishAot Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</PublishAot>\n";
-        project << "    <PublishAotUsingRuntimePack Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</PublishAotUsingRuntimePack>\n";
-        project << "    <NativeLib Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">Static</NativeLib>\n";
-        project << "    <SelfContained Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</SelfContained>\n";
-        project << "    <InvariantGlobalization Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</InvariantGlobalization>\n";
-        project << "    <AppleMinOSVersion Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true' and '$(AppleMinOSVersion)' == ''\">16.4</AppleMinOSVersion>\n";
-        project << "    <IsAotCompatible Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">true</IsAotCompatible>\n";
-        project << "    <JsonSerializerIsReflectionEnabledByDefault Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">false</JsonSerializerIsReflectionEnabledByDefault>\n";
-        project << "    <DefineConstants Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">"
-                << "$(DefineConstants);VENGINE_IOS_NATIVEAOT</DefineConstants>\n";
         project << "    <VEngineScriptHostAssembly Condition=\"'$(VEngineScriptHostAssembly)' == ''\">"
                 << "$(MSBuildThisFileDirectory)..\\..\\..\\Build\\windows-msvc-debug\\Managed\\VEngine.ScriptHost\\VEngine.ScriptHost.dll"
                 << "</VEngineScriptHostAssembly>\n";
-        project << "    <VEngineScriptHostProject Condition=\"'$(VEngineScriptHostProject)' == ''\"></VEngineScriptHostProject>\n";
         project << "  </PropertyGroup>\n\n";
-
-        project << "  <Target Name=\"ValidateVEngineIOSNativeAOTInputs\" BeforeTargets=\"ResolveReferences\" "
-                   "Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true' and '$(VEngineScriptHostProject)' == ''\">\n";
-        project << "    <Error Text=\"VEngineEnableIOSNativeAOT requires VEngineScriptHostProject to point at VEngine.ScriptHost.csproj.\" />\n";
-        project << "  </Target>\n\n";
 
         project << "  <ItemGroup>\n";
         for (const Path& scriptPath : scriptAssetPaths)
@@ -455,20 +423,13 @@ namespace ve::editor
             const std::string linkPath = ToMsBuildPath(scriptPath.GetString());
             project << "    <Compile Include=\"" << EscapeXml(includePath) << "\" Link=\"" << EscapeXml(linkPath) << "\" />\n";
         }
-        project << "    <Compile Include=\"Generated\\VEngineNativeAOTScriptRegistry.g.cs\" />\n";
         project << "  </ItemGroup>\n\n";
 
-        project << "  <ItemGroup Condition=\"'$(VEngineEnableIOSNativeAOT)' != 'true'\">\n";
+        project << "  <ItemGroup>\n";
         project << "    <Reference Include=\"VEngine.ScriptHost\">\n";
         project << "      <HintPath>$(VEngineScriptHostAssembly)</HintPath>\n";
         project << "      <Private>false</Private>\n";
         project << "    </Reference>\n";
-        project << "  </ItemGroup>\n";
-        project << "  <ItemGroup Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true' and '$(VEngineScriptHostProject)' != ''\">\n";
-        project << "    <ProjectReference Include=\"$(VEngineScriptHostProject)\" />\n";
-        project << "  </ItemGroup>\n";
-        project << "  <ItemGroup Condition=\"'$(VEngineEnableIOSNativeAOT)' == 'true'\">\n";
-        project << "    <TrimmerRootAssembly Include=\"VEngine.ScriptHost\" />\n";
         project << "  </ItemGroup>\n";
         project << "  <Import Project=\"Sdk.targets\" Sdk=\"Microsoft.NET.Sdk\" />\n";
         project << "</Project>\n";
@@ -483,13 +444,117 @@ namespace ve::editor
         return Result<Path>::Success(projectPath);
     }
 
+    Result<Path> EditorScriptProjectGenerator::GenerateIOSNativeAOTProject(const EditorIOSNativeAOTScriptProjectGenerateDesc& desc)
+    {
+        if (desc.projectRoot.IsEmpty() || desc.outputDirectory.IsEmpty() || desc.projectName.empty() || desc.scriptHostProjectPath.IsEmpty())
+        {
+            return Result<Path>::Failure(Error(ErrorCode::InvalidArgument,
+                                               "iOS NativeAOT script project generation requires a project root, output directory, project name, "
+                                               "and ScriptHost project path."));
+        }
+
+        std::vector<Path> scriptAssetPaths = desc.scriptAssetPaths;
+        std::sort(scriptAssetPaths.begin(),
+                  scriptAssetPaths.end(),
+                  [](const Path& left, const Path& right) { return left.GetString() < right.GetString(); });
+
+        ErrorCode directoryResult = FileSystem::CreateDirectories(desc.outputDirectory);
+        if (directoryResult != ErrorCode::None)
+        {
+            return Result<Path>::Failure(Error(directoryResult, "Failed to create iOS NativeAOT script project directory."));
+        }
+
+        const Path generatedSourceDirectory = GetNativeAOTGeneratedSourceDirectory(desc.outputDirectory);
+        directoryResult = FileSystem::CreateDirectories(generatedSourceDirectory);
+        if (directoryResult != ErrorCode::None)
+        {
+            return Result<Path>::Failure(Error(directoryResult, "Failed to create iOS NativeAOT generated script source directory."));
+        }
+
+        const std::vector<std::string> nativeAOTScriptTypeNames = CollectScriptTypeNames(desc.projectRoot, scriptAssetPaths);
+        const Path nativeAOTRegistryPath = MakeNativeAOTRegistryPath(desc.outputDirectory);
+        const ErrorCode registryWriteResult = FileSystem::WriteTextFile(nativeAOTRegistryPath, BuildNativeAOTRegistrySource(nativeAOTScriptTypeNames));
+        if (registryWriteResult != ErrorCode::None)
+        {
+            return Result<Path>::Failure(Error(registryWriteResult, "Failed to write iOS NativeAOT script registry source."));
+        }
+
+        const std::string assemblyName = desc.projectName + ".Scripts";
+        const std::string rootNamespace = MakeRootNamespace(desc.projectName);
+        const std::string appleMinOSVersion = desc.appleMinOSVersion.empty() ? "16.4" : desc.appleMinOSVersion;
+
+        std::ostringstream project;
+        project << "<Project>\n";
+        project << "  <PropertyGroup>\n";
+        project << "    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\\</BaseIntermediateOutputPath>\n";
+        project << "    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>\n";
+        project << "    <BaseOutputPath>$(MSBuildThisFileDirectory)bin\\</BaseOutputPath>\n";
+        project << "    <OutputPath>$(MSBuildThisFileDirectory)bin\\$(Configuration)\\</OutputPath>\n";
+        project << "  </PropertyGroup>\n";
+        project << "  <Import Project=\"Sdk.props\" Sdk=\"Microsoft.NET.Sdk\" />\n\n";
+        project << "  <PropertyGroup>\n";
+        project << "    <TargetFramework>net10.0</TargetFramework>\n";
+        project << "    <AssemblyName>" << EscapeXml(assemblyName) << "</AssemblyName>\n";
+        project << "    <RootNamespace>" << EscapeXml(rootNamespace) << "</RootNamespace>\n";
+        project << "    <Nullable>enable</Nullable>\n";
+        project << "    <ImplicitUsings>enable</ImplicitUsings>\n";
+        project << "    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>\n";
+        project << "    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>\n";
+        project << "    <OutputType>Library</OutputType>\n";
+        project << "    <VEngineEnableIOSNativeAOT>true</VEngineEnableIOSNativeAOT>\n";
+        project << "    <PublishAot>true</PublishAot>\n";
+        project << "    <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>\n";
+        project << "    <NativeLib>Static</NativeLib>\n";
+        project << "    <SelfContained>true</SelfContained>\n";
+        project << "    <InvariantGlobalization>true</InvariantGlobalization>\n";
+        project << "    <AppleMinOSVersion>" << EscapeXml(appleMinOSVersion) << "</AppleMinOSVersion>\n";
+        project << "    <IsAotCompatible>true</IsAotCompatible>\n";
+        project << "    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>\n";
+        project << "    <DefineConstants>$(DefineConstants);VENGINE_IOS_NATIVEAOT</DefineConstants>\n";
+        project << "  </PropertyGroup>\n\n";
+
+        project << "  <ItemGroup>\n";
+        for (const Path& scriptPath : scriptAssetPaths)
+        {
+            const std::string includePath = (desc.projectRoot / scriptPath).GetString();
+            const std::string linkPath = scriptPath.GetString();
+            project << "    <Compile Include=\"" << EscapeXml(includePath) << "\" Link=\"" << EscapeXml(linkPath) << "\" />\n";
+        }
+        project << "    <Compile Include=\"Generated/VEngineNativeAOTScriptRegistry.g.cs\" />\n";
+        project << "  </ItemGroup>\n\n";
+
+        project << "  <ItemGroup>\n";
+        project << "    <ProjectReference Include=\"" << EscapeXml(desc.scriptHostProjectPath.GetString())
+                << "\" AdditionalProperties=\"VEngineEnableIOSNativeAOT=true\" />\n";
+        project << "  </ItemGroup>\n";
+        project << "  <ItemGroup>\n";
+        project << "    <TrimmerRootAssembly Include=\"VEngine.ScriptHost\" />\n";
+        project << "  </ItemGroup>\n";
+        project << "  <Import Project=\"Sdk.targets\" Sdk=\"Microsoft.NET.Sdk\" />\n";
+        project << "</Project>\n";
+
+        const Path projectPath = GetGeneratedIOSNativeAOTProjectPath(desc.outputDirectory, desc.projectName);
+        const ErrorCode writeResult = FileSystem::WriteTextFile(projectPath, project.str());
+        if (writeResult != ErrorCode::None)
+        {
+            return Result<Path>::Failure(Error(writeResult, "Failed to write generated iOS NativeAOT script project file."));
+        }
+
+        return Result<Path>::Success(projectPath);
+    }
+
     Path EditorScriptProjectGenerator::GetGeneratedProjectPath(const Path& projectRoot, std::string_view projectName)
     {
         return projectRoot / EditorProject::LibraryDirectoryName / "Scripting" / (std::string(projectName) + ".Scripts.csproj");
     }
 
-    Path EditorScriptProjectGenerator::GetNativeAOTRegistryPath(const Path& projectRoot)
+    Path EditorScriptProjectGenerator::GetGeneratedIOSNativeAOTProjectPath(const Path& outputDirectory, std::string_view projectName)
     {
-        return MakeNativeAOTRegistryPath(projectRoot);
+        return outputDirectory / (std::string(projectName) + ".Scripts.iOS.NativeAOT.csproj");
+    }
+
+    Path EditorScriptProjectGenerator::GetNativeAOTRegistryPath(const Path& outputDirectory)
+    {
+        return MakeNativeAOTRegistryPath(outputDirectory);
     }
 } // namespace ve::editor
