@@ -69,6 +69,7 @@ function(ve_add_engine_script_host)
     message(STATUS "Engine script host runtime root: ${dotnetRuntimeRoot}")
 
     add_custom_target(VEngineEngineScriptHost
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${VE_ENGINE_SCRIPT_HOST_OBJ_DIR}"
         COMMAND ${CMAKE_COMMAND} -E remove_directory "${VE_ENGINE_SCRIPT_HOST_OUTPUT_DIR}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${VE_ENGINE_SCRIPT_HOST_OUTPUT_DIR}"
         COMMAND "${dotnetSdkExecutable}" publish
