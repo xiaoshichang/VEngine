@@ -26,6 +26,8 @@ function(ve_add_engine)
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Platform/DebugConsole.cpp
             Engine/Runtime/Platform/Window.cpp
+            Engine/Runtime/Physics/PhysicsSystem.cpp
+            Engine/Runtime/Physics/PhysicsSystemBackendJolt.cpp
             Engine/Runtime/Render/BaseRenderer.cpp
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
@@ -46,10 +48,12 @@ function(ve_add_engine)
             Engine/Runtime/Resource/ResourceSystem.cpp
             Engine/Runtime/Resource/RuntimeAssetLoader.cpp
             Engine/Runtime/Scene/CameraComponent.cpp
+            Engine/Runtime/Scene/ColliderComponent.cpp
             Engine/Runtime/Scene/Component.cpp
             Engine/Runtime/Scene/GameObject.cpp
             Engine/Runtime/Scene/LightComponent.cpp
             Engine/Runtime/Scene/MeshRenderComponent.cpp
+            Engine/Runtime/Scene/RigidbodyComponent.cpp
             Engine/Runtime/Scene/Scene.cpp
             Engine/Runtime/Scene/SceneSerialization.cpp
             Engine/Runtime/Scene/SceneSystem.cpp
@@ -100,6 +104,10 @@ function(ve_add_engine)
             Engine/Runtime/Platform/AutoreleasePool.h
             Engine/Runtime/Platform/DebugConsoleBackend.h
             Engine/Runtime/Platform/Window.h
+            Engine/Runtime/Physics/PhysicsSystem.h
+            Engine/Runtime/Physics/PhysicsSystemBackend.h
+            Engine/Runtime/Physics/PhysicsSystemBackendJolt.h
+            Engine/Runtime/Physics/PhysicsTypes.h
             Engine/Runtime/Render/BaseRenderer.h
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
@@ -122,10 +130,12 @@ function(ve_add_engine)
             Engine/Runtime/Resource/ResourceSystem.h
             Engine/Runtime/Resource/RuntimeAssetLoader.h
             Engine/Runtime/Scene/CameraComponent.h
+            Engine/Runtime/Scene/ColliderComponent.h
             Engine/Runtime/Scene/Component.h
             Engine/Runtime/Scene/GameObject.h
             Engine/Runtime/Scene/LightComponent.h
             Engine/Runtime/Scene/MeshRenderComponent.h
+            Engine/Runtime/Scene/RigidbodyComponent.h
             Engine/Runtime/Scene/Scene.h
             Engine/Runtime/Scene/SceneSerialization.h
             Engine/Runtime/Scene/SceneSystem.h

@@ -221,7 +221,8 @@ device verification, and production signing UX remain future work.
 - Implement Button.
 - Implement UI event routing.
 - Implement AABB, Sphere, and Raycast for picking and lightweight physics.
-- Implement ColliderComponent.
+- Implement ColliderComponent and RigidbodyComponent.
+- Add explicit Scene-to-PhysicsSystem synchronization APIs before runtime frame-loop integration.
 - Add simple UI and picking demo.
 
 ### Milestone 10: macOS Metal Demo
@@ -290,7 +291,7 @@ Later services should connect through this layer as their modules land:
 
 - Scripting.
 - Runtime UI.
-- Lightweight physics.
+- PhysicsSystem runtime frame-loop integration.
 
 RenderSystem now owns the Render Thread and the RHI device/swapchain lifecycle through this service boundary. Future
 rendering work should continue to attach render-resource and viewport state through the same model.
