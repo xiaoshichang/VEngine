@@ -102,8 +102,8 @@ viewport/panels, Windows packaging flow, and a first macOS packaging path. Mac t
 shells while the full macOS platform backend remains future work; the macOS player is built as a normal executable and
 the macOS Editor packages it into a generated `.app` with app-local .NET JIT scripting payloads. The iOS track now has
 an initial `VEngineIOSPlayer` target, iOS CMake presets, UIKit/Metal app shell, a NativeAOT-oriented scripting backend
-boundary with weak-symbol bridge discovery, and a first macOS Editor iOS packer that stages data, publishes NativeAOT
-project scripts, configures Xcode, archives, and exports through `xcodebuild`. Runtime scene loading, touch input,
+boundary with weak-symbol bridge discovery, and a first macOS Editor iOS packer that publishes NativeAOT project scripts,
+exports a type-filtered package data manifest, configures Xcode, archives, and exports through `xcodebuild`. Runtime scene loading, touch input,
 device verification, and production signing UX remain future work.
 
 ### Milestone 0: Project Skeleton

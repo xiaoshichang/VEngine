@@ -1208,8 +1208,9 @@ Current macOS platform status:
 - Provides a `VEngineMacEditor.app` target that can package the current project into a generated macOS `.app` by
   exporting/updating the CMake Xcode project, building `VEngineMacPlayer`, and copying player/data/JIT scripting payloads
   into the package bundle.
-- Provides an initial macOS-hosted iOS packaging path that stages runtime data, publishes project scripts as a
-  NativeAOT static library when available, configures the iOS Xcode project, and runs Xcode archive/export commands.
+- Provides an initial macOS-hosted iOS packaging path that publishes project scripts as a NativeAOT static library when
+  available, exports a type-filtered package data manifest, configures the iOS Xcode project, and runs Xcode
+  archive/export commands.
 - Provides a separate `VEngineRhiMetalTriangleDemo` that creates a Metal-backed view and exercises the Metal RHI.
 
 Remaining macOS platform work:

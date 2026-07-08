@@ -146,10 +146,12 @@ function(ve_add_ios_player)
         )
     endif()
 
-    if(VE_IOS_PACKAGE_DATA_ROOT)
+    if(VE_IOS_PACKAGE_DATA_MANIFEST)
         add_custom_command(TARGET VEngineIOSPlayer POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E remove_directory "$<TARGET_BUNDLE_DIR:VEngineIOSPlayer>/Data"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory "${VE_IOS_PACKAGE_DATA_ROOT}" "$<TARGET_BUNDLE_DIR:VEngineIOSPlayer>/Data"
+            COMMAND ${CMAKE_COMMAND}
+                -DVE_IOS_PACKAGE_MANIFEST="${VE_IOS_PACKAGE_DATA_MANIFEST}"
+                -DVE_IOS_PACKAGE_DESTINATION="$<TARGET_BUNDLE_DIR:VEngineIOSPlayer>/Data"
+                -P "${PROJECT_SOURCE_DIR}/CMake/Scripts/CopyIOSPackageData.cmake"
             COMMENT "Copying packaged iOS runtime data"
         )
     endif()

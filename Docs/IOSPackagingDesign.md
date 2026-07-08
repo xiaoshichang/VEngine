@@ -15,9 +15,11 @@ Current first slice:
 - Defines the native side of the iOS scripting boundary as a `ManagedScriptEntryPoints` table supplied by a linked
   .NET NativeAOT payload, with iOS weak-symbol discovery for the standard exported bridge functions.
 - Adds iOS third-party setup for Boost static libraries and Jolt source preparation.
-- Adds an initial macOS Editor iOS package target that stages runtime data, optionally publishes project scripts through
-  .NET NativeAOT, configures an iOS Xcode build tree, and drives `xcodebuild archive` / `xcodebuild -exportArchive`.
-- Runs an iOS packaging preflight step before staging files so missing `cmake`, `xcodebuild`, or script-publish `dotnet`
+- Adds an initial macOS Editor iOS package target that publishes project scripts through .NET NativeAOT, exports an
+  iOS package data manifest, configures an iOS Xcode build tree, and drives `xcodebuild archive` /
+  `xcodebuild -exportArchive`.
+- Runs an iOS packaging preflight step before package files are generated so missing `cmake`, `xcodebuild`, or
+  script-publish `dotnet`
   tooling fails before package directories are mutated.
 - Extends the Editor package dialog from a host-only packer to a selectable target packer. Windows exposes Windows
   packaging; macOS exposes macOS and iOS packaging.
@@ -25,7 +27,7 @@ Current first slice:
 Out of scope for this first slice:
 
 - Production-grade signing UI and provisioning profile selection.
-- Full asset cooking and platform-specific compression.
+- Full texture cooking and platform-specific compression.
 - Verified device/simulator build output on a macOS/Xcode host.
 - Touch input, engine runtime loop integration, scene loading, and swapchain rendering through the shared Player path.
 - Full C# syntax parsing for unusual script declarations; the first registry generator supports normal namespace/class
@@ -52,7 +54,36 @@ numeric dotted versions such as `16.4`, and NativeAOT project/runtime paths must
 uses `VE_IOS_DEPLOYMENT_TARGET` as the default `CMAKE_OSX_DEPLOYMENT_TARGET`, and the options layer forces the two values
 back into sync so Jolt, engine code, Xcode target settings, and NativeAOT publish inputs use the same minimum OS version.
 
-## 3. Platform Split
+## 3. Package Data
+
+The iOS package flow does not build a full intermediate `Data` directory mirror. After the asset database refreshes and
+project scripts are published, the packer writes generated package metadata under:
+
+```text
+<PackageOutput>/Generated/
+  PackageData/
+    VEProject.json
+    AssetManifest.json
+    Scripts/ScriptAssembly.json
+  IOSPackageData.json
+```
+
+`IOSPackageData.json` is the source-of-truth copy plan for the Xcode build. The iOS player target runs a post-build CMake
+script that removes `$TARGET_BUNDLE_DIR/Data` and copies only the manifest entries into the app bundle.
+
+Resource handling is type-specific:
+
+- Scenes and materials are copied directly from their runtime source paths into `.app/Data`.
+- OBJ source files are not copied. Their imported `.vemesh` runtime artifacts are copied.
+- Shader descriptors are copied with only the Metal artifacts referenced by the descriptor.
+- C# source files are skipped from `.app/Data`; they are inputs to the NativeAOT publish step only.
+- Future texture assets should bake or compress to iOS-specific runtime artifacts before those artifacts are listed in
+  `IOSPackageData.json`.
+
+The runtime `AssetManifest.json` is filtered with the same policy, so skipped source-only assets do not appear as
+loadable runtime resources.
+
+## 4. Platform Split
 
 `APPLE` is not treated as macOS. Platform-specific decisions should branch as:
 
@@ -74,7 +105,7 @@ macOS:
 iOS runtime code uses UIKit. macOS runtime code uses AppKit. Shared Apple rendering code may use Foundation, Metal, and
 QuartzCore when the APIs are available on both platforms.
 
-## 4. NativeAOT Scripting Direction
+## 5. NativeAOT Scripting Direction
 
 iOS does not use the desktop `hostfxr` / JIT scripting backend. The iOS backend expects project scripts to be built into
 a .NET NativeAOT static native library and linked into the app by the iOS package build.
@@ -147,9 +178,10 @@ iOS static library there.
 The packer prefers NativeAOT libraries whose filename stem matches `<Project>.Scripts` or `lib<Project>.Scripts` before
 falling back to the first `.a` under the publish output directory.
 
-After a NativeAOT publish succeeds, the packer writes `Data/Scripts/ScriptAssembly.json` with `assemblyPath` set to
+After a NativeAOT publish succeeds, the packer writes generated `Scripts/ScriptAssembly.json` with `assemblyPath` set to
 `Scripts/NativeAOT`. This path is a sentinel used by the shared Player script-loading flow to call
-`LoadProjectAssembly()`; it is not a desktop managed DLL payload.
+`LoadProjectAssembly()` after the Xcode package data copy places the manifest under `.app/Data/Scripts/`. It is not a
+desktop managed DLL payload.
 
 The first signing controls are environment variables consumed by the macOS Editor process:
 
@@ -168,14 +200,14 @@ VE_IOS_NATIVEAOT_RUNTIME_NATIVE_DIR=<optional NuGet runtime/native override>
 NativeAOT `AppleMinOSVersion` property so project code, engine code, and the NativeAOT object agree on the same minimum
 OS version; the packer validates that it is a numeric dotted version such as `16.4` before invoking CMake or dotnet.
 `VE_IOS_BUNDLE_IDENTIFIER` overrides the generated `com.vengine.packaged.<project>` identifier and is validated during
-the preflight step before staging starts. The preflight step also rejects unknown `VE_IOS_CODE_SIGN_STYLE` and
+the preflight step before package files are generated. The preflight step also rejects unknown `VE_IOS_CODE_SIGN_STYLE` and
 `VE_IOS_EXPORT_METHOD` values before running CMake or Xcode. Manual signing requires
 `VE_IOS_PROVISIONING_PROFILE_SPECIFIER`; when provided, the profile is passed to the generated Xcode target, the archive
 command, and the export options plist. `VE_IOS_CODE_SIGN_IDENTITY` is optional and is passed through the same archive and
 export path when set. When automatic signing is used with a team ID, the iOS packer passes `-allowProvisioningUpdates` to
 Xcode archive/export so local Xcode-managed profiles can be refreshed.
 
-## 5. Third-Party Setup
+## 6. Third-Party Setup
 
 Run iOS dependency setup from a macOS host:
 
@@ -203,7 +235,7 @@ inherits `CMAKE_OSX_DEPLOYMENT_TARGET` from the iOS packer or preset configure s
 Host tools such as the shader compiler and NativeAOT publish toolchain remain host-side dependencies. They should not be
 copied into the iOS app bundle.
 
-## 6. Next Milestones
+## 7. Next Milestones
 
 1. Build `VEngineIOSPlayer` on macOS/Xcode for simulator and device.
 2. Verify the Editor iOS packer end-to-end on macOS with a real signing team, provisioning profile, and generated

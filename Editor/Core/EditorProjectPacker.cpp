@@ -483,6 +483,11 @@ namespace ve::editor
         object["dataRoot"] = desc.dataRoot;
         object["assetManifest"] = desc.dataRoot + "/" + PackageManifestFilename;
         object["packagingLog"] = logPath_.GetString();
+        if (!desc.packageDataManifest.empty())
+        {
+            object["packageDataManifest"] = desc.packageDataManifest;
+        }
+
         if (!desc.appBundle.empty())
         {
             object["appBundle"] = desc.appBundle;

@@ -2,9 +2,12 @@
 
 #include "Editor/Core/Editor.h"
 #include "Editor/Core/EditorAssetDatabase.h"
+#include "Editor/Core/EditorAssetPath.h"
+#include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorScriptProjectGenerator.h"
 #include "Engine/Runtime/Core/JsonUtils.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Resource/AssetManifest.h"
 
 #include <algorithm>
 #include <array>
@@ -15,8 +18,9 @@
 #include <filesystem>
 #include <sstream>
 #include <string>
-#include <system_error>
 #include <sys/wait.h>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 namespace ve::editor
@@ -25,6 +29,8 @@ namespace ve::editor
     {
         constexpr const char* IOSPlatformName = "iOS";
         constexpr const char* PackageInfoFilename = "PackageInfo.json";
+        constexpr const char* PackageManifestFilename = "AssetManifest.json";
+        constexpr const char* PackageDataManifestFilename = "IOSPackageData.json";
         constexpr const char* IOSPlayerTargetName = "VEngineIOSPlayer";
 
 #if defined(VE_PROJECT_SOURCE_DIR)
@@ -90,6 +96,42 @@ namespace ve::editor
             }
 
             return first == 0 ? text : text.substr(first);
+        }
+
+        [[nodiscard]] std::string ReadString(const boost::json::object& object, boost::json::string_view key, std::string fallback = {})
+        {
+            if (const boost::json::value* value = object.if_contains(key); value != nullptr && value->is_string())
+            {
+                return std::string(value->as_string());
+            }
+
+            return fallback;
+        }
+
+        void AddPackageFile(boost::json::array& files, const Path& source, const Path& destination)
+        {
+            boost::json::object file;
+            file["source"] = source.GetString();
+            file["destination"] = destination.GetString();
+            files.emplace_back(std::move(file));
+        }
+
+        [[nodiscard]] bool ShouldIncludeIOSRuntimeAsset(const EditorAssetRecord& record) noexcept
+        {
+            switch (record.type)
+            {
+            case EditorAssetType::ObjSource:
+            case EditorAssetType::Mesh:
+            case EditorAssetType::Material:
+            case EditorAssetType::Shader:
+            case EditorAssetType::Scene:
+                return true;
+            case EditorAssetType::Script:
+            case EditorAssetType::Unknown:
+                return false;
+            }
+
+            return false;
         }
 
         [[nodiscard]] bool IsValidIOSDeploymentTargetText(std::string_view text) noexcept
@@ -222,12 +264,10 @@ namespace ve::editor
             ParsedNuGetVersion result;
 
             const size_t metadataPosition = text.find('+');
-            const std::string_view versionWithoutMetadata =
-                metadataPosition == std::string_view::npos ? text : text.substr(0, metadataPosition);
+            const std::string_view versionWithoutMetadata = metadataPosition == std::string_view::npos ? text : text.substr(0, metadataPosition);
             const size_t suffixPosition = versionWithoutMetadata.find('-');
-            const std::string_view numericText = suffixPosition == std::string_view::npos
-                ? versionWithoutMetadata
-                : versionWithoutMetadata.substr(0, suffixPosition);
+            const std::string_view numericText =
+                suffixPosition == std::string_view::npos ? versionWithoutMetadata : versionWithoutMetadata.substr(0, suffixPosition);
 
             if (suffixPosition != std::string_view::npos)
             {
@@ -239,9 +279,8 @@ namespace ve::editor
             while (segmentStart <= numericText.size())
             {
                 const size_t segmentEnd = numericText.find('.', segmentStart);
-                const std::string_view segment = segmentEnd == std::string_view::npos
-                    ? numericText.substr(segmentStart)
-                    : numericText.substr(segmentStart, segmentEnd - segmentStart);
+                const std::string_view segment =
+                    segmentEnd == std::string_view::npos ? numericText.substr(segmentStart) : numericText.substr(segmentStart, segmentEnd - segmentStart);
 
                 unsigned long long value = 0;
                 for (const char character : segment)
@@ -334,9 +373,10 @@ namespace ve::editor
         outputRoot_ = buildRoot_ / IOSPlatformName / packageDirectoryName;
         logDirectory_ = outputRoot_;
         logPath_ = logDirectory_ / ("Package_iOS_" + timestamp_ + ".log");
-        stagingRoot_ = outputRoot_ / "Staging";
-        packageDataRoot_ = stagingRoot_ / "Data";
-        packageBinRoot_ = stagingRoot_ / "Bin";
+        packageDataBuildRoot_ = outputRoot_ / "Generated" / "PackageData";
+        packageDataRoot_ = packageDataBuildRoot_;
+        packageDataManifestPath_ = outputRoot_ / "Generated" / PackageDataManifestFilename;
+        packageBinRoot_ = Path();
         packageRuntimeLogRoot_ = Path();
         xcodeBinaryRoot_ = outputRoot_ / "Xcode";
         archivePath_ = outputRoot_ / (packageDirectoryName + ".xcarchive");
@@ -345,14 +385,14 @@ namespace ve::editor
         nativeAOTProjectRoot_ = outputRoot_ / "NativeAOT" / "Project";
         nativeAOTOutputRoot_ = outputRoot_ / "NativeAOT" / "Output";
         bundleIdentifier_ = buildSettings_.ios.bundleIdentifier.empty() ? "com.vengine.packaged." + SanitizeBundleIdentifierSegment(projectName_)
-                                                                         : buildSettings_.ios.bundleIdentifier;
+                                                                        : buildSettings_.ios.bundleIdentifier;
         iosSDK_ = buildSettings_.ios.sdk.empty() ? "iphoneos" : buildSettings_.ios.sdk;
         buildConfiguration_ = "Release";
         developmentTeam_ = IsDefaultIOSDevelopmentTeamOption(buildSettings_.ios.developmentTeam) ? std::string{} : buildSettings_.ios.developmentTeam;
         codeSignStyle_ = buildSettings_.ios.codeSignStyle.empty() ? "Automatic" : NormalizeCodeSignStyle(buildSettings_.ios.codeSignStyle);
         provisioningProfileSpecifier_ = IsDefaultIOSProvisioningProfileOption(buildSettings_.ios.provisioningProfileSpecifier)
-            ? std::string{}
-            : buildSettings_.ios.provisioningProfileSpecifier;
+                                            ? std::string{}
+                                            : buildSettings_.ios.provisioningProfileSpecifier;
         codeSignIdentity_ = buildSettings_.ios.codeSignIdentity.empty() ? "Apple Development" : buildSettings_.ios.codeSignIdentity;
         deploymentTarget_ = ResolveIOSDeploymentTarget();
         exportMethod_ = buildSettings_.ios.exportMethod.empty() ? "development" : buildSettings_.ios.exportMethod;
@@ -365,9 +405,8 @@ namespace ve::editor
             PackageStepState{.name = "Validate iOS packaging environment"},
             PackageStepState{.name = "Prepare iOS package directories"},
             PackageStepState{.name = "Refresh asset database"},
-            PackageStepState{.name = "Export asset manifest"},
-            PackageStepState{.name = "Copy runtime assets"},
             PackageStepState{.name = "Publish iOS NativeAOT scripts"},
+            PackageStepState{.name = "Export iOS package data"},
             PackageStepState{.name = "Configure iOS Xcode project"},
             PackageStepState{.name = "Write package info"},
         };
@@ -384,14 +423,12 @@ namespace ve::editor
         case 2:
             return RefreshAssetDatabase(editor);
         case 3:
-            return ExportAssetManifest(editor);
-        case 4:
-            return CopyRuntimeAssets(editor);
-        case 5:
             return PublishIOSNativeAOTScripts(editor);
-        case 6:
+        case 4:
+            return ExportIOSPackageData(editor);
+        case 5:
             return ConfigureIOSXcodeProject();
-        case 7:
+        case 6:
             return WriteIOSPackageInfo();
         default:
             return ErrorCode::InvalidState;
@@ -400,7 +437,8 @@ namespace ve::editor
 
     void EditorProjectPackerIOS::ResetPlatformState()
     {
-        stagingRoot_ = Path();
+        packageDataBuildRoot_ = Path();
+        packageDataManifestPath_ = Path();
         xcodeBinaryRoot_ = Path();
         archivePath_ = Path();
         ipaExportRoot_ = Path();
@@ -460,8 +498,7 @@ namespace ve::editor
         if (!IsValidExportMethod(exportMethod_))
         {
             LogError(ErrorCode::InvalidArgument,
-                     "Invalid iOS export method: " + exportMethod_ +
-                         ". Use VE_IOS_EXPORT_METHOD=development, ad-hoc, app-store, or enterprise.");
+                     "Invalid iOS export method: " + exportMethod_ + ". Use VE_IOS_EXPORT_METHOD=development, ad-hoc, app-store, or enterprise.");
             return ErrorCode::InvalidArgument;
         }
 
@@ -484,8 +521,8 @@ namespace ve::editor
             return ErrorCode::Unsupported;
         }
 
-        ErrorCode result = RunPreflightCommand("cmake --version >/dev/null",
-                                               "CMake was not found. Install CMake or make it available on PATH before packaging for iOS.");
+        ErrorCode result =
+            RunPreflightCommand("cmake --version >/dev/null", "CMake was not found. Install CMake or make it available on PATH before packaging for iOS.");
         if (result != ErrorCode::None)
         {
             return result;
@@ -524,7 +561,13 @@ namespace ve::editor
 
     ErrorCode EditorProjectPackerIOS::PrepareIOSPackageDirectories()
     {
-        ErrorCode result = CreateDirectory(stagingRoot_);
+        ErrorCode result = CreateDirectory(logDirectory_);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        result = CreateDirectory(packageDataBuildRoot_);
         if (result != ErrorCode::None)
         {
             return result;
@@ -542,7 +585,230 @@ namespace ve::editor
             return result;
         }
 
-        return PreparePackageDirectories();
+        const Path sourceDescriptor = EditorProject::GetDescriptorPath(projectRoot_);
+        const Path destinationDescriptor = packageDataBuildRoot_ / EditorProject::DescriptorFilename;
+        result = CopyFileWithDirectories(sourceDescriptor, destinationDescriptor);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        LogLine("Prepared iOS package data descriptor: " + sourceDescriptor.GetString() + " -> " + destinationDescriptor.GetString());
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectPackerIOS::ExportIOSPackageData(Editor& editor)
+    {
+        ErrorCode result = WriteIOSAssetManifest(editor);
+        if (result != ErrorCode::None)
+        {
+            return result;
+        }
+
+        return WriteIOSPackageDataManifest(editor);
+    }
+
+    ErrorCode EditorProjectPackerIOS::WriteIOSAssetManifest(Editor& editor)
+    {
+        AssetManifest manifest;
+        size_t skippedCount = 0;
+        for (const auto& pair : editor.GetAssetDatabase().GetAssetsByID())
+        {
+            const EditorAssetRecord& record = pair.second;
+            if (!ShouldIncludeIOSRuntimeAsset(record) || record.asset.runtimePath.IsEmpty())
+            {
+                ++skippedCount;
+                continue;
+            }
+
+            ManifestAssetRecord manifestRecord;
+            manifestRecord.asset = record.asset;
+            manifestRecord.bundle = "Main";
+
+            const ErrorCode addResult = manifest.AddOrUpdate(std::move(manifestRecord));
+            if (addResult != ErrorCode::None)
+            {
+                LogError(addResult, "Failed to add asset to iOS package manifest.");
+                return addResult;
+            }
+        }
+
+        const Path manifestPath = packageDataBuildRoot_ / PackageManifestFilename;
+        const ErrorCode saveResult = manifest.SaveToFile(manifestPath);
+        if (saveResult != ErrorCode::None)
+        {
+            LogError(saveResult, "Failed to write iOS asset manifest: " + manifestPath.GetString());
+            return saveResult;
+        }
+
+        LogLine("Wrote iOS asset manifest: " + manifestPath.GetString() + ". Runtime asset count: " + std::to_string(manifest.GetAssetCount()) +
+                ", skipped asset count: " + std::to_string(skippedCount));
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectPackerIOS::WriteIOSPackageDataManifest(Editor& editor)
+    {
+        boost::json::array files;
+        AddPackageFile(files, packageDataBuildRoot_ / EditorProject::DescriptorFilename, Path(EditorProject::DescriptorFilename));
+        AddPackageFile(files, packageDataBuildRoot_ / PackageManifestFilename, Path(PackageManifestFilename));
+        size_t metadataFileCount = 2;
+
+        const Path scriptManifestPath = packageDataBuildRoot_ / "Scripts" / "ScriptAssembly.json";
+        if (FileSystem::IsFile(scriptManifestPath))
+        {
+            AddPackageFile(files, scriptManifestPath, Path("Scripts/ScriptAssembly.json"));
+            ++metadataFileCount;
+        }
+
+        size_t runtimeFileCount = 0;
+        size_t skippedCount = 0;
+        for (const auto& pair : editor.GetAssetDatabase().GetAssetsByID())
+        {
+            const EditorAssetRecord& record = pair.second;
+            if (!ShouldIncludeIOSRuntimeAsset(record) || record.asset.runtimePath.IsEmpty())
+            {
+                ++skippedCount;
+                continue;
+            }
+
+            const Path sourcePath = ResolveEditorContentPath(projectRoot_, record.asset.runtimePath);
+            if (record.type == EditorAssetType::Shader)
+            {
+                std::vector<Path> artifactPaths;
+                const ErrorCode bakeResult = BakeIOSShaderDescriptor(sourcePath, record.asset.runtimePath, artifactPaths);
+                if (bakeResult != ErrorCode::None)
+                {
+                    return bakeResult;
+                }
+
+                AddPackageFile(files, packageDataBuildRoot_ / record.asset.runtimePath, record.asset.runtimePath);
+                ++runtimeFileCount;
+                LogLine("Queued baked iOS shader descriptor: " + (packageDataBuildRoot_ / record.asset.runtimePath).GetString() + " -> Data/" +
+                        record.asset.runtimePath.GetString());
+
+                for (const Path& artifactRuntimePath : artifactPaths)
+                {
+                    const Path artifactSourcePath = ResolveEditorContentPath(projectRoot_, artifactRuntimePath);
+                    AddPackageFile(files, artifactSourcePath, artifactRuntimePath);
+                    ++runtimeFileCount;
+                    LogLine("Queued iOS shader artifact: " + artifactSourcePath.GetString() + " -> Data/" + artifactRuntimePath.GetString());
+                }
+
+                continue;
+            }
+
+            AddPackageFile(files, sourcePath, record.asset.runtimePath);
+            ++runtimeFileCount;
+            LogLine("Queued iOS runtime asset: " + sourcePath.GetString() + " -> Data/" + record.asset.runtimePath.GetString());
+        }
+
+        boost::json::object root;
+        root["schemaVersion"] = 1;
+        root["destinationRoot"] = "Data";
+        root["files"] = std::move(files);
+
+        const ErrorCode writeResult = FileSystem::WriteTextFile(packageDataManifestPath_, JsonUtils::SerializePretty(root));
+        if (writeResult != ErrorCode::None)
+        {
+            LogError(writeResult, "Failed to write iOS package data manifest: " + packageDataManifestPath_.GetString());
+            return writeResult;
+        }
+
+        LogLine("Wrote iOS package data manifest: " + packageDataManifestPath_.GetString() +
+                ". Queued file count: " + std::to_string(runtimeFileCount + metadataFileCount) + ", skipped asset count: " + std::to_string(skippedCount));
+        return ErrorCode::None;
+    }
+
+    ErrorCode EditorProjectPackerIOS::BakeIOSShaderDescriptor(const Path& sourcePath, const Path& runtimePath, std::vector<Path>& artifactRuntimePaths)
+    {
+        artifactRuntimePaths.clear();
+
+        Result<std::string> text = FileSystem::ReadTextFile(sourcePath);
+        if (!text)
+        {
+            LogError(text.GetError().GetCode(), "Failed to read shader descriptor for iOS bake: " + sourcePath.GetString());
+            return text.GetError().GetCode();
+        }
+
+        Result<boost::json::value> json = JsonUtils::Parse(text.GetValue());
+        if (!json || !json.GetValue().is_object())
+        {
+            LogError(ErrorCode::InvalidArgument, "Shader descriptor root must be a JSON object for iOS bake: " + sourcePath.GetString());
+            return ErrorCode::InvalidArgument;
+        }
+
+        boost::json::object& object = json.GetValue().as_object();
+        object.erase("source");
+
+        boost::json::value* stagesValue = object.if_contains("stages");
+        if (stagesValue == nullptr || !stagesValue->is_array())
+        {
+            LogError(ErrorCode::InvalidArgument, "Shader descriptor missing stages array for iOS bake: " + sourcePath.GetString());
+            return ErrorCode::InvalidArgument;
+        }
+
+        for (boost::json::value& stageValue : stagesValue->as_array())
+        {
+            if (!stageValue.is_object())
+            {
+                continue;
+            }
+
+            boost::json::object& stageObject = stageValue.as_object();
+            boost::json::value* artifactsValue = stageObject.if_contains("artifacts");
+            if (artifactsValue == nullptr || !artifactsValue->is_object())
+            {
+                continue;
+            }
+
+            boost::json::object& artifacts = artifactsValue->as_object();
+            const std::string metalPath = ReadString(artifacts, "metal");
+            if (metalPath.empty())
+            {
+                LogError(ErrorCode::InvalidArgument, "Shader descriptor stage is missing Metal artifact for iOS bake: " + sourcePath.GetString());
+                return ErrorCode::InvalidArgument;
+            }
+
+            Path metalRuntimePath(metalPath);
+            if (metalRuntimePath.IsAbsolute())
+            {
+                LogError(ErrorCode::InvalidArgument, "Metal shader artifact path must be project-relative for iOS bake: " + metalRuntimePath.GetString());
+                return ErrorCode::InvalidArgument;
+            }
+
+            artifactRuntimePaths.push_back(metalRuntimePath);
+
+            boost::json::object bakedArtifacts;
+            bakedArtifacts["metal"] = metalPath;
+
+            const std::string reflectionPath = ReadString(artifacts, "reflection");
+            if (!reflectionPath.empty())
+            {
+                Path reflectionRuntimePath(reflectionPath);
+                if (reflectionRuntimePath.IsAbsolute())
+                {
+                    LogError(ErrorCode::InvalidArgument,
+                             "Shader reflection artifact path must be project-relative for iOS bake: " + reflectionRuntimePath.GetString());
+                    return ErrorCode::InvalidArgument;
+                }
+
+                bakedArtifacts["reflection"] = reflectionPath;
+                artifactRuntimePaths.push_back(reflectionRuntimePath);
+            }
+
+            artifacts = std::move(bakedArtifacts);
+        }
+
+        const Path outputPath = packageDataBuildRoot_ / runtimePath;
+        const ErrorCode writeResult = FileSystem::WriteTextFile(outputPath, JsonUtils::SerializePretty(json.GetValue()));
+        if (writeResult != ErrorCode::None)
+        {
+            LogError(writeResult, "Failed to write baked iOS shader descriptor: " + outputPath.GetString());
+            return writeResult;
+        }
+
+        LogLine("Baked iOS shader descriptor: " + sourcePath.GetString() + " -> " + outputPath.GetString());
+        return ErrorCode::None;
     }
 
     ErrorCode EditorProjectPackerIOS::PublishIOSNativeAOTScripts(Editor& editor)
@@ -743,7 +1009,8 @@ namespace ve::editor
             .packageInfoPath = outputRoot_ / PackageInfoFilename,
             .platform = IOSPlatformName,
             .playerExecutable = std::string(IOSPlayerTargetName),
-            .dataRoot = packageDataRoot_.GetString(),
+            .dataRoot = "Data",
+            .packageDataManifest = packageDataManifestPath_.GetString(),
             .appBundle = {},
             .xcodeProject = xcodeProjectPath.GetString(),
         });
@@ -800,12 +1067,9 @@ namespace ve::editor
     {
         std::ostringstream stream;
         stream << "cmake"
-               << " -S " << ShellQuote(EngineSourceDirectory)
-               << " -B " << ShellQuote(xcodeBinaryRoot_.GetString())
-               << " -G Xcode"
+               << " -S " << ShellQuote(EngineSourceDirectory) << " -B " << ShellQuote(xcodeBinaryRoot_.GetString()) << " -G Xcode"
                << " -DCMAKE_TOOLCHAIN_FILE=" << ShellQuote(std::string(EngineSourceDirectory) + "/CMake/Toolchains/IOS.cmake")
-               << " -DVE_IOS_SDK=" << ShellQuote(iosSDK_)
-               << " -DVE_IOS_ARCHITECTURES=arm64"
+               << " -DVE_IOS_SDK=" << ShellQuote(iosSDK_) << " -DVE_IOS_ARCHITECTURES=arm64"
                << " -DVE_BUILD_PLAYER=ON"
                << " -DVE_BUILD_EDITOR=OFF"
                << " -DVE_BUILD_TESTS=OFF"
@@ -815,12 +1079,10 @@ namespace ve::editor
                << " -DVE_ENABLE_D3D11=OFF"
                << " -DVE_ENABLE_D3D12=OFF"
                << " -DVE_ENABLE_METAL=ON"
-               << " -DVE_IOS_BUNDLE_IDENTIFIER=" << ShellQuote(bundleIdentifier_)
-               << " -DVE_IOS_CODE_SIGN_STYLE=" << ShellQuote(codeSignStyle_)
-               << " -DVE_IOS_DEPLOYMENT_TARGET=" << ShellQuote(deploymentTarget_)
-               << " -DVE_IOS_ORIENTATION=" << ShellQuote(orientation_)
+               << " -DVE_IOS_BUNDLE_IDENTIFIER=" << ShellQuote(bundleIdentifier_) << " -DVE_IOS_CODE_SIGN_STYLE=" << ShellQuote(codeSignStyle_)
+               << " -DVE_IOS_DEPLOYMENT_TARGET=" << ShellQuote(deploymentTarget_) << " -DVE_IOS_ORIENTATION=" << ShellQuote(orientation_)
                << " -DCMAKE_OSX_DEPLOYMENT_TARGET=" << ShellQuote(deploymentTarget_)
-               << " -DVE_IOS_PACKAGE_DATA_ROOT=" << ShellQuote(packageDataRoot_.GetString());
+               << " -DVE_IOS_PACKAGE_DATA_MANIFEST=" << ShellQuote(packageDataManifestPath_.GetString());
 
         if (!developmentTeam_.empty())
         {
@@ -853,12 +1115,9 @@ namespace ve::editor
     std::string EditorProjectPackerIOS::BuildNativeAOTPublishCommand() const
     {
         std::ostringstream stream;
-        stream << "dotnet publish " << ShellQuote(GetGeneratedIOSNativeAOTScriptProjectPath().GetString())
-               << " --configuration " << ShellQuote(buildConfiguration_)
-               << " --framework net10.0"
-               << " --runtime " << ShellQuote(GetNativeAOTRuntimeIdentifier())
-               << " --output " << ShellQuote(nativeAOTOutputRoot_.GetString())
-               << " --nologo";
+        stream << "dotnet publish " << ShellQuote(GetGeneratedIOSNativeAOTScriptProjectPath().GetString()) << " --configuration "
+               << ShellQuote(buildConfiguration_) << " --framework net10.0"
+               << " --runtime " << ShellQuote(GetNativeAOTRuntimeIdentifier()) << " --output " << ShellQuote(nativeAOTOutputRoot_.GetString()) << " --nologo";
         return stream.str();
     }
 
@@ -866,12 +1125,9 @@ namespace ve::editor
     {
         std::ostringstream stream;
         stream << "xcodebuild"
-               << " -project " << ShellQuote(xcodeBinaryRoot_.GetString() + "/VEngine.xcodeproj")
-               << " -scheme " << ShellQuote(IOSPlayerTargetName)
-               << " -configuration " << ShellQuote(buildConfiguration_)
-               << " -sdk iphoneos"
-               << " -destination " << ShellQuote("generic/platform=iOS")
-               << " -archivePath " << ShellQuote(archivePath_.GetString())
+               << " -project " << ShellQuote(xcodeBinaryRoot_.GetString() + "/VEngine.xcodeproj") << " -scheme " << ShellQuote(IOSPlayerTargetName)
+               << " -configuration " << ShellQuote(buildConfiguration_) << " -sdk iphoneos"
+               << " -destination " << ShellQuote("generic/platform=iOS") << " -archivePath " << ShellQuote(archivePath_.GetString())
                << " CODE_SIGN_STYLE=" << ShellQuote(codeSignStyle_);
 
         if (!developmentTeam_.empty())
@@ -902,12 +1158,9 @@ namespace ve::editor
     {
         std::ostringstream stream;
         stream << "xcodebuild"
-               << " -project " << ShellQuote(xcodeBinaryRoot_.GetString() + "/VEngine.xcodeproj")
-               << " -scheme " << ShellQuote(IOSPlayerTargetName)
-               << " -configuration " << ShellQuote(buildConfiguration_)
-               << " -sdk iphonesimulator"
-               << " -destination " << ShellQuote("generic/platform=iOS Simulator")
-               << " CODE_SIGNING_ALLOWED=NO"
+               << " -project " << ShellQuote(xcodeBinaryRoot_.GetString() + "/VEngine.xcodeproj") << " -scheme " << ShellQuote(IOSPlayerTargetName)
+               << " -configuration " << ShellQuote(buildConfiguration_) << " -sdk iphonesimulator"
+               << " -destination " << ShellQuote("generic/platform=iOS Simulator") << " CODE_SIGNING_ALLOWED=NO"
                << " CODE_SIGNING_REQUIRED=NO"
                << " CODE_SIGN_IDENTITY="
                << " build";
@@ -919,8 +1172,7 @@ namespace ve::editor
         std::ostringstream stream;
         stream << "xcodebuild"
                << " -exportArchive"
-               << " -archivePath " << ShellQuote(archivePath_.GetString())
-               << " -exportPath " << ShellQuote(ipaExportRoot_.GetString())
+               << " -archivePath " << ShellQuote(archivePath_.GetString()) << " -exportPath " << ShellQuote(ipaExportRoot_.GetString())
                << " -exportOptionsPlist " << ShellQuote(exportOptionsPlistPath_.GetString());
 
         if (ShouldAllowProvisioningUpdates())

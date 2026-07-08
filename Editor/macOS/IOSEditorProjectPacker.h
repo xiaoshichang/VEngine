@@ -23,6 +23,10 @@ namespace ve::editor
 
         [[nodiscard]] ErrorCode ValidateIOSPackagingEnvironment(Editor& editor);
         [[nodiscard]] ErrorCode PrepareIOSPackageDirectories();
+        [[nodiscard]] ErrorCode ExportIOSPackageData(Editor& editor);
+        [[nodiscard]] ErrorCode WriteIOSAssetManifest(Editor& editor);
+        [[nodiscard]] ErrorCode WriteIOSPackageDataManifest(Editor& editor);
+        [[nodiscard]] ErrorCode BakeIOSShaderDescriptor(const Path& sourcePath, const Path& runtimePath, std::vector<Path>& artifactRuntimePaths);
         [[nodiscard]] ErrorCode PublishIOSNativeAOTScripts(Editor& editor);
         [[nodiscard]] ErrorCode WriteIOSNativeAOTScriptManifest();
         [[nodiscard]] ErrorCode ConfigureIOSXcodeProject();
@@ -60,7 +64,8 @@ namespace ve::editor
         [[nodiscard]] static bool IsValidDeploymentTarget(std::string_view text) noexcept;
         [[nodiscard]] static std::string NormalizeCodeSignStyle(std::string text);
 
-        Path stagingRoot_;
+        Path packageDataBuildRoot_;
+        Path packageDataManifestPath_;
         Path xcodeBinaryRoot_;
         Path archivePath_;
         Path ipaExportRoot_;

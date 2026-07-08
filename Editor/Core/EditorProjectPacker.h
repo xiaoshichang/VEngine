@@ -58,6 +58,7 @@ namespace ve::editor
         std::string platform;
         std::string playerExecutable;
         std::string dataRoot;
+        std::string packageDataManifest;
         std::string appBundle;
         std::string xcodeProject;
     };
