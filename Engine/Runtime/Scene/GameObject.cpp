@@ -204,9 +204,8 @@ namespace ve
     bool GameObject::RemoveScriptableComponent(const ScriptableComponent& component) noexcept
     {
         const auto componentIt = std::find_if(scriptableComponents_.begin(),
-                                             scriptableComponents_.end(),
-                                             [&component](const std::unique_ptr<ScriptableComponent>& candidate)
-                                             { return candidate.get() == &component; });
+                                              scriptableComponents_.end(),
+                                              [&component](const std::unique_ptr<ScriptableComponent>& candidate) { return candidate.get() == &component; });
         if (componentIt == scriptableComponents_.end() || *componentIt == nullptr)
         {
             return false;
@@ -216,6 +215,46 @@ namespace ve
         (*componentIt)->ClearOwner();
         scriptableComponents_.erase(componentIt);
         return true;
+    }
+
+    void GameObject::FixedUpdate(Float32 fixedDeltaSeconds)
+    {
+        Component* componentSlots[] = {
+            transformCmpt_.get(),
+            meshRenderCmpt_.get(),
+            cameraCmpt_.get(),
+            lightCmpt_.get(),
+            colliderCmpt_.get(),
+            rigidbodyCmpt_.get(),
+        };
+        for (Component* component : componentSlots)
+        {
+            if (component != nullptr && component->IsEnabled())
+            {
+                component->OnFixedUpdate(fixedDeltaSeconds);
+            }
+        }
+        for (std::unique_ptr<ScriptableComponent>& script : scriptableComponents_)
+        {
+            if (script != nullptr && script->IsEnabled())
+            {
+                script->OnFixedUpdate(fixedDeltaSeconds);
+            }
+        }
+
+        if (transformCmpt_ == nullptr)
+        {
+            return;
+        }
+
+        for (SizeT childIndex = 0; childIndex < transformCmpt_->GetChildCount(); ++childIndex)
+        {
+            GameObject* child = transformCmpt_->GetChildGameObject(childIndex);
+            if (child != nullptr)
+            {
+                child->FixedUpdate(fixedDeltaSeconds);
+            }
+        }
     }
 
     void GameObject::Update(Float32 deltaSeconds)

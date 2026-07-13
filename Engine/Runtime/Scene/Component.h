@@ -38,6 +38,9 @@ namespace ve
         /// Called by Scene update while this component and its owner are enabled.
         virtual void OnUpdate(Float32 deltaSeconds);
 
+        /// Called by Scene fixed update while this component and its owner are enabled.
+        virtual void OnFixedUpdate(Float32 fixedDeltaSeconds);
+
         /// Called after all Scene update work for the frame has completed.
         virtual void OnLateUpdate(Float32 deltaSeconds);
 

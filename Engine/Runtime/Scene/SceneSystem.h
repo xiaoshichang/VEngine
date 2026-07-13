@@ -22,6 +22,7 @@
 namespace ve
 {
     struct SceneSystemImpl;
+    class PhysicsSystem;
     class ScriptingSystem;
 
     /// SceneThread callbacks supplied by Editor for per-frame event and render hooks.
@@ -82,7 +83,8 @@ namespace ve
         /// Creates an empty active Scene and starts the Scene Thread.
         ///
         /// timeSystem must already be initialized by EngineRuntime before SceneSystem starts.
-        [[nodiscard]] ErrorCode Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, InputSystem& inputSystem, RenderSystem& renderSystem);
+        [[nodiscard]] ErrorCode Initialize(
+            const SceneSystemInitParam& initParam, TimeSystem& timeSystem, InputSystem& inputSystem, RenderSystem& renderSystem, PhysicsSystem& physicsSystem);
 
         /// Stops Scene updates and joins the Scene Thread.
         ///

@@ -122,12 +122,10 @@ namespace ve
             return collider != nullptr && collider->IsEnabled() ? collider : nullptr;
         }
 
-        [[nodiscard]] PhysicsSystemSceneSyncEntry* FindSceneSyncEntry(std::vector<PhysicsSystemSceneSyncEntry>& entries,
-                                                                      const GameObject& gameObject) noexcept
+        [[nodiscard]] PhysicsSystemSceneSyncEntry* FindSceneSyncEntry(std::vector<PhysicsSystemSceneSyncEntry>& entries, const GameObject& gameObject) noexcept
         {
-            const auto entryIt = std::find_if(entries.begin(),
-                                              entries.end(),
-                                              [&gameObject](const PhysicsSystemSceneSyncEntry& entry) { return entry.gameObject == &gameObject; });
+            const auto entryIt = std::find_if(
+                entries.begin(), entries.end(), [&gameObject](const PhysicsSystemSceneSyncEntry& entry) { return entry.gameObject == &gameObject; });
             return entryIt != entries.end() ? &(*entryIt) : nullptr;
         }
 
@@ -173,10 +171,8 @@ namespace ve
 
     namespace
     {
-        [[nodiscard]] ErrorCode SyncGameObjectBeforeStep(PhysicsSystem& physicsSystem,
-                                                         PhysicsSystemSceneSyncState& syncState,
-                                                         Scene& scene,
-                                                         GameObject& gameObject)
+        [[nodiscard]] ErrorCode
+        SyncGameObjectBeforeStep(PhysicsSystem& physicsSystem, PhysicsSystemSceneSyncState& syncState, Scene& scene, GameObject& gameObject)
         {
             ColliderComponent* collider = GetEnabledCollider(gameObject);
             if (collider != nullptr)
@@ -214,9 +210,9 @@ namespace ve
                 }
 
                 entry->seenInCurrentSync = true;
-                const bool shouldRecreateBody =
-                    !entry->body.IsValid() || entry->hasRigidbody != hasRigidbody || entry->motionType != bodyDesc.motionType ||
-                    collider->GetBackend().IsRuntimeShapeDirty() || (rigidbody != nullptr && rigidbody->GetBackend().IsRuntimeBodyDirty());
+                const bool shouldRecreateBody = !entry->body.IsValid() || entry->hasRigidbody != hasRigidbody || entry->motionType != bodyDesc.motionType ||
+                                                collider->GetBackend().IsRuntimeShapeDirty() ||
+                                                (rigidbody != nullptr && rigidbody->GetBackend().IsRuntimeBodyDirty());
                 if (shouldRecreateBody)
                 {
                     if (entry->body.IsValid())
@@ -553,6 +549,43 @@ namespace ve
         }
 
         return ErrorCode::None;
+    }
+
+    void PhysicsSystem::ClearSceneSyncState(Scene& scene) noexcept
+    {
+        if (!IsInitialized() || sceneSyncState_ == nullptr)
+        {
+            return;
+        }
+
+        const SizeT rootCount = scene.GetRootGameObjectCount();
+        for (SizeT rootIndex = 0; rootIndex < rootCount; ++rootIndex)
+        {
+            GameObject* root = scene.GetRootGameObject(rootIndex);
+            if (root != nullptr)
+            {
+                ClearRigidbodyHandleRecursive(*root);
+            }
+        }
+
+        for (auto entryIt = sceneSyncState_->entries.begin(); entryIt != sceneSyncState_->entries.end();)
+        {
+            PhysicsSystemSceneSyncEntry& entry = *entryIt;
+            if (entry.scene != &scene)
+            {
+                ++entryIt;
+                continue;
+            }
+
+            if (entry.body.IsValid())
+            {
+                const ErrorCode destroyResult = DestroyBody(entry.body);
+                VE_ASSERT_MESSAGE(destroyResult == ErrorCode::None || destroyResult == ErrorCode::NotFound,
+                                  "PhysicsSystem::ClearSceneSyncState failed to destroy a tracked physics body.");
+            }
+
+            entryIt = sceneSyncState_->entries.erase(entryIt);
+        }
     }
 
     std::unique_ptr<PhysicsSystemBackend> PhysicsSystem::CreateBackend(PhysicsBackendType backendType)

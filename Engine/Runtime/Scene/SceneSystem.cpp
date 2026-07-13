@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Physics/PhysicsSystem.h"
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
@@ -28,6 +29,7 @@ namespace ve
         TimeSystem* timeSystem = nullptr;
         InputSystem* inputSystem = nullptr;
         RenderSystem* renderSystem = nullptr;
+        PhysicsSystem* physicsSystem = nullptr;
 
         // frame sync between main thread and render thread.
         ManualResetEvent startLoopEvent;
@@ -84,6 +86,45 @@ namespace ve
             {
                 impl.scene->Update(deltaSeconds);
                 impl.scene->LateUpdate(deltaSeconds);
+            }
+        }
+
+        void FixedUpdateScene(SceneSystemImpl& impl, const TimeSnapshot& timeSnapshot)
+        {
+            if (impl.scene == nullptr || impl.scene->GetExecutionMode() != SceneExecutionMode::Runtime || impl.physicsSystem == nullptr ||
+                !impl.physicsSystem->IsInitialized())
+            {
+                return;
+            }
+
+            const Float32 fixedDeltaSeconds = timeSnapshot.fixedDeltaSeconds;
+            for (UInt32 stepIndex = 0; stepIndex < timeSnapshot.fixedStepCount; ++stepIndex)
+            {
+                impl.scene->FixedUpdate(fixedDeltaSeconds);
+
+                ErrorCode physicsResult = impl.physicsSystem->SyncSceneBeforeStep(*impl.scene);
+                if (physicsResult == ErrorCode::None)
+                {
+                    physicsResult = impl.physicsSystem->StepSimulation(PhysicsStepDesc{fixedDeltaSeconds, 1});
+                }
+                if (physicsResult == ErrorCode::None)
+                {
+                    physicsResult = impl.physicsSystem->WriteBackSceneAfterStep(*impl.scene);
+                }
+
+                if (physicsResult != ErrorCode::None)
+                {
+                    VE_LOG_ERROR_CATEGORY("Physics", "Scene physics fixed step failed: {}", ToString(physicsResult));
+                    return;
+                }
+            }
+        }
+
+        void ClearActiveScenePhysics(SceneSystemImpl& impl) noexcept
+        {
+            if (impl.scene != nullptr && impl.physicsSystem != nullptr && impl.physicsSystem->IsInitialized())
+            {
+                impl.physicsSystem->ClearSceneSyncState(*impl.scene);
             }
         }
 
@@ -196,6 +237,7 @@ namespace ve
 
                     impl.timeSystem->Tick();
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
+                    FixedUpdateScene(impl, timeSnapshot);
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
 
                     BeforeRenderScene(impl);
@@ -209,6 +251,7 @@ namespace ve
             }
             if (impl.scene != nullptr)
             {
+                ClearActiveScenePhysics(impl);
                 impl.scene->Clear();
             }
             impl.scene = nullptr;
@@ -286,8 +329,7 @@ namespace ve
             return Error();
         }
 
-        [[nodiscard]] Error
-        BindSceneAssetRefs(Scene& scene, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, RenderSystem* renderSystem)
+        [[nodiscard]] Error BindSceneAssetRefs(Scene& scene, const IAssetRecordProvider& provider, ResourceSystem& resourceSystem, RenderSystem* renderSystem)
         {
             for (SizeT rootIndex = 0; rootIndex < scene.GetRootGameObjectCount(); ++rootIndex)
             {
@@ -398,7 +440,8 @@ namespace ve
         Shutdown();
     }
 
-    ErrorCode SceneSystem::Initialize(const SceneSystemInitParam& initParam, TimeSystem& timeSystem, InputSystem& inputSystem, RenderSystem& renderSystem)
+    ErrorCode SceneSystem::Initialize(
+        const SceneSystemInitParam& initParam, TimeSystem& timeSystem, InputSystem& inputSystem, RenderSystem& renderSystem, PhysicsSystem& physicsSystem)
     {
         if (impl_->initialized.load(std::memory_order_acquire))
         {
@@ -420,9 +463,15 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
+        if (!physicsSystem.IsInitialized())
+        {
+            return ErrorCode::InvalidState;
+        }
+
         impl_->timeSystem = &timeSystem;
         impl_->inputSystem = &inputSystem;
         impl_->renderSystem = &renderSystem;
+        impl_->physicsSystem = &physicsSystem;
         impl_->stopRequested.store(false, std::memory_order_release);
         impl_->startLoopEvent.Reset();
 
@@ -502,12 +551,12 @@ namespace ve
         impl_->inputSystem = nullptr;
         VE_ASSERT(impl_->scene == nullptr);
         impl_->renderSystem = nullptr;
+        impl_->physicsSystem = nullptr;
         impl_->runtimeStartFrameCallback = nullptr;
         impl_->runtimeOSEventCallback = nullptr;
         impl_->playerSceneColorTexture.reset();
         impl_->osEventQueue.ClearForConsumer();
     }
-
 
     Result<std::unique_ptr<Scene>> SceneSystem::BuildSceneFromRequest(const SceneLoadRequest& request)
     {
@@ -563,6 +612,7 @@ namespace ve
 
         if (request.mode == SceneLoadMode::Single && impl_->scene != nullptr)
         {
+            ClearActiveScenePhysics(*impl_);
             impl_->scene->Clear();
         }
 
@@ -580,6 +630,7 @@ namespace ve
             return;
         }
 
+        ClearActiveScenePhysics(*impl_);
         impl_->scene->Clear();
     }
 
@@ -594,7 +645,6 @@ namespace ve
         VE_ASSERT(impl_->renderSystem != nullptr && impl_->renderSystem->IsInitialized());
         impl_->renderSystem->EnqueueCommand(std::move(command));
     }
-
 
     void SceneSystem::NotifyMainThreadFrameEnd()
     {

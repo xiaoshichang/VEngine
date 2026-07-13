@@ -206,6 +206,7 @@ namespace ve
             }
         }
 
+        void FixedUpdate(Float32 fixedDeltaSeconds);
         void Update(Float32 deltaSeconds);
         void LateUpdate(Float32 deltaSeconds);
 

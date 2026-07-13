@@ -702,8 +702,8 @@ that table automatically from weak-linked `VEngine_*` NativeAOT exports when the
 
 First-stage physics is intentionally lightweight. The current runtime code exposes a `PhysicsSystem` facade with a
 `PhysicsSystemBackend` boundary and a first concrete `PhysicsSystemBackendJolt` implementation backed by Jolt Physics.
-This facade is compiled into the `VEngine` static library, but it is intentionally not owned by `EngineRuntime` yet and
-does not run from the runtime frame loop yet.
+`EngineRuntime` owns and initializes this service, then passes it into `SceneSystem` so the Scene Thread can consume the
+`TimeSystem` fixed-step budget in the runtime frame loop.
 
 The initial engine-facing API covers:
 
@@ -718,11 +718,14 @@ The initial engine-facing API covers:
   runtime `ColliderBackend` and `RigidbodyBackend` state such as physics body handles and dirty sync flags. Body
   velocities belong to the actual `PhysicsSystemBackend` simulation state and are read or written through
   `PhysicsSystem` APIs.
-- Explicit Scene synchronization APIs on `PhysicsSystem`. A caller can invoke `SyncSceneBeforeStep(scene)` before
-  `StepSimulation()` to create, destroy, or refresh internal physics bodies for new, removed, and dirty Collider or
-  Rigidbody components, then invoke `WriteBackSceneAfterStep(scene)` after stepping to copy dynamic body simulation
+- Explicit Scene synchronization APIs on `PhysicsSystem`. The runtime frame loop invokes `SyncSceneBeforeStep(scene)`
+  before `StepSimulation()` to create, destroy, or refresh internal physics bodies for new, removed, and dirty Collider
+  or Rigidbody components, then invokes `WriteBackSceneAfterStep(scene)` after stepping to copy dynamic body simulation
   results back to `GameObject` transforms. `ClearSceneSyncState(scene)` destroys the physics bodies tracked for one
-  Scene. These APIs are intentionally manual until `EngineRuntime` owns the physics service.
+  Scene when the active Scene is replaced, unloaded, or shut down.
+- Unity-style fixed update flow for runtime Scenes. `TimeSystem` calculates `fixedStepCount`; for each fixed step,
+  `SceneSystem` calls `Scene::FixedUpdate(fixedDeltaSeconds)`, steps physics once, and then runs normal
+  `Update(deltaSeconds)` / `LateUpdate(deltaSeconds)` once per rendered frame.
 
 First-stage scene synchronization keeps an internal `PhysicsSystem` registry keyed by live `GameObject` pointers for the
 duration of the synchronized Scene. It supports static colliders, dynamic rigidbodies, kinematic rigidbodies, trigger
@@ -737,7 +740,6 @@ Future lightweight physics and scene-facing features:
 - `AABB`.
 - `Sphere`.
 - `Raycast`.
-- Runtime frame-loop integration.
 - Parent-aware world transform synchronization.
 - Simple overlap tests.
 

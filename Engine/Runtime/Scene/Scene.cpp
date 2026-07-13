@@ -327,6 +327,15 @@ namespace ve
                              [light = std::move(light), updateParam = std::move(updateParam)]() mutable { light->ApplyUpdateParam(std::move(updateParam)); });
     }
 
+    void Scene::FixedUpdate(Float32 fixedDeltaSeconds)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
+        {
+            gameObject->FixedUpdate(fixedDeltaSeconds);
+        }
+    }
+
     void Scene::Update(Float32 deltaSeconds)
     {
         VE_ASSERT_SCENE_THREAD();

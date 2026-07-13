@@ -61,6 +61,7 @@ namespace ve
         void UnregisterLight(std::shared_ptr<RTLight> light) noexcept;
         void UpdateLight(std::shared_ptr<RTLight> light, RTLightUpdateParam updateParam);
 
+        void FixedUpdate(Float32 fixedDeltaSeconds);
         void Update(Float32 deltaSeconds);
         void LateUpdate(Float32 deltaSeconds);
         void BeforeRender();

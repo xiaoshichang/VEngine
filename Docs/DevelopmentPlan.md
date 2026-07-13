@@ -289,8 +289,11 @@ Current services:
 
 Later services should connect through this layer as their modules land:
 
-- Scripting.
 - Runtime UI.
+
+Already connected through this layer:
+
+- Scripting.
 - PhysicsSystem runtime frame-loop integration.
 
 RenderSystem now owns the Render Thread and the RHI device/swapchain lifecycle through this service boundary. Future

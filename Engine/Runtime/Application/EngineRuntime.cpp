@@ -77,7 +77,14 @@ namespace ve
         }
         VE_LOG_INFO("TimeSystem initialized.");
 
-        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem, timeSystem_, inputSystem_, renderSystem_);
+        ErrorCode physicsSystemResult = physicsSystem_.Initialize(desc.physicsSystem);
+        if (physicsSystemResult != ErrorCode::None)
+        {
+            TerminateRuntimeInitialization("PhysicsSystem", physicsSystemResult);
+        }
+        VE_LOG_INFO("PhysicsSystem initialized.");
+
+        ErrorCode sceneSystemResult = sceneSystem_.Initialize(desc.sceneSystem, timeSystem_, inputSystem_, renderSystem_, physicsSystem_);
         if (sceneSystemResult != ErrorCode::None)
         {
             TerminateRuntimeInitialization("SceneSystem", sceneSystemResult);
@@ -112,6 +119,7 @@ namespace ve
         }
 
         sceneSystem_.Shutdown();
+        physicsSystem_.Shutdown();
         scriptingSystem_.Shutdown();
         resourceSystem_.Shutdown();
         timeSystem_.Shutdown();
@@ -226,5 +234,17 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetScriptingSystem requires an initialized runtime.");
         return scriptingSystem_;
+    }
+
+    PhysicsSystem& EngineRuntime::GetPhysicsSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetPhysicsSystem requires an initialized runtime.");
+        return physicsSystem_;
+    }
+
+    const PhysicsSystem& EngineRuntime::GetPhysicsSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetPhysicsSystem requires an initialized runtime.");
+        return physicsSystem_;
     }
 } // namespace ve

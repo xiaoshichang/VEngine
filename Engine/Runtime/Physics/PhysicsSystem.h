@@ -41,6 +41,7 @@ namespace ve
 
         [[nodiscard]] ErrorCode SyncSceneBeforeStep(Scene& scene);
         [[nodiscard]] ErrorCode WriteBackSceneAfterStep(Scene& scene);
+        void ClearSceneSyncState(Scene& scene) noexcept;
 
     private:
         [[nodiscard]] static std::unique_ptr<PhysicsSystemBackend> CreateBackend(PhysicsBackendType backendType);

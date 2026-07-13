@@ -57,6 +57,11 @@ namespace ve
         static_cast<void>(deltaSeconds);
     }
 
+    void Component::OnFixedUpdate(Float32 fixedDeltaSeconds)
+    {
+        static_cast<void>(fixedDeltaSeconds);
+    }
+
     void Component::OnLateUpdate(Float32 deltaSeconds)
     {
         static_cast<void>(deltaSeconds);
