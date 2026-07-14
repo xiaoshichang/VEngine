@@ -1,4 +1,4 @@
-#include "Editor/Panels/HierarchyPanel.h"
+#include "Editor/Panels/HierarchyPanel/HierarchyPanel.h"
 
 #include "Editor/Core/Editor.h"
 #include "Engine/Runtime/Logging/Log.h"

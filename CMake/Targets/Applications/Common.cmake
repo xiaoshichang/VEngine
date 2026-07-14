@@ -42,18 +42,22 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Core/EditorToolchain.h
     Editor/Core/Gizmos.cpp
     Editor/Core/Gizmos.h
-    Editor/Panels/AssetsPanel.cpp
-    Editor/Panels/AssetsPanel.h
-    Editor/Panels/BasePanel.cpp
-    Editor/Panels/BasePanel.h
-    Editor/Panels/GameViewPanel.cpp
-    Editor/Panels/GameViewPanel.h
-    Editor/Panels/HierarchyPanel.cpp
-    Editor/Panels/HierarchyPanel.h
-    Editor/Panels/InspectorPanel.cpp
-    Editor/Panels/InspectorPanel.h
-    Editor/Panels/SceneViewPanel.cpp
-    Editor/Panels/SceneViewPanel.h
+    Editor/Panels/AssetsPanel/AssetsPanel.cpp
+    Editor/Panels/AssetsPanel/AssetsPanel.h
+    Editor/Panels/BasePanel/BasePanel.cpp
+    Editor/Panels/BasePanel/BasePanel.h
+    Editor/Panels/GameViewPanel/GameViewPanel.cpp
+    Editor/Panels/GameViewPanel/GameViewPanel.h
+    Editor/Panels/HierarchyPanel/HierarchyPanel.cpp
+    Editor/Panels/HierarchyPanel/HierarchyPanel.h
+    Editor/Panels/InspectorPanel/InspectorAssetEditors.cpp
+    Editor/Panels/InspectorPanel/InspectorComponentEditors.cpp
+    Editor/Panels/InspectorPanel/InspectorPanel.cpp
+    Editor/Panels/InspectorPanel/InspectorPanel.h
+    Editor/Panels/InspectorPanel/InspectorPanelInternal.cpp
+    Editor/Panels/InspectorPanel/InspectorPanelInternal.h
+    Editor/Panels/SceneViewPanel/SceneViewPanel.cpp
+    Editor/Panels/SceneViewPanel/SceneViewPanel.h
     Editor/RenderPass/EditorGizmoRenderPass.cpp
     Editor/RenderPass/EditorGizmoRenderPass.h
     Editor/RenderPass/SceneGridRenderPass.cpp

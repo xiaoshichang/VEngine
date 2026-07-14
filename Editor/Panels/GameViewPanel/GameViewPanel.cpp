@@ -1,4 +1,4 @@
-#include "Editor/Panels/GameViewPanel.h"
+#include "Editor/Panels/GameViewPanel/GameViewPanel.h"
 
 #include "Editor/Core/Editor.h"
 #include "Engine/Runtime/Core/Assert.h"

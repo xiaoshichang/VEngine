@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Editor/Panels/BasePanel.h"
+#include "Editor/Panels/BasePanel/BasePanel.h"
 
 namespace ve
 {

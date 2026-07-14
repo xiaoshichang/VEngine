@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Editor/Panels/BasePanel.h"
+#include "Editor/Panels/BasePanel/BasePanel.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 
 #include <vector>

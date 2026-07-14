@@ -1,4 +1,4 @@
-#include "Editor/Panels/BasePanel.h"
+#include "Editor/Panels/BasePanel/BasePanel.h"
 
 #include <imgui.h>
 

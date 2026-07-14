@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Editor/Core/Gizmos.h"
-#include "Editor/Panels/BasePanel.h"
+#include "Editor/Panels/BasePanel/BasePanel.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Render/RenderScene.h"

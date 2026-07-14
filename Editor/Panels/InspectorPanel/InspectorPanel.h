@@ -2,7 +2,7 @@
 
 #include "Editor/Core/EditorEventDispatcher.h"
 #include "Editor/Core/EditorEvents.h"
-#include "Editor/Panels/BasePanel.h"
+#include "Editor/Panels/BasePanel/BasePanel.h"
 
 namespace ve
 {

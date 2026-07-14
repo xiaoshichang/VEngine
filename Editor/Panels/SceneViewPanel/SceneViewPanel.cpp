@@ -1,4 +1,4 @@
-#include "Editor/Panels/SceneViewPanel.h"
+#include "Editor/Panels/SceneViewPanel/SceneViewPanel.h"
 
 #include "Editor/Core/Editor.h"
 #include "Engine/Runtime/Core/Assert.h"

@@ -1,4 +1,4 @@
-#include "Editor/Panels/AssetsPanel.h"
+#include "Editor/Panels/AssetsPanel/AssetsPanel.h"
 
 #include "Editor/Core/Editor.h"
 #include "Editor/Core/EditorAssetDatabase.h"
