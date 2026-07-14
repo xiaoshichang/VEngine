@@ -11,10 +11,12 @@
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Resource/MaterialProperty.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
+#include "Engine/Runtime/Scene/ColliderComponent.h"
 #include "Engine/Runtime/Scene/Component.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/LightComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
+#include "Engine/Runtime/Scene/RigidbodyComponent.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Scripting/DotnetScriptableComponent.h"
 #include "Engine/Runtime/Scripting/ScriptableComponent.h"
@@ -98,6 +100,24 @@ namespace ve::editor
             }
 
             return false;
+        }
+
+        void RenderConstraintCheckbox(RigidbodyComponent& rigidbody, const char* label, RigidbodyConstraintFlags flag)
+        {
+            bool enabled = rigidbody.HasConstraint(flag);
+            if (ImGui::Checkbox(label, &enabled))
+            {
+                RigidbodyConstraintFlags constraints = rigidbody.GetConstraints();
+                if (enabled)
+                {
+                    constraints |= flag;
+                }
+                else
+                {
+                    constraints &= ~flag;
+                }
+                rigidbody.SetConstraints(constraints);
+            }
         }
 
         [[nodiscard]] std::string ResolveAssetPathFromID(const EditorAssetDatabase& assetDatabase, const AssetID& id)
@@ -537,6 +557,16 @@ namespace ve::editor
             RenderLightComponent(*light);
         }
 
+        if (ColliderComponent* collider = gameObject.GetComponent<ColliderComponent>(); collider != nullptr)
+        {
+            RenderColliderComponent(gameObject, *collider);
+        }
+
+        if (RigidbodyComponent* rigidbody = gameObject.GetComponent<RigidbodyComponent>(); rigidbody != nullptr)
+        {
+            RenderRigidbodyComponent(gameObject, *rigidbody);
+        }
+
         for (SizeT scriptIndex = 0; scriptIndex < gameObject.GetScriptableComponentCount();)
         {
             ScriptableComponent* script = gameObject.GetScriptableComponent(scriptIndex);
@@ -727,6 +757,174 @@ namespace ve::editor
         ImGui::PopID();
     }
 
+    void InspectorPanel::RenderColliderComponent(GameObject& gameObject, ColliderComponent& collider)
+    {
+        ImGui::PushID(&collider);
+        const bool open = ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen);
+        if (ImGui::BeginPopupContextItem("ColliderComponentContext"))
+        {
+            if (ImGui::MenuItem("Remove"))
+            {
+                const bool removed = gameObject.RemoveComponent<ColliderComponent>();
+                (void)removed;
+                ImGui::EndPopup();
+                ImGui::PopID();
+                return;
+            }
+            ImGui::EndPopup();
+        }
+
+        if (open)
+        {
+            RenderEnabledCheckbox(collider);
+
+            int shapeType = std::clamp(static_cast<int>(collider.GetShapeType()), 0, 2);
+            const char* shapeTypes[] = {"Box", "Sphere", "Capsule"};
+            if (ImGui::Combo("Shape", &shapeType, shapeTypes, IM_ARRAYSIZE(shapeTypes)))
+            {
+                collider.SetShapeType(static_cast<ColliderShapeType>(shapeType));
+            }
+
+            bool trigger = collider.IsTrigger();
+            if (ImGui::Checkbox("Is Trigger", &trigger))
+            {
+                collider.SetTrigger(trigger);
+            }
+
+            std::array<float, 3> center = ToFloat3(collider.GetCenter());
+            if (ImGui::DragFloat3("Center", center.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                collider.SetCenter(FromFloat3(center));
+            }
+
+            std::array<float, 3> size = ToFloat3(collider.GetSize());
+            if (ImGui::DragFloat3("Size", size.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                collider.SetSize(FromFloat3(size));
+            }
+
+            float radius = collider.GetRadius();
+            if (ImGui::DragFloat("Radius", &radius, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                collider.SetRadius(radius);
+            }
+
+            float height = collider.GetHeight();
+            if (ImGui::DragFloat("Height", &height, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                collider.SetHeight(height);
+            }
+
+            int direction = std::clamp(static_cast<int>(collider.GetDirection()), 0, 2);
+            const char* directions[] = {"X", "Y", "Z"};
+            if (ImGui::Combo("Direction", &direction, directions, IM_ARRAYSIZE(directions)))
+            {
+                collider.SetDirection(static_cast<ColliderDirectionAxis>(direction));
+            }
+
+            float staticFriction = collider.GetStaticFriction();
+            if (ImGui::DragFloat("Static Friction", &staticFriction, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                collider.SetStaticFriction(staticFriction);
+            }
+
+            float dynamicFriction = collider.GetDynamicFriction();
+            if (ImGui::DragFloat("Dynamic Friction", &dynamicFriction, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                collider.SetDynamicFriction(dynamicFriction);
+            }
+
+            float bounciness = collider.GetBounciness();
+            if (ImGui::DragFloat("Bounciness", &bounciness, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                collider.SetBounciness(bounciness);
+            }
+        }
+        ImGui::PopID();
+    }
+
+    void InspectorPanel::RenderRigidbodyComponent(GameObject& gameObject, RigidbodyComponent& rigidbody)
+    {
+        ImGui::PushID(&rigidbody);
+        const bool open = ImGui::CollapsingHeader("Rigidbody", ImGuiTreeNodeFlags_DefaultOpen);
+        if (ImGui::BeginPopupContextItem("RigidbodyComponentContext"))
+        {
+            if (ImGui::MenuItem("Remove"))
+            {
+                const bool removed = gameObject.RemoveComponent<RigidbodyComponent>();
+                (void)removed;
+                ImGui::EndPopup();
+                ImGui::PopID();
+                return;
+            }
+            ImGui::EndPopup();
+        }
+
+        if (open)
+        {
+            RenderEnabledCheckbox(rigidbody);
+
+            float mass = rigidbody.GetMass();
+            if (ImGui::DragFloat("Mass", &mass, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                rigidbody.SetMass(mass);
+            }
+
+            float linearDamping = rigidbody.GetLinearDamping();
+            if (ImGui::DragFloat("Linear Damping", &linearDamping, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                rigidbody.SetLinearDamping(linearDamping);
+            }
+
+            float angularDamping = rigidbody.GetAngularDamping();
+            if (ImGui::DragFloat("Angular Damping", &angularDamping, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            {
+                rigidbody.SetAngularDamping(angularDamping);
+            }
+
+            bool useGravity = rigidbody.UsesGravity();
+            if (ImGui::Checkbox("Use Gravity", &useGravity))
+            {
+                rigidbody.SetUseGravity(useGravity);
+            }
+
+            bool kinematic = rigidbody.IsKinematic();
+            if (ImGui::Checkbox("Is Kinematic", &kinematic))
+            {
+                rigidbody.SetKinematic(kinematic);
+            }
+
+            bool detectCollisions = rigidbody.DetectsCollisions();
+            if (ImGui::Checkbox("Detect Collisions", &detectCollisions))
+            {
+                rigidbody.SetDetectCollisions(detectCollisions);
+            }
+
+            int interpolationMode = std::clamp(static_cast<int>(rigidbody.GetInterpolationMode()), 0, 2);
+            const char* interpolationModes[] = {"None", "Interpolate", "Extrapolate"};
+            if (ImGui::Combo("Interpolation", &interpolationMode, interpolationModes, IM_ARRAYSIZE(interpolationModes)))
+            {
+                rigidbody.SetInterpolationMode(static_cast<RigidbodyInterpolationMode>(interpolationMode));
+            }
+
+            int collisionDetectionMode = std::clamp(static_cast<int>(rigidbody.GetCollisionDetectionMode()), 0, 3);
+            const char* collisionDetectionModes[] = {"Discrete", "Continuous", "Continuous Dynamic", "Continuous Speculative"};
+            if (ImGui::Combo("Collision Detection", &collisionDetectionMode, collisionDetectionModes, IM_ARRAYSIZE(collisionDetectionModes)))
+            {
+                rigidbody.SetCollisionDetectionMode(static_cast<RigidbodyCollisionDetectionMode>(collisionDetectionMode));
+            }
+
+            ImGui::SeparatorText("Constraints");
+            RenderConstraintCheckbox(rigidbody, "Freeze Position X", RigidbodyConstraintFlags::FreezePositionX);
+            RenderConstraintCheckbox(rigidbody, "Freeze Position Y", RigidbodyConstraintFlags::FreezePositionY);
+            RenderConstraintCheckbox(rigidbody, "Freeze Position Z", RigidbodyConstraintFlags::FreezePositionZ);
+            RenderConstraintCheckbox(rigidbody, "Freeze Rotation X", RigidbodyConstraintFlags::FreezeRotationX);
+            RenderConstraintCheckbox(rigidbody, "Freeze Rotation Y", RigidbodyConstraintFlags::FreezeRotationY);
+            RenderConstraintCheckbox(rigidbody, "Freeze Rotation Z", RigidbodyConstraintFlags::FreezeRotationZ);
+        }
+        ImGui::PopID();
+    }
+
     bool InspectorPanel::RenderScriptComponent(GameObject& gameObject, DotnetScriptableComponent& script)
     {
         ImGui::PushID(&script);
@@ -771,7 +969,8 @@ namespace ve::editor
                     }
                     else
                     {
-                        VE_LOG_WARN_CATEGORY("Editor", "Failed to read script fields '{}': {}", script.GetScriptTypeName(), fieldResult.GetError().GetMessage());
+                        VE_LOG_WARN_CATEGORY(
+                            "Editor", "Failed to read script fields '{}': {}", script.GetScriptTypeName(), fieldResult.GetError().GetMessage());
                     }
                 }
 
@@ -794,18 +993,31 @@ namespace ve::editor
             return;
         }
 
-        const std::vector<ScriptTypeInfo>& scriptTypes = editor_->GetScriptDatabase().GetScriptTypes();
-        if (scriptTypes.empty())
-        {
-            return;
-        }
-
         if (!ImGui::CollapsingHeader("Add Component"))
         {
             return;
         }
 
-        if (ImGui::BeginCombo("Script", "Select script"))
+        if (gameObject.GetComponent<ColliderComponent>() == nullptr && ImGui::Button("Add Collider"))
+        {
+            Result<ColliderComponent*> result = gameObject.AddComponentWithoutRenderRegistration<ColliderComponent>();
+            if (!result)
+            {
+                VE_LOG_WARN_CATEGORY("Editor", "Failed to add collider component: {}", result.GetError().GetMessage());
+            }
+        }
+
+        if (gameObject.GetComponent<RigidbodyComponent>() == nullptr && ImGui::Button("Add Rigidbody"))
+        {
+            Result<RigidbodyComponent*> result = gameObject.AddComponentWithoutRenderRegistration<RigidbodyComponent>();
+            if (!result)
+            {
+                VE_LOG_WARN_CATEGORY("Editor", "Failed to add rigidbody component: {}", result.GetError().GetMessage());
+            }
+        }
+
+        const std::vector<ScriptTypeInfo>& scriptTypes = editor_->GetScriptDatabase().GetScriptTypes();
+        if (!scriptTypes.empty() && ImGui::BeginCombo("Script", "Select script"))
         {
             for (const ScriptTypeInfo& scriptType : scriptTypes)
             {

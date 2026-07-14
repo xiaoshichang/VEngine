@@ -7,10 +7,12 @@
 namespace ve
 {
     class CameraComponent;
+    class ColliderComponent;
     class DotnetScriptableComponent;
     class GameObject;
     class LightComponent;
     class MeshRenderComponent;
+    class RigidbodyComponent;
     class TransformComponent;
 } // namespace ve
 
@@ -33,6 +35,8 @@ namespace ve::editor
         void RenderMeshRenderComponent(MeshRenderComponent& mesh);
         void RenderCameraComponent(CameraComponent& camera);
         void RenderLightComponent(LightComponent& light);
+        void RenderColliderComponent(GameObject& gameObject, ColliderComponent& collider);
+        void RenderRigidbodyComponent(GameObject& gameObject, RigidbodyComponent& rigidbody);
         [[nodiscard]] bool RenderScriptComponent(GameObject& gameObject, DotnetScriptableComponent& script);
         void RenderAddComponent(GameObject& gameObject);
         void RenderAsset(const EditorAssetRecord& asset);
