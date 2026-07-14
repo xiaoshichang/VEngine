@@ -644,6 +644,14 @@ namespace ve::editor
         loadRequest.provider = &assetDatabase_;
         loadRequest.resourceSystem = &runtime_->GetResourceSystem();
         loadRequest.scriptingSystem = &runtime_->GetScriptingSystem();
+
+        const ErrorCode physicsResetResult = runtime_->GetPhysicsSystem().ResetSimulation();
+        if (physicsResetResult != ErrorCode::None)
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to reset physics simulation before Play: {}", ToString(physicsResetResult));
+            return;
+        }
+
         Error loadResult = sceneSystem_->LoadScene(loadRequest);
         if (!loadResult.IsOk())
         {

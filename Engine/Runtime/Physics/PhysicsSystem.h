@@ -22,6 +22,7 @@ namespace ve
 
         [[nodiscard]] ErrorCode Initialize(const PhysicsSystemInitParam& initParam);
         void Shutdown() noexcept;
+        [[nodiscard]] ErrorCode ResetSimulation();
 
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] PhysicsBackendType GetBackendType() const noexcept;
@@ -48,6 +49,7 @@ namespace ve
 
         std::unique_ptr<PhysicsSystemBackend> backend_;
         std::unique_ptr<PhysicsSystemSceneSyncState> sceneSyncState_;
+        PhysicsSystemInitParam initParam_;
         bool initialized_ = false;
     };
 } // namespace ve

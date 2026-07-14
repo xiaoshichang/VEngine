@@ -171,6 +171,19 @@ namespace ve
 
     namespace
     {
+        void ClearAllSceneSyncHandles(PhysicsSystemSceneSyncState& syncState) noexcept
+        {
+            for (PhysicsSystemSceneSyncEntry& entry : syncState.entries)
+            {
+                if (entry.gameObject != nullptr)
+                {
+                    ClearRigidbodyHandleRecursive(*entry.gameObject);
+                }
+            }
+
+            syncState.entries.clear();
+        }
+
         [[nodiscard]] ErrorCode
         SyncGameObjectBeforeStep(PhysicsSystem& physicsSystem, PhysicsSystemSceneSyncState& syncState, Scene& scene, GameObject& gameObject)
         {
@@ -369,6 +382,7 @@ namespace ve
         }
 
         initialized_ = true;
+        initParam_ = initParam;
         return ErrorCode::None;
     }
 
@@ -386,6 +400,42 @@ namespace ve
         }
 
         initialized_ = false;
+    }
+
+    ErrorCode PhysicsSystem::ResetSimulation()
+    {
+        if (!initialized_)
+        {
+            return ErrorCode::InvalidState;
+        }
+
+        if (sceneSyncState_ != nullptr)
+        {
+            ClearAllSceneSyncHandles(*sceneSyncState_);
+        }
+
+        if (backend_ != nullptr)
+        {
+            backend_->Shutdown();
+            backend_.reset();
+        }
+
+        backend_ = CreateBackend(initParam_.backendType);
+        if (backend_ == nullptr)
+        {
+            initialized_ = false;
+            return ErrorCode::Unsupported;
+        }
+
+        const ErrorCode result = backend_->Initialize(initParam_);
+        if (result != ErrorCode::None)
+        {
+            backend_.reset();
+            initialized_ = false;
+            return result;
+        }
+
+        return ErrorCode::None;
     }
 
     bool PhysicsSystem::IsInitialized() const noexcept
