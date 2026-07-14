@@ -1,11 +1,12 @@
 #include "Engine/Runtime/Physics/PhysicsSystemBackendJolt.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Physics/JoltJobSystemVEngine.h"
 
 #include <Jolt/Jolt.h>
 
 #include <Jolt/Core/Factory.h>
-#include <Jolt/Core/JobSystemSingleThreaded.h>
+#include <Jolt/Core/JobSystem.h>
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
@@ -21,6 +22,7 @@
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/EActivation.h>
 #include <Jolt/Physics/EPhysicsUpdateError.h>
+#include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
 
@@ -207,7 +209,7 @@ namespace ve
         std::unique_ptr<JPH::ObjectVsBroadPhaseLayerFilterTable> objectVsBroadPhaseLayerFilter;
         std::unique_ptr<JPH::PhysicsSystem> physicsSystem;
         std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator;
-        std::unique_ptr<JPH::JobSystemSingleThreaded> jobSystem;
+        std::unique_ptr<JPH::JobSystem> jobSystem;
         std::vector<JPH::BodyID> bodyIds;
         bool joltRuntimeAcquired = false;
         bool initialized = false;
@@ -223,7 +225,7 @@ namespace ve
         Shutdown();
     }
 
-    ErrorCode PhysicsSystemBackendJolt::Initialize(const PhysicsSystemInitParam& initParam)
+    ErrorCode PhysicsSystemBackendJolt::Initialize(const PhysicsSystemInitParam& initParam, JobSystem& jobSystem)
     {
         if (impl_->initialized)
         {
@@ -269,7 +271,7 @@ namespace ve
             impl_->physicsSystem->SetGravity(ToJoltVec3(initParam.gravity));
 
             impl_->tempAllocator = std::make_unique<JPH::TempAllocatorImpl>(initParam.tempAllocatorSizeBytes);
-            impl_->jobSystem = std::make_unique<JPH::JobSystemSingleThreaded>(JPH::cMaxPhysicsJobs);
+            impl_->jobSystem = std::make_unique<JoltJobSystemVEngine>(jobSystem, JPH::cMaxPhysicsBarriers);
         }
         catch (const std::bad_alloc&)
         {

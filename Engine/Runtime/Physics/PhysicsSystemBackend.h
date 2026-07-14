@@ -8,12 +8,14 @@
 
 namespace ve
 {
+    class JobSystem;
+
     class PhysicsSystemBackend : public NonMovable
     {
     public:
         virtual ~PhysicsSystemBackend() = default;
 
-        [[nodiscard]] virtual ErrorCode Initialize(const PhysicsSystemInitParam& initParam) = 0;
+        [[nodiscard]] virtual ErrorCode Initialize(const PhysicsSystemInitParam& initParam, JobSystem& jobSystem) = 0;
         virtual void Shutdown() noexcept = 0;
         [[nodiscard]] virtual bool IsInitialized() const noexcept = 0;
         [[nodiscard]] virtual PhysicsBackendType GetBackendType() const noexcept = 0;

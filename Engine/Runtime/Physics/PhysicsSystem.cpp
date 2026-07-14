@@ -361,7 +361,7 @@ namespace ve
         Shutdown();
     }
 
-    ErrorCode PhysicsSystem::Initialize(const PhysicsSystemInitParam& initParam)
+    ErrorCode PhysicsSystem::Initialize(const PhysicsSystemInitParam& initParam, JobSystem& jobSystem)
     {
         if (initialized_)
         {
@@ -374,7 +374,7 @@ namespace ve
             return ErrorCode::Unsupported;
         }
 
-        const ErrorCode result = backend_->Initialize(initParam);
+        const ErrorCode result = backend_->Initialize(initParam, jobSystem);
         if (result != ErrorCode::None)
         {
             backend_.reset();
@@ -383,6 +383,7 @@ namespace ve
 
         initialized_ = true;
         initParam_ = initParam;
+        jobSystem_ = &jobSystem;
         return ErrorCode::None;
     }
 
@@ -399,6 +400,7 @@ namespace ve
             sceneSyncState_->entries.clear();
         }
 
+        jobSystem_ = nullptr;
         initialized_ = false;
     }
 
@@ -414,6 +416,8 @@ namespace ve
             ClearAllSceneSyncHandles(*sceneSyncState_);
         }
 
+        VE_ASSERT_MESSAGE(jobSystem_ != nullptr, "PhysicsSystem::ResetSimulation requires the JobSystem used for initialization.");
+
         if (backend_ != nullptr)
         {
             backend_->Shutdown();
@@ -427,7 +431,7 @@ namespace ve
             return ErrorCode::Unsupported;
         }
 
-        const ErrorCode result = backend_->Initialize(initParam_);
+        const ErrorCode result = backend_->Initialize(initParam_, *jobSystem_);
         if (result != ErrorCode::None)
         {
             backend_.reset();

@@ -10,6 +10,7 @@ option(VE_JOLT_ENABLE_DEBUG_RENDERER "Enable Jolt debug renderer support in the 
 option(VE_JOLT_ENABLE_PROFILER "Enable Jolt profiler support in the embedded VEngine build." OFF)
 option(VE_JOLT_ENABLE_OBJECT_STREAM "Enable Jolt ObjectStream support in the embedded VEngine build." OFF)
 option(VE_JOLT_USE_STATIC_MSVC_RUNTIME_LIBRARY "Build embedded Jolt with the static MSVC runtime." OFF)
+option(VE_JOLT_CROSS_PLATFORM_DETERMINISTIC "Build embedded Jolt with cross-platform deterministic simulation enabled." ON)
 
 function(ve_prepare_jolt_source)
     set(requiredJoltFiles
@@ -85,6 +86,7 @@ function(ve_add_jolt_library)
     set(PROFILER_IN_DEBUG_AND_RELEASE ${VE_JOLT_ENABLE_PROFILER})
     set(PROFILER_IN_DISTRIBUTION ${VE_JOLT_ENABLE_PROFILER})
     set(ENABLE_OBJECT_STREAM ${VE_JOLT_ENABLE_OBJECT_STREAM})
+    set(CROSS_PLATFORM_DETERMINISTIC ${VE_JOLT_CROSS_PLATFORM_DETERMINISTIC} CACHE BOOL "Cross platform deterministic" FORCE)
 
     add_subdirectory("${VE_JOLT_SOURCE_DIR}/Build" "${CMAKE_BINARY_DIR}/ThirdParty/Jolt" EXCLUDE_FROM_ALL)
 

@@ -704,6 +704,9 @@ First-stage physics is intentionally lightweight. The current runtime code expos
 `PhysicsSystemBackend` boundary and a first concrete `PhysicsSystemBackendJolt` implementation backed by Jolt Physics.
 `EngineRuntime` owns and initializes this service, then passes it into `SceneSystem` so the Scene Thread can consume the
 `TimeSystem` fixed-step budget in the runtime frame loop.
+The Jolt backend is initialized with the runtime `JobSystem` and uses a VEngine-owned Jolt job-system adapter for
+Jolt's internal update jobs; it does not keep a separate single-threaded physics job path. The embedded Jolt build enables
+`CROSS_PLATFORM_DETERMINISTIC` so physics builds use Jolt's cross-platform deterministic mode by default.
 
 The initial engine-facing API covers:
 

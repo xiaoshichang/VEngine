@@ -26,6 +26,8 @@ function(ve_add_engine)
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Platform/DebugConsole.cpp
             Engine/Runtime/Platform/Window.cpp
+            Engine/Runtime/Physics/JoltJobSystemVEngine.cpp
+            Engine/Runtime/Physics/JoltJobSystemVEngine.h
             Engine/Runtime/Physics/PhysicsSystem.cpp
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.cpp
             Engine/Runtime/Render/BaseRenderer.cpp

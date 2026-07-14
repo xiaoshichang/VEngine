@@ -11,6 +11,7 @@
 
 namespace ve
 {
+    class JobSystem;
     class Scene;
     struct PhysicsSystemSceneSyncState;
 
@@ -20,7 +21,7 @@ namespace ve
         PhysicsSystem();
         ~PhysicsSystem();
 
-        [[nodiscard]] ErrorCode Initialize(const PhysicsSystemInitParam& initParam);
+        [[nodiscard]] ErrorCode Initialize(const PhysicsSystemInitParam& initParam, JobSystem& jobSystem);
         void Shutdown() noexcept;
         [[nodiscard]] ErrorCode ResetSimulation();
 
@@ -49,6 +50,7 @@ namespace ve
 
         std::unique_ptr<PhysicsSystemBackend> backend_;
         std::unique_ptr<PhysicsSystemSceneSyncState> sceneSyncState_;
+        JobSystem* jobSystem_ = nullptr;
         PhysicsSystemInitParam initParam_;
         bool initialized_ = false;
     };

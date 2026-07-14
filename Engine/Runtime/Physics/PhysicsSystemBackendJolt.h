@@ -14,7 +14,7 @@ namespace ve
         PhysicsSystemBackendJolt();
         ~PhysicsSystemBackendJolt() override;
 
-        [[nodiscard]] ErrorCode Initialize(const PhysicsSystemInitParam& initParam) override;
+        [[nodiscard]] ErrorCode Initialize(const PhysicsSystemInitParam& initParam, JobSystem& jobSystem) override;
         void Shutdown() noexcept override;
         [[nodiscard]] bool IsInitialized() const noexcept override;
         [[nodiscard]] PhysicsBackendType GetBackendType() const noexcept override;

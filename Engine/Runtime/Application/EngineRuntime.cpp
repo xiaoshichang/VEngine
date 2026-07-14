@@ -77,7 +77,7 @@ namespace ve
         }
         VE_LOG_INFO("TimeSystem initialized.");
 
-        ErrorCode physicsSystemResult = physicsSystem_.Initialize(desc.physicsSystem);
+        ErrorCode physicsSystemResult = physicsSystem_.Initialize(desc.physicsSystem, jobSystem_);
         if (physicsSystemResult != ErrorCode::None)
         {
             TerminateRuntimeInitialization("PhysicsSystem", physicsSystemResult);
