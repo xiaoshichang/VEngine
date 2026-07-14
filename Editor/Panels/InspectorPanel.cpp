@@ -42,6 +42,8 @@ namespace ve::editor
         constexpr float FineDragSpeed = 0.01f;
         constexpr float MediumDragSpeed = 0.1f;
         constexpr float LargeDragSpeed = 1.0f;
+        constexpr float InspectorLabelWidth = 128.0f;
+        constexpr float AddComponentButtonWidth = 220.0f;
 
         [[nodiscard]] std::array<char, TextBufferSize> ToTextBuffer(const std::string& value)
         {
@@ -92,10 +94,111 @@ namespace ve::editor
             return Vector4(value[0], value[1], value[2], value[3]);
         }
 
+        void BeginField(const char* label)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(label);
+            ImGui::SameLine(InspectorLabelWidth);
+            ImGui::SetNextItemWidth(-1.0f);
+        }
+
+        [[nodiscard]] bool RenderFieldCheckbox(const char* label, bool* value)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::Checkbox("##Value", value);
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldDragFloat(const char* label, float* value, float speed, float minValue = 0.0f, float maxValue = 0.0f)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::DragFloat("##Value", value, speed, minValue, maxValue, "%.3f");
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldDragInt(const char* label, int* value)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::DragInt("##Value", value);
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldDragFloat3(const char* label, float* value, float speed)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::DragFloat3("##Value", value, speed, 0.0f, 0.0f, "%.3f");
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldDragFloat4(const char* label, float* value, float speed)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::DragFloat4("##Value", value, speed, 0.0f, 0.0f, "%.3f");
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldCombo(const char* label, int* selectedIndex, const char* const* values, int valueCount)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::Combo("##Value", selectedIndex, values, valueCount);
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldInputText(const char* label, char* buffer, SizeT bufferSize, ImGuiInputTextFlags flags = 0)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::InputText("##Value", buffer, bufferSize, flags);
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldColorEdit3(const char* label, float* value)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::ColorEdit3("##Value", value);
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderFieldColorEdit4(const char* label, float* value)
+        {
+            ImGui::PushID(label);
+            BeginField(label);
+            const bool changed = ImGui::ColorEdit4("##Value", value);
+            ImGui::PopID();
+            return changed;
+        }
+
+        [[nodiscard]] bool RenderComponentHeader(const char* label, const ImVec4& color)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Header, color);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
+                                  ImVec4((std::min)(color.x + 0.08f, 1.0f), (std::min)(color.y + 0.08f, 1.0f), (std::min)(color.z + 0.08f, 1.0f), color.w));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive,
+                                  ImVec4((std::min)(color.x + 0.14f, 1.0f), (std::min)(color.y + 0.14f, 1.0f), (std::min)(color.z + 0.14f, 1.0f), color.w));
+            const bool open = ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen);
+            ImGui::PopStyleColor(3);
+            return open;
+        }
+
         bool RenderEnabledCheckbox(Component& component)
         {
             bool enabled = component.IsEnabled();
-            if (ImGui::Checkbox("Enabled", &enabled))
+            if (RenderFieldCheckbox("Enabled", &enabled))
             {
                 component.SetEnabled(enabled);
                 return true;
@@ -107,7 +210,7 @@ namespace ve::editor
         void RenderConstraintCheckbox(RigidbodyComponent& rigidbody, const char* label, RigidbodyConstraintFlags flag)
         {
             bool enabled = rigidbody.HasConstraint(flag);
-            if (ImGui::Checkbox(label, &enabled))
+            if (RenderFieldCheckbox(label, &enabled))
             {
                 RigidbodyConstraintFlags constraints = rigidbody.GetConstraints();
                 if (enabled)
@@ -197,8 +300,7 @@ namespace ve::editor
             const ImGuiStyle& style = ImGui::GetStyle();
             const float buttonWidth = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.0f;
 
-            ImGui::TextUnformatted(label);
-            ImGui::SameLine();
+            BeginField(label);
             ImGui::SetNextItemWidth(-buttonWidth - style.ItemSpacing.x);
             ImGui::InputText(pathInputId, pathBuffer.data(), pathBuffer.size(), ImGuiInputTextFlags_ReadOnly);
             ImGui::SameLine();
@@ -433,7 +535,7 @@ namespace ve::editor
             case ScriptFieldKind::Bool:
             {
                 bool boolValue = value.is_bool() ? value.as_bool() : false;
-                if (ImGui::Checkbox(label.c_str(), &boolValue))
+                if (RenderFieldCheckbox(label.c_str(), &boolValue))
                 {
                     SetScriptField(script, field, boolValue);
                 }
@@ -442,7 +544,7 @@ namespace ve::editor
             case ScriptFieldKind::Int:
             {
                 int intValue = static_cast<int>(ReadJsonFloat(value));
-                if (ImGui::DragInt(label.c_str(), &intValue))
+                if (RenderFieldDragInt(label.c_str(), &intValue))
                 {
                     SetScriptField(script, field, intValue);
                 }
@@ -451,7 +553,7 @@ namespace ve::editor
             case ScriptFieldKind::Float:
             {
                 float floatValue = ReadJsonFloat(value);
-                if (ImGui::DragFloat(label.c_str(), &floatValue, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+                if (RenderFieldDragFloat(label.c_str(), &floatValue, FineDragSpeed))
                 {
                     SetScriptField(script, field, floatValue);
                 }
@@ -460,7 +562,7 @@ namespace ve::editor
             case ScriptFieldKind::String:
             {
                 std::array<char, TextBufferSize> buffer = ToTextBuffer(value.is_string() ? std::string(value.as_string()) : std::string());
-                if (ImGui::InputText(label.c_str(), buffer.data(), buffer.size()))
+                if (RenderFieldInputText(label.c_str(), buffer.data(), buffer.size()))
                 {
                     SetScriptField(script, field, boost::json::string(buffer.data()));
                 }
@@ -469,7 +571,7 @@ namespace ve::editor
             case ScriptFieldKind::Vector3:
             {
                 std::array<float, 3> vectorValue = ReadScriptVector3(value);
-                if (ImGui::DragFloat3(label.c_str(), vectorValue.data(), TransformDragSpeed, 0.0f, 0.0f, "%.3f"))
+                if (RenderFieldDragFloat3(label.c_str(), vectorValue.data(), TransformDragSpeed))
                 {
                     SetScriptField(script, field, WriteScriptVector3(vectorValue));
                 }
@@ -478,7 +580,7 @@ namespace ve::editor
             case ScriptFieldKind::Color:
             {
                 std::array<float, 4> colorValue = ReadScriptColor(value);
-                if (ImGui::ColorEdit4(label.c_str(), colorValue.data()))
+                if (RenderFieldColorEdit4(label.c_str(), colorValue.data()))
                 {
                     SetScriptField(script, field, WriteScriptColor(colorValue));
                 }
@@ -508,7 +610,7 @@ namespace ve::editor
                     enumLabels.push_back(enumName.c_str());
                 }
 
-                if (!enumLabels.empty() && ImGui::Combo(label.c_str(), &selectedIndex, enumLabels.data(), static_cast<int>(enumLabels.size())))
+                if (!enumLabels.empty() && RenderFieldCombo(label.c_str(), &selectedIndex, enumLabels.data(), static_cast<int>(enumLabels.size())))
                 {
                     SetScriptField(script, field, boost::json::string(field.enumNames[static_cast<SizeT>(selectedIndex)]));
                 }
@@ -584,7 +686,7 @@ namespace ve::editor
     void InspectorPanel::RenderGameObject(GameObject& gameObject)
     {
         std::array<char, TextBufferSize> nameBuffer = ToTextBuffer(gameObject.GetName());
-        if (ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size()))
+        if (RenderFieldInputText("Name", nameBuffer.data(), nameBuffer.size()))
         {
             gameObject.SetName(nameBuffer.data());
         }
@@ -661,24 +763,24 @@ namespace ve::editor
     void InspectorPanel::RenderTransformComponent(TransformComponent& transform)
     {
         ImGui::PushID(&transform);
-        if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
+        if (RenderComponentHeader("Transform", ImVec4(0.18f, 0.42f, 0.50f, 0.82f)))
         {
             RenderEnabledCheckbox(transform);
 
             std::array<float, 3> position = ToFloat3(transform.GetLocalPosition());
-            if (ImGui::DragFloat3("Position", position.data(), TransformDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat3("Position", position.data(), TransformDragSpeed))
             {
                 transform.SetLocalPosition(FromFloat3(position));
             }
 
             std::array<float, 4> rotation = ToFloat4(transform.GetLocalRotation());
-            if (ImGui::DragFloat4("Rotation XYZW", rotation.data(), RotationDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat4("Rotation XYZW", rotation.data(), RotationDragSpeed))
             {
                 transform.SetLocalRotation(FromFloat4(rotation));
             }
 
             std::array<float, 3> scale = ToFloat3(transform.GetLocalScale());
-            if (ImGui::DragFloat3("Scale", scale.data(), TransformDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat3("Scale", scale.data(), TransformDragSpeed))
             {
                 transform.SetLocalScale(FromFloat3(scale));
             }
@@ -689,7 +791,7 @@ namespace ve::editor
     bool InspectorPanel::RenderMeshRenderComponent(GameObject& gameObject, MeshRenderComponent& mesh)
     {
         ImGui::PushID(&mesh);
-        const bool open = ImGui::CollapsingHeader("Mesh Renderer", ImGuiTreeNodeFlags_DefaultOpen);
+        const bool open = RenderComponentHeader("Mesh Renderer", ImVec4(0.22f, 0.32f, 0.58f, 0.82f));
         if (RenderRemoveComponentContextMenu<MeshRenderComponent>(gameObject, "MeshRenderComponentContext"))
         {
             ImGui::PopID();
@@ -708,13 +810,13 @@ namespace ve::editor
             RenderAssetReferenceField("Material", "##MaterialReferencePath", "##MaterialReference", materialAssetPath);
 
             std::array<float, 3> boundsCenter = ToFloat3(mesh.GetBoundsCenter());
-            if (ImGui::DragFloat3("Bounds Center", boundsCenter.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat3("Bounds Center", boundsCenter.data(), BoundsDragSpeed))
             {
                 mesh.SetBoundsCenter(FromFloat3(boundsCenter));
             }
 
             std::array<float, 3> boundsExtents = ToFloat3(mesh.GetBoundsExtents());
-            if (ImGui::DragFloat3("Bounds Extents", boundsExtents.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat3("Bounds Extents", boundsExtents.data(), BoundsDragSpeed))
             {
                 mesh.SetBoundsExtents(FromFloat3(boundsExtents));
             }
@@ -726,7 +828,7 @@ namespace ve::editor
     bool InspectorPanel::RenderCameraComponent(GameObject& gameObject, CameraComponent& camera)
     {
         ImGui::PushID(&camera);
-        const bool open = ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen);
+        const bool open = RenderComponentHeader("Camera", ImVec4(0.20f, 0.46f, 0.30f, 0.82f));
         if (RenderRemoveComponentContextMenu<CameraComponent>(gameObject, "CameraComponentContext"))
         {
             ImGui::PopID();
@@ -738,50 +840,50 @@ namespace ve::editor
             RenderEnabledCheckbox(camera);
 
             bool primary = camera.IsPrimary();
-            if (ImGui::Checkbox("Primary", &primary))
+            if (RenderFieldCheckbox("Primary", &primary))
             {
                 camera.SetPrimary(primary);
             }
 
             int projectionMode = camera.GetProjectionMode() == CameraComponent::ProjectionMode::Perspective ? 0 : 1;
             const char* projectionModes[] = {"Perspective", "Orthographic"};
-            if (ImGui::Combo("Projection", &projectionMode, projectionModes, IM_ARRAYSIZE(projectionModes)))
+            if (RenderFieldCombo("Projection", &projectionMode, projectionModes, IM_ARRAYSIZE(projectionModes)))
             {
                 camera.SetProjectionMode(projectionMode == 0 ? CameraComponent::ProjectionMode::Perspective : CameraComponent::ProjectionMode::Orthographic);
             }
 
             float verticalFieldOfView = camera.GetVerticalFieldOfViewRadians();
-            if (ImGui::DragFloat("FOV Radians", &verticalFieldOfView, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("FOV Radians", &verticalFieldOfView, FineDragSpeed))
             {
                 camera.SetVerticalFieldOfViewRadians(verticalFieldOfView);
             }
 
             float orthographicSize = camera.GetOrthographicSize();
-            if (ImGui::DragFloat("Ortho Size", &orthographicSize, MediumDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Ortho Size", &orthographicSize, MediumDragSpeed))
             {
                 camera.SetOrthographicSize(orthographicSize);
             }
 
             float aspectRatio = camera.GetAspectRatio();
-            if (ImGui::DragFloat("Aspect", &aspectRatio, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Aspect", &aspectRatio, FineDragSpeed))
             {
                 camera.SetAspectRatio(aspectRatio);
             }
 
             float nearClipPlane = camera.GetNearClipPlane();
-            if (ImGui::DragFloat("Near", &nearClipPlane, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Near", &nearClipPlane, FineDragSpeed))
             {
                 camera.SetNearClipPlane(nearClipPlane);
             }
 
             float farClipPlane = camera.GetFarClipPlane();
-            if (ImGui::DragFloat("Far", &farClipPlane, LargeDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Far", &farClipPlane, LargeDragSpeed))
             {
                 camera.SetFarClipPlane(farClipPlane);
             }
 
             std::array<float, 4> clearColor = ToFloat4(camera.GetClearColor());
-            if (ImGui::ColorEdit4("Clear Color", clearColor.data()))
+            if (RenderFieldColorEdit4("Clear Color", clearColor.data()))
             {
                 camera.SetClearColor(ToRhiColor(clearColor));
             }
@@ -793,7 +895,7 @@ namespace ve::editor
     bool InspectorPanel::RenderLightComponent(GameObject& gameObject, LightComponent& light)
     {
         ImGui::PushID(&light);
-        const bool open = ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen);
+        const bool open = RenderComponentHeader("Light", ImVec4(0.54f, 0.42f, 0.18f, 0.82f));
         if (RenderRemoveComponentContextMenu<LightComponent>(gameObject, "LightComponentContext"))
         {
             ImGui::PopID();
@@ -806,43 +908,43 @@ namespace ve::editor
 
             int lightType = light.GetLightType() == LightType::Directional ? 0 : 1;
             const char* lightTypes[] = {"Directional", "Point"};
-            if (ImGui::Combo("Type", &lightType, lightTypes, IM_ARRAYSIZE(lightTypes)))
+            if (RenderFieldCombo("Type", &lightType, lightTypes, IM_ARRAYSIZE(lightTypes)))
             {
                 light.SetLightType(lightType == 0 ? LightType::Directional : LightType::Point);
             }
 
             std::array<float, 3> color = ToFloat3(light.GetColor());
-            if (ImGui::ColorEdit3("Color", color.data()))
+            if (RenderFieldColorEdit3("Color", color.data()))
             {
                 light.SetColor(FromFloat3(color));
             }
 
             float intensity = light.GetIntensity();
-            if (ImGui::DragFloat("Intensity", &intensity, MediumDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Intensity", &intensity, MediumDragSpeed))
             {
                 light.SetIntensity(intensity);
             }
 
             float range = light.GetRange();
-            if (ImGui::DragFloat("Range", &range, MediumDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Range", &range, MediumDragSpeed))
             {
                 light.SetRange(range);
             }
 
             float innerConeAngle = light.GetInnerConeAngleRadians();
-            if (ImGui::DragFloat("Inner Cone", &innerConeAngle, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Inner Cone", &innerConeAngle, FineDragSpeed))
             {
                 light.SetInnerConeAngleRadians(innerConeAngle);
             }
 
             float outerConeAngle = light.GetOuterConeAngleRadians();
-            if (ImGui::DragFloat("Outer Cone", &outerConeAngle, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Outer Cone", &outerConeAngle, FineDragSpeed))
             {
                 light.SetOuterConeAngleRadians(outerConeAngle);
             }
 
             bool castShadows = light.CastShadows();
-            if (ImGui::Checkbox("Cast Shadows", &castShadows))
+            if (RenderFieldCheckbox("Cast Shadows", &castShadows))
             {
                 light.SetCastShadows(castShadows);
             }
@@ -854,7 +956,7 @@ namespace ve::editor
     bool InspectorPanel::RenderColliderComponent(GameObject& gameObject, ColliderComponent& collider)
     {
         ImGui::PushID(&collider);
-        const bool open = ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen);
+        const bool open = RenderComponentHeader("Collider", ImVec4(0.43f, 0.28f, 0.55f, 0.82f));
         if (RenderRemoveComponentContextMenu<ColliderComponent>(gameObject, "ColliderComponentContext"))
         {
             ImGui::PopID();
@@ -867,62 +969,62 @@ namespace ve::editor
 
             int shapeType = std::clamp(static_cast<int>(collider.GetShapeType()), 0, 2);
             const char* shapeTypes[] = {"Box", "Sphere", "Capsule"};
-            if (ImGui::Combo("Shape", &shapeType, shapeTypes, IM_ARRAYSIZE(shapeTypes)))
+            if (RenderFieldCombo("Shape", &shapeType, shapeTypes, IM_ARRAYSIZE(shapeTypes)))
             {
                 collider.SetShapeType(static_cast<ColliderShapeType>(shapeType));
             }
 
             bool trigger = collider.IsTrigger();
-            if (ImGui::Checkbox("Is Trigger", &trigger))
+            if (RenderFieldCheckbox("Is Trigger", &trigger))
             {
                 collider.SetTrigger(trigger);
             }
 
             std::array<float, 3> center = ToFloat3(collider.GetCenter());
-            if (ImGui::DragFloat3("Center", center.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat3("Center", center.data(), BoundsDragSpeed))
             {
                 collider.SetCenter(FromFloat3(center));
             }
 
             std::array<float, 3> size = ToFloat3(collider.GetSize());
-            if (ImGui::DragFloat3("Size", size.data(), BoundsDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat3("Size", size.data(), BoundsDragSpeed))
             {
                 collider.SetSize(FromFloat3(size));
             }
 
             float radius = collider.GetRadius();
-            if (ImGui::DragFloat("Radius", &radius, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Radius", &radius, FineDragSpeed))
             {
                 collider.SetRadius(radius);
             }
 
             float height = collider.GetHeight();
-            if (ImGui::DragFloat("Height", &height, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Height", &height, FineDragSpeed))
             {
                 collider.SetHeight(height);
             }
 
             int direction = std::clamp(static_cast<int>(collider.GetDirection()), 0, 2);
             const char* directions[] = {"X", "Y", "Z"};
-            if (ImGui::Combo("Direction", &direction, directions, IM_ARRAYSIZE(directions)))
+            if (RenderFieldCombo("Direction", &direction, directions, IM_ARRAYSIZE(directions)))
             {
                 collider.SetDirection(static_cast<ColliderDirectionAxis>(direction));
             }
 
             float staticFriction = collider.GetStaticFriction();
-            if (ImGui::DragFloat("Static Friction", &staticFriction, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Static Friction", &staticFriction, FineDragSpeed))
             {
                 collider.SetStaticFriction(staticFriction);
             }
 
             float dynamicFriction = collider.GetDynamicFriction();
-            if (ImGui::DragFloat("Dynamic Friction", &dynamicFriction, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Dynamic Friction", &dynamicFriction, FineDragSpeed))
             {
                 collider.SetDynamicFriction(dynamicFriction);
             }
 
             float bounciness = collider.GetBounciness();
-            if (ImGui::DragFloat("Bounciness", &bounciness, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Bounciness", &bounciness, FineDragSpeed))
             {
                 collider.SetBounciness(bounciness);
             }
@@ -934,7 +1036,7 @@ namespace ve::editor
     bool InspectorPanel::RenderRigidbodyComponent(GameObject& gameObject, RigidbodyComponent& rigidbody)
     {
         ImGui::PushID(&rigidbody);
-        const bool open = ImGui::CollapsingHeader("Rigidbody", ImGuiTreeNodeFlags_DefaultOpen);
+        const bool open = RenderComponentHeader("Rigidbody", ImVec4(0.48f, 0.25f, 0.22f, 0.82f));
         if (RenderRemoveComponentContextMenu<RigidbodyComponent>(gameObject, "RigidbodyComponentContext"))
         {
             ImGui::PopID();
@@ -946,51 +1048,51 @@ namespace ve::editor
             RenderEnabledCheckbox(rigidbody);
 
             float mass = rigidbody.GetMass();
-            if (ImGui::DragFloat("Mass", &mass, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Mass", &mass, FineDragSpeed))
             {
                 rigidbody.SetMass(mass);
             }
 
             float linearDamping = rigidbody.GetLinearDamping();
-            if (ImGui::DragFloat("Linear Damping", &linearDamping, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Linear Damping", &linearDamping, FineDragSpeed))
             {
                 rigidbody.SetLinearDamping(linearDamping);
             }
 
             float angularDamping = rigidbody.GetAngularDamping();
-            if (ImGui::DragFloat("Angular Damping", &angularDamping, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+            if (RenderFieldDragFloat("Angular Damping", &angularDamping, FineDragSpeed))
             {
                 rigidbody.SetAngularDamping(angularDamping);
             }
 
             bool useGravity = rigidbody.UsesGravity();
-            if (ImGui::Checkbox("Use Gravity", &useGravity))
+            if (RenderFieldCheckbox("Use Gravity", &useGravity))
             {
                 rigidbody.SetUseGravity(useGravity);
             }
 
             bool kinematic = rigidbody.IsKinematic();
-            if (ImGui::Checkbox("Is Kinematic", &kinematic))
+            if (RenderFieldCheckbox("Is Kinematic", &kinematic))
             {
                 rigidbody.SetKinematic(kinematic);
             }
 
             bool detectCollisions = rigidbody.DetectsCollisions();
-            if (ImGui::Checkbox("Detect Collisions", &detectCollisions))
+            if (RenderFieldCheckbox("Detect Collisions", &detectCollisions))
             {
                 rigidbody.SetDetectCollisions(detectCollisions);
             }
 
             int interpolationMode = std::clamp(static_cast<int>(rigidbody.GetInterpolationMode()), 0, 2);
             const char* interpolationModes[] = {"None", "Interpolate", "Extrapolate"};
-            if (ImGui::Combo("Interpolation", &interpolationMode, interpolationModes, IM_ARRAYSIZE(interpolationModes)))
+            if (RenderFieldCombo("Interpolation", &interpolationMode, interpolationModes, IM_ARRAYSIZE(interpolationModes)))
             {
                 rigidbody.SetInterpolationMode(static_cast<RigidbodyInterpolationMode>(interpolationMode));
             }
 
             int collisionDetectionMode = std::clamp(static_cast<int>(rigidbody.GetCollisionDetectionMode()), 0, 3);
             const char* collisionDetectionModes[] = {"Discrete", "Continuous", "Continuous Dynamic", "Continuous Speculative"};
-            if (ImGui::Combo("Collision Detection", &collisionDetectionMode, collisionDetectionModes, IM_ARRAYSIZE(collisionDetectionModes)))
+            if (RenderFieldCombo("Collision Detection", &collisionDetectionMode, collisionDetectionModes, IM_ARRAYSIZE(collisionDetectionModes)))
             {
                 rigidbody.SetCollisionDetectionMode(static_cast<RigidbodyCollisionDetectionMode>(collisionDetectionMode));
             }
@@ -1010,7 +1112,7 @@ namespace ve::editor
     bool InspectorPanel::RenderScriptComponent(GameObject& gameObject, DotnetScriptableComponent& script)
     {
         ImGui::PushID(&script);
-        const bool open = ImGui::CollapsingHeader("Script", ImGuiTreeNodeFlags_DefaultOpen);
+        const bool open = RenderComponentHeader("Script", ImVec4(0.36f, 0.34f, 0.56f, 0.82f));
         if (ImGui::BeginPopupContextItem("ScriptComponentContext"))
         {
             if (ImGui::MenuItem("Remove Component"))
@@ -1075,7 +1177,11 @@ namespace ve::editor
             return;
         }
 
-        if (ImGui::Button("Add Component"))
+        const float availableWidth = ImGui::GetContentRegionAvail().x;
+        const float buttonWidth = (std::min)(AddComponentButtonWidth, availableWidth);
+        const float buttonOffset = (std::max)(0.0f, (availableWidth - buttonWidth) * 0.5f);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + buttonOffset);
+        if (ImGui::Button("Add Component", ImVec2(buttonWidth, 0.0f)))
         {
             addComponentFilter_[0] = '\0';
             ImGui::OpenPopup("AddComponentPopup");
@@ -1319,7 +1425,7 @@ namespace ve::editor
             if (value.type == MaterialPropertyType::Color)
             {
                 std::array<float, 4> color = ToFloat4(value.vectorValue);
-                if (ImGui::ColorEdit4(property.displayName.c_str(), color.data()))
+                if (RenderFieldColorEdit4(property.displayName.c_str(), color.data()))
                 {
                     value.vectorValue = FromFloat4Vector(color);
                     changed = true;
@@ -1328,7 +1434,7 @@ namespace ve::editor
             else if (value.type == MaterialPropertyType::Float4)
             {
                 std::array<float, 4> vector = ToFloat4(value.vectorValue);
-                if (ImGui::DragFloat4(property.displayName.c_str(), vector.data(), FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+                if (RenderFieldDragFloat4(property.displayName.c_str(), vector.data(), FineDragSpeed))
                 {
                     value.vectorValue = FromFloat4Vector(vector);
                     changed = true;
@@ -1337,7 +1443,7 @@ namespace ve::editor
             else if (value.type == MaterialPropertyType::Float)
             {
                 float floatValue = value.floatValue;
-                if (ImGui::DragFloat(property.displayName.c_str(), &floatValue, FineDragSpeed, 0.0f, 0.0f, "%.3f"))
+                if (RenderFieldDragFloat(property.displayName.c_str(), &floatValue, FineDragSpeed))
                 {
                     value.floatValue = floatValue;
                     changed = true;
@@ -1345,10 +1451,8 @@ namespace ve::editor
             }
             else if (value.type == MaterialPropertyType::Texture2D)
             {
-                ImGui::TextUnformatted(property.displayName.c_str());
                 std::array<char, TextBufferSize> idBuffer = ToTextBuffer(value.assetValue.IsEmpty() ? "" : value.assetValue.ToString());
-                ImGui::SetNextItemWidth(-1.0f);
-                if (ImGui::InputText("##TextureAssetID", idBuffer.data(), idBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+                if (RenderFieldInputText(property.displayName.c_str(), idBuffer.data(), idBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue))
                 {
                     Result<AssetID> parsedID = ParseAssetIDText(idBuffer.data());
                     if (parsedID)
