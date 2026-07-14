@@ -5,7 +5,8 @@
 namespace ve
 {
     class GameObject;
-}
+    class Scene;
+} // namespace ve
 
 namespace ve::editor
 {
@@ -19,7 +20,11 @@ namespace ve::editor
     private:
         [[nodiscard]] const char* GetName() const noexcept override;
         void RenderContent() override;
-        void RenderGameObjectTree(ve::GameObject& gameObject);
+        [[nodiscard]] bool RenderGameObjectTree(Scene& scene, GameObject& gameObject);
+        void RenderSceneContextMenu(Scene& scene);
+        [[nodiscard]] bool RenderGameObjectContextMenu(Scene& scene, GameObject& gameObject);
+        void CreateGameObject(Scene& scene, GameObject* parent);
+        [[nodiscard]] bool RemoveGameObject(Scene& scene, GameObject& gameObject);
 
         Editor* editor_ = nullptr;
     };

@@ -32,11 +32,11 @@ namespace ve::editor
         void OnSelectionChanged(const EditorSelectionChangedEvent& event);
         void RenderGameObject(GameObject& gameObject);
         void RenderTransformComponent(TransformComponent& transform);
-        void RenderMeshRenderComponent(MeshRenderComponent& mesh);
-        void RenderCameraComponent(CameraComponent& camera);
-        void RenderLightComponent(LightComponent& light);
-        void RenderColliderComponent(GameObject& gameObject, ColliderComponent& collider);
-        void RenderRigidbodyComponent(GameObject& gameObject, RigidbodyComponent& rigidbody);
+        [[nodiscard]] bool RenderMeshRenderComponent(GameObject& gameObject, MeshRenderComponent& mesh);
+        [[nodiscard]] bool RenderCameraComponent(GameObject& gameObject, CameraComponent& camera);
+        [[nodiscard]] bool RenderLightComponent(GameObject& gameObject, LightComponent& light);
+        [[nodiscard]] bool RenderColliderComponent(GameObject& gameObject, ColliderComponent& collider);
+        [[nodiscard]] bool RenderRigidbodyComponent(GameObject& gameObject, RigidbodyComponent& rigidbody);
         [[nodiscard]] bool RenderScriptComponent(GameObject& gameObject, DotnetScriptableComponent& script);
         void RenderAddComponent(GameObject& gameObject);
         void RenderAsset(const EditorAssetRecord& asset);
@@ -45,5 +45,6 @@ namespace ve::editor
         Editor* editor_ = nullptr;
         EditorSelectionChangedEvent selection_;
         EditorEventSubscription selectionSubscription_;
+        char addComponentFilter_[128] = {};
     };
 } // namespace ve::editor

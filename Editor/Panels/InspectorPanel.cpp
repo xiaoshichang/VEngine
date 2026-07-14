@@ -25,8 +25,10 @@
 #include <algorithm>
 #include <array>
 #include <boost/json.hpp>
+#include <cctype>
 #include <imgui.h>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ve::editor
@@ -118,6 +120,59 @@ namespace ve::editor
                 }
                 rigidbody.SetConstraints(constraints);
             }
+        }
+
+        [[nodiscard]] std::string ToLowerAscii(std::string_view value)
+        {
+            std::string lowered;
+            lowered.reserve(value.size());
+            for (const char character : value)
+            {
+                lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(character))));
+            }
+            return lowered;
+        }
+
+        [[nodiscard]] bool MatchesFilter(std::string_view value, std::string_view filter)
+        {
+            if (filter.empty())
+            {
+                return true;
+            }
+
+            return ToLowerAscii(value).find(ToLowerAscii(filter)) != std::string::npos;
+        }
+
+        [[nodiscard]] bool HasDotnetScriptType(const GameObject& gameObject, const std::string& scriptTypeName) noexcept
+        {
+            for (SizeT scriptIndex = 0; scriptIndex < gameObject.GetScriptableComponentCount(); ++scriptIndex)
+            {
+                const ScriptableComponent* script = gameObject.GetScriptableComponent(scriptIndex);
+                const DotnetScriptableComponent* dotnetScript = dynamic_cast<const DotnetScriptableComponent*>(script);
+                if (dotnetScript != nullptr && dotnetScript->GetScriptTypeName() == scriptTypeName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        template<typename TComponent>
+        [[nodiscard]] bool RenderRemoveComponentContextMenu(GameObject& gameObject, const char* popupID)
+        {
+            if (ImGui::BeginPopupContextItem(popupID))
+            {
+                bool removed = false;
+                if (ImGui::MenuItem("Remove Component"))
+                {
+                    removed = gameObject.RemoveComponent<TComponent>();
+                }
+                ImGui::EndPopup();
+                return removed;
+            }
+
+            return false;
         }
 
         [[nodiscard]] std::string ResolveAssetPathFromID(const EditorAssetDatabase& assetDatabase, const AssetID& id)
@@ -544,27 +599,42 @@ namespace ve::editor
 
         if (MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>(); mesh != nullptr)
         {
-            RenderMeshRenderComponent(*mesh);
+            if (RenderMeshRenderComponent(gameObject, *mesh))
+            {
+                return;
+            }
         }
 
         if (CameraComponent* camera = gameObject.GetComponent<CameraComponent>(); camera != nullptr)
         {
-            RenderCameraComponent(*camera);
+            if (RenderCameraComponent(gameObject, *camera))
+            {
+                return;
+            }
         }
 
         if (LightComponent* light = gameObject.GetComponent<LightComponent>(); light != nullptr)
         {
-            RenderLightComponent(*light);
+            if (RenderLightComponent(gameObject, *light))
+            {
+                return;
+            }
         }
 
         if (ColliderComponent* collider = gameObject.GetComponent<ColliderComponent>(); collider != nullptr)
         {
-            RenderColliderComponent(gameObject, *collider);
+            if (RenderColliderComponent(gameObject, *collider))
+            {
+                return;
+            }
         }
 
         if (RigidbodyComponent* rigidbody = gameObject.GetComponent<RigidbodyComponent>(); rigidbody != nullptr)
         {
-            RenderRigidbodyComponent(gameObject, *rigidbody);
+            if (RenderRigidbodyComponent(gameObject, *rigidbody))
+            {
+                return;
+            }
         }
 
         for (SizeT scriptIndex = 0; scriptIndex < gameObject.GetScriptableComponentCount();)
@@ -616,10 +686,17 @@ namespace ve::editor
         ImGui::PopID();
     }
 
-    void InspectorPanel::RenderMeshRenderComponent(MeshRenderComponent& mesh)
+    bool InspectorPanel::RenderMeshRenderComponent(GameObject& gameObject, MeshRenderComponent& mesh)
     {
         ImGui::PushID(&mesh);
-        if (ImGui::CollapsingHeader("Mesh Renderer", ImGuiTreeNodeFlags_DefaultOpen))
+        const bool open = ImGui::CollapsingHeader("Mesh Renderer", ImGuiTreeNodeFlags_DefaultOpen);
+        if (RenderRemoveComponentContextMenu<MeshRenderComponent>(gameObject, "MeshRenderComponentContext"))
+        {
+            ImGui::PopID();
+            return true;
+        }
+
+        if (open)
         {
             RenderEnabledCheckbox(mesh);
 
@@ -643,12 +720,20 @@ namespace ve::editor
             }
         }
         ImGui::PopID();
+        return false;
     }
 
-    void InspectorPanel::RenderCameraComponent(CameraComponent& camera)
+    bool InspectorPanel::RenderCameraComponent(GameObject& gameObject, CameraComponent& camera)
     {
         ImGui::PushID(&camera);
-        if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
+        const bool open = ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen);
+        if (RenderRemoveComponentContextMenu<CameraComponent>(gameObject, "CameraComponentContext"))
+        {
+            ImGui::PopID();
+            return true;
+        }
+
+        if (open)
         {
             RenderEnabledCheckbox(camera);
 
@@ -702,12 +787,20 @@ namespace ve::editor
             }
         }
         ImGui::PopID();
+        return false;
     }
 
-    void InspectorPanel::RenderLightComponent(LightComponent& light)
+    bool InspectorPanel::RenderLightComponent(GameObject& gameObject, LightComponent& light)
     {
         ImGui::PushID(&light);
-        if (ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen))
+        const bool open = ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen);
+        if (RenderRemoveComponentContextMenu<LightComponent>(gameObject, "LightComponentContext"))
+        {
+            ImGui::PopID();
+            return true;
+        }
+
+        if (open)
         {
             RenderEnabledCheckbox(light);
 
@@ -755,23 +848,17 @@ namespace ve::editor
             }
         }
         ImGui::PopID();
+        return false;
     }
 
-    void InspectorPanel::RenderColliderComponent(GameObject& gameObject, ColliderComponent& collider)
+    bool InspectorPanel::RenderColliderComponent(GameObject& gameObject, ColliderComponent& collider)
     {
         ImGui::PushID(&collider);
         const bool open = ImGui::CollapsingHeader("Collider", ImGuiTreeNodeFlags_DefaultOpen);
-        if (ImGui::BeginPopupContextItem("ColliderComponentContext"))
+        if (RenderRemoveComponentContextMenu<ColliderComponent>(gameObject, "ColliderComponentContext"))
         {
-            if (ImGui::MenuItem("Remove"))
-            {
-                const bool removed = gameObject.RemoveComponent<ColliderComponent>();
-                (void)removed;
-                ImGui::EndPopup();
-                ImGui::PopID();
-                return;
-            }
-            ImGui::EndPopup();
+            ImGui::PopID();
+            return true;
         }
 
         if (open)
@@ -841,23 +928,17 @@ namespace ve::editor
             }
         }
         ImGui::PopID();
+        return false;
     }
 
-    void InspectorPanel::RenderRigidbodyComponent(GameObject& gameObject, RigidbodyComponent& rigidbody)
+    bool InspectorPanel::RenderRigidbodyComponent(GameObject& gameObject, RigidbodyComponent& rigidbody)
     {
         ImGui::PushID(&rigidbody);
         const bool open = ImGui::CollapsingHeader("Rigidbody", ImGuiTreeNodeFlags_DefaultOpen);
-        if (ImGui::BeginPopupContextItem("RigidbodyComponentContext"))
+        if (RenderRemoveComponentContextMenu<RigidbodyComponent>(gameObject, "RigidbodyComponentContext"))
         {
-            if (ImGui::MenuItem("Remove"))
-            {
-                const bool removed = gameObject.RemoveComponent<RigidbodyComponent>();
-                (void)removed;
-                ImGui::EndPopup();
-                ImGui::PopID();
-                return;
-            }
-            ImGui::EndPopup();
+            ImGui::PopID();
+            return true;
         }
 
         if (open)
@@ -923,6 +1004,7 @@ namespace ve::editor
             RenderConstraintCheckbox(rigidbody, "Freeze Rotation Z", RigidbodyConstraintFlags::FreezeRotationZ);
         }
         ImGui::PopID();
+        return false;
     }
 
     bool InspectorPanel::RenderScriptComponent(GameObject& gameObject, DotnetScriptableComponent& script)
@@ -931,7 +1013,7 @@ namespace ve::editor
         const bool open = ImGui::CollapsingHeader("Script", ImGuiTreeNodeFlags_DefaultOpen);
         if (ImGui::BeginPopupContextItem("ScriptComponentContext"))
         {
-            if (ImGui::MenuItem("Remove"))
+            if (ImGui::MenuItem("Remove Component"))
             {
                 const bool removed = gameObject.RemoveScriptableComponent(script);
                 ImGui::EndPopup();
@@ -993,56 +1075,146 @@ namespace ve::editor
             return;
         }
 
-        if (!ImGui::CollapsingHeader("Add Component"))
+        if (ImGui::Button("Add Component"))
+        {
+            addComponentFilter_[0] = '\0';
+            ImGui::OpenPopup("AddComponentPopup");
+        }
+
+        if (!ImGui::BeginPopup("AddComponentPopup"))
         {
             return;
         }
 
-        if (gameObject.GetComponent<ColliderComponent>() == nullptr && ImGui::Button("Add Collider"))
+        ImGui::SetNextItemWidth(260.0f);
+        ImGui::InputText("Filter", addComponentFilter_, sizeof(addComponentFilter_));
+        ImGui::Separator();
+
+        const std::string_view filter(addComponentFilter_);
+        bool renderedAnyComponent = false;
+
+        auto renderAddEntry = [&](const char* label, auto addComponent)
         {
-            Result<ColliderComponent*> result = gameObject.AddComponentWithoutRenderRegistration<ColliderComponent>();
-            if (!result)
+            if (!MatchesFilter(label, filter))
             {
-                VE_LOG_WARN_CATEGORY("Editor", "Failed to add collider component: {}", result.GetError().GetMessage());
+                return;
             }
+
+            renderedAnyComponent = true;
+            if (ImGui::Selectable(label))
+            {
+                addComponent();
+                ImGui::CloseCurrentPopup();
+            }
+        };
+
+        if (gameObject.GetComponent<MeshRenderComponent>() == nullptr)
+        {
+            renderAddEntry("Mesh Renderer",
+                           [&gameObject]()
+                           {
+                               Result<MeshRenderComponent*> result = gameObject.AddComponent<MeshRenderComponent>();
+                               if (!result)
+                               {
+                                   VE_LOG_WARN_CATEGORY("Editor", "Failed to add mesh renderer component: {}", result.GetError().GetMessage());
+                               }
+                           });
         }
 
-        if (gameObject.GetComponent<RigidbodyComponent>() == nullptr && ImGui::Button("Add Rigidbody"))
+        if (gameObject.GetComponent<CameraComponent>() == nullptr)
         {
-            Result<RigidbodyComponent*> result = gameObject.AddComponentWithoutRenderRegistration<RigidbodyComponent>();
-            if (!result)
-            {
-                VE_LOG_WARN_CATEGORY("Editor", "Failed to add rigidbody component: {}", result.GetError().GetMessage());
-            }
+            renderAddEntry("Camera",
+                           [&gameObject]()
+                           {
+                               Result<CameraComponent*> result = gameObject.AddComponent<CameraComponent>();
+                               if (!result)
+                               {
+                                   VE_LOG_WARN_CATEGORY("Editor", "Failed to add camera component: {}", result.GetError().GetMessage());
+                               }
+                           });
+        }
+
+        if (gameObject.GetComponent<LightComponent>() == nullptr)
+        {
+            renderAddEntry("Light",
+                           [&gameObject]()
+                           {
+                               Result<LightComponent*> result = gameObject.AddComponent<LightComponent>();
+                               if (!result)
+                               {
+                                   VE_LOG_WARN_CATEGORY("Editor", "Failed to add light component: {}", result.GetError().GetMessage());
+                               }
+                           });
+        }
+
+        if (gameObject.GetComponent<ColliderComponent>() == nullptr)
+        {
+            renderAddEntry("Collider",
+                           [&gameObject]()
+                           {
+                               Result<ColliderComponent*> result = gameObject.AddComponent<ColliderComponent>();
+                               if (!result)
+                               {
+                                   VE_LOG_WARN_CATEGORY("Editor", "Failed to add collider component: {}", result.GetError().GetMessage());
+                               }
+                           });
+        }
+
+        if (gameObject.GetComponent<RigidbodyComponent>() == nullptr)
+        {
+            renderAddEntry("Rigidbody",
+                           [&gameObject]()
+                           {
+                               Result<RigidbodyComponent*> result = gameObject.AddComponent<RigidbodyComponent>();
+                               if (!result)
+                               {
+                                   VE_LOG_WARN_CATEGORY("Editor", "Failed to add rigidbody component: {}", result.GetError().GetMessage());
+                               }
+                           });
         }
 
         const std::vector<ScriptTypeInfo>& scriptTypes = editor_->GetScriptDatabase().GetScriptTypes();
-        if (!scriptTypes.empty() && ImGui::BeginCombo("Script", "Select script"))
+        for (const ScriptTypeInfo& scriptType : scriptTypes)
         {
-            for (const ScriptTypeInfo& scriptType : scriptTypes)
+            if (HasDotnetScriptType(gameObject, scriptType.typeName))
             {
-                const char* label = scriptType.displayName.empty() ? scriptType.typeName.c_str() : scriptType.displayName.c_str();
-                if (ImGui::Selectable(label))
+                continue;
+            }
+
+            const char* label = scriptType.displayName.empty() ? scriptType.typeName.c_str() : scriptType.displayName.c_str();
+            if (!MatchesFilter(label, filter) && !MatchesFilter(scriptType.typeName, filter))
+            {
+                continue;
+            }
+
+            renderedAnyComponent = true;
+            if (ImGui::Selectable(label))
+            {
+                ScriptingSystem& scriptingSystem = editor_->GetRuntime().GetScriptingSystem();
+                Result<DotnetScriptableComponent*> result =
+                    gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptType.typeName, scriptingSystem);
+                if (!result)
                 {
-                    ve::ScriptingSystem& scriptingSystem = editor_->GetRuntime().GetScriptingSystem();
-                    Result<DotnetScriptableComponent*> result =
-                        gameObject.AddComponentWithoutRenderRegistration<DotnetScriptableComponent>(scriptType.typeName, scriptingSystem);
-                    if (!result)
+                    VE_LOG_WARN_CATEGORY("Editor", "Failed to add script component '{}': {}", scriptType.typeName, result.GetError().GetMessage());
+                }
+                else
+                {
+                    const ErrorCode ensureResult = result.GetValue()->EnsureScriptInstance(false);
+                    if (ensureResult != ErrorCode::None)
                     {
-                        VE_LOG_WARN_CATEGORY("Editor", "Failed to add script component '{}': {}", scriptType.typeName, result.GetError().GetMessage());
-                    }
-                    else
-                    {
-                        const ErrorCode ensureResult = result.GetValue()->EnsureScriptInstance(false);
-                        if (ensureResult != ErrorCode::None)
-                        {
-                            VE_LOG_WARN_CATEGORY("Editor", "Failed to create editor script instance '{}': {}", scriptType.typeName, ToString(ensureResult));
-                        }
+                        VE_LOG_WARN_CATEGORY("Editor", "Failed to create editor script instance '{}': {}", scriptType.typeName, ToString(ensureResult));
                     }
                 }
+                ImGui::CloseCurrentPopup();
             }
-            ImGui::EndCombo();
         }
+
+        if (!renderedAnyComponent)
+        {
+            ImGui::TextDisabled("No components available.");
+        }
+
+        ImGui::EndPopup();
     }
 
     void InspectorPanel::RenderAsset(const EditorAssetRecord& asset)
