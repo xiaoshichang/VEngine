@@ -301,16 +301,16 @@ namespace ve
     void JobSystem::Shutdown() noexcept
     {
         {
-            std::unique_lock<std::mutex> lock(impl_->schedulerMutex);
+            std::lock_guard<std::mutex> lock(impl_->schedulerMutex);
             if (!impl_->initialized)
             {
                 return;
             }
 
             impl_->acceptingJobs = false;
-            impl_->allJobsCompleteCondition.wait(lock, [&]() { return impl_->incompleteJobCount == 0; });
         }
 
+        WaitIdle();
         StopAndJoinWorkers(*impl_);
 
         {
@@ -318,6 +318,17 @@ namespace ve
             impl_->initialized = false;
             impl_->stopping = false;
         }
+    }
+
+    void JobSystem::WaitIdle() const noexcept
+    {
+        std::unique_lock<std::mutex> lock(impl_->schedulerMutex);
+        if (!impl_->initialized)
+        {
+            return;
+        }
+
+        impl_->allJobsCompleteCondition.wait(lock, [&]() { return impl_->incompleteJobCount == 0; });
     }
 
     bool JobSystem::IsInitialized() const noexcept

@@ -6,9 +6,6 @@
 
 #include <Jolt/Core/JobSystemWithBarrier.h>
 
-#include <mutex>
-#include <vector>
-
 namespace ve
 {
     class JoltJobSystemVEngine final : public JPH::JobSystemWithBarrier
@@ -31,12 +28,7 @@ namespace ve
 
     private:
         void QueueJobInternal(Job* job);
-        void DrainQueuedJobs();
 
         ve::JobSystem& jobSystem_;
-        std::mutex queuedJobMutex_;
-        std::vector<ve::JobHandle> queuedJobs_;
-
-        static thread_local bool executingJoltJobOnWorker_;
     };
 } // namespace ve

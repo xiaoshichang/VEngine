@@ -119,6 +119,7 @@ namespace ve
         }
 
         sceneSystem_.Shutdown();
+        jobSystem_.Shutdown();
         physicsSystem_.Shutdown();
         scriptingSystem_.Shutdown();
         resourceSystem_.Shutdown();
@@ -126,7 +127,6 @@ namespace ve
         renderSystem_.Shutdown();
         inputSystem_.Shutdown();
         ioSystem_.Shutdown();
-        jobSystem_.Shutdown();
         state_ = EngineRuntimeState::Shutdown;
     }
 

@@ -93,6 +93,12 @@ namespace ve
         /// Shutdown does not cancel work. It is safe to call on an uninitialized system, where it becomes a no-op.
         void Shutdown() noexcept;
 
+        /// Blocks until every submitted job has completed without stopping worker threads.
+        ///
+        /// WaitIdle is safe to call on an uninitialized system, where it becomes a no-op. It must not be called from a
+        /// worker job because the running job is included in the submitted work being waited on.
+        void WaitIdle() const noexcept;
+
         /// Returns true after Initialize() succeeds and before Shutdown() finishes.
         [[nodiscard]] bool IsInitialized() const noexcept;
 

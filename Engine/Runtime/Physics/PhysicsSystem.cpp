@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Physics/PhysicsSystem.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Physics/PhysicsSystemBackendJolt.h"
 #include "Engine/Runtime/Scene/ColliderComponent.h"
@@ -391,6 +392,11 @@ namespace ve
     {
         if (backend_ != nullptr)
         {
+            if (jobSystem_ != nullptr)
+            {
+                jobSystem_->WaitIdle();
+            }
+
             backend_->Shutdown();
             backend_.reset();
         }
@@ -420,6 +426,7 @@ namespace ve
 
         if (backend_ != nullptr)
         {
+            jobSystem_->WaitIdle();
             backend_->Shutdown();
             backend_.reset();
         }

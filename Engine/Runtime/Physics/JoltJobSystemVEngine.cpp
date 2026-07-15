@@ -13,26 +13,6 @@ namespace ve
 {
     namespace
     {
-        class ScopedJoltWorkerExecution final
-        {
-        public:
-            explicit ScopedJoltWorkerExecution(bool& flag) noexcept
-                : flag_(flag)
-                , previousValue_(flag)
-            {
-                flag_ = true;
-            }
-
-            ~ScopedJoltWorkerExecution()
-            {
-                flag_ = previousValue_;
-            }
-
-        private:
-            bool& flag_;
-            bool previousValue_ = false;
-        };
-
         [[nodiscard]] int ToJoltConcurrency(SizeT workerThreadCount) noexcept
         {
             constexpr SizeT maxInt = static_cast<SizeT>(std::numeric_limits<int>::max());
@@ -53,8 +33,6 @@ namespace ve
         }
     } // namespace
 
-    thread_local bool JoltJobSystemVEngine::executingJoltJobOnWorker_ = false;
-
     JoltJobSystemVEngine::JoltJobSystemVEngine(ve::JobSystem& jobSystem, JPH::uint maxBarriers)
         : JPH::JobSystemWithBarrier(maxBarriers)
         , jobSystem_(jobSystem)
@@ -63,7 +41,6 @@ namespace ve
 
     JoltJobSystemVEngine::~JoltJobSystemVEngine()
     {
-        DrainQueuedJobs();
     }
 
     int JoltJobSystemVEngine::GetMaxConcurrency() const
@@ -101,7 +78,6 @@ namespace ve
     void JoltJobSystemVEngine::WaitForJobs(Barrier* barrier)
     {
         JPH::JobSystemWithBarrier::WaitForJobs(barrier);
-        DrainQueuedJobs();
     }
 
     void JoltJobSystemVEngine::QueueJobs(Job** jobs, JPH::uint jobCount)
@@ -121,61 +97,24 @@ namespace ve
     {
         job->AddRef();
 
-        Result<ve::JobHandle> handle = jobSystem_.Schedule(JobDesc{"JoltPhysics"},
-                                                           [job]()
-                                                           {
-                                                               ScopedJoltWorkerExecution executionScope(executingJoltJobOnWorker_);
-                                                               try
-                                                               {
-                                                                   job->Execute();
-                                                               }
-                                                               catch (...)
-                                                               {
-                                                                   job->Release();
-                                                                   throw;
-                                                               }
-                                                               job->Release();
-                                                           });
-        if (!handle)
+        Result<ve::JobHandle> scheduleResult = jobSystem_.Schedule(JobDesc{"JoltPhysics"},
+                                                                   [job]()
+                                                                   {
+                                                                       try
+                                                                       {
+                                                                           job->Execute();
+                                                                       }
+                                                                       catch (...)
+                                                                       {
+                                                                           job->Release();
+                                                                           throw;
+                                                                       }
+                                                                       job->Release();
+                                                                   });
+        if (!scheduleResult)
         {
             job->Release();
-            ThrowScheduleFailure(handle.GetError());
-        }
-
-        ve::JobHandle queuedJob = handle.MoveValue();
-        try
-        {
-            std::lock_guard<std::mutex> lock(queuedJobMutex_);
-            queuedJobs_.push_back(queuedJob);
-        }
-        catch (...)
-        {
-            jobSystem_.Wait(queuedJob);
-            throw;
-        }
-    }
-
-    void JoltJobSystemVEngine::DrainQueuedJobs()
-    {
-        if (executingJoltJobOnWorker_)
-        {
-            return;
-        }
-
-        for (;;)
-        {
-            std::vector<ve::JobHandle> jobsToWait;
-            {
-                std::lock_guard<std::mutex> lock(queuedJobMutex_);
-                if (queuedJobs_.empty())
-                {
-                    return;
-                }
-
-                jobsToWait.swap(queuedJobs_);
-            }
-
-            jobSystem_.WaitAll(jobsToWait);
+            ThrowScheduleFailure(scheduleResult.GetError());
         }
     }
 } // namespace ve
