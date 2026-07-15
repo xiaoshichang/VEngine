@@ -65,6 +65,8 @@ function(ve_add_windows_editor)
     ve_add_editor_packaging_definitions(VEngineWinEditor)
 
     add_custom_command(TARGET VEngineWinEditor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:VEngineWinEditor>/Assets"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${PROJECT_SOURCE_DIR}/Assets"
             "$<TARGET_FILE_DIR:VEngineWinEditor>/Assets"

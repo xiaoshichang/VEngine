@@ -8,8 +8,8 @@ namespace ve::editor
 {
     namespace
     {
-        constexpr const char* BuiltinAssetDirectoryName = "BuiltinAsset";
-        constexpr const char* EditorOnlyAssetDirectoryName = "EditorOnlyAsset";
+        constexpr const char* BuiltinAssetsDirectoryName = "Builtin";
+        constexpr const char* EditorAssetsDirectoryName = "Editor";
 
         [[nodiscard]] bool StartsWithPathRoot(const Path& path, const char* root) noexcept
         {
@@ -63,18 +63,18 @@ namespace ve::editor
 
     Path GetBuiltinAssetsRootPath(const Path& projectRoot)
     {
-        return GetEngineAssetsRootPath(projectRoot) / BuiltinAssetDirectoryName;
+        return GetEngineAssetsRootPath(projectRoot) / BuiltinAssetsDirectoryName;
     }
 
-    Path GetEditorOnlyAssetsRootPath(const Path& projectRoot)
+    Path GetEditorAssetsRootPath(const Path& projectRoot)
     {
-        return GetEngineAssetsRootPath(projectRoot) / EditorOnlyAssetDirectoryName;
+        return GetEngineAssetsRootPath(projectRoot) / EditorAssetsDirectoryName;
     }
 
     bool IsEditorContentPath(const Path& path) noexcept
     {
         return StartsWithPathRoot(path, EditorProject::AssetsDirectoryName) || StartsWithPathRoot(path, EditorProject::LibraryDirectoryName) ||
-               StartsWithPathRoot(path, BuiltinAssetDirectoryName) || StartsWithPathRoot(path, EditorOnlyAssetDirectoryName);
+               StartsWithPathRoot(path, BuiltinAssetsDirectoryName) || StartsWithPathRoot(path, EditorAssetsDirectoryName);
     }
 
     Path ResolveEditorAssetReference(std::string_view reference, std::string_view fallbackExtension)
@@ -100,12 +100,12 @@ namespace ve::editor
             return contentPath;
         }
 
-        if (StartsWithPathRoot(contentPath, BuiltinAssetDirectoryName))
+        if (StartsWithPathRoot(contentPath, BuiltinAssetsDirectoryName))
         {
             return GetEngineAssetsRootPath(projectRoot) / contentPath;
         }
 
-        if (StartsWithPathRoot(contentPath, EditorOnlyAssetDirectoryName))
+        if (StartsWithPathRoot(contentPath, EditorAssetsDirectoryName))
         {
             return GetEngineAssetsRootPath(projectRoot) / contentPath;
         }
@@ -115,13 +115,13 @@ namespace ve::editor
 
     Path ToEditorContentPath(const Path& projectRoot, const Path& physicalPath)
     {
-        Path contentPath = TryToRootRelativePath(physicalPath, GetBuiltinAssetsRootPath(projectRoot), BuiltinAssetDirectoryName);
+        Path contentPath = TryToRootRelativePath(physicalPath, GetBuiltinAssetsRootPath(projectRoot), BuiltinAssetsDirectoryName);
         if (!contentPath.IsEmpty())
         {
             return contentPath;
         }
 
-        contentPath = TryToRootRelativePath(physicalPath, GetEditorOnlyAssetsRootPath(projectRoot), EditorOnlyAssetDirectoryName);
+        contentPath = TryToRootRelativePath(physicalPath, GetEditorAssetsRootPath(projectRoot), EditorAssetsDirectoryName);
         if (!contentPath.IsEmpty())
         {
             return contentPath;

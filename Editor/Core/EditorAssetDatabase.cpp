@@ -924,10 +924,10 @@ namespace ve::editor
             return result;
         }
 
-        const Path builtinEngineAssetsRoot = GetBuiltinAssetsRootPath() / "Engine";
-        if (FileSystem::IsDirectory(builtinEngineAssetsRoot))
+        const Path builtinAssetsRoot = GetBuiltinAssetsRootPath();
+        if (FileSystem::IsDirectory(builtinAssetsRoot))
         {
-            const ErrorCode builtinResult = ScanAndImportDirectory(builtinEngineAssetsRoot, false);
+            const ErrorCode builtinResult = ScanAndImportDirectory(builtinAssetsRoot, false);
             if (builtinResult != ErrorCode::None)
             {
                 return builtinResult;
@@ -963,10 +963,10 @@ namespace ve::editor
             return result;
         }
 
-        const Path builtinEngineAssetsRoot = GetBuiltinAssetsRootPath() / "Engine";
-        if (FileSystem::IsDirectory(builtinEngineAssetsRoot))
+        const Path builtinAssetsRoot = GetBuiltinAssetsRootPath();
+        if (FileSystem::IsDirectory(builtinAssetsRoot))
         {
-            const ErrorCode builtinResult = ScanAndImportDirectory(builtinEngineAssetsRoot, true);
+            const ErrorCode builtinResult = ScanAndImportDirectory(builtinAssetsRoot, true);
             if (builtinResult != ErrorCode::None)
             {
                 return builtinResult;

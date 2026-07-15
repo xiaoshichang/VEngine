@@ -7,7 +7,7 @@
 namespace ve::editor
 {
     [[nodiscard]] Path GetBuiltinAssetsRootPath(const Path& projectRoot);
-    [[nodiscard]] Path GetEditorOnlyAssetsRootPath(const Path& projectRoot);
+    [[nodiscard]] Path GetEditorAssetsRootPath(const Path& projectRoot);
     [[nodiscard]] bool IsEditorContentPath(const Path& path) noexcept;
     [[nodiscard]] Path ResolveEditorAssetReference(std::string_view reference, std::string_view fallbackExtension);
     [[nodiscard]] Path ResolveEditorContentPath(const Path& projectRoot, const Path& contentPath);

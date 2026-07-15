@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "name": "Cube Red",
-    "shader": "BuiltinAsset/Engine/Shaders/BasicMesh",
+    "shader": "Builtin/Shaders/BasicMesh",
     "properties": {
         "baseColor": [1E0, 1E0, 1E0, 1E0],
         "mainTexture": null
