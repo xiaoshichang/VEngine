@@ -5,7 +5,11 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#include <condition_variable>
+#include <cstddef>
+#include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -308,9 +312,10 @@ namespace ve::rhi
         class MetalBuffer final : public RhiBuffer
         {
         public:
-            MetalBuffer(id<MTLBuffer> buffer, uint64_t size)
+            MetalBuffer(id<MTLBuffer> buffer, uint64_t size, RhiBufferMemoryUsage memoryUsage)
                 : buffer_(buffer)
                 , size_(size)
+                , memoryUsage_(memoryUsage)
             {
             }
 
@@ -329,9 +334,15 @@ namespace ve::rhi
                 return buffer_;
             }
 
+            [[nodiscard]] RhiBufferMemoryUsage GetMemoryUsage() const noexcept
+            {
+                return memoryUsage_;
+            }
+
         private:
             id<MTLBuffer> buffer_ = nil;
             uint64_t size_ = 0;
+            RhiBufferMemoryUsage memoryUsage_ = RhiBufferMemoryUsage::GpuOnly;
         };
 
         class MetalTexture final : public RhiTexture
@@ -422,28 +433,38 @@ namespace ve::rhi
 
             void Signal(uint64_t value) noexcept
             {
-                if (value > completedValue_)
                 {
-                    completedValue_ = value;
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    if (value > completedValue_)
+                    {
+                        completedValue_ = value;
+                    }
                 }
+                condition_.notify_all();
             }
 
             [[nodiscard]] bool IsComplete(uint64_t value) const noexcept override
             {
+                std::lock_guard<std::mutex> lock(mutex_);
                 return completedValue_ >= value;
             }
 
             [[nodiscard]] bool Wait(uint64_t value) override
             {
-                return IsComplete(value);
+                std::unique_lock<std::mutex> lock(mutex_);
+                condition_.wait(lock, [this, value]() { return completedValue_ >= value; });
+                return true;
             }
 
             [[nodiscard]] uint64_t GetCompletedValue() const noexcept override
             {
+                std::lock_guard<std::mutex> lock(mutex_);
                 return completedValue_;
             }
 
         private:
+            mutable std::mutex mutex_;
+            std::condition_variable condition_;
             uint64_t completedValue_ = 0;
         };
 
@@ -758,14 +779,14 @@ namespace ve::rhi
 
                 const MTLSize copySize = MTLSizeMake(sourceTexture.GetWidth(), sourceTexture.GetHeight(), 1);
                 [blitEncoder copyFromTexture:metalTexture->GetNativeTexture()
-                                  sourceSlice:0
-                                  sourceLevel:0
-                                 sourceOrigin:MTLOriginMake(0, 0, 0)
-                                   sourceSize:copySize
-                                    toTexture:drawable_.texture
-                             destinationSlice:0
-                             destinationLevel:0
-                            destinationOrigin:MTLOriginMake(0, 0, 0)];
+                                 sourceSlice:0
+                                 sourceLevel:0
+                                sourceOrigin:MTLOriginMake(0, 0, 0)
+                                  sourceSize:copySize
+                                   toTexture:drawable_.texture
+                            destinationSlice:0
+                            destinationLevel:0
+                           destinationOrigin:MTLOriginMake(0, 0, 0)];
                 [blitEncoder endEncoding];
                 return true;
             }
@@ -779,7 +800,8 @@ namespace ve::rhi
                 const RhiRasterizerStateDesc& rasterizerState = metalPipelineState.GetRasterizerState();
                 [renderCommandEncoder_ setFrontFacingWinding:rasterizerState.frontCounterClockwise ? MTLWindingCounterClockwise : MTLWindingClockwise];
                 [renderCommandEncoder_ setCullMode:ToMetalCullMode(rasterizerState.cullMode)];
-                [renderCommandEncoder_ setTriangleFillMode:rasterizerState.fillMode == RhiFillMode::Wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
+                [renderCommandEncoder_
+                    setTriangleFillMode:rasterizerState.fillMode == RhiFillMode::Wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
                 primitiveType_ = ToMetalPrimitiveType(metalPipelineState.GetTopology());
             }
 
@@ -820,8 +842,10 @@ namespace ve::rhi
                 indexType_ = format == RhiIndexFormat::UInt16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32;
             }
 
-            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) override
+            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
             {
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset + size <= buffer.GetSize());
                 const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
                 switch (stage)
                 {
@@ -875,7 +899,7 @@ namespace ve::rhi
                                                   indexCount:indexCount
                                                    indexType:indexType_
                                                  indexBuffer:indexBuffer_
-                                                  indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
+                                           indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
             }
 
             [[nodiscard]] void* GetNativeRenderEncoderHandle() const noexcept override
@@ -888,7 +912,7 @@ namespace ve::rhi
                 return commandBuffer_;
             }
 
-            [[nodiscard]] bool CommitAndWait()
+            [[nodiscard]] bool Commit(MetalFence* completionFence, uint64_t completionValue)
             {
                 if (commandBuffer_ == nil)
                 {
@@ -900,8 +924,14 @@ namespace ve::rhi
                     [commandBuffer_ presentDrawable:drawable_];
                 }
 
+                if (completionFence != nullptr)
+                {
+                    [commandBuffer_ addCompletedHandler:^(id<MTLCommandBuffer>) {
+                      completionFence->Signal(completionValue);
+                    }];
+                }
+
                 [commandBuffer_ commit];
-                [commandBuffer_ waitUntilCompleted];
 
                 [drawable_ release];
                 drawable_ = nil;
@@ -1023,7 +1053,18 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<MetalBuffer>(buffer, desc.size);
+                return std::make_unique<MetalBuffer>(buffer, desc.size, desc.memoryUsage);
+            }
+
+            void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) override
+            {
+                static_cast<void>(updateMode);
+                auto& metalBuffer = static_cast<MetalBuffer&>(buffer);
+                VE_ASSERT(metalBuffer.GetMemoryUsage() == RhiBufferMemoryUsage::CpuToGpu);
+                VE_ASSERT(data != nullptr);
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset + size <= metalBuffer.GetSize());
+                std::memcpy(static_cast<std::byte*>([metalBuffer.GetNativeBuffer() contents]) + offset, data, static_cast<size_t>(size));
             }
 
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
@@ -1183,9 +1224,8 @@ namespace ve::rhi
                 }
 
                 MTLDepthStencilDescriptor* depthStencilDescriptor = [[MTLDepthStencilDescriptor alloc] init];
-                depthStencilDescriptor.depthCompareFunction = desc.depthStencilState.depthTestEnabled
-                                                                  ? ToMetalCompareFunction(desc.depthStencilState.depthCompareFunction)
-                                                                  : MTLCompareFunctionAlways;
+                depthStencilDescriptor.depthCompareFunction =
+                    desc.depthStencilState.depthTestEnabled ? ToMetalCompareFunction(desc.depthStencilState.depthCompareFunction) : MTLCompareFunctionAlways;
                 depthStencilDescriptor.depthWriteEnabled = desc.depthStencilState.depthWriteEnabled ? YES : NO;
                 if (desc.depthStencilState.stencilEnabled)
                 {
@@ -1220,20 +1260,7 @@ namespace ve::rhi
                 return std::make_unique<MetalFence>(initialValue);
             }
 
-            [[nodiscard]] bool SignalFence(RhiFence& fence, uint64_t value) override
-            {
-                auto* metalFence = dynamic_cast<MetalFence*>(&fence);
-                if (metalFence == nullptr)
-                {
-                    SetLastError("Metal device can only signal Metal fences.");
-                    return false;
-                }
-
-                metalFence->Signal(value);
-                return true;
-            }
-
-            [[nodiscard]] bool Submit(RhiCommandList& commandList) override
+            [[nodiscard]] bool Submit(RhiCommandList& commandList, RhiFence* completionFence, uint64_t completionValue) override
             {
                 auto* metalCommandList = dynamic_cast<MetalCommandList*>(&commandList);
 
@@ -1243,10 +1270,29 @@ namespace ve::rhi
                     return false;
                 }
 
-                return metalCommandList->CommitAndWait();
+                MetalFence* metalFence = nullptr;
+                if (completionFence != nullptr)
+                {
+                    metalFence = dynamic_cast<MetalFence*>(completionFence);
+                    if (metalFence == nullptr)
+                    {
+                        SetLastError("Metal device can only signal Metal fences.");
+                        return false;
+                    }
+                }
+
+                return metalCommandList->Commit(metalFence, completionValue);
             }
 
-            void WaitIdle() override {}
+            void WaitIdle() override
+            {
+                @autoreleasepool
+                {
+                    id<MTLCommandBuffer> commandBuffer = [commandQueue_ commandBuffer];
+                    [commandBuffer commit];
+                    [commandBuffer waitUntilCompleted];
+                }
+            }
 
             [[nodiscard]] void* GetNativeDeviceHandle() const noexcept override
             {

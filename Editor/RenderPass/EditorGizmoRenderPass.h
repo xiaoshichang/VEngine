@@ -54,7 +54,6 @@ namespace ve
         EditorGizmoRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiBuffer> lineVertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> iconVertexBuffer_;
-        std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
         std::unique_ptr<rhi::RhiTexture> iconAtlasTexture_;
         std::unique_ptr<rhi::RhiSampler> iconSampler_;
         rhi::RhiPipelineState* linePipelineState_ = nullptr;

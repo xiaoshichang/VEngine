@@ -31,10 +31,14 @@ function(ve_add_engine)
             Engine/Runtime/Physics/PhysicsSystem.cpp
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.cpp
             Engine/Runtime/Render/BaseRenderer.cpp
+            Engine/Runtime/Render/FrameContext.cpp
+            Engine/Runtime/Render/FrameUniformAllocator.cpp
+            Engine/Runtime/Render/MaterialUniformPool.cpp
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
+            Engine/Runtime/Render/RenderFrameUniformCache.cpp
             Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.cpp
             Engine/Runtime/Render/RenderPass/RenderPass.cpp
             Engine/Runtime/Render/RenderResource.cpp
@@ -111,10 +115,14 @@ function(ve_add_engine)
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.h
             Engine/Runtime/Physics/PhysicsTypes.h
             Engine/Runtime/Render/BaseRenderer.h
+            Engine/Runtime/Render/FrameContext.h
+            Engine/Runtime/Render/FrameUniformAllocator.h
+            Engine/Runtime/Render/MaterialUniformPool.h
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderFramePipeline.h
+            Engine/Runtime/Render/RenderFrameUniformCache.h
             Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.h
             Engine/Runtime/Render/RenderPass/RenderPass.h
             Engine/Runtime/Render/RenderResource.h

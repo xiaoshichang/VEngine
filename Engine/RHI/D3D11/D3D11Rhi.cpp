@@ -12,8 +12,10 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <d3dcompiler.h>
 #include <dxgi.h>
 #include <memory>
@@ -290,9 +292,10 @@ namespace ve::rhi
         class D3D11Buffer final : public RhiBuffer
         {
         public:
-            D3D11Buffer(ComPtr<ID3D11Buffer> buffer, uint64_t size)
+            D3D11Buffer(ComPtr<ID3D11Buffer> buffer, uint64_t size, RhiBufferMemoryUsage memoryUsage)
                 : buffer_(std::move(buffer))
                 , size_(size)
+                , memoryUsage_(memoryUsage)
             {
             }
 
@@ -306,9 +309,15 @@ namespace ve::rhi
                 return buffer_.Get();
             }
 
+            [[nodiscard]] RhiBufferMemoryUsage GetMemoryUsage() const noexcept
+            {
+                return memoryUsage_;
+            }
+
         private:
             ComPtr<ID3D11Buffer> buffer_;
             uint64_t size_ = 0;
+            RhiBufferMemoryUsage memoryUsage_ = RhiBufferMemoryUsage::GpuOnly;
         };
 
         class D3D11Texture final : public RhiTexture
@@ -639,8 +648,9 @@ namespace ve::rhi
         class D3D11CommandList final : public RhiCommandList
         {
         public:
-            explicit D3D11CommandList(ComPtr<ID3D11DeviceContext> context)
+            D3D11CommandList(ComPtr<ID3D11DeviceContext> context, ComPtr<ID3D11DeviceContext1> context1)
                 : context_(std::move(context))
+                , context1_(std::move(context1))
             {
             }
 
@@ -793,18 +803,25 @@ namespace ve::rhi
                 context_->IASetIndexBuffer(d3dBuffer.GetNativeBuffer(), ToDxgiIndexFormat(format), static_cast<UINT>(offset));
             }
 
-            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) override
+            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
             {
-                VE_ASSERT(offset == 0);
+                constexpr uint64_t ConstantSize = 16;
+                constexpr uint64_t BindingAlignment = 16 * ConstantSize;
+                VE_ASSERT(context1_ != nullptr);
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset % BindingAlignment == 0);
+                VE_ASSERT(offset + size <= buffer.GetSize());
                 const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
                 ID3D11Buffer* nativeBuffer = d3dBuffer.GetNativeBuffer();
+                const UINT firstConstant = static_cast<UINT>(offset / ConstantSize);
+                const UINT constantCount = static_cast<UINT>(((size + BindingAlignment - 1) / BindingAlignment) * (BindingAlignment / ConstantSize));
                 switch (stage)
                 {
                 case RhiShaderStage::Vertex:
-                    context_->VSSetConstantBuffers(slot, 1, &nativeBuffer);
+                    context1_->VSSetConstantBuffers1(slot, 1, &nativeBuffer, &firstConstant, &constantCount);
                     break;
                 case RhiShaderStage::Fragment:
-                    context_->PSSetConstantBuffers(slot, 1, &nativeBuffer);
+                    context1_->PSSetConstantBuffers1(slot, 1, &nativeBuffer, &firstConstant, &constantCount);
                     break;
                 }
             }
@@ -851,6 +868,7 @@ namespace ve::rhi
 
         private:
             ComPtr<ID3D11DeviceContext> context_;
+            ComPtr<ID3D11DeviceContext1> context1_;
         };
 
         class D3D11Device final : public RhiDevice
@@ -905,6 +923,21 @@ namespace ve::rhi
                 if (FAILED(result))
                 {
                     SetLastError(MakeHResultError("D3D11CreateDevice", result));
+                    return false;
+                }
+
+                result = context_.As(&context1_);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11DeviceContext::QueryInterface ID3D11DeviceContext1", result));
+                    return false;
+                }
+
+                D3D11_FEATURE_DATA_D3D11_OPTIONS options = {};
+                result = device_->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS, &options, sizeof(options));
+                if (FAILED(result) || !options.MapNoOverwriteOnDynamicConstantBuffer)
+                {
+                    SetLastError("D3D11.1 dynamic constant-buffer no-overwrite updates are required.");
                     return false;
                 }
 
@@ -1005,8 +1038,9 @@ namespace ve::rhi
             {
                 D3D11_BUFFER_DESC bufferDesc = {};
                 bufferDesc.ByteWidth = static_cast<UINT>(desc.size);
-                bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+                bufferDesc.Usage = desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
                 bufferDesc.BindFlags = ToD3D11BufferBindFlags(desc.usage);
+                bufferDesc.CPUAccessFlags = desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_CPU_ACCESS_WRITE : 0;
 
                 D3D11_SUBRESOURCE_DATA initialData = {};
                 initialData.pSysMem = desc.initialData;
@@ -1020,7 +1054,28 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11Buffer>(buffer, desc.size);
+                return std::make_unique<D3D11Buffer>(buffer, desc.size, desc.memoryUsage);
+            }
+
+            void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) override
+            {
+                auto& d3dBuffer = static_cast<D3D11Buffer&>(buffer);
+                VE_ASSERT(d3dBuffer.GetMemoryUsage() == RhiBufferMemoryUsage::CpuToGpu);
+                VE_ASSERT(data != nullptr);
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset + size <= d3dBuffer.GetSize());
+
+                D3D11_MAPPED_SUBRESOURCE mappedResource = {};
+                const D3D11_MAP mapType = updateMode == RhiBufferUpdateMode::Discard ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+                const HRESULT result = context_->Map(d3dBuffer.GetNativeBuffer(), 0, mapType, 0, &mappedResource);
+                VE_ASSERT_MESSAGE(SUCCEEDED(result), "ID3D11DeviceContext::Map dynamic buffer failed.");
+                if (FAILED(result))
+                {
+                    return;
+                }
+
+                std::memcpy(static_cast<std::byte*>(mappedResource.pData) + offset, data, static_cast<size_t>(size));
+                context_->Unmap(d3dBuffer.GetNativeBuffer(), 0);
             }
 
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
@@ -1307,37 +1362,36 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override
             {
-                return std::make_unique<D3D11CommandList>(context_);
+                return std::make_unique<D3D11CommandList>(context_, context1_);
             }
 
             [[nodiscard]] std::unique_ptr<RhiFence> CreateFence(uint64_t initialValue = 0) override
             {
-                D3D11_QUERY_DESC queryDesc = {};
-                queryDesc.Query = D3D11_QUERY_EVENT;
-
-                ComPtr<ID3D11Query> query;
-                HRESULT result = device_->CreateQuery(&queryDesc, &query);
-
-                if (FAILED(result))
-                {
-                    SetLastError(MakeHResultError("ID3D11Device::CreateQuery fence", result));
-                    return nullptr;
-                }
-
-                context_->End(query.Get());
                 return std::make_unique<D3D11Fence>(device_, context_, initialValue);
             }
 
-            [[nodiscard]] bool SignalFence(RhiFence& fence, uint64_t value) override
+            [[nodiscard]] bool Submit(RhiCommandList& commandList, RhiFence* completionFence, uint64_t completionValue) override
             {
-                auto* d3dFence = dynamic_cast<D3D11Fence*>(&fence);
+                auto* d3dCommandList = dynamic_cast<D3D11CommandList*>(&commandList);
+                if (d3dCommandList == nullptr)
+                {
+                    SetLastError("D3D11 device can only submit D3D11 command lists.");
+                    return false;
+                }
+
+                if (completionFence == nullptr)
+                {
+                    return true;
+                }
+
+                auto* d3dFence = dynamic_cast<D3D11Fence*>(completionFence);
                 if (d3dFence == nullptr)
                 {
                     SetLastError("D3D11 device can only signal D3D11 fences.");
                     return false;
                 }
 
-                if (!d3dFence->Signal(value))
+                if (!d3dFence->Signal(completionValue))
                 {
                     SetLastError("D3D11 fence signal failed.");
                     return false;
@@ -1346,15 +1400,14 @@ namespace ve::rhi
                 return true;
             }
 
-            [[nodiscard]] bool Submit(RhiCommandList& commandList) override
-            {
-                (void)commandList;
-                return true;
-            }
-
             void WaitIdle() override
             {
-                context_->Flush();
+                D3D11Fence fence(device_, context_, 0);
+                if (fence.Signal(1))
+                {
+                    context_->Flush();
+                    (void)fence.Wait(1);
+                }
             }
 
         private:
@@ -1367,6 +1420,7 @@ namespace ve::rhi
             bool enableDebug_ = false;
             ComPtr<ID3D11Device> device_;
             ComPtr<ID3D11DeviceContext> context_;
+            ComPtr<ID3D11DeviceContext1> context1_;
             std::string lastError_;
         };
     } // namespace

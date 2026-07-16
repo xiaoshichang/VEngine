@@ -3,14 +3,11 @@
 #include "Editor/Core/EditorBuiltinResources.h"
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
-#include "Engine/Runtime/Math/Math.h"
+#include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <algorithm>
-#include <array>
-#include <cstring>
 #include <string>
 #include <utility>
 
@@ -28,9 +25,10 @@ namespace ve
         const ShaderID EditorGizmoIconFragmentShaderID{EditorGizmoIconFragmentShaderName, 0};
 
         const char* EditorGizmoLineShaderSource = R"(
-cbuffer EditorGizmoConstants : register(b0)
+cbuffer ViewConstants : register(b1)
 {
-    float4x4 worldViewProjection;
+    float4x4 viewProjection;
+    float4 cameraWorldPosition;
 };
 
 struct VSInput
@@ -48,7 +46,7 @@ struct VSOutput
 VSOutput VSMain(VSInput input)
 {
     VSOutput output;
-    output.position = mul(worldViewProjection, float4(input.position, 1.0f));
+    output.position = mul(viewProjection, float4(input.position, 1.0f));
     output.color = input.color;
     return output;
 }
@@ -63,9 +61,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
 #include <metal_stdlib>
 using namespace metal;
 
-struct EditorGizmoConstants
+struct ViewConstants
 {
-    float4x4 worldViewProjection;
+    float4x4 viewProjection;
+    float4 cameraWorldPosition;
 };
 
 struct VSInput
@@ -80,10 +79,10 @@ struct VSOutput
     float3 color;
 };
 
-[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant EditorGizmoConstants* constants [[buffer(0)]])
+[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant ViewConstants* constants [[buffer(1)]])
 {
     VSOutput output;
-    output.position = constants->worldViewProjection * float4(input.position, 1.0f);
+    output.position = constants->viewProjection * float4(input.position, 1.0f);
     output.color = input.color;
     return output;
 }
@@ -95,9 +94,10 @@ struct VSOutput
 )";
 
         const char* EditorGizmoIconShaderSource = R"(
-cbuffer EditorGizmoConstants : register(b0)
+cbuffer ViewConstants : register(b1)
 {
-    float4x4 worldViewProjection;
+    float4x4 viewProjection;
+    float4 cameraWorldPosition;
 };
 
 Texture2D IconAtlasTexture : register(t0);
@@ -120,7 +120,7 @@ struct VSOutput
 VSOutput VSMain(VSInput input)
 {
     VSOutput output;
-    output.position = mul(worldViewProjection, float4(input.position, 1.0f));
+    output.position = mul(viewProjection, float4(input.position, 1.0f));
     output.uv = input.uv.xy;
     output.color = input.color;
     return output;
@@ -137,9 +137,10 @@ float4 PSMain(VSOutput input) : SV_TARGET
 #include <metal_stdlib>
 using namespace metal;
 
-struct EditorGizmoConstants
+struct ViewConstants
 {
-    float4x4 worldViewProjection;
+    float4x4 viewProjection;
+    float4 cameraWorldPosition;
 };
 
 struct VSInput
@@ -156,10 +157,10 @@ struct VSOutput
     float3 color;
 };
 
-[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant EditorGizmoConstants* constants [[buffer(0)]])
+[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant ViewConstants* constants [[buffer(1)]])
 {
     VSOutput output;
-    output.position = constants->worldViewProjection * float4(input.position, 1.0f);
+    output.position = constants->viewProjection * float4(input.position, 1.0f);
     output.uv = input.uv.xy;
     output.color = input.color;
     return output;
@@ -171,14 +172,6 @@ struct VSOutput
     return float4(clamp(input.color, 0.0f, 1.0f), atlas.a);
 }
 )";
-
-        struct EditorGizmoUniformData
-        {
-            Float32 worldViewProjection[16] = {};
-            Float32 padding[48] = {};
-        };
-
-        static_assert(sizeof(EditorGizmoUniformData) == 256);
 
         [[nodiscard]] rhi::RhiBufferDesc MakeBufferDesc(UInt64 size, rhi::RhiBufferUsage usage, const void* initialData, const char* debugName) noexcept
         {
@@ -213,78 +206,6 @@ struct VSOutput
             return static_cast<Int32>(targetFormat);
         }
 
-        [[nodiscard]] Matrix44 BuildRigidInverse(const Matrix44& localToWorld) noexcept
-        {
-            Matrix44 inverse = Matrix44::Identity();
-            for (SizeT row = 0; row < 3; ++row)
-            {
-                for (SizeT column = 0; column < 3; ++column)
-                {
-                    inverse.Set(row, column, localToWorld.Get(column, row));
-                }
-            }
-
-            const Vector3 translation(localToWorld.Get(0, 3), localToWorld.Get(1, 3), localToWorld.Get(2, 3));
-            for (SizeT row = 0; row < 3; ++row)
-            {
-                const Float32 value =
-                    -((inverse.Get(row, 0) * translation.GetX()) + (inverse.Get(row, 1) * translation.GetY()) + (inverse.Get(row, 2) * translation.GetZ()));
-                inverse.Set(row, 3, value);
-            }
-
-            return inverse;
-        }
-
-        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCamera& camera) noexcept
-        {
-            const Float32 nearClip = std::max(camera.GetNearClipPlane(), 0.001f);
-            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
-            const Float32 fieldOfView = std::max(camera.GetVerticalFieldOfViewRadians(), 0.001f);
-            const Float32 yScale = 1.0f / std::tan(fieldOfView * 0.5f);
-            const Float32 xScale = yScale / aspectRatio;
-
-            Matrix44 projection = Matrix44::Zero();
-            projection.Set(0, 0, xScale);
-            projection.Set(1, 1, yScale);
-            projection.Set(2, 2, farClip / (farClip - nearClip));
-            projection.Set(2, 3, -(nearClip * farClip) / (farClip - nearClip));
-            projection.Set(3, 2, 1.0f);
-            return projection;
-        }
-
-        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCamera& camera) noexcept
-        {
-            const Float32 nearClip = camera.GetNearClipPlane();
-            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
-            const Float32 height = std::max(camera.GetOrthographicSize(), 0.001f);
-            const Float32 width = height * aspectRatio;
-
-            Matrix44 projection = Matrix44::Identity();
-            projection.Set(0, 0, 2.0f / width);
-            projection.Set(1, 1, 2.0f / height);
-            projection.Set(2, 2, 1.0f / (farClip - nearClip));
-            projection.Set(2, 3, -nearClip / (farClip - nearClip));
-            return projection;
-        }
-
-        [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCamera& camera) noexcept
-        {
-            return camera.GetProjectionMode() == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(camera)
-                                                                                     : BuildPerspectiveProjection(camera);
-        }
-
-        [[nodiscard]] EditorGizmoUniformData BuildUniformData(const std::shared_ptr<RTCamera>& camera) noexcept
-        {
-            EditorGizmoUniformData data = {};
-            const Matrix44 viewProjection =
-                camera != nullptr ? BuildProjectionMatrix(*camera) * BuildRigidInverse(camera->GetLocalToWorld()) : Matrix44::Identity();
-            const Matrix44 shaderWorldViewProjection = viewProjection.Transposed();
-            const std::array<Float32, 16>& values = shaderWorldViewProjection.GetValues();
-            std::memcpy(data.worldViewProjection, values.data(), sizeof(data.worldViewProjection));
-            return data;
-        }
     } // namespace
 
     EditorGizmoRenderPass::EditorGizmoRenderPass(EditorGizmoRenderPassInitParam initParam)
@@ -327,12 +248,13 @@ struct VSOutput
         }
         EnsureIconResources(context);
         UploadFrameResources(context);
+        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get());
 
         rhi::RhiCommandList& commandList = context.commandList;
         if (uploadedIconVertexCount_ > 0)
         {
             commandList.SetPipeline(*iconPipelineState_);
-            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
             commandList.SetTexture(rhi::RhiShaderStage::Fragment, 0, *iconAtlasTexture_);
             commandList.SetSampler(rhi::RhiShaderStage::Fragment, 0, *iconSampler_);
             commandList.SetVertexBuffer(0, *iconVertexBuffer_, sizeof(EditorGizmoIconVertex), 0);
@@ -342,10 +264,21 @@ struct VSOutput
         if (uploadedLineVertexCount_ > 0)
         {
             commandList.SetPipeline(*linePipelineState_);
-            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
             commandList.SetVertexBuffer(0, *lineVertexBuffer_, sizeof(EditorGizmoVertex), 0);
             commandList.Draw(static_cast<UInt32>(uploadedLineVertexCount_), 0);
         }
+
+        if (lineVertexBuffer_ != nullptr)
+        {
+            context.frameData.RetainTransientResource(std::move(lineVertexBuffer_));
+        }
+        if (iconVertexBuffer_ != nullptr)
+        {
+            context.frameData.RetainTransientResource(std::move(iconVertexBuffer_));
+        }
+        context.frameData.RetainTransientResource(std::move(iconAtlasTexture_));
+        context.frameData.RetainTransientResource(std::move(iconSampler_));
     }
 
     void EditorGizmoRenderPass::EnsurePipeline(RenderPassContext& context)
@@ -537,11 +470,6 @@ struct VSOutput
         {
             iconVertexBuffer_.reset();
         }
-
-        const EditorGizmoUniformData uniformData = BuildUniformData(context.rendererData.resolvedCamera);
-        uniformBuffer_ =
-            context.device.CreateBuffer(MakeBufferDesc(sizeof(EditorGizmoUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "EditorGizmoUniformBuffer"));
-        VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "EditorGizmoRenderPass failed to create uniform buffer.");
     }
 
     rhi::RhiFormat EditorGizmoRenderPass::ResolveTargetFormat(const RenderPassContext& context) const noexcept

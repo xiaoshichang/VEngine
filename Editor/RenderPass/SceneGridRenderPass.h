@@ -30,11 +30,9 @@ namespace ve
     private:
         void EnsureResources(RenderPassContext& context);
         void EnsurePipeline(RenderPassContext& context);
-        void UploadUniforms(RenderPassContext& context);
 
         SceneGridRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiBuffer> vertexBuffer_;
-        std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
         rhi::RhiPipelineState* pipelineState_ = nullptr;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         bool pipelineDepthEnabled_ = false;

@@ -144,7 +144,7 @@ namespace ve::rhi
         virtual void SetIndexBuffer(const RhiBuffer& buffer, RhiIndexFormat format, uint64_t offset) = 0;
 
         /// Binds a uniform/constant buffer to one shader stage.
-        virtual void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) = 0;
+        virtual void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) = 0;
 
         /// Binds a sampled texture to one shader stage.
         virtual void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) = 0;
@@ -187,6 +187,9 @@ namespace ve::rhi
         /// Creates a GPU buffer and optionally uploads initial data.
         [[nodiscard]] virtual std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) = 0;
 
+        /// Updates a CPU-visible buffer range.
+        virtual void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) = 0;
+
         /// Creates a texture resource and optionally uploads initial data.
         [[nodiscard]] virtual std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) = 0;
 
@@ -205,11 +208,8 @@ namespace ve::rhi
         /// Creates a fence object compatible with this device's graphics queue.
         [[nodiscard]] virtual std::unique_ptr<RhiFence> CreateFence(uint64_t initialValue = 0) = 0;
 
-        /// Signals a fence from this device's graphics queue.
-        [[nodiscard]] virtual bool SignalFence(RhiFence& fence, uint64_t value) = 0;
-
-        /// Submits a recorded command list to the graphics queue.
-        [[nodiscard]] virtual bool Submit(RhiCommandList& commandList) = 0;
+        /// Submits a recorded command list and optionally signals a completion fence after the queued work.
+        [[nodiscard]] virtual bool Submit(RhiCommandList& commandList, RhiFence* completionFence = nullptr, uint64_t completionValue = 0) = 0;
 
         /// Blocks until all previously submitted work is complete.
         virtual void WaitIdle() = 0;

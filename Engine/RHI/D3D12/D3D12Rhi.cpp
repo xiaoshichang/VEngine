@@ -272,10 +272,20 @@ namespace ve::rhi
         class D3D12Buffer final : public RhiBuffer
         {
         public:
-            D3D12Buffer(ComPtr<ID3D12Resource> resource, uint64_t size)
+            D3D12Buffer(ComPtr<ID3D12Resource> resource, uint64_t size, RhiBufferMemoryUsage memoryUsage, std::byte* mappedData)
                 : resource_(std::move(resource))
                 , size_(size)
+                , memoryUsage_(memoryUsage)
+                , mappedData_(mappedData)
             {
+            }
+
+            ~D3D12Buffer() override
+            {
+                if (mappedData_ != nullptr)
+                {
+                    resource_->Unmap(0, nullptr);
+                }
             }
 
             [[nodiscard]] uint64_t GetSize() const noexcept override
@@ -288,9 +298,21 @@ namespace ve::rhi
                 return resource_.Get();
             }
 
+            [[nodiscard]] RhiBufferMemoryUsage GetMemoryUsage() const noexcept
+            {
+                return memoryUsage_;
+            }
+
+            [[nodiscard]] std::byte* GetMappedData() const noexcept
+            {
+                return mappedData_;
+            }
+
         private:
             ComPtr<ID3D12Resource> resource_;
             uint64_t size_ = 0;
+            RhiBufferMemoryUsage memoryUsage_ = RhiBufferMemoryUsage::GpuOnly;
+            std::byte* mappedData_ = nullptr;
         };
 
         class D3D12Texture final : public RhiTexture
@@ -828,8 +850,11 @@ namespace ve::rhi
                 commandList_->IASetIndexBuffer(&bufferView);
             }
 
-            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset) override
+            void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
             {
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT == 0);
+                VE_ASSERT(offset + size <= buffer.GetSize());
                 const auto& d3dBuffer = static_cast<const D3D12Buffer&>(buffer);
                 const UINT rootParameterIndex = ResolveUniformRootParameter(stage, slot);
                 commandList_->SetGraphicsRootConstantBufferView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
@@ -842,7 +867,7 @@ namespace ve::rhi
                 VE_ASSERT(d3dTexture.HasShaderResourceView());
                 activeResourceHeap_ = d3dTexture.GetShaderResourceViewHeap();
                 ApplyDescriptorHeaps();
-                commandList_->SetGraphicsRootDescriptorTable(3, d3dTexture.GetShaderResourceView());
+                commandList_->SetGraphicsRootDescriptorTable(4, d3dTexture.GetShaderResourceView());
             }
 
             void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) override
@@ -851,7 +876,7 @@ namespace ve::rhi
                 const auto& d3dSampler = static_cast<const D3D12Sampler&>(sampler);
                 activeSamplerHeap_ = d3dSampler.GetSamplerHeap();
                 ApplyDescriptorHeaps();
-                commandList_->SetGraphicsRootDescriptorTable(4, d3dSampler.GetSampler());
+                commandList_->SetGraphicsRootDescriptorTable(5, d3dSampler.GetSampler());
             }
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
@@ -889,13 +914,9 @@ namespace ve::rhi
 
             [[nodiscard]] static UINT ResolveUniformRootParameter(RhiShaderStage stage, uint32_t slot) noexcept
             {
-                VE_ASSERT((stage == RhiShaderStage::Vertex && slot == 0) || (stage == RhiShaderStage::Fragment && (slot == 1 || slot == 2)));
-                if (stage == RhiShaderStage::Vertex)
-                {
-                    return 0u;
-                }
-
-                return slot == 1 ? 1u : 2u;
+                static_cast<void>(stage);
+                VE_ASSERT(slot < 4);
+                return slot;
             }
 
             void ApplyDescriptorHeaps()
@@ -1115,7 +1136,26 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                if (desc.initialData != nullptr && desc.size > 0)
+                std::byte* persistentMappedData = nullptr;
+                if (desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu)
+                {
+                    void* mappedData = nullptr;
+                    D3D12_RANGE readRange = {};
+                    result = resource->Map(0, &readRange, &mappedData);
+
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D12Resource::Map", result));
+                        return nullptr;
+                    }
+
+                    persistentMappedData = static_cast<std::byte*>(mappedData);
+                    if (desc.initialData != nullptr && desc.size > 0)
+                    {
+                        std::memcpy(persistentMappedData, desc.initialData, static_cast<size_t>(desc.size));
+                    }
+                }
+                else if (desc.initialData != nullptr && desc.size > 0)
                 {
                     void* mappedData = nullptr;
                     D3D12_RANGE readRange = {};
@@ -1131,7 +1171,19 @@ namespace ve::rhi
                     resource->Unmap(0, nullptr);
                 }
 
-                return std::make_unique<D3D12Buffer>(resource, desc.size);
+                return std::make_unique<D3D12Buffer>(resource, desc.size, desc.memoryUsage, persistentMappedData);
+            }
+
+            void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) override
+            {
+                static_cast<void>(updateMode);
+                auto& d3dBuffer = static_cast<D3D12Buffer&>(buffer);
+                VE_ASSERT(d3dBuffer.GetMemoryUsage() == RhiBufferMemoryUsage::CpuToGpu);
+                VE_ASSERT(d3dBuffer.GetMappedData() != nullptr);
+                VE_ASSERT(data != nullptr);
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset + size <= d3dBuffer.GetSize());
+                std::memcpy(d3dBuffer.GetMappedData() + offset, data, static_cast<size_t>(size));
             }
 
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
@@ -1481,30 +1533,25 @@ namespace ve::rhi
                 descriptorRanges[1].RegisterSpace = 0;
                 descriptorRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-                D3D12_ROOT_PARAMETER rootParameters[5] = {};
-                rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-                rootParameters[0].Descriptor.ShaderRegister = 0;
-                rootParameters[0].Descriptor.RegisterSpace = 0;
-                rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-                rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-                rootParameters[1].Descriptor.ShaderRegister = 1;
-                rootParameters[1].Descriptor.RegisterSpace = 0;
-                rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-                rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-                rootParameters[2].Descriptor.ShaderRegister = 2;
-                rootParameters[2].Descriptor.RegisterSpace = 0;
-                rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-                rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-                rootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
-                rootParameters[3].DescriptorTable.pDescriptorRanges = &descriptorRanges[0];
-                rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+                D3D12_ROOT_PARAMETER rootParameters[6] = {};
+                for (UINT slot = 0; slot < 4; ++slot)
+                {
+                    rootParameters[slot].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                    rootParameters[slot].Descriptor.ShaderRegister = slot;
+                    rootParameters[slot].Descriptor.RegisterSpace = 0;
+                    rootParameters[slot].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+                }
                 rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
                 rootParameters[4].DescriptorTable.NumDescriptorRanges = 1;
-                rootParameters[4].DescriptorTable.pDescriptorRanges = &descriptorRanges[1];
+                rootParameters[4].DescriptorTable.pDescriptorRanges = &descriptorRanges[0];
                 rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+                rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                rootParameters[5].DescriptorTable.NumDescriptorRanges = 1;
+                rootParameters[5].DescriptorTable.pDescriptorRanges = &descriptorRanges[1];
+                rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
                 D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-                rootSignatureDesc.NumParameters = 5;
+                rootSignatureDesc.NumParameters = 6;
                 rootSignatureDesc.pParameters = rootParameters;
                 rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
@@ -1656,26 +1703,7 @@ namespace ve::rhi
                 return std::make_unique<D3D12FenceObject>(fence, fenceEvent_);
             }
 
-            [[nodiscard]] bool SignalFence(RhiFence& fence, uint64_t value) override
-            {
-                auto* d3dFence = dynamic_cast<D3D12FenceObject*>(&fence);
-                if (d3dFence == nullptr)
-                {
-                    SetLastError("D3D12 device can only signal D3D12 fences.");
-                    return false;
-                }
-
-                HRESULT result = queue_->Signal(d3dFence->GetNativeFence(), value);
-                if (FAILED(result))
-                {
-                    SetLastError(MakeHResultError("ID3D12CommandQueue::Signal external fence", result));
-                    return false;
-                }
-
-                return true;
-            }
-
-            [[nodiscard]] bool Submit(RhiCommandList& commandList) override
+            [[nodiscard]] bool Submit(RhiCommandList& commandList, RhiFence* completionFence, uint64_t completionValue) override
             {
                 auto* d3dCommandList = dynamic_cast<D3D12CommandList*>(&commandList);
 
@@ -1687,7 +1715,27 @@ namespace ve::rhi
 
                 ID3D12CommandList* nativeCommandLists[] = {d3dCommandList->GetNativeCommandList()};
                 queue_->ExecuteCommandLists(1, nativeCommandLists);
-                return SignalAndWait();
+
+                if (completionFence == nullptr)
+                {
+                    return true;
+                }
+
+                auto* d3dFence = dynamic_cast<D3D12FenceObject*>(completionFence);
+                if (d3dFence == nullptr)
+                {
+                    SetLastError("D3D12 device can only signal D3D12 fences.");
+                    return false;
+                }
+
+                const HRESULT result = queue_->Signal(d3dFence->GetNativeFence(), completionValue);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D12CommandQueue::Signal completion fence", result));
+                    return false;
+                }
+
+                return true;
             }
 
             void WaitIdle() override

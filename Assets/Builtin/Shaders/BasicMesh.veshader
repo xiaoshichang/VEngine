@@ -22,7 +22,7 @@
                     "field": "baseColor",
                     "offset": 0,
                     "size": 16,
-                    "slot": 1,
+                    "slot": 3,
                     "space": 0
                 }
             },

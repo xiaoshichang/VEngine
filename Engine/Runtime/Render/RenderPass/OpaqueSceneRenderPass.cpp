@@ -1,19 +1,15 @@
 #include "Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.h"
 
-#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
-#include "Engine/Runtime/Math/Math.h"
+#include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <string>
 #include <utility>
 
@@ -21,152 +17,6 @@ namespace ve
 {
     namespace
     {
-        struct OpaqueSceneObjectUniformData
-        {
-            Float32 worldViewProjection[16] = {};
-            Float32 localToWorld[16] = {};
-            Float32 padding[32] = {};
-        };
-
-        struct OpaqueSceneLightUniformData
-        {
-            Float32 lightDirectionAndIntensity[4] = {0.0f, 0.0f, 1.0f, 0.0f};
-            Float32 lightColorAndAmbient[4] = {1.0f, 1.0f, 1.0f, 0.35f};
-            Float32 padding[56] = {};
-        };
-
-        static_assert(sizeof(OpaqueSceneObjectUniformData) == 256);
-        static_assert(sizeof(OpaqueSceneLightUniformData) == 256);
-
-        [[nodiscard]] rhi::RhiBufferDesc MakeUniformBufferDesc(UInt64 size, const void* initialData, const char* debugName) noexcept
-        {
-            rhi::RhiBufferDesc desc = {};
-            desc.size = size;
-            desc.usage = rhi::RhiBufferUsage::Uniform;
-            desc.initialData = initialData;
-            desc.debugName = debugName;
-            return desc;
-        }
-
-        [[nodiscard]] Matrix44 BuildRigidInverse(const Matrix44& localToWorld) noexcept
-        {
-            Matrix44 inverse = Matrix44::Identity();
-            for (SizeT row = 0; row < 3; ++row)
-            {
-                for (SizeT column = 0; column < 3; ++column)
-                {
-                    inverse.Set(row, column, localToWorld.Get(column, row));
-                }
-            }
-
-            const Vector3 translation(localToWorld.Get(0, 3), localToWorld.Get(1, 3), localToWorld.Get(2, 3));
-            for (SizeT row = 0; row < 3; ++row)
-            {
-                const Float32 value =
-                    -((inverse.Get(row, 0) * translation.GetX()) + (inverse.Get(row, 1) * translation.GetY()) + (inverse.Get(row, 2) * translation.GetZ()));
-                inverse.Set(row, 3, value);
-            }
-
-            return inverse;
-        }
-
-        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCamera& camera) noexcept
-        {
-            const Float32 nearClip = std::max(camera.GetNearClipPlane(), 0.001f);
-            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
-            const Float32 fieldOfView = std::max(camera.GetVerticalFieldOfViewRadians(), 0.001f);
-            const Float32 yScale = 1.0f / std::tan(fieldOfView * 0.5f);
-            const Float32 xScale = yScale / aspectRatio;
-
-            Matrix44 projection = Matrix44::Zero();
-            projection.Set(0, 0, xScale);
-            projection.Set(1, 1, yScale);
-            projection.Set(2, 2, farClip / (farClip - nearClip));
-            projection.Set(2, 3, -(nearClip * farClip) / (farClip - nearClip));
-            projection.Set(3, 2, 1.0f);
-            return projection;
-        }
-
-        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCamera& camera) noexcept
-        {
-            const Float32 nearClip = camera.GetNearClipPlane();
-            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
-            const Float32 height = std::max(camera.GetOrthographicSize(), 0.001f);
-            const Float32 width = height * aspectRatio;
-
-            Matrix44 projection = Matrix44::Identity();
-            projection.Set(0, 0, 2.0f / width);
-            projection.Set(1, 1, 2.0f / height);
-            projection.Set(2, 2, 1.0f / (farClip - nearClip));
-            projection.Set(2, 3, -nearClip / (farClip - nearClip));
-            return projection;
-        }
-
-        [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCamera& camera) noexcept
-        {
-            return camera.GetProjectionMode() == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(camera) : BuildPerspectiveProjection(camera);
-        }
-
-        [[nodiscard]] Matrix44 BuildViewProjectionMatrix(const std::shared_ptr<RTCamera>& camera) noexcept
-        {
-            if (camera == nullptr)
-            {
-                return Matrix44::Identity();
-            }
-
-            return BuildProjectionMatrix(*camera) * BuildRigidInverse(camera->GetLocalToWorld());
-        }
-
-        [[nodiscard]] OpaqueSceneObjectUniformData BuildObjectUniformData(const Matrix44& worldViewProjection, const Matrix44& localToWorld) noexcept
-        {
-            OpaqueSceneObjectUniformData data = {};
-            const Matrix44 shaderWorldViewProjection = worldViewProjection.Transposed();
-            const Matrix44 shaderLocalToWorld = localToWorld.Transposed();
-            const std::array<Float32, 16>& worldViewProjectionValues = shaderWorldViewProjection.GetValues();
-            const std::array<Float32, 16>& localToWorldValues = shaderLocalToWorld.GetValues();
-            std::memcpy(data.worldViewProjection, worldViewProjectionValues.data(), sizeof(data.worldViewProjection));
-            std::memcpy(data.localToWorld, localToWorldValues.data(), sizeof(data.localToWorld));
-            return data;
-        }
-
-        [[nodiscard]] std::shared_ptr<RTLight> FindDirectionalLight(const RTScene& scene) noexcept
-        {
-            for (SizeT lightIndex = 0; lightIndex < scene.GetLightCount(); ++lightIndex)
-            {
-                std::shared_ptr<RTLight> light = scene.GetLight(lightIndex);
-                if (light != nullptr && light->GetType() == RTLightType::Directional)
-                {
-                    return light;
-                }
-            }
-
-            return nullptr;
-        }
-
-        [[nodiscard]] OpaqueSceneLightUniformData BuildLightUniformData(const RTScene& scene) noexcept
-        {
-            OpaqueSceneLightUniformData data = {};
-            const std::shared_ptr<RTLight> light = FindDirectionalLight(scene);
-            if (light == nullptr)
-            {
-                return data;
-            }
-
-            
-            const Vector3 direction = light->GetDirection().Normalized();
-            data.lightDirectionAndIntensity[0] = direction.GetX();
-            data.lightDirectionAndIntensity[1] = direction.GetY();
-            data.lightDirectionAndIntensity[2] = direction.GetZ();
-            data.lightDirectionAndIntensity[3] = std::max(light->GetIntensity(), 0.0f);
-            data.lightColorAndAmbient[0] = std::max(light->GetColor().GetX(), 0.0f);
-            data.lightColorAndAmbient[1] = std::max(light->GetColor().GetY(), 0.0f);
-            data.lightColorAndAmbient[2] = std::max(light->GetColor().GetZ(), 0.0f);
-            data.lightColorAndAmbient[3] = 0.35f;
-            return data;
-        }
-
         [[nodiscard]] std::shared_ptr<RTShaderResource> FindFirstShaderResource(const RTScene& scene) noexcept
         {
             for (SizeT itemIndex = 0; itemIndex < scene.GetRenderItemCount(); ++itemIndex)
@@ -198,9 +48,8 @@ namespace ve
             return static_cast<Int32>(targetFormat) | (static_cast<Int32>(fillMode) << 8) | (depthEnabled ? (1 << 16) : 0);
         }
 
-        [[nodiscard]] std::string BuildOpaquePipelineName(const RTShaderResource& shaderResource,
-                                                          const rhi::RhiShaderModule& vertexShader,
-                                                          const rhi::RhiShaderModule& fragmentShader)
+        [[nodiscard]] std::string
+        BuildOpaquePipelineName(const RTShaderResource& shaderResource, const rhi::RhiShaderModule& vertexShader, const rhi::RhiShaderModule& fragmentShader)
         {
             std::string name = "OpaqueScenePipeline:";
             name += shaderResource.GetDesc().name;
@@ -242,8 +91,10 @@ namespace ve
                 *initParam_.target.colorTexture->GetTexture(), rhi::RhiLoadAction::Clear, initParam_.target.colorStoreAction, clearColor);
             if (initParam_.target.colorTexture->GetDepthTexture() != nullptr)
             {
-                builder.SetDepthStencilAttachment(
-                    *initParam_.target.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Clear, rhi::RhiStoreAction::Store, rhi::RhiDepthStencilClearValue{});
+                builder.SetDepthStencilAttachment(*initParam_.target.colorTexture->GetDepthTexture(),
+                                                  rhi::RhiLoadAction::Clear,
+                                                  rhi::RhiStoreAction::Store,
+                                                  rhi::RhiDepthStencilClearValue{});
             }
             return;
         }
@@ -270,9 +121,10 @@ namespace ve
         rhi::RhiCommandList& commandList = context.commandList;
         commandList.SetPipeline(*pipelineState_);
 
-        frameUniformBuffers_.clear();
-        BindLightUniform(context, *scene);
-        const Matrix44 viewProjection = BuildViewProjectionMatrix(context.rendererData.resolvedCamera);
+        const UniformBufferAllocation frameUniform = context.frameData.GetFrameUniform(*scene);
+        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get());
+        commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *frameUniform.buffer, frameUniform.offset, frameUniform.size);
+        commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
         for (SizeT itemIndex = 0; itemIndex < scene->GetRenderItemCount(); ++itemIndex)
         {
             const std::shared_ptr<RTRenderItem> item = scene->GetRenderItem(itemIndex);
@@ -289,14 +141,8 @@ namespace ve
                 continue;
             }
 
-            const Matrix44& localToWorld = item->GetLocalToWorld();
-            const Matrix44 worldViewProjection = viewProjection * localToWorld;
-            const OpaqueSceneObjectUniformData objectUniformData = BuildObjectUniformData(worldViewProjection, localToWorld);
-            std::unique_ptr<rhi::RhiBuffer> objectUniformBuffer = context.device.CreateBuffer(
-                MakeUniformBufferDesc(sizeof(OpaqueSceneObjectUniformData), &objectUniformData, "OpaqueSceneObjectUniformBuffer"));
-            VE_ASSERT_MESSAGE(objectUniformBuffer != nullptr, "OpaqueScenePass failed to create object uniform buffer.");
-            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *objectUniformBuffer, 0);
-            frameUniformBuffers_.push_back(std::move(objectUniformBuffer));
+            const UniformBufferAllocation objectUniform = context.frameData.GetObjectUniform(*item);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 2, *objectUniform.buffer, objectUniform.offset, objectUniform.size);
 
             if (!BindMaterialUniform(context, *item))
             {
@@ -381,12 +227,11 @@ namespace ve
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = "OpaqueScenePipeline";
 
-        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(device,
-                                                                     GraphicsPipelineID{BuildOpaquePipelineName(*shaderResource, *vertexShader, *fragmentShader),
-                                                                                        BuildOpaquePipelineVariant(targetFormat,
-                                                                                                                   initParam_.fillMode,
-                                                                                                                   depthEnabled)},
-                                                                     pipelineDesc);
+        pipelineState_ =
+            shaderManager->GetOrCreateGraphicsPipeline(device,
+                                                       GraphicsPipelineID{BuildOpaquePipelineName(*shaderResource, *vertexShader, *fragmentShader),
+                                                                          BuildOpaquePipelineVariant(targetFormat, initParam_.fillMode, depthEnabled)},
+                                                       pipelineDesc);
         VE_ASSERT_MESSAGE(pipelineState_ != nullptr, "OpaqueScenePass failed to create pipeline state.");
         pipelineColorFormat_ = targetFormat;
         pipelineFillMode_ = initParam_.fillMode;
@@ -394,22 +239,14 @@ namespace ve
         pipelineShaderResource_ = shaderResource;
     }
 
-    void OpaqueSceneRenderPass::BindLightUniform(RenderPassContext& context, const RTScene& scene)
-    {
-        const OpaqueSceneLightUniformData lightUniformData = BuildLightUniformData(scene);
-        std::unique_ptr<rhi::RhiBuffer> lightUniformBuffer =
-            context.device.CreateBuffer(MakeUniformBufferDesc(sizeof(OpaqueSceneLightUniformData), &lightUniformData, "OpaqueSceneLightUniformBuffer"));
-        VE_ASSERT_MESSAGE(lightUniformBuffer != nullptr, "OpaqueScenePass failed to create light uniform buffer.");
-        context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 2, *lightUniformBuffer, 0);
-        frameUniformBuffers_.push_back(std::move(lightUniformBuffer));
-    }
-
     bool OpaqueSceneRenderPass::BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item)
     {
         const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item.GetMaterialResource());
         if (materialResource != nullptr && materialResource->GetUniformBuffer() != nullptr)
         {
-            context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *materialResource->GetUniformBuffer(), 0);
+            const rhi::RhiBuffer* uniformBuffer = materialResource->GetUniformBuffer();
+            context.commandList.SetUniformBuffer(
+                rhi::RhiShaderStage::Fragment, 3, *uniformBuffer, materialResource->GetUniformBufferOffset(), materialResource->GetUniformBufferSize());
             return true;
         }
 

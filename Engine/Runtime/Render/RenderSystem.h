@@ -171,6 +171,7 @@ namespace ve
         void InitRenderResource(std::shared_ptr<RTMeshResource> meshResource, RTMeshResourceDesc desc);
         void InitRenderResource(std::shared_ptr<RTShaderResource> shaderResource, RTShaderResourceDesc desc);
         void InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource, RTMaterialResourceDesc desc);
+        void ReleaseRenderResource(std::shared_ptr<RTMaterialResource> materialResource);
 
         /// Enqueues one complete main-swapchain frame on the Render Thread.
         ///

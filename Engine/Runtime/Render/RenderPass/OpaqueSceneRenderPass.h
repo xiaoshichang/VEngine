@@ -6,7 +6,6 @@
 #include "Engine/Runtime/Render/RenderPass/RenderPass.h"
 
 #include <memory>
-#include <vector>
 
 namespace ve
 {
@@ -31,13 +30,11 @@ namespace ve
 
     private:
         void EnsurePipeline(RenderPassContext& context);
-        void BindLightUniform(RenderPassContext& context, const RTScene& scene);
         [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
         [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
 
         OpaqueSceneRenderPassInitParam initParam_;
         rhi::RhiPipelineState* pipelineState_ = nullptr;
-        std::vector<std::unique_ptr<rhi::RhiBuffer>> frameUniformBuffers_;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
         std::weak_ptr<RTShaderResource> pipelineShaderResource_;

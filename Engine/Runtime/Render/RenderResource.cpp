@@ -210,17 +210,27 @@ namespace ve
 
     bool RTMaterialResource::IsInitialized() const noexcept
     {
-        return uniformBuffer_ != nullptr;
+        return uniformAllocation_.buffer != nullptr;
     }
 
     rhi::RhiBuffer* RTMaterialResource::GetUniformBuffer() noexcept
     {
-        return uniformBuffer_.get();
+        return uniformAllocation_.buffer;
     }
 
     const rhi::RhiBuffer* RTMaterialResource::GetUniformBuffer() const noexcept
     {
-        return uniformBuffer_.get();
+        return uniformAllocation_.buffer;
+    }
+
+    UInt64 RTMaterialResource::GetUniformBufferOffset() const noexcept
+    {
+        return uniformAllocation_.offset;
+    }
+
+    UInt64 RTMaterialResource::GetUniformBufferSize() const noexcept
+    {
+        return uniformAllocation_.size;
     }
 
     std::shared_ptr<RTShaderResource> RTMaterialResource::GetShaderResource() const noexcept
@@ -233,25 +243,39 @@ namespace ve
         return desc_.revision;
     }
 
-    void RTMaterialResource::InitRenderResource(rhi::RhiDevice& device, RTMaterialResourceDesc desc)
+    void RTMaterialResource::InitRenderResource(MaterialUniformPool& uniformPool, RTMaterialResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource();
-        desc_ = std::move(desc);
-        if (desc_.constantData.empty())
+        if (desc.constantData.empty())
         {
+            ResetRenderResource(uniformPool);
+            desc_ = std::move(desc);
             return;
         }
 
-        uniformBuffer_ = device.CreateBuffer(MakeBufferDesc(
-            static_cast<UInt64>(desc_.constantData.size()), rhi::RhiBufferUsage::Uniform, desc_.constantData.data(), "RTMaterialResourceUniformBuffer"));
-        VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "RTMaterialResource failed to create uniform buffer.");
+        const UInt64 constantDataSize = static_cast<UInt64>(desc.constantData.size());
+        if (!uniformPool.IsValid(uniformAllocation_))
+        {
+            uniformAllocation_ = {};
+        }
+        if (uniformAllocation_.buffer == nullptr || uniformAllocation_.size != constantDataSize)
+        {
+            MaterialUniformAllocation newAllocation = uniformPool.Allocate(constantDataSize);
+            uniformPool.Update(newAllocation, desc.constantData.data(), constantDataSize);
+            uniformPool.Release(uniformAllocation_);
+            uniformAllocation_ = newAllocation;
+        }
+        else
+        {
+            uniformPool.Update(uniformAllocation_, desc.constantData.data(), constantDataSize);
+        }
+        desc_ = std::move(desc);
     }
 
-    void RTMaterialResource::ResetRenderResource() noexcept
+    void RTMaterialResource::ResetRenderResource(MaterialUniformPool& uniformPool)
     {
         VE_ASSERT_RENDER_THREAD();
-        uniformBuffer_.reset();
+        uniformPool.Release(uniformAllocation_);
     }
 } // namespace ve

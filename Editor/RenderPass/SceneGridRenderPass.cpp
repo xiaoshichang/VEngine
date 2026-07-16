@@ -3,14 +3,13 @@
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Math.h"
+#include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
-#include <array>
-#include <cstring>
 #include <string>
 #include <utility>
 
@@ -26,14 +25,19 @@ namespace ve
         constexpr Float32 GridExtent = 1000.0f;
 
         const char* SceneGridShaderSource = R"(
-cbuffer SceneGridConstants : register(b0)
+cbuffer SceneGridFrameConstants : register(b0)
 {
-    float4x4 worldViewProjection;
     float4 gridParams;
     float4 minorColor;
     float4 majorColor;
     float4 xAxisColor;
     float4 zAxisColor;
+};
+
+cbuffer ViewConstants : register(b1)
+{
+    float4x4 viewProjection;
+    float4 cameraWorldPosition;
 };
 
 struct VSInput
@@ -51,7 +55,7 @@ struct VSOutput
 VSOutput VSMain(VSInput input)
 {
     VSOutput output;
-    output.position = mul(worldViewProjection, float4(input.position, 1.0f));
+    output.position = mul(viewProjection, float4(input.position, 1.0f));
     output.worldPosition = input.position;
     return output;
 }
@@ -97,14 +101,19 @@ float4 PSMain(VSOutput input) : SV_TARGET
 #include <metal_stdlib>
 using namespace metal;
 
-struct SceneGridConstants
+struct SceneGridFrameConstants
 {
-    float4x4 worldViewProjection;
     float4 gridParams;
     float4 minorColor;
     float4 majorColor;
     float4 xAxisColor;
     float4 zAxisColor;
+};
+
+struct ViewConstants
+{
+    float4x4 viewProjection;
+    float4 cameraWorldPosition;
 };
 
 struct VSInput
@@ -119,10 +128,10 @@ struct VSOutput
     float3 worldPosition;
 };
 
-[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant SceneGridConstants* constants [[buffer(0)]])
+[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant ViewConstants* viewConstants [[buffer(1)]])
 {
     VSOutput output;
-    output.position = constants->worldViewProjection * float4(input.position, 1.0f);
+    output.position = viewConstants->viewProjection * float4(input.position, 1.0f);
     output.worldPosition = input.position;
     return output;
 }
@@ -141,7 +150,7 @@ float AxisLine(float coordinate, float width)
     return 1.0f - smoothstep(0.0f, antiAlias * width, fabs(coordinate));
 }
 
-[[fragment]] float4 PSMain(VSOutput input [[stage_in]], constant SceneGridConstants* constants [[buffer(0)]])
+[[fragment]] float4 PSMain(VSOutput input [[stage_in]], constant SceneGridFrameConstants* constants [[buffer(0)]])
 {
     float unitSize = max(constants->gridParams.x, 0.001f);
     float opacity = clamp(constants->gridParams.y, 0.0f, 1.0f);
@@ -167,16 +176,14 @@ float AxisLine(float coordinate, float width)
 
         struct SceneGridUniformData
         {
-            Float32 worldViewProjection[16] = {};
             Float32 gridParams[4] = {1.0f, 0.45f, 0.025f, 10.0f};
             Float32 minorColor[4] = {0.45f, 0.48f, 0.52f, 1.0f};
             Float32 majorColor[4] = {0.72f, 0.75f, 0.80f, 1.0f};
             Float32 xAxisColor[4] = {0.95f, 0.20f, 0.20f, 1.0f};
             Float32 zAxisColor[4] = {0.22f, 0.42f, 0.95f, 1.0f};
-            Float32 padding[28] = {};
         };
 
-        static_assert(sizeof(SceneGridUniformData) == 256);
+        static_assert(sizeof(SceneGridUniformData) == 80);
 
         [[nodiscard]] rhi::RhiBufferDesc MakeBufferDesc(UInt64 size, rhi::RhiBufferUsage usage, const void* initialData, const char* debugName) noexcept
         {
@@ -211,84 +218,9 @@ float AxisLine(float coordinate, float width)
             return static_cast<Int32>(targetFormat) | (depthEnabled ? (1 << 16) : 0);
         }
 
-        [[nodiscard]] Matrix44 BuildRigidInverse(const Matrix44& localToWorld) noexcept
-        {
-            Matrix44 inverse = Matrix44::Identity();
-            for (SizeT row = 0; row < 3; ++row)
-            {
-                for (SizeT column = 0; column < 3; ++column)
-                {
-                    inverse.Set(row, column, localToWorld.Get(column, row));
-                }
-            }
-
-            const Vector3 translation(localToWorld.Get(0, 3), localToWorld.Get(1, 3), localToWorld.Get(2, 3));
-            for (SizeT row = 0; row < 3; ++row)
-            {
-                const Float32 value =
-                    -((inverse.Get(row, 0) * translation.GetX()) + (inverse.Get(row, 1) * translation.GetY()) + (inverse.Get(row, 2) * translation.GetZ()));
-                inverse.Set(row, 3, value);
-            }
-
-            return inverse;
-        }
-
-        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCamera& camera) noexcept
-        {
-            const Float32 nearClip = std::max(camera.GetNearClipPlane(), 0.001f);
-            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
-            const Float32 fieldOfView = std::max(camera.GetVerticalFieldOfViewRadians(), 0.001f);
-            const Float32 yScale = 1.0f / std::tan(fieldOfView * 0.5f);
-            const Float32 xScale = yScale / aspectRatio;
-
-            Matrix44 projection = Matrix44::Zero();
-            projection.Set(0, 0, xScale);
-            projection.Set(1, 1, yScale);
-            projection.Set(2, 2, farClip / (farClip - nearClip));
-            projection.Set(2, 3, -(nearClip * farClip) / (farClip - nearClip));
-            projection.Set(3, 2, 1.0f);
-            return projection;
-        }
-
-        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCamera& camera) noexcept
-        {
-            const Float32 nearClip = camera.GetNearClipPlane();
-            const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
-            const Float32 height = std::max(camera.GetOrthographicSize(), 0.001f);
-            const Float32 width = height * aspectRatio;
-
-            Matrix44 projection = Matrix44::Identity();
-            projection.Set(0, 0, 2.0f / width);
-            projection.Set(1, 1, 2.0f / height);
-            projection.Set(2, 2, 1.0f / (farClip - nearClip));
-            projection.Set(2, 3, -nearClip / (farClip - nearClip));
-            return projection;
-        }
-
-        [[nodiscard]] Matrix44 BuildProjectionMatrix(const RTCamera& camera) noexcept
-        {
-            return camera.GetProjectionMode() == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(camera)
-                                                                                     : BuildPerspectiveProjection(camera);
-        }
-
-        [[nodiscard]] Matrix44 BuildViewProjectionMatrix(const std::shared_ptr<RTCamera>& camera) noexcept
-        {
-            if (camera == nullptr)
-            {
-                return Matrix44::Identity();
-            }
-
-            return BuildProjectionMatrix(*camera) * BuildRigidInverse(camera->GetLocalToWorld());
-        }
-
-        [[nodiscard]] SceneGridUniformData BuildUniformData(const std::shared_ptr<RTCamera>& camera, const SceneGridRenderPassInitParam& initParam) noexcept
+        [[nodiscard]] SceneGridUniformData BuildUniformData(const SceneGridRenderPassInitParam& initParam) noexcept
         {
             SceneGridUniformData data = {};
-            const Matrix44 worldViewProjection = BuildViewProjectionMatrix(camera).Transposed();
-            const std::array<Float32, 16>& values = worldViewProjection.GetValues();
-            std::memcpy(data.worldViewProjection, values.data(), sizeof(data.worldViewProjection));
             data.gridParams[0] = std::max(initParam.unitSize, 0.001f);
             data.gridParams[1] = Clamp(initParam.opacity, 0.0f, 1.0f);
             data.gridParams[2] = 1.25f;
@@ -362,14 +294,18 @@ float AxisLine(float coordinate, float width)
         {
             return;
         }
-        UploadUniforms(context);
+        const SceneGridUniformData gridUniformData = BuildUniformData(initParam_);
+        const UniformBufferAllocation gridUniform = context.frameData.UploadUniform(&gridUniformData, sizeof(gridUniformData));
+        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get());
 
         rhi::RhiCommandList& commandList = context.commandList;
         commandList.SetPipeline(*pipelineState_);
-        commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 0, *uniformBuffer_, 0);
-        commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *uniformBuffer_, 0);
+        commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
+        commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *gridUniform.buffer, gridUniform.offset, gridUniform.size);
         commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(RTMeshVertex), 0);
         commandList.Draw(12, 0);
+
+        context.frameData.RetainTransientResource(std::move(vertexBuffer_));
     }
 
     void SceneGridRenderPass::EnsureResources(RenderPassContext& context)
@@ -455,11 +391,4 @@ float AxisLine(float coordinate, float width)
         pipelineDepthEnabled_ = depthEnabled;
     }
 
-    void SceneGridRenderPass::UploadUniforms(RenderPassContext& context)
-    {
-        const SceneGridUniformData uniformData = BuildUniformData(context.rendererData.resolvedCamera, initParam_);
-        uniformBuffer_ = context.device.CreateBuffer(
-            MakeBufferDesc(sizeof(SceneGridUniformData), rhi::RhiBufferUsage::Uniform, &uniformData, "SceneGridUniformBuffer"));
-        VE_ASSERT_MESSAGE(uniformBuffer_ != nullptr, "SceneGridRenderPass failed to create uniform buffer.");
-    }
 } // namespace ve

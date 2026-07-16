@@ -8,8 +8,8 @@
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/ResourceSystem.h"
 
-#include <boost/json.hpp>
 #include <algorithm>
+#include <boost/json.hpp>
 #include <cstddef>
 #include <string_view>
 #include <utility>
@@ -83,10 +83,10 @@ namespace ve
             Result<std::vector<std::byte>> artifactBytes = FileSystem::ReadBinaryFile(resolvedPath);
             if (!artifactBytes)
             {
-                return Result<std::vector<std::byte>>::Failure(
-                    Error(artifactBytes.GetError().GetCode(),
-                          "Failed to read " + std::string(backendName) + " shader artifact '" + resolvedPath.GetString() + "' for shader '" +
-                              record.runtimePath.GetString() + "': " + artifactBytes.GetError().GetMessage()));
+                return Result<std::vector<std::byte>>::Failure(Error(artifactBytes.GetError().GetCode(),
+                                                                     "Failed to read " + std::string(backendName) + " shader artifact '" +
+                                                                         resolvedPath.GetString() + "' for shader '" + record.runtimePath.GetString() +
+                                                                         "': " + artifactBytes.GetError().GetMessage()));
             }
 
             return artifactBytes;
@@ -110,10 +110,10 @@ namespace ve
             Result<std::string> artifactText = FileSystem::ReadTextFile(resolvedPath);
             if (!artifactText)
             {
-                return Result<std::string>::Failure(
-                    Error(artifactText.GetError().GetCode(),
-                          "Failed to read " + std::string(backendName) + " shader artifact '" + resolvedPath.GetString() + "' for shader '" +
-                              record.runtimePath.GetString() + "': " + artifactText.GetError().GetMessage()));
+                return Result<std::string>::Failure(Error(artifactText.GetError().GetCode(),
+                                                          "Failed to read " + std::string(backendName) + " shader artifact '" + resolvedPath.GetString() +
+                                                              "' for shader '" + record.runtimePath.GetString() +
+                                                              "': " + artifactText.GetError().GetMessage()));
             }
 
             return artifactText;
@@ -197,7 +197,6 @@ namespace ve
 
             return Result<RTShaderResourceDesc>::Success(std::move(desc));
         }
-
 
         [[nodiscard]] bool ReadFloat3(const boost::json::value& value, Float32 out[3], const Float32 fallback[3]) noexcept
         {
@@ -489,8 +488,9 @@ namespace ve
 
     ErrorCode MaterialResource::SetPropertyValue(std::string_view name, MaterialPropertyValue value)
     {
-        const auto propertyIt = std::find_if(
-            materialLayout_.properties.begin(), materialLayout_.properties.end(), [name](const ShaderMaterialPropertyDesc& property) { return property.name == name; });
+        const auto propertyIt = std::find_if(materialLayout_.properties.begin(),
+                                             materialLayout_.properties.end(),
+                                             [name](const ShaderMaterialPropertyDesc& property) { return property.name == name; });
         if (propertyIt == materialLayout_.properties.end())
         {
             return ErrorCode::NotFound;
@@ -516,8 +516,7 @@ namespace ve
     {
         try
         {
-            renderSystem.EnqueueCommand(
-                RenderCommand{"ReleaseRTMaterialResource", [rtMaterialResource = rtMaterialResource_]() { rtMaterialResource->ResetRenderResource(); }});
+            renderSystem.ReleaseRenderResource(rtMaterialResource_);
         }
         catch (...)
         {

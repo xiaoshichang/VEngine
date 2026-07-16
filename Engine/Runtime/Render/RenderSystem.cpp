@@ -15,6 +15,8 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/BaseRenderer.h"
+#include "Engine/Runtime/Render/FrameContext.h"
+#include "Engine/Runtime/Render/MaterialUniformPool.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
@@ -22,6 +24,7 @@
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <array>
 #include <exception>
 #include <optional>
 
@@ -43,7 +46,8 @@ namespace ve
         Atomic<int> backendValue{-1};
         std::unique_ptr<rhi::RhiDevice> device;
         std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
-        std::unique_ptr<rhi::RhiCommandList> frameCommandList;
+        std::array<FrameContext, RenderFrameContextCount> frameContexts;
+        MaterialUniformPool materialUniformPool;
         ShaderManager shaderManager;
         UInt64 nextFrameIndex = 1;
     };
@@ -129,17 +133,36 @@ namespace ve
 
         void DestroyFrameResources(RenderSystemImpl& impl)
         {
-            impl.frameCommandList.reset();
+            for (FrameContext& frameContext : impl.frameContexts)
+            {
+                const bool shutdown = frameContext.Shutdown();
+                VE_ASSERT_MESSAGE(shutdown, "Failed to shut down a render frame context.");
+            }
+        }
+
+        [[nodiscard]] bool WaitForAllFrameContexts(RenderSystemImpl& impl)
+        {
+            for (FrameContext& frameContext : impl.frameContexts)
+            {
+                if (frameContext.IsInitialized() && !frameContext.WaitAndReset())
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         [[nodiscard]] ErrorCode CreateFrameResources(RenderSystemImpl& impl)
         {
             VE_ASSERT_MESSAGE(impl.device != nullptr, "CreateFrameResources requires an initialized RHI device.");
 
-            impl.frameCommandList = impl.device->CreateCommandList();
-            if (impl.frameCommandList == nullptr)
+            for (UInt32 contextIndex = 0; contextIndex < RenderFrameContextCount; ++contextIndex)
             {
-                return ErrorCode::PlatformError;
+                if (!impl.frameContexts[contextIndex].Initialize(*impl.device, contextIndex))
+                {
+                    DestroyFrameResources(impl);
+                    return ErrorCode::PlatformError;
+                }
             }
 
             return ErrorCode::None;
@@ -150,14 +173,20 @@ namespace ve
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
             VE_ASSERT(impl.mainSwapchain != nullptr);
-            VE_ASSERT(impl.frameCommandList != nullptr);
+            const UInt64 frameIndex = impl.nextFrameIndex++;
+            FrameContext& frameContext = impl.frameContexts[frameIndex % RenderFrameContextCount];
+            if (!frameContext.WaitAndReset())
+            {
+                return ErrorCode::PlatformError;
+            }
 
             FrameRenderPipelineData frameData = {};
-            frameData.frameIndex = impl.nextFrameIndex++;
+            frameData.frameIndex = frameIndex;
             frameData.device = impl.device.get();
-            frameData.commandList = impl.frameCommandList.get();
+            frameData.commandList = &frameContext.GetCommandList();
             frameData.mainSwapchain = impl.mainSwapchain.get();
             frameData.shaderManager = &impl.shaderManager;
+            frameData.frameContext = &frameContext;
 
             ErrorCode renderResult = framePipeline.RenderFrame(frameData);
             if (renderResult != ErrorCode::None)
@@ -165,11 +194,20 @@ namespace ve
                 return renderResult;
             }
 
-            auto ok = impl.device->Submit(*impl.frameCommandList);
-            VE_ASSERT(ok);
+            const UInt64 submissionFenceValue = frameContext.GetNextSubmissionFenceValue();
+            auto ok = impl.device->Submit(frameContext.GetCommandList(), &frameContext.GetCompletionFence(), submissionFenceValue);
+            if (!ok)
+            {
+                impl.device->WaitIdle();
+                return ErrorCode::PlatformError;
+            }
+            frameContext.MarkSubmitted(submissionFenceValue);
 
             ok = impl.mainSwapchain->Present();
-            VE_ASSERT(ok);
+            if (!ok)
+            {
+                return ErrorCode::PlatformError;
+            }
 
             return ErrorCode::None;
         }
@@ -234,6 +272,7 @@ namespace ve
             impl.shaderManager.Clear();
             DestroyFrameResources(impl);
             impl.mainSwapchain.reset();
+            impl.materialUniformPool.Shutdown();
 
             if (impl.device != nullptr)
             {
@@ -374,6 +413,7 @@ namespace ve
                                       }
 
                                       impl_->device = std::move(device);
+                                      impl_->materialUniformPool.Initialize(*impl_->device);
                                       impl_->backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
                                       VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
                                       return ErrorCode::None;
@@ -532,8 +572,38 @@ namespace ve
         EnqueueCommand("RenderSystemInitMaterialResource",
                        [this, materialResource = std::move(materialResource), desc = std::move(desc)]() mutable
                        {
-                           VE_ASSERT(impl_->device != nullptr);
-                           materialResource->InitRenderResource(*impl_->device, std::move(desc));
+                           if (materialResource->IsInitialized())
+                           {
+                               const bool waitResult = WaitForAllFrameContexts(*impl_);
+                               VE_ASSERT_MESSAGE(waitResult, "Failed to wait for in-flight frames before updating a material uniform.");
+                               if (!waitResult)
+                               {
+                                   return;
+                               }
+                           }
+                           materialResource->InitRenderResource(impl_->materialUniformPool, std::move(desc));
+                       });
+    }
+
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTMaterialResource> materialResource)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(materialResource != nullptr, "RenderSystem::ReleaseRenderResource requires a material resource.");
+
+        EnqueueCommand("RenderSystemReleaseMaterialResource",
+                       [this, materialResource = std::move(materialResource)]()
+                       {
+                           if (!materialResource->IsInitialized())
+                           {
+                               return;
+                           }
+
+                           const bool waitResult = WaitForAllFrameContexts(*impl_);
+                           VE_ASSERT_MESSAGE(waitResult, "Failed to wait for in-flight frames before releasing a material uniform.");
+                           if (waitResult)
+                           {
+                               materialResource->ResetRenderResource(impl_->materialUniformPool);
+                           }
                        });
     }
 

@@ -4,9 +4,10 @@
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Render/MaterialUniformPool.h"
 
-#include <memory>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -116,14 +117,16 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] rhi::RhiBuffer* GetUniformBuffer() noexcept;
         [[nodiscard]] const rhi::RhiBuffer* GetUniformBuffer() const noexcept;
+        [[nodiscard]] UInt64 GetUniformBufferOffset() const noexcept;
+        [[nodiscard]] UInt64 GetUniformBufferSize() const noexcept;
         [[nodiscard]] std::shared_ptr<RTShaderResource> GetShaderResource() const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
 
-        void InitRenderResource(rhi::RhiDevice& device, RTMaterialResourceDesc desc);
-        void ResetRenderResource() noexcept;
+        void InitRenderResource(MaterialUniformPool& uniformPool, RTMaterialResourceDesc desc);
+        void ResetRenderResource(MaterialUniformPool& uniformPool);
 
     private:
         RTMaterialResourceDesc desc_;
-        std::unique_ptr<rhi::RhiBuffer> uniformBuffer_;
+        MaterialUniformAllocation uniformAllocation_;
     };
 } // namespace ve

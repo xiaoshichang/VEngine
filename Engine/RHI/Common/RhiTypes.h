@@ -36,89 +36,146 @@ namespace ve::rhi
         Wireframe,
     };
 
+    /// Selects the multiplier applied to a source or destination term before a blend operation.
     enum class RhiBlendFactor
     {
+        /// Multiplies the term by zero.
         Zero,
+        /// Multiplies the term by one.
         One,
+        /// Multiplies the term by the source color.
         SourceColor,
+        /// Multiplies the term by one minus the source color.
         OneMinusSourceColor,
+        /// Multiplies every component of the term by the source alpha.
         SourceAlpha,
+        /// Multiplies every component of the term by one minus the source alpha.
         OneMinusSourceAlpha,
+        /// Multiplies the term by the destination color already stored in the render target.
         DestinationColor,
+        /// Multiplies the term by one minus the destination color.
         OneMinusDestinationColor,
+        /// Multiplies every component of the term by the destination alpha.
         DestinationAlpha,
+        /// Multiplies every component of the term by one minus the destination alpha.
         OneMinusDestinationAlpha,
     };
 
+    /// Combines the source and destination terms after their blend factors have been applied.
     enum class RhiBlendOperation
     {
+        /// Adds the source and destination terms.
         Add,
+        /// Subtracts the destination term from the source term.
         Subtract,
+        /// Subtracts the source term from the destination term.
         ReverseSubtract,
+        /// Selects the component-wise minimum of the source and destination values.
         Min,
+        /// Selects the component-wise maximum of the source and destination values.
         Max,
     };
 
+    /// Selects which triangle faces are discarded before rasterization.
     enum class RhiCullMode
     {
+        /// Rasterizes both front-facing and back-facing triangles.
         None,
+        /// Discards front-facing triangles.
         Front,
+        /// Discards back-facing triangles.
         Back,
     };
 
+    /// Compares an incoming or reference value on the left with a stored destination value on the right.
     enum class RhiCompareFunction
     {
+        /// Never passes.
         Never,
+        /// Passes when the left value is less than the right value.
         Less,
+        /// Passes when both values are equal.
         Equal,
+        /// Always passes.
         Always,
+        /// Passes when the left value is less than or equal to the right value.
         LessEqual,
+        /// Passes when the left value is greater than the right value.
         Greater,
+        /// Passes when both values are not equal.
         NotEqual,
+        /// Passes when the left value is greater than or equal to the right value.
         GreaterEqual,
     };
 
+    /// Selects how a stored stencil value is modified after a stencil or depth test event.
     enum class RhiStencilOperation
     {
+        /// Leaves the current stencil value unchanged.
         Keep,
+        /// Writes zero.
         Zero,
+        /// Writes the current stencil reference value.
         Replace,
+        /// Increments and saturates at the maximum representable stencil value.
         IncrementClamp,
+        /// Decrements and saturates at zero.
         DecrementClamp,
+        /// Inverts every bit in the current stencil value.
         Invert,
+        /// Increments and wraps from the maximum representable value to zero.
         IncrementWrap,
+        /// Decrements and wraps from zero to the maximum representable value.
         DecrementWrap,
     };
 
+    /// Selects spatial and mip-level filtering for texture sampling.
     enum class RhiSamplerFilter
     {
+        /// Uses the nearest texel and nearest mip level.
         Point,
+        /// Linearly filters texels within one mip level and selects the nearest mip level.
         Bilinear,
+        /// Linearly filters texels and blends between the two nearest mip levels.
         Trilinear,
+        /// Uses anisotropic filtering to improve samples viewed at oblique angles.
         Anisotropic,
     };
 
+    /// Selects how texture coordinates outside the normalized texture extent are resolved.
     enum class RhiSamplerAddressMode
     {
+        /// Repeats the texture at every integer boundary.
         Wrap,
+        /// Repeats the texture and mirrors every second repetition.
         Mirror,
+        /// Clamps coordinates to the nearest texture edge.
         Clamp,
+        /// Returns the sampler's configured border color when sampling outside the texture extent.
         Border,
     };
 
+    /// Selects whether sampling returns texture values or comparison-test results.
     enum class RhiSamplerReductionMode
     {
+        /// Filters and returns the sampled texture values.
         Standard,
+        /// Compares samples with a reference value using the sampler comparison function, then filters the comparison results.
         Comparison,
     };
 
-    /// Describes a small set of cross-backend texture and vertex formats.
+    /// Describes a small set of cross-backend texture, render-target, depth, and vertex formats.
     enum class RhiFormat
     {
+        /// No format is specified. Used as an invalid or uninitialized format value.
         Unknown,
+        /// Four 8-bit unsigned normalized channels in red, green, blue, alpha order. Integer values map to the floating-point range [0, 1].
         Rgba8Unorm,
+        /// Four 8-bit unsigned normalized channels in blue, green, red, alpha order. Integer values map to the floating-point range [0, 1].
         Bgra8Unorm,
+        /// Three 32-bit floating-point channels in red, green, blue order.
         Rgb32Float,
+        /// One 32-bit floating-point depth channel.
         Depth32Float,
     };
 
@@ -134,18 +191,23 @@ namespace ve::rhi
         Texture2D,
     };
 
-    /// Describes how a render target should be loaded at render-pass begin.
+    /// Describes how an attachment is initialized when a render pass begins.
     enum class RhiLoadAction
     {
+        /// Preserves and exposes the attachment contents produced before this render pass.
         Load,
+        /// Initializes the attachment with the clear value specified by the render-pass descriptor.
         Clear,
+        /// Does not preserve previous contents. The attachment contents are undefined until written by this render pass.
         DontCare,
     };
 
-    /// Describes how a render target should be stored at render-pass end.
+    /// Describes whether an attachment's contents remain valid after a render pass ends.
     enum class RhiStoreAction
     {
+        /// Preserves the rendered contents for later passes, presentation, or readback.
         Store,
+        /// Allows the backend to discard the rendered contents; subsequent attachment contents are undefined.
         DontCare,
     };
 
@@ -315,11 +377,32 @@ namespace ve::rhi
         bool hasDepthStencilAttachment = false;
     };
 
+    /// Describes the intended CPU/GPU access pattern of a buffer.
+    enum class RhiBufferMemoryUsage
+    {
+        /// Optimized for GPU access. The CPU cannot update the buffer through RhiDevice::UpdateBuffer; contents are normally supplied at creation or
+        /// through a backend upload path.
+        GpuOnly,
+        /// CPU-writable memory consumed by the GPU. Supports RhiDevice::UpdateBuffer and is intended for frequently updated upload or dynamic data.
+        CpuToGpu,
+    };
+
+    /// Selects how an UpdateBuffer write relates to existing data in a CpuToGpu buffer.
+    enum class RhiBufferUpdateMode
+    {
+        /// The previous buffer contents may be invalidated. Use for the first write after the entire buffer is safe to reuse; on APIs such as D3D11 this
+        /// may rename or discard the whole resource.
+        Discard,
+        /// Preserves other ranges. The caller guarantees that the written range does not overlap data that an in-flight GPU submission may still read.
+        NoOverwrite,
+    };
+
     /// Describes initial data and usage for a GPU buffer.
     struct RhiBufferDesc
     {
         uint64_t size = 0;
         RhiBufferUsage usage = RhiBufferUsage::Vertex;
+        RhiBufferMemoryUsage memoryUsage = RhiBufferMemoryUsage::GpuOnly;
         const void* initialData = nullptr;
         const char* debugName = nullptr;
     };
