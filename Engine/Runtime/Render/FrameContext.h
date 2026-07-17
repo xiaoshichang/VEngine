@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/FrameUniformAllocator.h"
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphTransientResourcePool.h"
 
 #include <memory>
 #include <vector>
@@ -29,6 +30,7 @@ namespace ve
         [[nodiscard]] UniformBufferAllocation GetObjectUniform(const RTRenderItem& item);
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() noexcept;
+        [[nodiscard]] FrameGraphTransientResourcePool& GetFrameGraphTransientResourcePool() noexcept;
         [[nodiscard]] rhi::RhiFence& GetCompletionFence() noexcept;
         [[nodiscard]] UInt64 GetNextSubmissionFenceValue() const noexcept;
         void MarkSubmitted(UInt64 fenceValue) noexcept;
@@ -37,6 +39,7 @@ namespace ve
         std::unique_ptr<rhi::RhiCommandList> commandList_;
         std::unique_ptr<rhi::RhiFence> completionFence_;
         std::vector<std::unique_ptr<rhi::RhiObject>> transientResources_;
+        FrameGraphTransientResourcePool transientResourcePool_;
         FrameUniformAllocator uniformAllocator_;
         RenderFrameUniformCache uniformCache_;
         UInt64 submittedFenceValue_ = 0;

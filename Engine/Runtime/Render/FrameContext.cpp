@@ -30,6 +30,7 @@ namespace ve
 
         uniformAllocator_.Initialize(device);
         uniformCache_.Initialize(uniformAllocator_);
+        transientResourcePool_.Initialize(device);
 
         return true;
     }
@@ -65,10 +66,11 @@ namespace ve
             return false;
         }
 
-        commandList_.reset();
-        completionFence_.reset();
+        transientResourcePool_.Shutdown();
         uniformCache_.Shutdown();
         uniformAllocator_.Shutdown();
+        commandList_.reset();
+        completionFence_.reset();
         nextFenceValue_ = 1;
         return true;
     }
@@ -111,6 +113,12 @@ namespace ve
         return *commandList_;
     }
 
+    FrameGraphTransientResourcePool& FrameContext::GetFrameGraphTransientResourcePool() noexcept
+    {
+        VE_ASSERT(commandList_ != nullptr);
+        return transientResourcePool_;
+    }
+
     rhi::RhiFence& FrameContext::GetCompletionFence() noexcept
     {
         VE_ASSERT(completionFence_ != nullptr);
@@ -141,6 +149,12 @@ namespace ve
     {
         VE_ASSERT(frameContext != nullptr);
         return frameContext->GetCommandList();
+    }
+
+    FrameGraphTransientResourcePool& FrameRenderPipelineData::GetFrameGraphTransientResourcePool() const
+    {
+        VE_ASSERT(frameContext != nullptr);
+        return frameContext->GetFrameGraphTransientResourcePool();
     }
 
     UniformBufferAllocation FrameRenderPipelineData::UploadUniform(const void* data, UInt64 size) const

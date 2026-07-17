@@ -9,6 +9,7 @@ namespace ve
 {
     class ShaderManager;
     class FrameContext;
+    class FrameGraphTransientResourcePool;
     class RTCamera;
     class RTRenderItem;
     class RTScene;
@@ -35,6 +36,7 @@ namespace ve
         FrameContext* frameContext = nullptr;
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
+        [[nodiscard]] FrameGraphTransientResourcePool& GetFrameGraphTransientResourcePool() const;
         void RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource) const;
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size) const;
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene) const;
