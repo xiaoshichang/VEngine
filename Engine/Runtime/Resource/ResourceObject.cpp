@@ -428,6 +428,24 @@ namespace ve
             return materialJson.GetError();
         }
 
+        const boost::json::value* renderQueueValue = materialJson.GetValue().if_contains("renderQueue");
+        renderQueue_ = RenderQueue::Opaque;
+        if (renderQueueValue != nullptr)
+        {
+            if (!renderQueueValue->is_string())
+            {
+                return Error(ErrorCode::InvalidArgument, "Material renderQueue must be a string: " + GetRuntimePath().GetString());
+            }
+
+            const boost::json::string& renderQueueString = renderQueueValue->as_string();
+            Result<RenderQueue> parsedQueue = ParseRenderQueue(std::string_view(renderQueueString.data(), renderQueueString.size()));
+            if (!parsedQueue)
+            {
+                return Error(parsedQueue.GetError().GetCode(), parsedQueue.GetError().GetMessage() + ": " + GetRuntimePath().GetString());
+            }
+            renderQueue_ = parsedQueue.GetValue();
+        }
+
         const boost::json::value* propertiesValue = materialJson.GetValue().if_contains("properties");
         if (propertiesValue == nullptr || !propertiesValue->is_object())
         {
@@ -530,6 +548,7 @@ namespace ve
         desc.name = GetRuntimePath().GetString();
         desc.constantData = BuildMaterialConstantData(materialLayout_, propertyValues_);
         desc.shaderResource = rtShaderResource_;
+        desc.renderQueue = renderQueue_;
         desc.revision = revision_;
         return desc;
     }

@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/MaterialUniformPool.h"
+#include "Engine/Runtime/Render/Renderer/RenderQueue.h"
 
 #include <cstddef>
 #include <memory>
@@ -104,6 +105,7 @@ namespace ve
         std::string name = "MaterialResource";
         std::vector<std::byte> constantData;
         std::shared_ptr<RTShaderResource> shaderResource;
+        RenderQueue renderQueue = RenderQueue::Opaque;
         UInt64 revision = 0;
     };
 

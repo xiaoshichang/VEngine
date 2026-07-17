@@ -5,6 +5,7 @@
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Resource/AssetRecord.h"
 #include "Engine/Runtime/Resource/MaterialProperty.h"
+#include "Engine/Runtime/Render/Renderer/RenderQueue.h"
 
 #include <cstddef>
 #include <memory>
@@ -92,6 +93,7 @@ namespace ve
         std::string text_;
         ShaderMaterialLayout materialLayout_;
         std::vector<MaterialPropertyValue> propertyValues_;
+        RenderQueue renderQueue_ = RenderQueue::Opaque;
         UInt64 revision_ = 1;
         bool dirty_ = true;
         std::shared_ptr<RTMaterialResource> rtMaterialResource_;
