@@ -8,42 +8,6 @@
 
 namespace ve
 {
-    namespace
-    {
-        [[nodiscard]] std::shared_ptr<RTCamera> FindCameraFromScene(const RTScene& scene) noexcept
-        {
-            std::shared_ptr<RTCamera> fallback;
-            for (SizeT cameraIndex = 0; cameraIndex < scene.GetCameraCount(); ++cameraIndex)
-            {
-                std::shared_ptr<RTCamera> camera = scene.GetCamera(cameraIndex);
-                if (camera == nullptr)
-                {
-                    continue;
-                }
-
-                if (fallback == nullptr)
-                {
-                    fallback = camera;
-                }
-
-                if (camera->IsPrimary())
-                {
-                    return camera;
-                }
-            }
-
-            return fallback;
-        }
-
-        void ValidateRenderPasses(const std::vector<std::unique_ptr<RenderPass>>& passes)
-        {
-            for (const std::unique_ptr<RenderPass>& pass : passes)
-            {
-                VE_ASSERT_MESSAGE(pass != nullptr, "Renderer construction requires valid render passes.");
-            }
-        }
-
-    } // namespace
 
     BaseRendererInitParam ForwardRendererInitParam::TakeBaseInitParam() &&
     {
@@ -55,12 +19,10 @@ namespace ve
             passes.insert(passes.begin(), std::make_unique<OpaqueSceneRenderPass>(std::move(passInitParam)));
         }
 
-        ValidateRenderPasses(passes);
-
         BaseRendererInitParam baseInitParam = {};
         baseInitParam.frameData = frameData;
         baseInitParam.scene = std::move(scene);
-        baseInitParam.externalCamera = std::move(externalCamera);
+        baseInitParam.camera = std::move(camera);
         baseInitParam.passes = std::move(passes);
         return baseInitParam;
     }
@@ -74,8 +36,7 @@ namespace ve
         VE_ASSERT(initParam.scene != nullptr);
 
         rendererData_.scene = std::move(initParam.scene);
-        rendererData_.resolvedCamera =
-            initParam.externalCamera != nullptr ? std::move(initParam.externalCamera) : FindCameraFromScene(*rendererData_.scene);
+        rendererData_.resolvedCamera = std::move(initParam.camera);
     }
 
     void BaseRenderer::RenderScene()

@@ -34,18 +34,7 @@ namespace ve
     CameraComponent::~CameraComponent()
     {
         UnregisterTransformChangedCallback();
-        UnregisterCameraFromRenderThread();
-    }
-
-    bool CameraComponent::IsPrimary() const noexcept
-    {
-        return primary_;
-    }
-
-    void CameraComponent::SetPrimary(bool primary) noexcept
-    {
-        primary_ = primary;
-        MarkCameraDirty();
+        UnregisterCameraFromScene();
     }
 
     CameraComponent::ProjectionMode CameraComponent::GetProjectionMode() const noexcept
@@ -86,9 +75,21 @@ namespace ve
         return aspectRatio_;
     }
 
+    bool CameraComponent::IsAspectRatioAutomatic() const noexcept
+    {
+        return automaticAspectRatio_;
+    }
+
     void CameraComponent::SetAspectRatio(Float32 aspectRatio) noexcept
     {
         aspectRatio_ = aspectRatio;
+        automaticAspectRatio_ = false;
+        MarkCameraDirty();
+    }
+
+    void CameraComponent::ResetAspectRatio() noexcept
+    {
+        automaticAspectRatio_ = true;
         MarkCameraDirty();
     }
 
@@ -141,10 +142,10 @@ namespace ve
         const TransformComponent* transform = owner != nullptr ? owner->GetComponent<TransformComponent>() : nullptr;
 
         return RTCameraInitParam{
-            primary_,
             ToRTCameraProjectionMode(projectionMode_),
             verticalFieldOfViewRadians_,
             orthographicSize_,
+            automaticAspectRatio_,
             aspectRatio_,
             nearClipPlane_,
             farClipPlane_,
@@ -160,10 +161,10 @@ namespace ve
 
         return RTCameraUpdateParam{
             RTCameraDirtyFlags::All,
-            primary_,
             ToRTCameraProjectionMode(projectionMode_),
             verticalFieldOfViewRadians_,
             orthographicSize_,
+            automaticAspectRatio_,
             aspectRatio_,
             nearClipPlane_,
             farClipPlane_,
@@ -204,37 +205,37 @@ namespace ve
         transformChangedCallbackId_ = 0;
     }
 
-    void CameraComponent::RegisterCameraToRenderThread()
+    void CameraComponent::RegisterCameraToScene()
     {
-        if (!IsEnabled() || renderThreadRegistered_)
+        if (!IsEnabled() || sceneRegistered_)
         {
             return;
         }
 
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
-        scene->RegisterCamera(rtCamera_);
+        scene->RegisterCamera(*this);
         scene->UpdateCamera(rtCamera_, BuildCameraUpdateParam());
-        renderThreadRegistered_ = true;
+        sceneRegistered_ = true;
         ClearCameraDirty();
     }
 
-    void CameraComponent::UnregisterCameraFromRenderThread() noexcept
+    void CameraComponent::UnregisterCameraFromScene() noexcept
     {
-        if (!renderThreadRegistered_)
+        if (!sceneRegistered_)
         {
             return;
         }
 
-        renderThreadRegistered_ = false;
+        sceneRegistered_ = false;
         Scene* scene = GetScene();
         VE_ASSERT(scene != nullptr);
-        scene->UnregisterCamera(rtCamera_);
+        scene->UnregisterCamera(*this);
     }
 
     void CameraComponent::SubmitCameraUpdateToRenderThread()
     {
-        if (!IsCameraDirty() || !IsEnabled() || !renderThreadRegistered_)
+        if (!IsCameraDirty() || !IsEnabled() || !sceneRegistered_)
         {
             return;
         }
@@ -257,14 +258,22 @@ namespace ve
             return;
         }
 
+        Scene* scene = GetScene();
+        const bool dispatchesLifecycle = scene != nullptr && scene->ShouldDispatchLifecycleCallbacks();
         Component::SetEnabled(enabled);
-        if (enabled)
+        if (!dispatchesLifecycle)
         {
-            RegisterCameraToRenderThread();
+            enabled ? OnEnable() : OnDisable();
         }
-        else
-        {
-            UnregisterCameraFromRenderThread();
-        }
+    }
+
+    void CameraComponent::OnEnable()
+    {
+        RegisterCameraToScene();
+    }
+
+    void CameraComponent::OnDisable()
+    {
+        UnregisterCameraFromScene();
     }
 } // namespace ve

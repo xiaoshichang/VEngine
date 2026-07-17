@@ -44,6 +44,7 @@ namespace ve::editor
             RTCameraProjectionMode projectionMode = RTCameraProjectionMode::Perspective;
             Float32 verticalFieldOfViewRadians = 1.0471975512f;
             Float32 orthographicSize = 5.0f;
+            bool automaticAspectRatio = true;
             Float32 aspectRatio = 1.7777778f;
             Float32 nearClipPlane = 0.1f;
             Float32 farClipPlane = 1000.0f;

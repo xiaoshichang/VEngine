@@ -64,56 +64,16 @@ namespace ve
         return rootGameObjects_[index].get();
     }
 
-    CameraComponent* Scene::GetMainCamera() noexcept
+    CameraComponent* Scene::GetCamera() noexcept
     {
         VE_ASSERT_SCENE_THREAD();
-        CameraComponent* fallbackCamera = nullptr;
-        for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
-        {
-            if (gameObject == nullptr)
-            {
-                continue;
-            }
-
-            CameraComponent* camera = FindMainCameraRecursive(*gameObject);
-            if (camera != nullptr && camera->IsPrimary())
-            {
-                return camera;
-            }
-
-            if (fallbackCamera == nullptr)
-            {
-                fallbackCamera = camera;
-            }
-        }
-
-        return fallbackCamera;
+        return cameras_.empty() ? nullptr : cameras_.front();
     }
 
-    const CameraComponent* Scene::GetMainCamera() const noexcept
+    const CameraComponent* Scene::GetCamera() const noexcept
     {
         VE_ASSERT_SCENE_THREAD();
-        const CameraComponent* fallbackCamera = nullptr;
-        for (const std::unique_ptr<GameObject>& gameObject : rootGameObjects_)
-        {
-            if (gameObject == nullptr)
-            {
-                continue;
-            }
-
-            const CameraComponent* camera = FindMainCameraRecursive(*gameObject);
-            if (camera != nullptr && camera->IsPrimary())
-            {
-                return camera;
-            }
-
-            if (fallbackCamera == nullptr)
-            {
-                fallbackCamera = camera;
-            }
-        }
-
-        return fallbackCamera;
+        return cameras_.empty() ? nullptr : cameras_.front();
     }
 
     Result<GameObject*> Scene::CreateRootGameObject(std::string name)
@@ -255,28 +215,19 @@ namespace ve
                              [item = std::move(item), updateParam = std::move(updateParam)]() mutable { item->ApplyUpdateParam(std::move(updateParam)); });
     }
 
-    void Scene::RegisterCamera(std::shared_ptr<RTCamera> camera)
+    void Scene::RegisterCamera(CameraComponent& camera)
     {
         VE_ASSERT_SCENE_THREAD();
-        if (camera == nullptr)
+        if (std::find(cameras_.begin(), cameras_.end(), &camera) == cameras_.end())
         {
-            return;
+            cameras_.push_back(&camera);
         }
-
-        std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneAddCamera", [rtScene, camera = std::move(camera)]() { rtScene->AddCamera(camera); });
     }
 
-    void Scene::UnregisterCamera(std::shared_ptr<RTCamera> camera) noexcept
+    void Scene::UnregisterCamera(CameraComponent& camera) noexcept
     {
         VE_ASSERT_SCENE_THREAD();
-        if (camera == nullptr)
-        {
-            return;
-        }
-
-        std::shared_ptr<RTScene> rtScene = rtScene_;
-        SubmitRTSceneCommand("RTSceneRemoveCamera", [rtScene, camera = std::move(camera)]() { rtScene->RemoveCamera(camera); });
+        cameras_.erase(std::remove(cameras_.begin(), cameras_.end(), &camera), cameras_.end());
     }
 
     void Scene::UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraUpdateParam updateParam)
@@ -411,7 +362,7 @@ namespace ve
 
         if (CameraComponent* camera = gameObject.GetComponent<CameraComponent>(); camera != nullptr)
         {
-            camera->RegisterCameraToRenderThread();
+            camera->RegisterCameraToScene();
         }
 
         if (LightComponent* light = gameObject.GetComponent<LightComponent>(); light != nullptr)
@@ -477,77 +428,4 @@ namespace ve
         sceneSystem_.EnqueueRenderCommand(RenderCommand{std::move(debugName), std::move(function)});
     }
 
-    CameraComponent* Scene::FindMainCameraRecursive(GameObject& gameObject) noexcept
-    {
-        CameraComponent* fallbackCamera = gameObject.GetComponent<CameraComponent>();
-        if (fallbackCamera != nullptr && fallbackCamera->IsPrimary())
-        {
-            return fallbackCamera;
-        }
-
-        TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
-        if (transform == nullptr)
-        {
-            return fallbackCamera;
-        }
-
-        for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
-        {
-            GameObject* child = transform->GetChildGameObject(childIndex);
-            if (child == nullptr)
-            {
-                continue;
-            }
-
-            CameraComponent* childCamera = FindMainCameraRecursive(*child);
-            if (childCamera != nullptr && childCamera->IsPrimary())
-            {
-                return childCamera;
-            }
-
-            if (fallbackCamera == nullptr)
-            {
-                fallbackCamera = childCamera;
-            }
-        }
-
-        return fallbackCamera;
-    }
-
-    const CameraComponent* Scene::FindMainCameraRecursive(const GameObject& gameObject) noexcept
-    {
-        const CameraComponent* fallbackCamera = gameObject.GetComponent<CameraComponent>();
-        if (fallbackCamera != nullptr && fallbackCamera->IsPrimary())
-        {
-            return fallbackCamera;
-        }
-
-        const TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
-        if (transform == nullptr)
-        {
-            return fallbackCamera;
-        }
-
-        for (SizeT childIndex = 0; childIndex < transform->GetChildCount(); ++childIndex)
-        {
-            const GameObject* child = transform->GetChildGameObject(childIndex);
-            if (child == nullptr)
-            {
-                continue;
-            }
-
-            const CameraComponent* childCamera = FindMainCameraRecursive(*child);
-            if (childCamera != nullptr && childCamera->IsPrimary())
-            {
-                return childCamera;
-            }
-
-            if (fallbackCamera == nullptr)
-            {
-                fallbackCamera = childCamera;
-            }
-        }
-
-        return fallbackCamera;
-    }
 } // namespace ve

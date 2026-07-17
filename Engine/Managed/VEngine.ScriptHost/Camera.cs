@@ -17,12 +17,6 @@ public sealed class Camera
 
     public bool Exists => NativeApi.HasCamera(nativeComponent_);
 
-    public bool IsPrimary
-    {
-        get => NativeApi.GetCameraIsPrimary(nativeComponent_);
-        set => NativeApi.SetCameraIsPrimary(nativeComponent_, value);
-    }
-
     public CameraProjectionMode ProjectionMode
     {
         get => NativeApi.GetCameraProjectionMode(nativeComponent_);
@@ -45,6 +39,13 @@ public sealed class Camera
     {
         get => NativeApi.GetCameraAspectRatio(nativeComponent_);
         set => NativeApi.SetCameraAspectRatio(nativeComponent_, value);
+    }
+
+    public bool IsAspectRatioAutomatic => NativeApi.IsCameraAspectRatioAutomatic(nativeComponent_);
+
+    public void ResetAspectRatio()
+    {
+        NativeApi.ResetCameraAspectRatio(nativeComponent_);
     }
 
     public float NearClipPlane

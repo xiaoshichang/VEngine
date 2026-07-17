@@ -351,7 +351,7 @@ namespace ve
                         }
                         else if constexpr (std::is_same_v<TComponent, CameraComponent>)
                         {
-                            componentPointer->RegisterCameraToRenderThread();
+                            componentPointer->RegisterCameraToScene();
                         }
                         else if constexpr (std::is_same_v<TComponent, LightComponent>)
                         {

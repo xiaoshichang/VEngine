@@ -82,8 +82,6 @@ namespace ve
         void* getTransformLocalPosition = nullptr;
         void* setTransformLocalPosition = nullptr;
         void* hasCamera = nullptr;
-        void* getCameraIsPrimary = nullptr;
-        void* setCameraIsPrimary = nullptr;
         void* getCameraProjectionMode = nullptr;
         void* setCameraProjectionMode = nullptr;
         void* getCameraVerticalFieldOfViewRadians = nullptr;
@@ -92,6 +90,8 @@ namespace ve
         void* setCameraOrthographicSize = nullptr;
         void* getCameraAspectRatio = nullptr;
         void* setCameraAspectRatio = nullptr;
+        void* isCameraAspectRatioAutomatic = nullptr;
+        void* resetCameraAspectRatio = nullptr;
         void* getCameraNearClipPlane = nullptr;
         void* setCameraNearClipPlane = nullptr;
         void* getCameraFarClipPlane = nullptr;

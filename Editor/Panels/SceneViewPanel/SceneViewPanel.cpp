@@ -188,7 +188,6 @@ namespace ve::editor
             textureRebuilt = true;
         }
 
-        camera_.aspectRatio = static_cast<Float32>(desiredExtent.width) / static_cast<Float32>((std::max)(desiredExtent.height, MinSceneViewExtent));
         UpdateSceneViewCamera();
 
         const ImVec2 imageSize(static_cast<float>(desiredExtent.width), static_cast<float>(desiredExtent.height));
@@ -286,7 +285,11 @@ namespace ve::editor
 
         ImGui::DragFloat("FOV Radians", &camera_.verticalFieldOfViewRadians, 0.01f, 0.001f, Math::Pi, "%.3f");
         ImGui::DragFloat("Ortho Size", &camera_.orthographicSize, 0.1f, 0.001f, 1000.0f, "%.3f");
-        ImGui::DragFloat("Aspect", &camera_.aspectRatio, 0.01f, 0.001f, 100.0f, "%.3f");
+        ImGui::Checkbox("Auto Aspect", &camera_.automaticAspectRatio);
+        if (!camera_.automaticAspectRatio)
+        {
+            ImGui::DragFloat("Aspect Override", &camera_.aspectRatio, 0.01f, 0.001f, 100.0f, "%.3f");
+        }
         ImGui::DragFloat("Near", &camera_.nearClipPlane, 0.01f, 0.001f, 1000.0f, "%.3f");
         ImGui::DragFloat("Far", &camera_.farClipPlane, 1.0f, 0.001f, 100000.0f, "%.3f");
 
@@ -546,10 +549,10 @@ namespace ve::editor
     RTCameraInitParam SceneViewPanel::BuildCameraInitParam() const noexcept
     {
         RTCameraInitParam initParam = {};
-        initParam.primary = false;
         initParam.projectionMode = camera_.projectionMode;
         initParam.verticalFieldOfViewRadians = camera_.verticalFieldOfViewRadians;
         initParam.orthographicSize = camera_.orthographicSize;
+        initParam.automaticAspectRatio = camera_.automaticAspectRatio;
         initParam.aspectRatio = (std::max)(camera_.aspectRatio, 0.001f);
         initParam.nearClipPlane = camera_.nearClipPlane;
         initParam.farClipPlane = (std::max)(camera_.farClipPlane, camera_.nearClipPlane + 0.001f);
@@ -562,10 +565,10 @@ namespace ve::editor
     {
         RTCameraUpdateParam updateParam = {};
         updateParam.dirtyFlags = RTCameraDirtyFlags::All;
-        updateParam.primary = false;
         updateParam.projectionMode = camera_.projectionMode;
         updateParam.verticalFieldOfViewRadians = camera_.verticalFieldOfViewRadians;
         updateParam.orthographicSize = camera_.orthographicSize;
+        updateParam.automaticAspectRatio = camera_.automaticAspectRatio;
         updateParam.aspectRatio = (std::max)(camera_.aspectRatio, 0.001f);
         updateParam.nearClipPlane = camera_.nearClipPlane;
         updateParam.farClipPlane = (std::max)(camera_.farClipPlane, camera_.nearClipPlane + 0.001f);

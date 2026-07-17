@@ -95,9 +95,9 @@ namespace ve
         return uniformCache_.GetFrameUniform(scene);
     }
 
-    UniformBufferAllocation FrameContext::GetViewUniform(const RTCamera* camera)
+    UniformBufferAllocation FrameContext::GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent)
     {
-        return uniformCache_.GetViewUniform(camera);
+        return uniformCache_.GetViewUniform(camera, targetExtent);
     }
 
     UniformBufferAllocation FrameContext::GetObjectUniform(const RTRenderItem& item)
@@ -155,10 +155,10 @@ namespace ve
         return frameContext->GetFrameUniform(scene);
     }
 
-    UniformBufferAllocation FrameRenderPipelineData::GetViewUniform(const RTCamera* camera) const
+    UniformBufferAllocation FrameRenderPipelineData::GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const
     {
         VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetViewUniform(camera);
+        return frameContext->GetViewUniform(camera, targetExtent);
     }
 
     UniformBufferAllocation FrameRenderPipelineData::GetObjectUniform(const RTRenderItem& item) const

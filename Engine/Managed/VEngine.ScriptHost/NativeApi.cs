@@ -10,8 +10,6 @@ public unsafe struct NativeScriptApi
     public delegate* unmanaged[Cdecl]<nint, float*, float*, float*, void> GetTransformLocalPosition;
     public delegate* unmanaged[Cdecl]<nint, float, float, float, void> SetTransformLocalPosition;
     public delegate* unmanaged[Cdecl]<nint, int> HasCamera;
-    public delegate* unmanaged[Cdecl]<nint, int> GetCameraIsPrimary;
-    public delegate* unmanaged[Cdecl]<nint, int, void> SetCameraIsPrimary;
     public delegate* unmanaged[Cdecl]<nint, int> GetCameraProjectionMode;
     public delegate* unmanaged[Cdecl]<nint, int, void> SetCameraProjectionMode;
     public delegate* unmanaged[Cdecl]<nint, float> GetCameraVerticalFieldOfViewRadians;
@@ -20,6 +18,8 @@ public unsafe struct NativeScriptApi
     public delegate* unmanaged[Cdecl]<nint, float, void> SetCameraOrthographicSize;
     public delegate* unmanaged[Cdecl]<nint, float> GetCameraAspectRatio;
     public delegate* unmanaged[Cdecl]<nint, float, void> SetCameraAspectRatio;
+    public delegate* unmanaged[Cdecl]<nint, int> IsCameraAspectRatioAutomatic;
+    public delegate* unmanaged[Cdecl]<nint, void> ResetCameraAspectRatio;
     public delegate* unmanaged[Cdecl]<nint, float> GetCameraNearClipPlane;
     public delegate* unmanaged[Cdecl]<nint, float, void> SetCameraNearClipPlane;
     public delegate* unmanaged[Cdecl]<nint, float> GetCameraFarClipPlane;
@@ -45,8 +45,6 @@ internal static unsafe class NativeApi
     private static delegate* unmanaged[Cdecl]<nint, float*, float*, float*, void> getTransformLocalPosition_;
     private static delegate* unmanaged[Cdecl]<nint, float, float, float, void> setTransformLocalPosition_;
     private static delegate* unmanaged[Cdecl]<nint, int> hasCamera_;
-    private static delegate* unmanaged[Cdecl]<nint, int> getCameraIsPrimary_;
-    private static delegate* unmanaged[Cdecl]<nint, int, void> setCameraIsPrimary_;
     private static delegate* unmanaged[Cdecl]<nint, int> getCameraProjectionMode_;
     private static delegate* unmanaged[Cdecl]<nint, int, void> setCameraProjectionMode_;
     private static delegate* unmanaged[Cdecl]<nint, float> getCameraVerticalFieldOfViewRadians_;
@@ -55,6 +53,8 @@ internal static unsafe class NativeApi
     private static delegate* unmanaged[Cdecl]<nint, float, void> setCameraOrthographicSize_;
     private static delegate* unmanaged[Cdecl]<nint, float> getCameraAspectRatio_;
     private static delegate* unmanaged[Cdecl]<nint, float, void> setCameraAspectRatio_;
+    private static delegate* unmanaged[Cdecl]<nint, int> isCameraAspectRatioAutomatic_;
+    private static delegate* unmanaged[Cdecl]<nint, void> resetCameraAspectRatio_;
     private static delegate* unmanaged[Cdecl]<nint, float> getCameraNearClipPlane_;
     private static delegate* unmanaged[Cdecl]<nint, float, void> setCameraNearClipPlane_;
     private static delegate* unmanaged[Cdecl]<nint, float> getCameraFarClipPlane_;
@@ -84,8 +84,6 @@ internal static unsafe class NativeApi
         getTransformLocalPosition_ = nativeApi->GetTransformLocalPosition;
         setTransformLocalPosition_ = nativeApi->SetTransformLocalPosition;
         hasCamera_ = nativeApi->HasCamera;
-        getCameraIsPrimary_ = nativeApi->GetCameraIsPrimary;
-        setCameraIsPrimary_ = nativeApi->SetCameraIsPrimary;
         getCameraProjectionMode_ = nativeApi->GetCameraProjectionMode;
         setCameraProjectionMode_ = nativeApi->SetCameraProjectionMode;
         getCameraVerticalFieldOfViewRadians_ = nativeApi->GetCameraVerticalFieldOfViewRadians;
@@ -94,6 +92,8 @@ internal static unsafe class NativeApi
         setCameraOrthographicSize_ = nativeApi->SetCameraOrthographicSize;
         getCameraAspectRatio_ = nativeApi->GetCameraAspectRatio;
         setCameraAspectRatio_ = nativeApi->SetCameraAspectRatio;
+        isCameraAspectRatioAutomatic_ = nativeApi->IsCameraAspectRatioAutomatic;
+        resetCameraAspectRatio_ = nativeApi->ResetCameraAspectRatio;
         getCameraNearClipPlane_ = nativeApi->GetCameraNearClipPlane;
         setCameraNearClipPlane_ = nativeApi->SetCameraNearClipPlane;
         getCameraFarClipPlane_ = nativeApi->GetCameraFarClipPlane;
@@ -141,19 +141,6 @@ internal static unsafe class NativeApi
     public static bool HasCamera(nint nativeComponent)
     {
         return nativeComponent != 0 && hasCamera_ != null && hasCamera_(nativeComponent) != 0;
-    }
-
-    public static bool GetCameraIsPrimary(nint nativeComponent)
-    {
-        return nativeComponent != 0 && getCameraIsPrimary_ != null && getCameraIsPrimary_(nativeComponent) != 0;
-    }
-
-    public static void SetCameraIsPrimary(nint nativeComponent, bool primary)
-    {
-        if (nativeComponent != 0 && setCameraIsPrimary_ != null)
-        {
-            setCameraIsPrimary_(nativeComponent, primary ? 1 : 0);
-        }
     }
 
     public static CameraProjectionMode GetCameraProjectionMode(nint nativeComponent)
@@ -205,6 +192,19 @@ internal static unsafe class NativeApi
         if (nativeComponent != 0 && setCameraAspectRatio_ != null)
         {
             setCameraAspectRatio_(nativeComponent, aspectRatio);
+        }
+    }
+
+    public static bool IsCameraAspectRatioAutomatic(nint nativeComponent)
+    {
+        return nativeComponent != 0 && isCameraAspectRatioAutomatic_ != null && isCameraAspectRatioAutomatic_(nativeComponent) != 0;
+    }
+
+    public static void ResetCameraAspectRatio(nint nativeComponent)
+    {
+        if (nativeComponent != 0 && resetCameraAspectRatio_ != null)
+        {
+            resetCameraAspectRatio_(nativeComponent);
         }
     }
 

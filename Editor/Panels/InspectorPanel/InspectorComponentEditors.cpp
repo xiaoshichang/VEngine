@@ -328,12 +328,6 @@ namespace ve::editor
         {
             RenderEnabledCheckbox(camera);
 
-            bool primary = camera.IsPrimary();
-            if (RenderFieldCheckbox("Primary", &primary))
-            {
-                camera.SetPrimary(primary);
-            }
-
             int projectionMode = camera.GetProjectionMode() == CameraComponent::ProjectionMode::Perspective ? 0 : 1;
             const char* projectionModes[] = {"Perspective", "Orthographic"};
             if (RenderFieldCombo("Projection", &projectionMode, projectionModes, IM_ARRAYSIZE(projectionModes)))
@@ -354,9 +348,22 @@ namespace ve::editor
             }
 
             float aspectRatio = camera.GetAspectRatio();
-            if (RenderFieldDragFloat("Aspect", &aspectRatio, FineDragSpeed))
+            if (RenderFieldDragFloat("Aspect Override", &aspectRatio, FineDragSpeed))
             {
                 camera.SetAspectRatio(aspectRatio);
+            }
+
+            bool automaticAspectRatio = camera.IsAspectRatioAutomatic();
+            if (RenderFieldCheckbox("Auto Aspect", &automaticAspectRatio))
+            {
+                if (automaticAspectRatio)
+                {
+                    camera.ResetAspectRatio();
+                }
+                else
+                {
+                    camera.SetAspectRatio(aspectRatio);
+                }
             }
 
             float nearClipPlane = camera.GetNearClipPlane();

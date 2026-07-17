@@ -173,21 +173,6 @@ namespace ve
             return GetBoundComponent<CameraComponent>(nativeComponent) != nullptr ? 1 : 0;
         }
 
-        Int32 NativeGetCameraIsPrimary(void* nativeComponent)
-        {
-            CameraComponent* camera = GetBoundComponent<CameraComponent>(nativeComponent);
-            return camera != nullptr && camera->IsPrimary() ? 1 : 0;
-        }
-
-        void NativeSetCameraIsPrimary(void* nativeComponent, Int32 primary)
-        {
-            CameraComponent* camera = GetBoundComponent<CameraComponent>(nativeComponent);
-            if (camera != nullptr)
-            {
-                camera->SetPrimary(primary != 0);
-            }
-        }
-
         Int32 NativeGetCameraProjectionMode(void* nativeComponent)
         {
             CameraComponent* camera = GetBoundComponent<CameraComponent>(nativeComponent);
@@ -249,6 +234,21 @@ namespace ve
             if (camera != nullptr)
             {
                 camera->SetAspectRatio(aspectRatio);
+            }
+        }
+
+        Int32 NativeIsCameraAspectRatioAutomatic(void* nativeComponent)
+        {
+            CameraComponent* camera = GetBoundComponent<CameraComponent>(nativeComponent);
+            return camera != nullptr && camera->IsAspectRatioAutomatic() ? 1 : 0;
+        }
+
+        void NativeResetCameraAspectRatio(void* nativeComponent)
+        {
+            CameraComponent* camera = GetBoundComponent<CameraComponent>(nativeComponent);
+            if (camera != nullptr)
+            {
+                camera->ResetAspectRatio();
             }
         }
 
@@ -581,8 +581,6 @@ namespace ve
             reinterpret_cast<void*>(&NativeGetTransformLocalPosition),
             reinterpret_cast<void*>(&NativeSetTransformLocalPosition),
             reinterpret_cast<void*>(&NativeHasCamera),
-            reinterpret_cast<void*>(&NativeGetCameraIsPrimary),
-            reinterpret_cast<void*>(&NativeSetCameraIsPrimary),
             reinterpret_cast<void*>(&NativeGetCameraProjectionMode),
             reinterpret_cast<void*>(&NativeSetCameraProjectionMode),
             reinterpret_cast<void*>(&NativeGetCameraVerticalFieldOfViewRadians),
@@ -591,6 +589,8 @@ namespace ve
             reinterpret_cast<void*>(&NativeSetCameraOrthographicSize),
             reinterpret_cast<void*>(&NativeGetCameraAspectRatio),
             reinterpret_cast<void*>(&NativeSetCameraAspectRatio),
+            reinterpret_cast<void*>(&NativeIsCameraAspectRatioAutomatic),
+            reinterpret_cast<void*>(&NativeResetCameraAspectRatio),
             reinterpret_cast<void*>(&NativeGetCameraNearClipPlane),
             reinterpret_cast<void*>(&NativeSetCameraNearClipPlane),
             reinterpret_cast<void*>(&NativeGetCameraFarClipPlane),

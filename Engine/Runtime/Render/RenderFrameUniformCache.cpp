@@ -34,11 +34,22 @@ namespace ve
             return inverse;
         }
 
-        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCamera& camera) noexcept
+        [[nodiscard]] Float32 ResolveAspectRatio(const RTCamera& camera, rhi::RhiExtent2D targetExtent) noexcept
+        {
+            if (!camera.IsAspectRatioAutomatic())
+            {
+                return std::max(camera.GetAspectRatio(), 0.001f);
+            }
+
+            const Float32 width = static_cast<Float32>(std::max(targetExtent.width, 1u));
+            const Float32 height = static_cast<Float32>(std::max(targetExtent.height, 1u));
+            return width / height;
+        }
+
+        [[nodiscard]] Matrix44 BuildPerspectiveProjection(const RTCamera& camera, Float32 aspectRatio) noexcept
         {
             const Float32 nearClip = std::max(camera.GetNearClipPlane(), 0.001f);
             const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
             const Float32 fieldOfView = std::max(camera.GetVerticalFieldOfViewRadians(), 0.001f);
             const Float32 yScale = 1.0f / std::tan(fieldOfView * 0.5f);
             const Float32 xScale = yScale / aspectRatio;
@@ -52,11 +63,10 @@ namespace ve
             return projection;
         }
 
-        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCamera& camera) noexcept
+        [[nodiscard]] Matrix44 BuildOrthographicProjection(const RTCamera& camera, Float32 aspectRatio) noexcept
         {
             const Float32 nearClip = camera.GetNearClipPlane();
             const Float32 farClip = std::max(camera.GetFarClipPlane(), nearClip + 0.001f);
-            const Float32 aspectRatio = std::max(camera.GetAspectRatio(), 0.001f);
             const Float32 height = std::max(camera.GetOrthographicSize(), 0.001f);
             const Float32 width = height * aspectRatio;
 
@@ -68,15 +78,16 @@ namespace ve
             return projection;
         }
 
-        [[nodiscard]] Matrix44 BuildViewProjection(const RTCamera* camera) noexcept
+        [[nodiscard]] Matrix44 BuildViewProjection(const RTCamera* camera, rhi::RhiExtent2D targetExtent) noexcept
         {
             if (camera == nullptr)
             {
                 return Matrix44::Identity();
             }
 
-            const Matrix44 projection = camera->GetProjectionMode() == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(*camera)
-                                                                                                            : BuildPerspectiveProjection(*camera);
+            const Float32 aspectRatio = ResolveAspectRatio(*camera, targetExtent);
+            const Matrix44 projection = camera->GetProjectionMode() == RTCameraProjectionMode::Orthographic ? BuildOrthographicProjection(*camera, aspectRatio)
+                                                                                                            : BuildPerspectiveProjection(*camera, aspectRatio);
             return projection * BuildRigidInverse(camera->GetLocalToWorld());
         }
 
@@ -110,10 +121,10 @@ namespace ve
             return data;
         }
 
-        [[nodiscard]] ViewUniformData BuildViewUniformData(const RTCamera* camera) noexcept
+        [[nodiscard]] ViewUniformData BuildViewUniformData(const RTCamera* camera, rhi::RhiExtent2D targetExtent) noexcept
         {
             ViewUniformData data = {};
-            data.viewProjection = BuildViewProjection(camera).Transposed();
+            data.viewProjection = BuildViewProjection(camera, targetExtent).Transposed();
             if (camera != nullptr)
             {
                 const Matrix44& localToWorld = camera->GetLocalToWorld();
@@ -167,18 +178,19 @@ namespace ve
         return allocation;
     }
 
-    UniformBufferAllocation RenderFrameUniformCache::GetViewUniform(const RTCamera* camera)
+    UniformBufferAllocation RenderFrameUniformCache::GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent)
     {
         VE_ASSERT(allocator_ != nullptr);
-        const auto found = viewUniforms_.find(camera);
+        const ViewUniformKey key{camera, targetExtent.width, targetExtent.height};
+        const auto found = viewUniforms_.find(key);
         if (found != viewUniforms_.end())
         {
             return found->second;
         }
 
-        const ViewUniformData data = BuildViewUniformData(camera);
+        const ViewUniformData data = BuildViewUniformData(camera, targetExtent);
         const UniformBufferAllocation allocation = allocator_->Upload(&data, sizeof(data));
-        viewUniforms_.emplace(camera, allocation);
+        viewUniforms_.emplace(key, allocation);
         return allocation;
     }
 

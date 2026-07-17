@@ -61,11 +61,10 @@ namespace ve
     enum class RTCameraDirtyFlags : UInt32
     {
         None = 0,
-        Primary = 1u << 0,
-        Projection = 1u << 1,
-        ClearColor = 1u << 2,
-        Transform = 1u << 3,
-        All = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3),
+        Projection = 1u << 0,
+        ClearColor = 1u << 1,
+        Transform = 1u << 2,
+        All = (1u << 0) | (1u << 1) | (1u << 2),
     };
 
     template<>
@@ -80,10 +79,10 @@ namespace ve
 
     struct RTCameraInitParam
     {
-        bool primary = false;
         RTCameraProjectionMode projectionMode = RTCameraProjectionMode::Perspective;
         Float32 verticalFieldOfViewRadians = 1.0471975512f;
         Float32 orthographicSize = 5.0f;
+        bool automaticAspectRatio = true;
         Float32 aspectRatio = 1.7777778f;
         Float32 nearClipPlane = 0.1f;
         Float32 farClipPlane = 1000.0f;
@@ -94,10 +93,10 @@ namespace ve
     struct RTCameraUpdateParam
     {
         RTCameraDirtyFlags dirtyFlags = RTCameraDirtyFlags::None;
-        bool primary = false;
         RTCameraProjectionMode projectionMode = RTCameraProjectionMode::Perspective;
         Float32 verticalFieldOfViewRadians = 1.0471975512f;
         Float32 orthographicSize = 5.0f;
+        bool automaticAspectRatio = true;
         Float32 aspectRatio = 1.7777778f;
         Float32 nearClipPlane = 0.1f;
         Float32 farClipPlane = 1000.0f;
@@ -197,10 +196,10 @@ namespace ve
 
         void ApplyUpdateParam(RTCameraUpdateParam updateParam);
 
-        [[nodiscard]] bool IsPrimary() const noexcept;
         [[nodiscard]] RTCameraProjectionMode GetProjectionMode() const noexcept;
         [[nodiscard]] Float32 GetVerticalFieldOfViewRadians() const noexcept;
         [[nodiscard]] Float32 GetOrthographicSize() const noexcept;
+        [[nodiscard]] bool IsAspectRatioAutomatic() const noexcept;
         [[nodiscard]] Float32 GetAspectRatio() const noexcept;
         [[nodiscard]] Float32 GetNearClipPlane() const noexcept;
         [[nodiscard]] Float32 GetFarClipPlane() const noexcept;
@@ -211,10 +210,10 @@ namespace ve
         void SetUniformBufferResource(std::shared_ptr<RHIResource> resource) noexcept;
 
     private:
-        bool primary_ = false;
         RTCameraProjectionMode projectionMode_ = RTCameraProjectionMode::Perspective;
         Float32 verticalFieldOfViewRadians_ = 1.0471975512f;
         Float32 orthographicSize_ = 5.0f;
+        bool automaticAspectRatio_ = true;
         Float32 aspectRatio_ = 1.7777778f;
         Float32 nearClipPlane_ = 0.1f;
         Float32 farClipPlane_ = 1000.0f;
@@ -269,22 +268,17 @@ namespace ve
 
         void AddRenderItem(std::shared_ptr<RTRenderItem> item);
         void RemoveRenderItem(const std::shared_ptr<RTRenderItem>& item) noexcept;
-        void AddCamera(std::shared_ptr<RTCamera> camera);
-        void RemoveCamera(const std::shared_ptr<RTCamera>& camera) noexcept;
         void AddLight(std::shared_ptr<RTLight> light);
         void RemoveLight(const std::shared_ptr<RTLight>& light) noexcept;
         void Clear() noexcept;
 
         [[nodiscard]] SizeT GetRenderItemCount() const noexcept;
         [[nodiscard]] std::shared_ptr<RTRenderItem> GetRenderItem(SizeT index) const noexcept;
-        [[nodiscard]] SizeT GetCameraCount() const noexcept;
-        [[nodiscard]] std::shared_ptr<RTCamera> GetCamera(SizeT index) const noexcept;
         [[nodiscard]] SizeT GetLightCount() const noexcept;
         [[nodiscard]] std::shared_ptr<RTLight> GetLight(SizeT index) const noexcept;
 
     private:
         std::vector<std::shared_ptr<RTRenderItem>> renderItems_;
-        std::vector<std::shared_ptr<RTCamera>> cameras_;
         std::vector<std::shared_ptr<RTLight>> lights_;
     };
 } // namespace ve

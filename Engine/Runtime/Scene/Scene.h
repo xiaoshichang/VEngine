@@ -39,8 +39,8 @@ namespace ve
         [[nodiscard]] SizeT GetRootGameObjectCount() const noexcept;
         [[nodiscard]] GameObject* GetRootGameObject(SizeT index) noexcept;
         [[nodiscard]] const GameObject* GetRootGameObject(SizeT index) const noexcept;
-        [[nodiscard]] CameraComponent* GetMainCamera() noexcept;
-        [[nodiscard]] const CameraComponent* GetMainCamera() const noexcept;
+        [[nodiscard]] CameraComponent* GetCamera() noexcept;
+        [[nodiscard]] const CameraComponent* GetCamera() const noexcept;
 
         [[nodiscard]] bool DestroyRootGameObject(GameObject& gameObject) noexcept;
         void Clear() noexcept;
@@ -54,8 +54,6 @@ namespace ve
         void RegisterRenderItem(std::shared_ptr<RTRenderItem> item);
         void UnregisterRenderItem(std::shared_ptr<RTRenderItem> item) noexcept;
         void UpdateRenderItem(std::shared_ptr<RTRenderItem> item, RTRenderItemUpdateParam updateParam);
-        void RegisterCamera(std::shared_ptr<RTCamera> camera);
-        void UnregisterCamera(std::shared_ptr<RTCamera> camera) noexcept;
         void UpdateCamera(std::shared_ptr<RTCamera> camera, RTCameraUpdateParam updateParam);
         void RegisterLight(std::shared_ptr<RTLight> light);
         void UnregisterLight(std::shared_ptr<RTLight> light) noexcept;
@@ -72,6 +70,7 @@ namespace ve
     private:
         friend class SceneSystem;
         friend class SceneSerialization;
+        friend class CameraComponent;
         friend class Component;
         friend class GameObject;
 
@@ -81,8 +80,8 @@ namespace ve
         void RegisterRenderItemsRecursive(GameObject& gameObject);
         void SyncRenderItemsBeforeRenderRecursive(GameObject& gameObject);
         void SubmitRTSceneCommand(std::string debugName, std::function<void()> function) const;
-        [[nodiscard]] static CameraComponent* FindMainCameraRecursive(GameObject& gameObject) noexcept;
-        [[nodiscard]] static const CameraComponent* FindMainCameraRecursive(const GameObject& gameObject) noexcept;
+        void RegisterCamera(CameraComponent& camera);
+        void UnregisterCamera(CameraComponent& camera) noexcept;
 
         std::string name_;
         SceneSystem& sceneSystem_;
@@ -90,5 +89,6 @@ namespace ve
         bool loaded_ = false;
         std::shared_ptr<RTScene> rtScene_;
         std::vector<std::unique_ptr<GameObject>> rootGameObjects_;
+        std::vector<CameraComponent*> cameras_;
     };
 } // namespace ve

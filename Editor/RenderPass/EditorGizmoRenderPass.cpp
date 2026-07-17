@@ -248,7 +248,9 @@ struct VSOutput
         }
         EnsureIconResources(context);
         UploadFrameResources(context);
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get());
+        const rhi::RhiRenderArea& renderArea = context.passData.renderPassDesc.renderArea;
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
 
         rhi::RhiCommandList& commandList = context.commandList;
         if (uploadedIconVertexCount_ > 0)

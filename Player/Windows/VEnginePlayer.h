@@ -27,7 +27,6 @@ namespace ve
         void ActivatePackagedProjectRoot(const Path& dataRoot);
         [[nodiscard]] bool InitializePackagedAssetLoader(const Path& dataRoot);
         [[nodiscard]] bool InitializePackagedScripts(const Path& dataRoot);
-        void SynchronizeMainCameraAspectRatio();
         void SchedulePackagedStartupSceneLoad(std::string startScene);
         void LoadPendingPackagedStartupScene();
 

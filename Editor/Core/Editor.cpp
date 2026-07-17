@@ -12,6 +12,7 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Scene/CameraComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
@@ -54,6 +55,7 @@ namespace ve::editor
     {
         std::shared_ptr<RTRenderTexture> sceneViewTexture;
         std::shared_ptr<RTCamera> sceneViewCameraSnapshot;
+        std::shared_ptr<RTCamera> gameViewCameraSnapshot;
         rhi::RhiFillMode sceneViewFillMode = rhi::RhiFillMode::Solid;
         bool sceneViewGridEnabled = false;
         Float32 sceneViewGridOpacity = 0.45f;
@@ -286,13 +288,15 @@ namespace ve::editor
         views.sceneViewGridOpacity = projectEditingView_->GetSceneViewGridOpacity();
         views.sceneViewGridUnitSize = projectEditingView_->GetSceneViewGridUnitSize();
 
-        const Scene* scene = sceneSystem_ != nullptr ? sceneSystem_->GetScene() : nullptr;
+        Scene* scene = sceneSystem_ != nullptr ? sceneSystem_->GetScene() : nullptr;
         views.sceneViewGizmoDrawList = projectEditingView_->GetSceneViewGizmos().BuildDrawList(GizmoBuildDesc{
             scene,
             GetSelectedGameObject(),
             projectEditingView_->GetSceneViewCameraLocalToWorld(),
         });
         views.gameViewTexture = projectEditingView_->GetGameViewTexture();
+        CameraComponent* camera = scene != nullptr ? scene->GetCamera() : nullptr;
+        views.gameViewCameraSnapshot = camera != nullptr ? camera->GetRTCamera() : nullptr;
         return views;
     }
 
@@ -325,7 +329,7 @@ namespace ve::editor
         // Keeping the pass list together avoids repeating BaseRenderer setup for grid and gizmo overlays.
         ForwardRendererInitParam rendererInitParam = {};
         rendererInitParam.scene = renderScene;
-        rendererInitParam.externalCamera = views.sceneViewCameraSnapshot;
+        rendererInitParam.camera = views.sceneViewCameraSnapshot;
         rendererInitParam.target.colorTexture = views.sceneViewTexture;
         rendererInitParam.fillMode = views.sceneViewFillMode;
         rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Load;
@@ -363,6 +367,7 @@ namespace ve::editor
         // Game View intentionally stays free of editor gizmo/grid passes for now.
         ForwardRendererInitParam rendererInitParam = {};
         rendererInitParam.scene = renderScene;
+        rendererInitParam.camera = views.gameViewCameraSnapshot;
         rendererInitParam.target.colorTexture = views.gameViewTexture;
         pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
     }

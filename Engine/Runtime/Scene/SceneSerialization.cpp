@@ -579,10 +579,10 @@ namespace ve
             boost::json::object object;
             object["type"] = "CameraComponent";
             object["enabled"] = camera.IsEnabled();
-            object["primary"] = camera.IsPrimary();
             object["projectionMode"] = ToString(camera.GetProjectionMode());
             object["verticalFieldOfViewRadians"] = camera.GetVerticalFieldOfViewRadians();
             object["orthographicSize"] = camera.GetOrthographicSize();
+            object["automaticAspectRatio"] = camera.IsAspectRatioAutomatic();
             object["aspectRatio"] = camera.GetAspectRatio();
             object["nearClipPlane"] = camera.GetNearClipPlane();
             object["farClipPlane"] = camera.GetFarClipPlane();
@@ -840,11 +840,14 @@ namespace ve
                 camera = result.GetValue();
             }
 
-            camera->SetPrimary(ReadBool(object, "primary", camera->IsPrimary()));
             camera->SetProjectionMode(ParseProjectionMode(ReadString(object, "projectionMode", ToString(camera->GetProjectionMode()))));
             camera->SetVerticalFieldOfViewRadians(ReadFloat(object, "verticalFieldOfViewRadians", camera->GetVerticalFieldOfViewRadians()));
             camera->SetOrthographicSize(ReadFloat(object, "orthographicSize", camera->GetOrthographicSize()));
             camera->SetAspectRatio(ReadFloat(object, "aspectRatio", camera->GetAspectRatio()));
+            if (ReadBool(object, "automaticAspectRatio", true))
+            {
+                camera->ResetAspectRatio();
+            }
             camera->SetNearClipPlane(ReadFloat(object, "nearClipPlane", camera->GetNearClipPlane()));
             camera->SetFarClipPlane(ReadFloat(object, "farClipPlane", camera->GetFarClipPlane()));
             if (const boost::json::value* value = object.if_contains("clearColor"); value != nullptr)

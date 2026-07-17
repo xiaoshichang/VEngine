@@ -15,23 +15,10 @@ namespace ve::editor
     namespace
     {
         constexpr UInt32 MinGameViewExtent = 1;
-        constexpr float DefaultGameViewAspectRatio = 16.0f / 9.0f;
-
-        [[nodiscard]] float GetGameViewAspectRatio(const Editor& editor) noexcept
+        [[nodiscard]] const CameraComponent* GetGameViewCamera(const Editor& editor) noexcept
         {
             const Scene* scene = editor.GetSceneSystem().GetScene();
-            if (scene == nullptr)
-            {
-                return DefaultGameViewAspectRatio;
-            }
-
-            const CameraComponent* camera = scene->GetMainCamera();
-            if (camera == nullptr)
-            {
-                return DefaultGameViewAspectRatio;
-            }
-
-            return (std::max)(camera->GetAspectRatio(), 0.001f);
+            return scene != nullptr ? scene->GetCamera() : nullptr;
         }
     } // namespace
 
@@ -75,8 +62,9 @@ namespace ve::editor
         VE_ASSERT_MESSAGE(editor_ != nullptr, "GameViewPanel requires Init before Render.");
 
         const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
-        const float aspectRatio = GetGameViewAspectRatio(*editor_);
-        const ImVec2 fittedImageSize = CalculateFittedImageSize(canvasSize, aspectRatio);
+        const CameraComponent* camera = GetGameViewCamera(*editor_);
+        const ImVec2 fittedImageSize =
+            camera != nullptr && !camera->IsAspectRatioAutomatic() ? CalculateFittedImageSize(canvasSize, camera->GetAspectRatio()) : canvasSize;
         const WindowExtent desiredExtent = ToRenderTargetExtent(fittedImageSize);
         bool textureRebuilt = false;
         if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !gameViewTexture_->IsValid())

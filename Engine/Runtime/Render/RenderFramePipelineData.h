@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Types.h"
 
 #include <memory>
@@ -37,7 +38,7 @@ namespace ve
         void RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource) const;
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size) const;
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene) const;
-        [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera) const;
+        [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const;
         [[nodiscard]] UniformBufferAllocation GetObjectUniform(const RTRenderItem& item) const;
     };
 } // namespace ve

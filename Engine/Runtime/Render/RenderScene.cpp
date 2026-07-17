@@ -74,10 +74,10 @@ namespace ve
     }
 
     RTCamera::RTCamera(RTCameraInitParam initParam)
-        : primary_(initParam.primary)
-        , projectionMode_(initParam.projectionMode)
+        : projectionMode_(initParam.projectionMode)
         , verticalFieldOfViewRadians_(initParam.verticalFieldOfViewRadians)
         , orthographicSize_(initParam.orthographicSize)
+        , automaticAspectRatio_(initParam.automaticAspectRatio)
         , aspectRatio_(initParam.aspectRatio)
         , nearClipPlane_(initParam.nearClipPlane)
         , farClipPlane_(initParam.farClipPlane)
@@ -88,16 +88,12 @@ namespace ve
 
     void RTCamera::ApplyUpdateParam(RTCameraUpdateParam updateParam)
     {
-        if (HasRTCameraDirtyFlag(updateParam.dirtyFlags, RTCameraDirtyFlags::Primary))
-        {
-            primary_ = updateParam.primary;
-        }
-
         if (HasRTCameraDirtyFlag(updateParam.dirtyFlags, RTCameraDirtyFlags::Projection))
         {
             projectionMode_ = updateParam.projectionMode;
             verticalFieldOfViewRadians_ = updateParam.verticalFieldOfViewRadians;
             orthographicSize_ = updateParam.orthographicSize;
+            automaticAspectRatio_ = updateParam.automaticAspectRatio;
             aspectRatio_ = updateParam.aspectRatio;
             nearClipPlane_ = updateParam.nearClipPlane;
             farClipPlane_ = updateParam.farClipPlane;
@@ -114,11 +110,6 @@ namespace ve
         }
     }
 
-    bool RTCamera::IsPrimary() const noexcept
-    {
-        return primary_;
-    }
-
     RTCameraProjectionMode RTCamera::GetProjectionMode() const noexcept
     {
         return projectionMode_;
@@ -132,6 +123,11 @@ namespace ve
     Float32 RTCamera::GetOrthographicSize() const noexcept
     {
         return orthographicSize_;
+    }
+
+    bool RTCamera::IsAspectRatioAutomatic() const noexcept
+    {
+        return automaticAspectRatio_;
     }
 
     Float32 RTCamera::GetAspectRatio() const noexcept
@@ -298,27 +294,6 @@ namespace ve
         renderItems_.erase(std::remove(renderItems_.begin(), renderItems_.end(), item), renderItems_.end());
     }
 
-    void RTScene::AddCamera(std::shared_ptr<RTCamera> camera)
-    {
-        if (camera == nullptr)
-        {
-            return;
-        }
-
-        const auto existing =
-            std::find_if(cameras_.begin(), cameras_.end(), [&camera](const std::shared_ptr<RTCamera>& candidate) { return candidate == camera; });
-
-        if (existing == cameras_.end())
-        {
-            cameras_.push_back(std::move(camera));
-        }
-    }
-
-    void RTScene::RemoveCamera(const std::shared_ptr<RTCamera>& camera) noexcept
-    {
-        cameras_.erase(std::remove(cameras_.begin(), cameras_.end(), camera), cameras_.end());
-    }
-
     void RTScene::AddLight(std::shared_ptr<RTLight> light)
     {
         if (light == nullptr)
@@ -342,7 +317,6 @@ namespace ve
     void RTScene::Clear() noexcept
     {
         renderItems_.clear();
-        cameras_.clear();
         lights_.clear();
     }
 
@@ -359,21 +333,6 @@ namespace ve
         }
 
         return renderItems_[index];
-    }
-
-    SizeT RTScene::GetCameraCount() const noexcept
-    {
-        return cameras_.size();
-    }
-
-    std::shared_ptr<RTCamera> RTScene::GetCamera(SizeT index) const noexcept
-    {
-        if (index >= cameras_.size())
-        {
-            return nullptr;
-        }
-
-        return cameras_[index];
     }
 
     SizeT RTScene::GetLightCount() const noexcept

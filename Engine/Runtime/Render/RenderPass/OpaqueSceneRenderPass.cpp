@@ -122,7 +122,9 @@ namespace ve
         commandList.SetPipeline(*pipelineState_);
 
         const UniformBufferAllocation frameUniform = context.frameData.GetFrameUniform(*scene);
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get());
+        const rhi::RhiRenderArea& renderArea = context.passData.renderPassDesc.renderArea;
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *frameUniform.buffer, frameUniform.offset, frameUniform.size);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
         for (SizeT itemIndex = 0; itemIndex < scene->GetRenderItemCount(); ++itemIndex)

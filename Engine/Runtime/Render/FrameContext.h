@@ -25,7 +25,7 @@ namespace ve
         void RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource);
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size);
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene);
-        [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera);
+        [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent);
         [[nodiscard]] UniformBufferAllocation GetObjectUniform(const RTRenderItem& item);
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() noexcept;

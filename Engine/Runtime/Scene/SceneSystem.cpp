@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Scene/CameraComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
@@ -171,6 +172,8 @@ namespace ve
 
             ForwardRendererInitParam rendererInitParam = {};
             rendererInitParam.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
+            CameraComponent* camera = impl.scene != nullptr ? impl.scene->GetCamera() : nullptr;
+            rendererInitParam.camera = camera != nullptr ? camera->GetRTCamera() : nullptr;
             rendererInitParam.target.colorTexture = impl.playerSceneColorTexture;
 
             PlayerRenderFramePipelineInitParam pipelineInitParam = {};

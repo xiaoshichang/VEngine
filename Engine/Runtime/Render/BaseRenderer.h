@@ -32,14 +32,14 @@ namespace ve
     {
         const FrameRenderPipelineData* frameData = nullptr;
         std::shared_ptr<RTScene> scene;
-        std::shared_ptr<RTCamera> externalCamera;
+        std::shared_ptr<RTCamera> camera;
         std::vector<std::unique_ptr<RenderPass>> passes;
     };
 
     /// Describes a forward renderer instance for one scene view.
     ///
-    /// `scene` is the render-thread scene snapshot source. `camera` optionally overrides the scene's primary camera,
-    /// which is how editor viewports provide their own SceneView camera. `target` chooses the output surface,
+    /// `scene` is the render-thread scene snapshot source. `camera` is selected by the Scene or supplied by an editor
+    /// viewport before render-thread submission. `target` chooses the output surface,
     /// `fillMode` controls rasterization, and inherited `passes` contains extra passes recorded after the optional
     /// standard opaque pass.
     struct ForwardRendererInitParam : public BaseRendererInitParam
