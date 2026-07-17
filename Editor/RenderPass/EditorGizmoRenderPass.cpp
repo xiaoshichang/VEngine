@@ -5,6 +5,8 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -213,38 +215,36 @@ struct VSOutput
     {
     }
 
-    const char* EditorGizmoRenderPass::GetName() const noexcept
+    void EditorGizmoRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
     {
-        return "EditorGizmoPass";
+        struct GizmoPassData
+        {
+            FrameGraphTextureHandle color;
+        };
+
+        frameGraph.AddRasterPass<GizmoPassData>(
+            "EditorGizmoPass",
+            [&graphData](FrameGraphBuilder& builder, GizmoPassData& passData)
+            {
+                passData.color = builder.Write(graphData.color, FrameGraphTextureAccess::ColorAttachment);
+                builder.SetColorAttachment(passData.color, rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
+                graphData.color = passData.color;
+            },
+            [this](const GizmoPassData&, RenderPassContext& context) { return Execute(context); });
     }
 
-    void EditorGizmoRenderPass::Setup(RenderPassBuilder& builder)
-    {
-        if (initParam_.colorTexture == nullptr || initParam_.colorTexture->GetTexture() == nullptr)
-        {
-            return;
-        }
-
-        builder.AddTextureColorAttachment(*initParam_.colorTexture->GetTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
-        if (initParam_.colorTexture->GetDepthTexture() != nullptr)
-        {
-            builder.SetDepthStencilAttachment(
-                *initParam_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
-        }
-    }
-
-    void EditorGizmoRenderPass::Execute(RenderPassContext& context)
+    ErrorCode EditorGizmoRenderPass::Execute(RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
         if (initParam_.drawList == nullptr || (initParam_.drawList->lines.empty() && initParam_.drawList->icons.empty()))
         {
-            return;
+            return ErrorCode::None;
         }
 
         EnsurePipeline(context);
         if (linePipelineState_ == nullptr || iconPipelineState_ == nullptr)
         {
-            return;
+            return ErrorCode::InvalidState;
         }
         EnsureIconResources(context);
         UploadFrameResources(context);
@@ -281,6 +281,7 @@ struct VSOutput
         }
         context.frameData.RetainTransientResource(std::move(iconAtlasTexture_));
         context.frameData.RetainTransientResource(std::move(iconSampler_));
+        return ErrorCode::None;
     }
 
     void EditorGizmoRenderPass::EnsurePipeline(RenderPassContext& context)

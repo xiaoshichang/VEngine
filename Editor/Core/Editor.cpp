@@ -327,12 +327,12 @@ namespace ve::editor
 
         // Scene View is one renderer with a normal scene pass followed by editor-only visual aid passes.
         // Keeping the pass list together avoids repeating BaseRenderer setup for grid and gizmo overlays.
-        ForwardRendererInitParam rendererInitParam = {};
+        StandaloneRendererInitParam rendererInitParam = {};
         rendererInitParam.scene = renderScene;
         rendererInitParam.camera = views.sceneViewCameraSnapshot;
         rendererInitParam.target.colorTexture = views.sceneViewTexture;
         rendererInitParam.fillMode = views.sceneViewFillMode;
-        rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Load;
+        rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Clear;
         rendererInitParam.target.colorStoreAction = rhi::RhiStoreAction::Store;
 
         if (views.sceneViewGridEnabled)
@@ -341,7 +341,7 @@ namespace ve::editor
             gridPassInitParam.colorTexture = views.sceneViewTexture;
             gridPassInitParam.opacity = views.sceneViewGridOpacity;
             gridPassInitParam.unitSize = views.sceneViewGridUnitSize;
-            rendererInitParam.passes.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassInitParam)));
+            rendererInitParam.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassInitParam)));
         }
 
         if (views.sceneViewGizmoDrawList != nullptr)
@@ -349,7 +349,7 @@ namespace ve::editor
             EditorGizmoRenderPassInitParam gizmoPassInitParam = {};
             gizmoPassInitParam.colorTexture = views.sceneViewTexture;
             gizmoPassInitParam.drawList = views.sceneViewGizmoDrawList;
-            rendererInitParam.passes.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassInitParam)));
+            rendererInitParam.additionalPasses.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassInitParam)));
         }
 
         pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
@@ -365,7 +365,7 @@ namespace ve::editor
         }
 
         // Game View intentionally stays free of editor gizmo/grid passes for now.
-        ForwardRendererInitParam rendererInitParam = {};
+        StandaloneRendererInitParam rendererInitParam = {};
         rendererInitParam.scene = renderScene;
         rendererInitParam.camera = views.gameViewCameraSnapshot;
         rendererInitParam.target.colorTexture = views.gameViewTexture;
@@ -861,10 +861,12 @@ namespace ve::editor
             sceneReloadSnapshot = snapshot.MoveValue();
         }
 
-        const ErrorCode loadResult = runtime_->GetScriptingSystem().LoadProjectAssembly(ScriptingProjectAssemblyLoadDesc{compileResult.GetValue().assemblyPath});
+        const ErrorCode loadResult =
+            runtime_->GetScriptingSystem().LoadProjectAssembly(ScriptingProjectAssemblyLoadDesc{compileResult.GetValue().assemblyPath});
         if (loadResult != ErrorCode::None)
         {
-            VE_LOG_WARN_CATEGORY("Editor", "Failed to load project script assembly '{}': {}", compileResult.GetValue().assemblyPath.GetString(), ToString(loadResult));
+            VE_LOG_WARN_CATEGORY(
+                "Editor", "Failed to load project script assembly '{}': {}", compileResult.GetValue().assemblyPath.GetString(), ToString(loadResult));
             return;
         }
 

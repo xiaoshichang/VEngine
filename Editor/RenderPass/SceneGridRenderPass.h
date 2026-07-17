@@ -3,8 +3,8 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Render/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 
 #include <memory>
 #include <vector>
@@ -23,11 +23,10 @@ namespace ve
     public:
         explicit SceneGridRenderPass(SceneGridRenderPassInitParam initParam);
 
-        [[nodiscard]] const char* GetName() const noexcept override;
-        void Setup(RenderPassBuilder& builder) override;
-        void Execute(RenderPassContext& context) override;
+        void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
 
     private:
+        [[nodiscard]] ErrorCode Execute(RenderPassContext& context);
         void EnsureResources(RenderPassContext& context);
         void EnsurePipeline(RenderPassContext& context);
 

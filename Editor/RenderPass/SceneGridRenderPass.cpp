@@ -6,6 +6,8 @@
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -260,39 +262,43 @@ float AxisLine(float coordinate, float width)
     {
     }
 
-    const char* SceneGridRenderPass::GetName() const noexcept
+    void SceneGridRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
     {
-        return "SceneGridPass";
+        struct GridPassData
+        {
+            FrameGraphTextureHandle color;
+            FrameGraphTextureHandle depth;
+        };
+
+        frameGraph.AddRasterPass<GridPassData>(
+            "SceneGridPass",
+            [&graphData](FrameGraphBuilder& builder, GridPassData& passData)
+            {
+                passData.color = builder.Write(graphData.color, FrameGraphTextureAccess::ColorAttachment);
+                builder.SetColorAttachment(passData.color, rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
+                graphData.color = passData.color;
+                if (graphData.depth.IsValid())
+                {
+                    passData.depth = builder.Read(graphData.depth, FrameGraphTextureAccess::DepthAttachment);
+                    builder.SetDepthAttachment(passData.depth, rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiDepthStencilClearValue{}, true);
+                }
+            },
+            [this](const GridPassData&, RenderPassContext& context) { return Execute(context); });
     }
 
-    void SceneGridRenderPass::Setup(RenderPassBuilder& builder)
-    {
-        if (initParam_.colorTexture == nullptr || initParam_.colorTexture->GetTexture() == nullptr)
-        {
-            return;
-        }
-
-        builder.AddTextureColorAttachment(*initParam_.colorTexture->GetTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
-        if (initParam_.colorTexture->GetDepthTexture() != nullptr)
-        {
-            builder.SetDepthStencilAttachment(
-                *initParam_.colorTexture->GetDepthTexture(), rhi::RhiLoadAction::Load, rhi::RhiStoreAction::DontCare, rhi::RhiDepthStencilClearValue{});
-        }
-    }
-
-    void SceneGridRenderPass::Execute(RenderPassContext& context)
+    ErrorCode SceneGridRenderPass::Execute(RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
         if (initParam_.opacity <= 0.0f)
         {
-            return;
+            return ErrorCode::None;
         }
 
         EnsureResources(context);
         EnsurePipeline(context);
         if (pipelineState_ == nullptr)
         {
-            return;
+            return ErrorCode::InvalidState;
         }
         const SceneGridUniformData gridUniformData = BuildUniformData(initParam_);
         const UniformBufferAllocation gridUniform = context.frameData.UploadUniform(&gridUniformData, sizeof(gridUniformData));
@@ -308,6 +314,7 @@ float AxisLine(float coordinate, float width)
         commandList.Draw(12, 0);
 
         context.frameData.RetainTransientResource(std::move(vertexBuffer_));
+        return ErrorCode::None;
     }
 
     void SceneGridRenderPass::EnsureResources(RenderPassContext& context)

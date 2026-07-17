@@ -4,9 +4,10 @@
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Render/BaseRenderer.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
+#include "Engine/Runtime/Render/Renderer/StandaloneRenderer.h"
 
 #include <functional>
 #include <memory>
@@ -25,7 +26,7 @@ namespace ve
     /// Describes the editor frame flow after editor UI has produced draw data on the Scene Thread.
     struct EditorRenderFramePipelineInitParam
     {
-        std::vector<ForwardRendererInitParam> sceneRenderers;
+        std::vector<StandaloneRendererInitParam> sceneRenderers;
         rhi::RhiLoadAction overlayColorLoadAction = rhi::RhiLoadAction::Clear;
         EditorOverlayRenderCallback overlayRenderCallback;
     };
@@ -33,7 +34,7 @@ namespace ve
     /// Describes the player frame flow: render the scene to an intermediate color texture, then present it.
     struct PlayerRenderFramePipelineInitParam
     {
-        ForwardRendererInitParam sceneRenderer;
+        BaseRendererInitParam sceneRenderer;
         std::shared_ptr<RTRenderTexture> sceneColorTexture;
     };
 
@@ -61,7 +62,7 @@ namespace ve
     private:
         [[nodiscard]] ErrorCode RecordOverlayPass(const FrameRenderPipelineData& frameData);
 
-        std::vector<ForwardRendererInitParam> sceneRenderers_;
+        std::vector<StandaloneRendererInitParam> sceneRenderers_;
         rhi::RhiLoadAction overlayColorLoadAction_ = rhi::RhiLoadAction::Clear;
         EditorOverlayRenderCallback overlayRenderCallback_;
     };
@@ -77,7 +78,7 @@ namespace ve
         void EnsureSceneColorTexture(rhi::RhiDevice& device, const rhi::RhiSwapchain& mainSwapchain);
         [[nodiscard]] ErrorCode CopySceneColorToSwapchain(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
 
-        ForwardRendererInitParam sceneRenderer_;
+        BaseRendererInitParam sceneRenderer_;
         std::shared_ptr<RTRenderTexture> sceneColorTexture_;
     };
 } // namespace ve

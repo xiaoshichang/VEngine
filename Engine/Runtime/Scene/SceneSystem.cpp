@@ -170,7 +170,7 @@ namespace ve
                 impl.playerSceneColorTexture = std::make_shared<RTRenderTexture>(std::move(textureDesc));
             }
 
-            ForwardRendererInitParam rendererInitParam = {};
+            BaseRendererInitParam rendererInitParam = {};
             rendererInitParam.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
             CameraComponent* camera = impl.scene != nullptr ? impl.scene->GetCamera() : nullptr;
             rendererInitParam.camera = camera != nullptr ? camera->GetRTCamera() : nullptr;

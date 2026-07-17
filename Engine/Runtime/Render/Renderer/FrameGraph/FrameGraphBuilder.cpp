@@ -56,4 +56,9 @@ namespace ve
     {
         frameGraph_.SetSideEffect(passIndex_);
     }
+
+    const RendererData& FrameGraphBuilder::GetRendererData() const noexcept
+    {
+        return frameGraph_.GetRendererData();
+    }
 } // namespace ve

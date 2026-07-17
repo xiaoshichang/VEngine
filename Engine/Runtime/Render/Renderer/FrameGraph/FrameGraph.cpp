@@ -174,8 +174,7 @@ namespace ve
         return FrameGraphTextureHandle{index, 0};
     }
 
-    FrameGraphTextureHandle
-    FrameGraph::ImportTexture(std::string name, FrameGraphTextureDesc desc, ImportedFrameGraphTexture importedTexture)
+    FrameGraphTextureHandle FrameGraph::ImportTexture(std::string name, FrameGraphTextureDesc desc, ImportedFrameGraphTexture importedTexture)
     {
         VE_ASSERT_RENDER_THREAD();
         impl_->InvalidateCompile();
@@ -204,7 +203,8 @@ namespace ve
         VE_ASSERT(executeFunction != nullptr);
         impl_->InvalidateCompile();
 
-        const rhi::RhiExtent2D extent = impl_->context.frameData.mainSwapchain != nullptr ? impl_->context.frameData.mainSwapchain->GetExtent() : rhi::RhiExtent2D{};
+        const rhi::RhiExtent2D extent =
+            impl_->context.frameData.mainSwapchain != nullptr ? impl_->context.frameData.mainSwapchain->GetExtent() : rhi::RhiExtent2D{};
         Impl::PassNode pass = {};
         pass.name = std::move(name);
         pass.renderArea = rhi::RhiRenderArea{0, 0, extent.width, extent.height};
@@ -283,11 +283,8 @@ namespace ve
         return output;
     }
 
-    void FrameGraph::SetColorAttachment(UInt32 passIndex,
-                                        FrameGraphTextureHandle handle,
-                                        rhi::RhiLoadAction loadAction,
-                                        rhi::RhiStoreAction storeAction,
-                                        rhi::RhiColor clearColor)
+    void FrameGraph::SetColorAttachment(
+        UInt32 passIndex, FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor)
     {
         impl_->InvalidateCompile();
         if (passIndex >= impl_->passes.size())
@@ -304,6 +301,13 @@ namespace ve
         }
 
         pass.colorAttachments.push_back(ColorAttachmentRecord{handle, loadAction, storeAction, clearColor});
+        if (impl_->IsHandleValid(handle))
+        {
+            const FrameGraphTextureDesc& desc = impl_->textures[handle.index].desc;
+            pass.renderArea = rhi::RhiRenderArea{0, 0, desc.width, desc.height};
+            pass.viewport = rhi::RhiViewport{0.0f, 0.0f, static_cast<Float32>(desc.width), static_cast<Float32>(desc.height), 0.0f, 1.0f};
+            pass.scissorRect = rhi::RhiScissorRect{0, 0, desc.width, desc.height};
+        }
     }
 
     void FrameGraph::SetDepthAttachment(UInt32 passIndex,
@@ -365,6 +369,11 @@ namespace ve
         }
     }
 
+    const RendererData& FrameGraph::GetRendererData() const noexcept
+    {
+        return impl_->context.rendererData;
+    }
+
     Error FrameGraph::Compile()
     {
         VE_ASSERT_RENDER_THREAD();
@@ -396,8 +405,7 @@ namespace ve
             }
             if (resource.imported && resource.importedTexture.texture != nullptr &&
                 (resource.importedTexture.texture->GetDimension() != resource.desc.dimension ||
-                 resource.importedTexture.texture->GetWidth() != resource.desc.width ||
-                 resource.importedTexture.texture->GetHeight() != resource.desc.height ||
+                 resource.importedTexture.texture->GetWidth() != resource.desc.width || resource.importedTexture.texture->GetHeight() != resource.desc.height ||
                  resource.importedTexture.texture->GetFormat() != resource.desc.format))
             {
                 return Error(ErrorCode::InvalidArgument, "Imported frame graph texture '" + resource.name + "' does not match its descriptor.");
@@ -468,8 +476,7 @@ namespace ve
                                                    });
                 if (accessIt == pass.textureAccesses.end())
                 {
-                    return Error(ErrorCode::InvalidArgument,
-                                 "Frame graph pass '" + pass.name + "' color attachment was not declared as a color write.");
+                    return Error(ErrorCode::InvalidArgument, "Frame graph pass '" + pass.name + "' color attachment was not declared as a color write.");
                 }
                 const Impl::TextureResourceNode& resource = impl_->textures[attachment.handle.index];
                 if (resource.desc.format == rhi::RhiFormat::Depth32Float)
@@ -488,15 +495,14 @@ namespace ve
             {
                 const DepthAttachmentRecord& attachment = *pass.depthAttachment;
                 const TextureAccessMode requiredMode = attachment.readOnly ? TextureAccessMode::Read : TextureAccessMode::Write;
-                const bool declared = std::any_of(pass.textureAccesses.begin(),
-                                                  pass.textureAccesses.end(),
-                                                  [&attachment, requiredMode](const TextureAccessRecord& access)
-                                                  {
-                                                      const FrameGraphTextureHandle declaredHandle =
-                                                          requiredMode == TextureAccessMode::Read ? access.input : access.output;
-                                                      return access.mode == requiredMode && access.access == FrameGraphTextureAccess::DepthAttachment &&
-                                                             declaredHandle == attachment.handle;
-                                                  });
+                const bool declared = std::any_of(
+                    pass.textureAccesses.begin(),
+                    pass.textureAccesses.end(),
+                    [&attachment, requiredMode](const TextureAccessRecord& access)
+                    {
+                        const FrameGraphTextureHandle declaredHandle = requiredMode == TextureAccessMode::Read ? access.input : access.output;
+                        return access.mode == requiredMode && access.access == FrameGraphTextureAccess::DepthAttachment && declaredHandle == attachment.handle;
+                    });
                 if (!declared)
                 {
                     return Error(ErrorCode::InvalidArgument,
@@ -512,9 +518,7 @@ namespace ve
                     const auto accessIt = std::find_if(pass.textureAccesses.begin(),
                                                        pass.textureAccesses.end(),
                                                        [&attachment](const TextureAccessRecord& access)
-                                                       {
-                                                           return access.mode == TextureAccessMode::Write && access.output == attachment.handle;
-                                                       });
+                                                       { return access.mode == TextureAccessMode::Write && access.output == attachment.handle; });
                     VE_ASSERT(accessIt != pass.textureAccesses.end());
                     if (resource.versions[accessIt->input.version].producer == InvalidPassIndex)
                     {
@@ -681,8 +685,7 @@ namespace ve
 
             for (const ColorAttachmentRecord& attachment : pass.colorAttachments)
             {
-                rhi::RhiRenderPassColorAttachmentDesc& rhiAttachment =
-                    passData.renderPassDesc.colorAttachments[passData.renderPassDesc.colorAttachmentCount];
+                rhi::RhiRenderPassColorAttachmentDesc& rhiAttachment = passData.renderPassDesc.colorAttachments[passData.renderPassDesc.colorAttachmentCount];
                 rhiAttachment.texture = ResolveTexture(attachment.handle).texture;
                 rhiAttachment.loadAction = attachment.loadAction;
                 rhiAttachment.storeAction = attachment.storeAction;

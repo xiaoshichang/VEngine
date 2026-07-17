@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Render/Renderer/RendererFactory.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <utility>
@@ -64,11 +65,17 @@ namespace ve
             return ErrorCode::PlatformError;
         }
 
-        for (ForwardRendererInitParam& rendererInitParam : sceneRenderers_)
+        for (StandaloneRendererInitParam& rendererInitParam : sceneRenderers_)
         {
             rendererInitParam.frameData = &frameData;
-            ForwardRenderer renderer(std::move(rendererInitParam));
-            renderer.RenderScene();
+            StandaloneRenderer renderer(std::move(rendererInitParam));
+            const ErrorCode renderResult = renderer.RenderScene();
+            if (renderResult != ErrorCode::None)
+            {
+                const bool ended = commandList.End();
+                VE_ASSERT_MESSAGE(ended, "EditorRenderFramePipeline failed to end command list after renderer failure.");
+                return renderResult;
+            }
         }
 
         const ErrorCode overlayResult = RecordOverlayPass(frameData);
@@ -133,8 +140,21 @@ namespace ve
         if (sceneRenderer_.scene != nullptr)
         {
             sceneRenderer_.frameData = &frameData;
-            ForwardRenderer sceneRenderer(std::move(sceneRenderer_));
-            sceneRenderer.RenderScene();
+            std::unique_ptr<BaseRenderer> sceneRenderer = CreatePlayerRenderer(std::move(sceneRenderer_));
+            if (sceneRenderer == nullptr)
+            {
+                const bool ended = commandList.End();
+                VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after renderer creation failure.");
+                return ErrorCode::InvalidState;
+            }
+
+            const ErrorCode renderResult = sceneRenderer->RenderScene();
+            if (renderResult != ErrorCode::None)
+            {
+                const bool ended = commandList.End();
+                VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after renderer failure.");
+                return renderResult;
+            }
 
             const ErrorCode copyResult = CopySceneColorToSwapchain(commandList, *frameData.mainSwapchain);
             if (copyResult != ErrorCode::None)

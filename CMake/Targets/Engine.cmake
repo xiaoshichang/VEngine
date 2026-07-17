@@ -30,7 +30,6 @@ function(ve_add_engine)
             Engine/Runtime/Physics/JoltJobSystemVEngine.h
             Engine/Runtime/Physics/PhysicsSystem.cpp
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.cpp
-            Engine/Runtime/Render/BaseRenderer.cpp
             Engine/Runtime/Render/FrameContext.cpp
             Engine/Runtime/Render/FrameUniformAllocator.cpp
             Engine/Runtime/Render/MaterialUniformPool.cpp
@@ -39,16 +38,21 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
             Engine/Runtime/Render/RenderFrameUniformCache.cpp
-            Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.cpp
-            Engine/Runtime/Render/RenderPass/RenderPass.cpp
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
             Engine/Runtime/Render/RenderSystem.cpp
+            Engine/Runtime/Render/Renderer/BaseRenderer.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphResource.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphTransientResourcePool.cpp
+            Engine/Runtime/Render/Renderer/MobileRenderer.cpp
+            Engine/Runtime/Render/Renderer/RendererFactory.cpp
             Engine/Runtime/Render/Renderer/RenderQueue.cpp
+            Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.cpp
+            Engine/Runtime/Render/Renderer/RenderPass/RenderPass.cpp
+            Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.cpp
+            Engine/Runtime/Render/Renderer/StandaloneRenderer.cpp
             Engine/Runtime/Render/ShaderManager.cpp
             Engine/Runtime/Render/ViewportClient.cpp
             Engine/Runtime/Resource/AssetID.cpp
@@ -119,7 +123,6 @@ function(ve_add_engine)
             Engine/Runtime/Physics/PhysicsSystemBackend.h
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.h
             Engine/Runtime/Physics/PhysicsTypes.h
-            Engine/Runtime/Render/BaseRenderer.h
             Engine/Runtime/Render/FrameContext.h
             Engine/Runtime/Render/FrameUniformAllocator.h
             Engine/Runtime/Render/MaterialUniformPool.h
@@ -128,17 +131,22 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderFramePipeline.h
             Engine/Runtime/Render/RenderFrameUniformCache.h
-            Engine/Runtime/Render/RenderPass/OpaqueSceneRenderPass.h
-            Engine/Runtime/Render/RenderPass/RenderPass.h
             Engine/Runtime/Render/RenderResource.h
             Engine/Runtime/Render/RenderScene.h
             Engine/Runtime/Render/RenderShaderIDs.h
             Engine/Runtime/Render/RenderSystem.h
+            Engine/Runtime/Render/Renderer/BaseRenderer.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphResource.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphTransientResourcePool.h
+            Engine/Runtime/Render/Renderer/MobileRenderer.h
+            Engine/Runtime/Render/Renderer/RendererFactory.h
             Engine/Runtime/Render/Renderer/RenderQueue.h
+            Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h
+            Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h
+            Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h
+            Engine/Runtime/Render/Renderer/StandaloneRenderer.h
             Engine/Runtime/Render/ShaderManager.h
             Engine/Runtime/Render/ViewportClient.h
             Engine/Runtime/Resource/AssetID.h

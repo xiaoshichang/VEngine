@@ -4,8 +4,8 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
-#include "Engine/Runtime/Render/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphResource.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 
 #include <functional>
 #include <memory>
@@ -54,33 +54,28 @@ namespace ve
             auto setup = std::make_shared<std::decay_t<SetupCallback>>(std::forward<SetupCallback>(setupCallback));
             auto execute = std::make_shared<std::decay_t<ExecuteCallback>>(std::forward<ExecuteCallback>(executeCallback));
 
-            AddRasterPassInternal(std::move(name),
-                                  [passData, setup](FrameGraphBuilder& builder) { (*setup)(builder, *passData); },
-                                  [passData, execute](const FrameGraphPassResources& resources, RenderPassContext& context)
-                                  {
-                                      if constexpr (std::is_invocable_r_v<ErrorCode,
-                                                                           std::decay_t<ExecuteCallback>&,
-                                                                           const PassData&,
-                                                                           const FrameGraphPassResources&,
-                                                                           RenderPassContext&>)
-                                      {
-                                          return (*execute)(*passData, resources, context);
-                                      }
-                                      else
-                                      {
-                                          static_assert(std::is_invocable_r_v<ErrorCode,
-                                                                              std::decay_t<ExecuteCallback>&,
-                                                                              const PassData&,
-                                                                              RenderPassContext&>,
-                                                        "Frame graph execute callback has an unsupported signature.");
-                                          return (*execute)(*passData, context);
-                                      }
-                                  });
+            AddRasterPassInternal(
+                std::move(name),
+                [passData, setup](FrameGraphBuilder& builder) { (*setup)(builder, *passData); },
+                [passData, execute](const FrameGraphPassResources& resources, RenderPassContext& context)
+                {
+                    if constexpr (
+                        std::is_invocable_r_v<ErrorCode, std::decay_t<ExecuteCallback>&, const PassData&, const FrameGraphPassResources&, RenderPassContext&>)
+                    {
+                        return (*execute)(*passData, resources, context);
+                    }
+                    else
+                    {
+                        static_cast<void>(resources);
+                        static_assert(std::is_invocable_r_v<ErrorCode, std::decay_t<ExecuteCallback>&, const PassData&, RenderPassContext&>,
+                                      "Frame graph execute callback has an unsupported signature.");
+                        return (*execute)(*passData, context);
+                    }
+                });
         }
 
         [[nodiscard]] FrameGraphTextureHandle CreateTexture(std::string name, FrameGraphTextureDesc desc);
-        [[nodiscard]] FrameGraphTextureHandle
-        ImportTexture(std::string name, FrameGraphTextureDesc desc, ImportedFrameGraphTexture importedTexture);
+        [[nodiscard]] FrameGraphTextureHandle ImportTexture(std::string name, FrameGraphTextureDesc desc, ImportedFrameGraphTexture importedTexture);
         void Export(FrameGraphTextureHandle handle);
 
         [[nodiscard]] Error Compile();
@@ -96,11 +91,8 @@ namespace ve
         void AddRasterPassInternal(std::string name, SetupFunction setupFunction, ExecuteFunction executeFunction);
         [[nodiscard]] FrameGraphTextureHandle ReadTexture(UInt32 passIndex, FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
         [[nodiscard]] FrameGraphTextureHandle WriteTexture(UInt32 passIndex, FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
-        void SetColorAttachment(UInt32 passIndex,
-                                FrameGraphTextureHandle handle,
-                                rhi::RhiLoadAction loadAction,
-                                rhi::RhiStoreAction storeAction,
-                                rhi::RhiColor clearColor);
+        void SetColorAttachment(
+            UInt32 passIndex, FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor);
         void SetDepthAttachment(UInt32 passIndex,
                                 FrameGraphTextureHandle handle,
                                 rhi::RhiLoadAction loadAction,
@@ -111,6 +103,7 @@ namespace ve
         void SetViewport(UInt32 passIndex, const rhi::RhiViewport& viewport) noexcept;
         void SetScissor(UInt32 passIndex, const rhi::RhiScissorRect& scissorRect) noexcept;
         void SetSideEffect(UInt32 passIndex) noexcept;
+        [[nodiscard]] const RendererData& GetRendererData() const noexcept;
         [[nodiscard]] ResolvedFrameGraphTexture ResolveTexture(FrameGraphTextureHandle handle) const noexcept;
 
         struct Impl;

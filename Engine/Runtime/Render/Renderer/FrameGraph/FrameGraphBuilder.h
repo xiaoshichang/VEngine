@@ -8,6 +8,7 @@
 namespace ve
 {
     class FrameGraph;
+    struct RendererData;
 
     /// Declares resource access and raster state for one frame-graph pass.
     class FrameGraphBuilder final : public NonCopyable
@@ -16,10 +17,7 @@ namespace ve
         [[nodiscard]] FrameGraphTextureHandle Read(FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
         [[nodiscard]] FrameGraphTextureHandle Write(FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
 
-        void SetColorAttachment(FrameGraphTextureHandle handle,
-                                rhi::RhiLoadAction loadAction,
-                                rhi::RhiStoreAction storeAction,
-                                rhi::RhiColor clearColor);
+        void SetColorAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor);
         void SetDepthAttachment(FrameGraphTextureHandle handle,
                                 rhi::RhiLoadAction loadAction,
                                 rhi::RhiStoreAction storeAction,
@@ -29,6 +27,7 @@ namespace ve
         void SetViewport(const rhi::RhiViewport& viewport) noexcept;
         void SetScissor(const rhi::RhiScissorRect& scissorRect) noexcept;
         void SetSideEffect() noexcept;
+        [[nodiscard]] const RendererData& GetRendererData() const noexcept;
 
     private:
         friend class FrameGraph;
