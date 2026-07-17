@@ -27,9 +27,10 @@ namespace ve
     private:
         friend class FrameGraph;
 
-        explicit FrameGraphPassResources(const FrameGraph& frameGraph) noexcept;
+        FrameGraphPassResources(const FrameGraph& frameGraph, UInt32 passIndex) noexcept;
 
         const FrameGraph& frameGraph_;
+        UInt32 passIndex_ = 0;
     };
 
     struct FrameGraphExecuteContext
@@ -105,6 +106,7 @@ namespace ve
         void SetSideEffect(UInt32 passIndex) noexcept;
         [[nodiscard]] const RendererData& GetRendererData() const noexcept;
         [[nodiscard]] ResolvedFrameGraphTexture ResolveTexture(FrameGraphTextureHandle handle) const noexcept;
+        [[nodiscard]] ResolvedFrameGraphTexture ResolvePassTexture(UInt32 passIndex, FrameGraphTextureHandle handle) const noexcept;
 
         struct Impl;
         std::unique_ptr<Impl> impl_;

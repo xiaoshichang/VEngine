@@ -151,14 +151,15 @@ namespace ve
 
     FrameGraph::~FrameGraph() = default;
 
-    FrameGraphPassResources::FrameGraphPassResources(const FrameGraph& frameGraph) noexcept
+    FrameGraphPassResources::FrameGraphPassResources(const FrameGraph& frameGraph, UInt32 passIndex) noexcept
         : frameGraph_(frameGraph)
+        , passIndex_(passIndex)
     {
     }
 
     ResolvedFrameGraphTexture FrameGraphPassResources::GetTexture(FrameGraphTextureHandle handle) const noexcept
     {
-        return frameGraph_.ResolveTexture(handle);
+        return frameGraph_.ResolvePassTexture(passIndex_, handle);
     }
 
     FrameGraphTextureHandle FrameGraph::CreateTexture(std::string name, FrameGraphTextureDesc desc)
@@ -231,6 +232,26 @@ namespace ve
             return ResolvedFrameGraphTexture{resource.importedTexture.texture, resource.importedTexture.isSwapchain};
         }
         return ResolvedFrameGraphTexture{resource.physicalTexture.get(), false};
+    }
+
+    ResolvedFrameGraphTexture FrameGraph::ResolvePassTexture(UInt32 passIndex, FrameGraphTextureHandle handle) const noexcept
+    {
+        if (passIndex >= impl_->passes.size())
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Frame graph resource resolution requires a valid pass index.");
+            return {};
+        }
+
+        const Impl::PassNode& pass = impl_->passes[passIndex];
+        const bool declared = std::any_of(pass.textureAccesses.begin(),
+                                          pass.textureAccesses.end(),
+                                          [handle](const TextureAccessRecord& access) { return access.input == handle || access.output == handle; });
+        if (!declared)
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Frame graph pass attempted to resolve an undeclared texture handle.");
+            return {};
+        }
+        return ResolveTexture(handle);
     }
 
     FrameGraphTextureHandle FrameGraph::ReadTexture(UInt32 passIndex, FrameGraphTextureHandle handle, FrameGraphTextureAccess access)
@@ -660,7 +681,6 @@ namespace ve
         };
 
         rhi::RhiCommandList& commandList = impl_->context.frameData.GetCommandList();
-        const FrameGraphPassResources passResources(*this);
         for (UInt32 orderIndex = 0; orderIndex < impl_->compiledPassOrder.size(); ++orderIndex)
         {
             for (Impl::TextureResourceNode& resource : impl_->textures)
@@ -676,7 +696,9 @@ namespace ve
                 }
             }
 
-            Impl::PassNode& pass = impl_->passes[impl_->compiledPassOrder[orderIndex]];
+            const UInt32 passIndex = impl_->compiledPassOrder[orderIndex];
+            Impl::PassNode& pass = impl_->passes[passIndex];
+            const FrameGraphPassResources passResources(*this, passIndex);
             RenderPassData passData = {};
             passData.renderPassDesc.debugName = pass.name.c_str();
             passData.renderPassDesc.renderArea = pass.renderArea;

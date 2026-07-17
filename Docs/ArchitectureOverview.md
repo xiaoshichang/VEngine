@@ -570,6 +570,8 @@ Responsibilities:
 - Light extraction.
 - Mesh render queues.
 - Material binding.
+- Material render-queue classification into opaque and transparent draw lists.
+- Frame Graph build, compile, culling, resource lifetime, and ordered pass execution.
 - Viewport rendering.
 - ViewportClient ownership and viewport binding.
 - RenderTarget description for window and texture-backed outputs.
@@ -582,6 +584,12 @@ Viewport clients model one active binding at a time:
 
 The viewport client keeps these modes mutually exclusive so camera data can stay separate and be merged later when scene
 render work is assembled for the Render Thread.
+
+Renderer-owned code lives under `Engine/Runtime/Render/Renderer`. `StandaloneRenderer` is selected for Windows and
+macOS host products, while `MobileRenderer` owns the iOS topology. Both build scene work through typed, versioned Frame
+Graph texture handles; opaque and transparent passes consume only their preclassified queue lists. Each in-flight
+`FrameContext` owns one transient Frame Graph texture pool so reuse remains protected by that context's completion
+fence.
 
 Render-facing resource ownership follows an Unreal-style split between the Scene Thread and Render Thread:
 
