@@ -78,9 +78,12 @@ namespace ve
     {
         RenderBackend backend = RenderBackend::D3D12;
         bool hasMainSwapchain = false;
+        UInt32 mainSwapchainBufferCount = 0;
+        rhi::RhiFormat mainSwapchainColorFormat = rhi::RhiFormat::Unknown;
         void* device = nullptr;
         void* immediateContext = nullptr;
         void* graphicsQueue = nullptr;
+        rhi::RhiNativeShaderResourceDescriptorAllocator* shaderResourceDescriptorAllocator = nullptr;
     };
 
     /// Callable payload executed on the Render Thread.

@@ -622,6 +622,11 @@ namespace ve::rhi
                 return colorFormat_;
             }
 
+            [[nodiscard]] uint32_t GetBufferCount() const noexcept override
+            {
+                return bufferCount_;
+            }
+
             [[nodiscard]] bool Present() override
             {
                 HRESULT result = swapchain_->Present(1, 0);

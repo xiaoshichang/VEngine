@@ -45,9 +45,8 @@ namespace ve::rhi
 
         /// Returns a backend-native sampled view handle when the backend exposes one.
         ///
-        /// D3D11 returns ID3D11ShaderResourceView* so editor ImGui can display texture-backed viewports. Backends that
-        /// require descriptor allocation or a different binding path should leave this null until their editor texture
-        /// bridge is implemented.
+        /// D3D11 returns ID3D11ShaderResourceView*. D3D12 returns the GPU descriptor handle encoded as the opaque
+        /// pointer value. Other backends may return their native sampled texture handle or null when unsupported.
         [[nodiscard]] virtual void* GetNativeSampledViewHandle() const noexcept
         {
             return nullptr;
@@ -101,6 +100,9 @@ namespace ve::rhi
 
         /// Returns the color format used by the swapchain back buffers.
         [[nodiscard]] virtual RhiFormat GetColorFormat() const noexcept = 0;
+
+        /// Returns the number of back buffers/drawables used by the swapchain.
+        [[nodiscard]] virtual uint32_t GetBufferCount() const noexcept = 0;
 
         /// Presents the current back buffer to the screen.
         [[nodiscard]] virtual bool Present() = 0;
@@ -172,6 +174,24 @@ namespace ve::rhi
         }
     };
 
+    /// Opaque CPU and GPU descriptor handle values used by native renderer integrations.
+    struct RhiNativeShaderResourceDescriptor
+    {
+        uint64_t cpuHandle = 0;
+        uint64_t gpuHandle = 0;
+    };
+
+    /// Allocates native shader-resource descriptors from the heap bound by a platform renderer integration.
+    class RhiNativeShaderResourceDescriptorAllocator
+    {
+    public:
+        virtual ~RhiNativeShaderResourceDescriptorAllocator() = default;
+
+        [[nodiscard]] virtual void* GetNativeHeapHandle() const noexcept = 0;
+        [[nodiscard]] virtual bool Allocate(RhiNativeShaderResourceDescriptor& outDescriptor) = 0;
+        virtual void Release(RhiNativeShaderResourceDescriptor descriptor) noexcept = 0;
+    };
+
     /// Creates RHI objects and submits command lists to a backend graphics queue.
     class RhiDevice : public RhiObject
     {
@@ -232,6 +252,12 @@ namespace ve::rhi
         /// Returns the backend-native graphics queue handle when available.
         /// For example: ID3D12CommandQueue* on D3D12.
         [[nodiscard]] virtual void* GetNativeGraphicsQueueHandle() const noexcept
+        {
+            return nullptr;
+        }
+
+        /// Returns the native shader-resource descriptor allocator used by renderer integrations when available.
+        [[nodiscard]] virtual RhiNativeShaderResourceDescriptorAllocator* GetNativeShaderResourceDescriptorAllocator() const noexcept
         {
             return nullptr;
         }

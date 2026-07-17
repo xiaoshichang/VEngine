@@ -563,11 +563,17 @@ namespace ve::rhi
         class D3D11Swapchain final : public RhiSwapchain
         {
         public:
-            D3D11Swapchain(ComPtr<ID3D11Device> device, ComPtr<IDXGISwapChain> swapchain, RhiExtent2D extent, RhiFormat colorFormat, std::string* lastError)
+            D3D11Swapchain(ComPtr<ID3D11Device> device,
+                           ComPtr<IDXGISwapChain> swapchain,
+                           RhiExtent2D extent,
+                           RhiFormat colorFormat,
+                           uint32_t bufferCount,
+                           std::string* lastError)
                 : device_(std::move(device))
                 , swapchain_(std::move(swapchain))
                 , extent_(extent)
                 , colorFormat_(colorFormat)
+                , bufferCount_(bufferCount)
                 , lastError_(lastError)
             {
             }
@@ -601,6 +607,11 @@ namespace ve::rhi
             [[nodiscard]] RhiFormat GetColorFormat() const noexcept override
             {
                 return colorFormat_;
+            }
+
+            [[nodiscard]] uint32_t GetBufferCount() const noexcept override
+            {
+                return bufferCount_;
             }
 
             [[nodiscard]] bool Present() override
@@ -642,6 +653,7 @@ namespace ve::rhi
             ComPtr<ID3D11RenderTargetView> renderTargetView_;
             RhiExtent2D extent_ = {};
             RhiFormat colorFormat_ = RhiFormat::Bgra8Unorm;
+            uint32_t bufferCount_ = 2;
             std::string* lastError_ = nullptr;
         };
 
@@ -1019,7 +1031,8 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                auto rhiSwapchain = std::make_unique<D3D11Swapchain>(device_, swapchain, RhiExtent2D{desc.width, desc.height}, desc.colorFormat, &lastError_);
+                auto rhiSwapchain = std::make_unique<D3D11Swapchain>(
+                    device_, swapchain, RhiExtent2D{desc.width, desc.height}, desc.colorFormat, swapchainDesc.BufferCount, &lastError_);
 
                 if (!rhiSwapchain->Initialize())
                 {

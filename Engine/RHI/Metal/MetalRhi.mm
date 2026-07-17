@@ -582,6 +582,11 @@ namespace ve::rhi
                 return colorFormat_;
             }
 
+            [[nodiscard]] uint32_t GetBufferCount() const noexcept override
+            {
+                return 3;
+            }
+
             [[nodiscard]] bool Present() override
             {
                 return true;

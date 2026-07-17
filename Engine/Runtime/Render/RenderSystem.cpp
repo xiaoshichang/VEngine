@@ -434,6 +434,12 @@ namespace ve
                                       outHandles.device = impl_->device->GetNativeDeviceHandle();
                                       outHandles.immediateContext = impl_->device->GetNativeImmediateContextHandle();
                                       outHandles.graphicsQueue = impl_->device->GetNativeGraphicsQueueHandle();
+                                      outHandles.shaderResourceDescriptorAllocator = impl_->device->GetNativeShaderResourceDescriptorAllocator();
+                                      if (impl_->mainSwapchain != nullptr)
+                                      {
+                                          outHandles.mainSwapchainBufferCount = impl_->mainSwapchain->GetBufferCount();
+                                          outHandles.mainSwapchainColorFormat = impl_->mainSwapchain->GetColorFormat();
+                                      }
                                       return ErrorCode::None;
                                   });
     }
