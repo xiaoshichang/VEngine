@@ -13,7 +13,12 @@ namespace ve::editor
         void RenderDrawData(rhi::RhiCommandList& commandList, ImDrawData& drawData) override;
 
     private:
-        void* nativeDevice_ = nullptr;
+        [[nodiscard]] ErrorCode InitD3D11(const RenderNativeHandles& nativeHandles);
+        [[nodiscard]] ErrorCode InitD3D12(const RenderNativeHandles& nativeHandles);
+        void ShutdownD3D11() noexcept;
+        void ShutdownD3D12() noexcept;
+
+        rhi::RhiNativeShaderResourceDescriptorAllocator* shaderResourceDescriptorAllocator_ = nullptr;
         bool initialized_ = false;
     };
 } // namespace ve::editor
