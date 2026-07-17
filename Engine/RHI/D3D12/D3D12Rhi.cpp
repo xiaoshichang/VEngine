@@ -12,6 +12,7 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include <d3dcompiler.h>
 #include <dxgi1_6.h>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -269,6 +271,140 @@ namespace ve::rhi
             return buffer;
         }
 
+        class D3D12ShaderResourceDescriptorAllocator final : public RhiNativeShaderResourceDescriptorAllocator
+        {
+        public:
+            [[nodiscard]] bool Initialize(ID3D12Device* device, ID3D12Fence* fence)
+            {
+                if (device == nullptr || fence == nullptr)
+                {
+                    return false;
+                }
+
+                D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+                heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+                heapDesc.NumDescriptors = DescriptorCapacity;
+                heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+                if (FAILED(device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&heap_))))
+                {
+                    return false;
+                }
+
+                fence_ = fence;
+                descriptorSize_ = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                cpuStart_ = heap_->GetCPUDescriptorHandleForHeapStart();
+                gpuStart_ = heap_->GetGPUDescriptorHandleForHeapStart();
+                allocatedSlots_.assign(DescriptorCapacity, false);
+                freeIndices_.reserve(DescriptorCapacity);
+                retiredIndices_.reserve(DescriptorCapacity);
+                return descriptorSize_ != 0;
+            }
+
+            [[nodiscard]] void* GetNativeHeapHandle() const noexcept override
+            {
+                return heap_.Get();
+            }
+
+            [[nodiscard]] bool Allocate(RhiNativeShaderResourceDescriptor& outDescriptor) override
+            {
+                std::scoped_lock lock(mutex_);
+                CollectCompletedSlots();
+
+                uint32_t descriptorIndex = 0;
+                if (!freeIndices_.empty())
+                {
+                    descriptorIndex = freeIndices_.back();
+                    freeIndices_.pop_back();
+                }
+                else
+                {
+                    if (nextIndex_ >= DescriptorCapacity)
+                    {
+                        outDescriptor = {};
+                        return false;
+                    }
+
+                    descriptorIndex = nextIndex_;
+                    ++nextIndex_;
+                }
+
+                VE_ASSERT_MESSAGE(!allocatedSlots_[descriptorIndex], "D3D12 shader-resource descriptor slot is already allocated.");
+                allocatedSlots_[descriptorIndex] = true;
+                outDescriptor.cpuHandle = cpuStart_.ptr + (static_cast<uint64_t>(descriptorIndex) * descriptorSize_);
+                outDescriptor.gpuHandle = gpuStart_.ptr + (static_cast<uint64_t>(descriptorIndex) * descriptorSize_);
+                return true;
+            }
+
+            void Release(RhiNativeShaderResourceDescriptor descriptor) noexcept override
+            {
+                std::scoped_lock lock(mutex_);
+
+                const bool cpuHandleInRange = descriptor.cpuHandle >= cpuStart_.ptr;
+                const bool gpuHandleInRange = descriptor.gpuHandle >= gpuStart_.ptr;
+                const uint64_t cpuOffset = cpuHandleInRange ? descriptor.cpuHandle - cpuStart_.ptr : 0;
+                const uint64_t gpuOffset = gpuHandleInRange ? descriptor.gpuHandle - gpuStart_.ptr : 0;
+                const bool aligned = descriptorSize_ != 0 && cpuOffset % descriptorSize_ == 0 && gpuOffset % descriptorSize_ == 0;
+                const uint64_t cpuIndex = descriptorSize_ != 0 ? cpuOffset / descriptorSize_ : DescriptorCapacity;
+                const uint64_t gpuIndex = descriptorSize_ != 0 ? gpuOffset / descriptorSize_ : DescriptorCapacity;
+                const bool valid = cpuHandleInRange && gpuHandleInRange && aligned && cpuIndex == gpuIndex && cpuIndex < nextIndex_ &&
+                                   allocatedSlots_[static_cast<size_t>(cpuIndex)];
+                VE_ASSERT_MESSAGE(valid, "D3D12 shader-resource descriptor release is invalid or duplicated.");
+                if (!valid)
+                {
+                    return;
+                }
+
+                const uint32_t descriptorIndex = static_cast<uint32_t>(cpuIndex);
+                allocatedSlots_[descriptorIndex] = false;
+                retiredIndices_.push_back(RetiredDescriptor{descriptorIndex, lastSubmittedFenceValue_.load(std::memory_order_acquire)});
+            }
+
+            void NotifySubmission(uint64_t fenceValue) noexcept
+            {
+                lastSubmittedFenceValue_.store(fenceValue, std::memory_order_release);
+            }
+
+        private:
+            struct RetiredDescriptor
+            {
+                uint32_t index = 0;
+                uint64_t fenceValue = 0;
+            };
+
+            void CollectCompletedSlots()
+            {
+                const uint64_t completedFenceValue = fence_->GetCompletedValue();
+                auto removeBegin = std::remove_if(retiredIndices_.begin(),
+                                                  retiredIndices_.end(),
+                                                  [this, completedFenceValue](const RetiredDescriptor& retiredDescriptor)
+                                                  {
+                                                      if (retiredDescriptor.fenceValue > completedFenceValue)
+                                                      {
+                                                          return false;
+                                                      }
+
+                                                      freeIndices_.push_back(retiredDescriptor.index);
+                                                      return true;
+                                                  });
+                retiredIndices_.erase(removeBegin, retiredIndices_.end());
+            }
+
+            static constexpr uint32_t DescriptorCapacity = 4096;
+
+            ComPtr<ID3D12DescriptorHeap> heap_;
+            ComPtr<ID3D12Fence> fence_;
+            D3D12_CPU_DESCRIPTOR_HANDLE cpuStart_ = {};
+            D3D12_GPU_DESCRIPTOR_HANDLE gpuStart_ = {};
+            uint32_t descriptorSize_ = 0;
+            uint32_t nextIndex_ = 0;
+            std::vector<bool> allocatedSlots_;
+            std::vector<uint32_t> freeIndices_;
+            std::vector<RetiredDescriptor> retiredIndices_;
+            std::atomic<uint64_t> lastSubmittedFenceValue_{0};
+            std::mutex mutex_;
+        };
+
         class D3D12Buffer final : public RhiBuffer
         {
         public:
@@ -321,18 +457,28 @@ namespace ve::rhi
             D3D12Texture(ComPtr<ID3D12Resource> resource,
                          ComPtr<ID3D12DescriptorHeap> rtvHeap,
                          ComPtr<ID3D12DescriptorHeap> dsvHeap,
-                         ComPtr<ID3D12DescriptorHeap> srvHeap,
+                         std::shared_ptr<D3D12ShaderResourceDescriptorAllocator> shaderResourceDescriptorAllocator,
+                         RhiNativeShaderResourceDescriptor shaderResourceDescriptor,
                          RhiTextureDesc desc,
                          D3D12_RESOURCE_STATES resourceState,
                          UINT dsvDescriptorSize)
                 : resource_(std::move(resource))
                 , rtvHeap_(std::move(rtvHeap))
                 , dsvHeap_(std::move(dsvHeap))
-                , srvHeap_(std::move(srvHeap))
+                , shaderResourceDescriptorAllocator_(std::move(shaderResourceDescriptorAllocator))
+                , shaderResourceDescriptor_(shaderResourceDescriptor)
                 , desc_(desc)
                 , resourceState_(resourceState)
                 , dsvDescriptorSize_(dsvDescriptorSize)
             {
+            }
+
+            ~D3D12Texture() override
+            {
+                if (HasShaderResourceView())
+                {
+                    shaderResourceDescriptorAllocator_->Release(shaderResourceDescriptor_);
+                }
             }
 
             [[nodiscard]] RhiTextureDimension GetDimension() const noexcept override
@@ -389,18 +535,24 @@ namespace ve::rhi
 
             [[nodiscard]] bool HasShaderResourceView() const noexcept
             {
-                return srvHeap_ != nullptr;
+                return shaderResourceDescriptorAllocator_ != nullptr && shaderResourceDescriptor_.gpuHandle != 0;
             }
 
             [[nodiscard]] ID3D12DescriptorHeap* GetShaderResourceViewHeap() const noexcept
             {
-                return srvHeap_.Get();
+                VE_ASSERT(HasShaderResourceView());
+                return static_cast<ID3D12DescriptorHeap*>(shaderResourceDescriptorAllocator_->GetNativeHeapHandle());
             }
 
             [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceView() const noexcept
             {
-                VE_ASSERT(srvHeap_ != nullptr);
-                return srvHeap_->GetGPUDescriptorHandleForHeapStart();
+                VE_ASSERT(HasShaderResourceView());
+                return D3D12_GPU_DESCRIPTOR_HANDLE{shaderResourceDescriptor_.gpuHandle};
+            }
+
+            [[nodiscard]] void* GetNativeSampledViewHandle() const noexcept override
+            {
+                return reinterpret_cast<void*>(static_cast<uintptr_t>(shaderResourceDescriptor_.gpuHandle));
             }
 
             [[nodiscard]] D3D12_RESOURCE_STATES GetResourceState() const noexcept
@@ -417,7 +569,8 @@ namespace ve::rhi
             ComPtr<ID3D12Resource> resource_;
             ComPtr<ID3D12DescriptorHeap> rtvHeap_;
             ComPtr<ID3D12DescriptorHeap> dsvHeap_;
-            ComPtr<ID3D12DescriptorHeap> srvHeap_;
+            std::shared_ptr<D3D12ShaderResourceDescriptorAllocator> shaderResourceDescriptorAllocator_;
+            RhiNativeShaderResourceDescriptor shaderResourceDescriptor_ = {};
             RhiTextureDesc desc_ = {};
             D3D12_RESOURCE_STATES resourceState_ = D3D12_RESOURCE_STATE_COMMON;
             UINT dsvDescriptorSize_ = 0;
@@ -783,6 +936,13 @@ namespace ve::rhi
                     activeSwapchain_ = nullptr;
                 }
 
+                if (activeTexture_ != nullptr && activeTexture_->HasShaderResourceView())
+                {
+                    TransitionResource(
+                        activeTexture_->GetNativeResource(), activeTexture_->GetResourceState(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    activeTexture_->SetResourceState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                }
+
                 activeTexture_ = nullptr;
                 activeDepthTexture_ = nullptr;
             }
@@ -904,7 +1064,7 @@ namespace ve::rhi
                 commandList_->DrawIndexedInstanced(indexCount, 1, firstIndex, vertexOffset, 0);
             }
 
-            [[nodiscard]] ID3D12GraphicsCommandList* GetNativeCommandList() const noexcept
+            [[nodiscard]] void* GetNativeCommandBufferHandle() const noexcept override
             {
                 return commandList_.Get();
             }
@@ -1047,6 +1207,13 @@ namespace ve::rhi
                     return false;
                 }
 
+                shaderResourceDescriptorAllocator_ = std::make_shared<D3D12ShaderResourceDescriptorAllocator>();
+                if (!shaderResourceDescriptorAllocator_->Initialize(device_.Get(), fence_.Get()))
+                {
+                    SetLastError("Failed to create the D3D12 shared shader-resource descriptor heap.");
+                    return false;
+                }
+
                 return true;
             }
 
@@ -1068,6 +1235,11 @@ namespace ve::rhi
             [[nodiscard]] void* GetNativeGraphicsQueueHandle() const noexcept override
             {
                 return queue_.Get();
+            }
+
+            [[nodiscard]] RhiNativeShaderResourceDescriptorAllocator* GetNativeShaderResourceDescriptorAllocator() const noexcept override
+            {
+                return shaderResourceDescriptorAllocator_.get();
             }
 
             [[nodiscard]] std::unique_ptr<RhiSwapchain> CreateSwapchain(const RhiSwapchainDesc& desc) override
@@ -1418,18 +1590,12 @@ namespace ve::rhi
                     device_->CreateDepthStencilView(resource.Get(), &dsvDesc, dsvHandle);
                 }
 
-                ComPtr<ID3D12DescriptorHeap> srvHeap;
+                RhiNativeShaderResourceDescriptor shaderResourceDescriptor = {};
                 if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Sampled)) != 0)
                 {
-                    D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-                    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-                    heapDesc.NumDescriptors = 1;
-                    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-                    result = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&srvHeap));
-                    if (FAILED(result))
+                    if (!shaderResourceDescriptorAllocator_->Allocate(shaderResourceDescriptor))
                     {
-                        SetLastError(MakeHResultError("ID3D12Device::CreateDescriptorHeap texture SRV", result));
+                        SetLastError("D3D12 shader-resource descriptor heap is exhausted.");
                         return nullptr;
                     }
 
@@ -1438,10 +1604,11 @@ namespace ve::rhi
                     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
                     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
                     srvDesc.Texture2D.MipLevels = desc.mipLevelCount;
-                    device_->CreateShaderResourceView(resource.Get(), &srvDesc, srvHeap->GetCPUDescriptorHandleForHeapStart());
+                    device_->CreateShaderResourceView(resource.Get(), &srvDesc, D3D12_CPU_DESCRIPTOR_HANDLE{shaderResourceDescriptor.cpuHandle});
                 }
 
-                return std::make_unique<D3D12Texture>(resource, rtvHeap, dsvHeap, srvHeap, desc, resourceState, dsvDescriptorSize);
+                return std::make_unique<D3D12Texture>(
+                    resource, rtvHeap, dsvHeap, shaderResourceDescriptorAllocator_, shaderResourceDescriptor, desc, resourceState, dsvDescriptorSize);
             }
 
             [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override
@@ -1739,8 +1906,15 @@ namespace ve::rhi
                     return false;
                 }
 
-                ID3D12CommandList* nativeCommandLists[] = {d3dCommandList->GetNativeCommandList()};
+                auto* nativeCommandList = static_cast<ID3D12GraphicsCommandList*>(d3dCommandList->GetNativeCommandBufferHandle());
+                ID3D12CommandList* nativeCommandLists[] = {nativeCommandList};
                 queue_->ExecuteCommandLists(1, nativeCommandLists);
+
+                uint64_t submissionFenceValue = 0;
+                if (!SignalInternalFence(submissionFenceValue))
+                {
+                    return false;
+                }
 
                 if (completionFence == nullptr)
                 {
@@ -1775,20 +1949,15 @@ namespace ve::rhi
         private:
             [[nodiscard]] bool SignalAndWait()
             {
-                const uint64_t fenceValue = nextFenceValue_;
-                ++nextFenceValue_;
-
-                HRESULT result = queue_->Signal(fence_.Get(), fenceValue);
-
-                if (FAILED(result))
+                uint64_t fenceValue = 0;
+                if (!SignalInternalFence(fenceValue))
                 {
-                    SetLastError(MakeHResultError("ID3D12CommandQueue::Signal", result));
                     return false;
                 }
 
                 if (fence_->GetCompletedValue() < fenceValue)
                 {
-                    result = fence_->SetEventOnCompletion(fenceValue, fenceEvent_);
+                    const HRESULT result = fence_->SetEventOnCompletion(fenceValue, fenceEvent_);
 
                     if (FAILED(result))
                     {
@@ -1799,6 +1968,22 @@ namespace ve::rhi
                     WaitForSingleObject(fenceEvent_, INFINITE);
                 }
 
+                return true;
+            }
+
+            [[nodiscard]] bool SignalInternalFence(uint64_t& outFenceValue)
+            {
+                outFenceValue = nextFenceValue_;
+                ++nextFenceValue_;
+
+                const HRESULT result = queue_->Signal(fence_.Get(), outFenceValue);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D12CommandQueue::Signal", result));
+                    return false;
+                }
+
+                shaderResourceDescriptorAllocator_->NotifySubmission(outFenceValue);
                 return true;
             }
 
@@ -1813,6 +1998,7 @@ namespace ve::rhi
             ComPtr<ID3D12Device> device_;
             ComPtr<ID3D12CommandQueue> queue_;
             ComPtr<ID3D12Fence> fence_;
+            std::shared_ptr<D3D12ShaderResourceDescriptorAllocator> shaderResourceDescriptorAllocator_;
             HANDLE fenceEvent_ = nullptr;
             uint64_t nextFenceValue_ = 1;
             std::string lastError_;
