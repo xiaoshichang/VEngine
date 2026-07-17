@@ -249,17 +249,20 @@ function(ve_add_engine)
             PRIVATE
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.cpp
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.cpp
+                Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.cpp
                 Engine/Runtime/Platform/Windows/Win32Window.cpp
                 Engine/Runtime/Scripting/DotnetJITScriptingBackend.cpp
             PUBLIC
                 Engine/Runtime/Platform/Windows/Win32DebugConsoleBackend.h
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.h
+                Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h
                 Engine/Runtime/Platform/Windows/Win32Window.h
                 Engine/Runtime/Scripting/DotnetJITScriptingBackend.h
         )
 
         target_link_libraries(VEngine
             PUBLIC
+                shell32
                 user32
         )
     endif()

@@ -2,6 +2,7 @@
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/DebugConsole.h"
+#include "Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -38,7 +39,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineWinEditorJobWorker";
     initParam.runtime.ioSystem.threadName = "VEngineWinEditorIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineWinEditorRenderThread";
-    initParam.runtime.renderSystem.device.backend = ve::RenderBackend::D3D11;
+    initParam.runtime.renderSystem.device.backend = ve::SelectWin32RenderBackendFromCommandLine();
     initParam.runtime.scriptingSystem.scriptHostRoot = ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
     initParam.runtime.scriptingSystem.runtimeConfigPath = initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
     const ve::Path editorLocalDotNetRoot = ve::FileSystem::GetExecutableDirectory() / "DotNet" / "win-x64" / "10.0.9";
