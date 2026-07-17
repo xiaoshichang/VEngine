@@ -664,14 +664,9 @@ namespace ve::rhi
                 return true;
             }
 
-            [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassDesc& desc) override
+            [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) override
             {
-                if (desc.colorAttachmentCount == 0)
-                {
-                    return false;
-                }
-
-                const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
+                const RhiRenderPassColorAttachmentInfo& colorAttachment = beginInfo.colorAttachment;
                 ID3D11RenderTargetView* renderTargetView = nullptr;
                 ID3D11DepthStencilView* depthStencilView = nullptr;
                 if (colorAttachment.texture != nullptr)
@@ -700,9 +695,9 @@ namespace ve::rhi
                     return false;
                 }
 
-                if (desc.hasDepthStencilAttachment)
+                if (beginInfo.hasDepthAttachment)
                 {
-                    auto* d3dDepthTexture = dynamic_cast<D3D11Texture*>(desc.depthStencilAttachment.texture);
+                    auto* d3dDepthTexture = dynamic_cast<D3D11Texture*>(beginInfo.depthAttachment.texture);
                     if (d3dDepthTexture == nullptr)
                     {
                         return false;
@@ -724,9 +719,9 @@ namespace ve::rhi
                     context_->ClearRenderTargetView(renderTargetView, clearColor);
                 }
 
-                if (depthStencilView != nullptr && desc.depthStencilAttachment.depthLoadAction == RhiLoadAction::Clear)
+                if (depthStencilView != nullptr && beginInfo.depthAttachment.loadAction == RhiLoadAction::Clear)
                 {
-                    context_->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH, desc.depthStencilAttachment.clearValue.depth, 0);
+                    context_->ClearDepthStencilView(depthStencilView, D3D11_CLEAR_DEPTH, beginInfo.depthAttachment.clearDepth, 0);
                 }
 
                 return true;

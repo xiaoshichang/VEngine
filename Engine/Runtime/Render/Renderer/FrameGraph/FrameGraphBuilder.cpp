@@ -10,31 +10,24 @@ namespace ve
     {
     }
 
-    FrameGraphTextureHandle FrameGraphBuilder::Read(FrameGraphTextureHandle handle, FrameGraphTextureAccess access)
+    FrameGraphTextureHandle FrameGraphBuilder::Read(FrameGraphTextureHandle handle)
     {
-        return frameGraph_.ReadTexture(passIndex_, handle, access);
+        return frameGraph_.ReadTexture(passIndex_, handle, FrameGraphTextureAccess::ShaderRead);
     }
 
-    FrameGraphTextureHandle FrameGraphBuilder::Write(FrameGraphTextureHandle handle, FrameGraphTextureAccess access)
+    FrameGraphTextureHandle FrameGraphBuilder::WriteColorAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiColor clearColor)
     {
-        return frameGraph_.WriteTexture(passIndex_, handle, access);
+        return frameGraph_.WriteColorAttachment(passIndex_, handle, loadAction, clearColor);
     }
 
-    void FrameGraphBuilder::SetColorAttachment(FrameGraphTextureHandle handle,
-                                               rhi::RhiLoadAction loadAction,
-                                               rhi::RhiStoreAction storeAction,
-                                               rhi::RhiColor clearColor)
+    FrameGraphTextureHandle FrameGraphBuilder::WriteDepthAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, Float32 clearDepth)
     {
-        frameGraph_.SetColorAttachment(passIndex_, handle, loadAction, storeAction, clearColor);
+        return frameGraph_.WriteDepthAttachment(passIndex_, handle, loadAction, clearDepth);
     }
 
-    void FrameGraphBuilder::SetDepthAttachment(FrameGraphTextureHandle handle,
-                                               rhi::RhiLoadAction loadAction,
-                                               rhi::RhiStoreAction storeAction,
-                                               rhi::RhiDepthStencilClearValue clearValue,
-                                               bool readOnly)
+    FrameGraphTextureHandle FrameGraphBuilder::ReadDepthAttachment(FrameGraphTextureHandle handle)
     {
-        frameGraph_.SetDepthAttachment(passIndex_, handle, loadAction, storeAction, clearValue, readOnly);
+        return frameGraph_.ReadDepthAttachment(passIndex_, handle);
     }
 
     void FrameGraphBuilder::SetRenderArea(const rhi::RhiRenderArea& renderArea) noexcept

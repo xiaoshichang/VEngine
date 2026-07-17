@@ -627,18 +627,18 @@ namespace ve::rhi
                 return commandBuffer_ != nil;
             }
 
-            [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassDesc& desc) override
+            [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) override
             {
                 @autoreleasepool
                 {
                     auto* metalSwapchain = dynamic_cast<MetalSwapchain*>(&swapchain);
 
-                    if (metalSwapchain == nullptr || commandBuffer_ == nil || desc.colorAttachmentCount == 0)
+                    if (metalSwapchain == nullptr || commandBuffer_ == nil)
                     {
                         return false;
                     }
 
-                    const RhiRenderPassColorAttachmentDesc& colorAttachment = desc.colorAttachments[0];
+                    const RhiRenderPassColorAttachmentInfo& colorAttachment = beginInfo.colorAttachment;
                     const bool targetsSwapchain = colorAttachment.texture == nullptr;
                     id<MTLTexture> colorTexture = nil;
                     if (colorAttachment.texture != nullptr)
@@ -679,9 +679,9 @@ namespace ve::rhi
                     }
 
                     id<MTLTexture> depthTexture = nil;
-                    if (desc.hasDepthStencilAttachment)
+                    if (beginInfo.hasDepthAttachment)
                     {
-                        auto* metalDepthTexture = dynamic_cast<MetalTexture*>(desc.depthStencilAttachment.texture);
+                        auto* metalDepthTexture = dynamic_cast<MetalTexture*>(beginInfo.depthAttachment.texture);
                         if (metalDepthTexture == nullptr)
                         {
                             if (targetsSwapchain)
@@ -713,9 +713,9 @@ namespace ve::rhi
                     if (depthTexture != nil)
                     {
                         renderPassDescriptor.depthAttachment.texture = depthTexture;
-                        renderPassDescriptor.depthAttachment.loadAction = ToMetalLoadAction(desc.depthStencilAttachment.depthLoadAction);
-                        renderPassDescriptor.depthAttachment.storeAction = ToMetalStoreAction(desc.depthStencilAttachment.depthStoreAction);
-                        renderPassDescriptor.depthAttachment.clearDepth = desc.depthStencilAttachment.clearValue.depth;
+                        renderPassDescriptor.depthAttachment.loadAction = ToMetalLoadAction(beginInfo.depthAttachment.loadAction);
+                        renderPassDescriptor.depthAttachment.storeAction = ToMetalStoreAction(beginInfo.depthAttachment.storeAction);
+                        renderPassDescriptor.depthAttachment.clearDepth = beginInfo.depthAttachment.clearDepth;
                     }
 
                     renderCommandEncoder_ = [[commandBuffer_ renderCommandEncoderWithDescriptor:renderPassDescriptor] retain];
@@ -729,6 +729,11 @@ namespace ve::rhi
                             drawable_ = nil;
                         }
                         return false;
+                    }
+
+                    if (beginInfo.debugName != nullptr)
+                    {
+                        renderCommandEncoder_.label = [NSString stringWithUTF8String:beginInfo.debugName];
                     }
 
                     return true;

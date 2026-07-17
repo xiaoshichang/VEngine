@@ -226,8 +226,7 @@ struct VSOutput
             "EditorGizmoPass",
             [&graphData](FrameGraphBuilder& builder, GizmoPassData& passData)
             {
-                passData.color = builder.Write(graphData.color, FrameGraphTextureAccess::ColorAttachment);
-                builder.SetColorAttachment(passData.color, rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
+                passData.color = builder.WriteColorAttachment(graphData.color, rhi::RhiLoadAction::Load);
                 graphData.color = passData.color;
             },
             [this](const GizmoPassData&, RenderPassContext& context) { return Execute(context); });
@@ -248,7 +247,7 @@ struct VSOutput
         }
         EnsureIconResources(context);
         UploadFrameResources(context);
-        const rhi::RhiRenderArea& renderArea = context.passData.renderPassDesc.renderArea;
+        const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
         const UniformBufferAllocation viewUniform =
             context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
 
@@ -286,7 +285,7 @@ struct VSOutput
 
     void EditorGizmoRenderPass::EnsurePipeline(RenderPassContext& context)
     {
-        const rhi::RhiFormat targetFormat = ResolveTargetFormat(context);
+        const rhi::RhiFormat targetFormat = context.executionInfo.colorFormat;
         if (linePipelineState_ != nullptr && iconPipelineState_ != nullptr && pipelineColorFormat_ == targetFormat)
         {
             return;
@@ -475,14 +474,4 @@ struct VSOutput
         }
     }
 
-    rhi::RhiFormat EditorGizmoRenderPass::ResolveTargetFormat(const RenderPassContext& context) const noexcept
-    {
-        if (initParam_.colorTexture != nullptr)
-        {
-            return initParam_.colorTexture->GetDesc().colorFormat;
-        }
-
-        VE_ASSERT(context.frameData.mainSwapchain != nullptr);
-        return context.frameData.mainSwapchain->GetColorFormat();
-    }
 } // namespace ve

@@ -333,12 +333,10 @@ namespace ve::editor
         rendererInitParam.target.colorTexture = views.sceneViewTexture;
         rendererInitParam.fillMode = views.sceneViewFillMode;
         rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Clear;
-        rendererInitParam.target.colorStoreAction = rhi::RhiStoreAction::Store;
 
         if (views.sceneViewGridEnabled)
         {
             SceneGridRenderPassInitParam gridPassInitParam = {};
-            gridPassInitParam.colorTexture = views.sceneViewTexture;
             gridPassInitParam.opacity = views.sceneViewGridOpacity;
             gridPassInitParam.unitSize = views.sceneViewGridUnitSize;
             rendererInitParam.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassInitParam)));
@@ -347,7 +345,6 @@ namespace ve::editor
         if (views.sceneViewGizmoDrawList != nullptr)
         {
             EditorGizmoRenderPassInitParam gizmoPassInitParam = {};
-            gizmoPassInitParam.colorTexture = views.sceneViewTexture;
             gizmoPassInitParam.drawList = views.sceneViewGizmoDrawList;
             rendererInitParam.additionalPasses.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassInitParam)));
         }

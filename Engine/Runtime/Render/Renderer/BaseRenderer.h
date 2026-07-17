@@ -18,7 +18,6 @@ namespace ve
     {
         std::shared_ptr<RTRenderTexture> colorTexture;
         rhi::RhiLoadAction colorLoadAction = rhi::RhiLoadAction::Clear;
-        rhi::RhiStoreAction colorStoreAction = rhi::RhiStoreAction::Store;
     };
 
     struct BaseRendererInitParam

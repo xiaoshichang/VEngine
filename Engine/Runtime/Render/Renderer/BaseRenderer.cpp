@@ -57,17 +57,31 @@ namespace ve
 
         FrameGraph frameGraph(FrameGraphExecuteContext{*frameRenderData_, rendererData_});
         RendererFrameGraphData graphData = {};
-        const ErrorCode importResult = ImportRenderTargets(frameGraph, graphData);
-        if (importResult != ErrorCode::None)
-        {
-            return importResult;
-        }
 
-        if (rendererData_.scene != nullptr && rendererData_.resolvedCamera != nullptr)
+        const ErrorCode setupResult = frameGraph.Setup(
+            [this, &graphData](FrameGraph& setupGraph)
+            {
+                // Setup step 1: import the renderer-owned output attachments into the graph namespace.
+                const ErrorCode importResult = ImportRenderTargets(setupGraph, graphData);
+                if (importResult != ErrorCode::None)
+                {
+                    return importResult;
+                }
+
+                // Setup step 2: register the renderer topology and let each pass declare its resource accesses.
+                if (rendererData_.scene != nullptr && rendererData_.resolvedCamera != nullptr)
+                {
+                    BuildFrameGraph(setupGraph, graphData);
+                }
+
+                // Setup step 3: declare the final color version as an externally observable graph result.
+                setupGraph.Export(graphData.color);
+                return ErrorCode::None;
+            });
+        if (setupResult != ErrorCode::None)
         {
-            BuildFrameGraph(frameGraph, graphData);
+            return setupResult;
         }
-        frameGraph.Export(graphData.color);
 
         Error compileResult = frameGraph.Compile();
         if (!compileResult.IsOk())

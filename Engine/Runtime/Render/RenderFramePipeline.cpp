@@ -1,6 +1,9 @@
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/RendererFactory.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -10,30 +13,63 @@ namespace ve
 {
     namespace
     {
-        [[nodiscard]] rhi::RhiRenderPassDesc BuildOverlayRenderPassDesc(rhi::RhiSwapchain& mainSwapchain, rhi::RhiLoadAction colorLoadAction) noexcept
+        struct SwapchainRasterPassData
         {
-            rhi::RhiRenderPassDesc desc = {};
-            desc.debugName = "EditorOverlayPass";
-            const rhi::RhiExtent2D extent = mainSwapchain.GetExtent();
-            desc.renderArea = rhi::RhiRenderArea{0, 0, extent.width, extent.height};
-            desc.colorAttachmentCount = 1;
-            desc.colorAttachments[0].texture = nullptr;
-            desc.colorAttachments[0].loadAction = colorLoadAction;
-            desc.colorAttachments[0].storeAction = rhi::RhiStoreAction::Store;
-            desc.colorAttachments[0].clearColor = rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
-            return desc;
-        }
+            FrameGraphTextureHandle color;
+        };
 
-        [[nodiscard]] rhi::RhiViewport BuildMainViewport(rhi::RhiSwapchain& mainSwapchain) noexcept
+        [[nodiscard]] ErrorCode RecordSwapchainRasterPass(const FrameRenderPipelineData& frameData,
+                                                          const char* passName,
+                                                          rhi::RhiLoadAction loadAction,
+                                                          rhi::RhiColor clearColor,
+                                                          const EditorOverlayRenderCallback& renderCallback)
         {
-            const rhi::RhiExtent2D extent = mainSwapchain.GetExtent();
-            return rhi::RhiViewport{0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f};
-        }
+            VE_ASSERT(frameData.mainSwapchain != nullptr);
+            const rhi::RhiExtent2D extent = frameData.mainSwapchain->GetExtent();
+            RendererData rendererData = {};
+            FrameGraph frameGraph(FrameGraphExecuteContext{frameData, rendererData});
+            FrameGraphTextureHandle color;
 
-        [[nodiscard]] rhi::RhiScissorRect BuildMainScissor(rhi::RhiSwapchain& mainSwapchain) noexcept
-        {
-            const rhi::RhiExtent2D extent = mainSwapchain.GetExtent();
-            return rhi::RhiScissorRect{0, 0, extent.width, extent.height};
+            const ErrorCode setupResult = frameGraph.Setup(
+                [&](FrameGraph& setupGraph)
+                {
+                    FrameGraphTextureDesc colorDesc = {};
+                    colorDesc.width = extent.width;
+                    colorDesc.height = extent.height;
+                    colorDesc.format = frameData.mainSwapchain->GetColorFormat();
+                    colorDesc.usage = rhi::RhiTextureUsage::RenderTarget;
+                    color = setupGraph.ImportTexture("MainSwapchainColor", colorDesc, ImportedFrameGraphTexture{nullptr, true});
+
+                    setupGraph.AddRasterPass<SwapchainRasterPassData>(
+                        passName,
+                        [&](FrameGraphBuilder& builder, SwapchainRasterPassData& passData)
+                        {
+                            passData.color = builder.WriteColorAttachment(color, loadAction, clearColor);
+                            color = passData.color;
+                        },
+                        [&renderCallback](const SwapchainRasterPassData&, RenderPassContext& context)
+                        {
+                            if (renderCallback)
+                            {
+                                renderCallback(context.commandList);
+                            }
+                            return ErrorCode::None;
+                        });
+                    setupGraph.Export(color);
+                    return ErrorCode::None;
+                });
+            if (setupResult != ErrorCode::None)
+            {
+                return setupResult;
+            }
+
+            const Error compileResult = frameGraph.Compile();
+            if (!compileResult.IsOk())
+            {
+                VE_LOG_ERROR("Frame graph compile failed for %s: %s", passName, compileResult.GetMessage().c_str());
+                return compileResult.GetCode();
+            }
+            return frameGraph.Execute();
         }
 
         [[nodiscard]] RenderTextureDesc BuildSceneColorTextureDesc(const rhi::RhiSwapchain& mainSwapchain)
@@ -96,25 +132,8 @@ namespace ve
 
     ErrorCode EditorRenderFramePipeline::RecordOverlayPass(const FrameRenderPipelineData& frameData)
     {
-        VE_ASSERT(frameData.mainSwapchain != nullptr);
-        rhi::RhiCommandList& commandList = frameData.GetCommandList();
-
-        const rhi::RhiRenderPassDesc passDesc = BuildOverlayRenderPassDesc(*frameData.mainSwapchain, overlayColorLoadAction_);
-        if (!commandList.BeginRenderPass(*frameData.mainSwapchain, passDesc))
-        {
-            return ErrorCode::PlatformError;
-        }
-
-        commandList.SetViewport(BuildMainViewport(*frameData.mainSwapchain));
-        commandList.SetScissor(BuildMainScissor(*frameData.mainSwapchain));
-
-        if (overlayRenderCallback_)
-        {
-            overlayRenderCallback_(commandList);
-        }
-
-        commandList.EndRenderPass();
-        return ErrorCode::None;
+        return RecordSwapchainRasterPass(
+            frameData, "EditorOverlayPass", overlayColorLoadAction_, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f}, overlayRenderCallback_);
     }
 
     PlayerRenderFramePipeline::PlayerRenderFramePipeline(PlayerRenderFramePipelineInitParam initParam)
@@ -166,15 +185,14 @@ namespace ve
         }
         else
         {
-            const rhi::RhiRenderPassDesc passDesc = BuildOverlayRenderPassDesc(*frameData.mainSwapchain, rhi::RhiLoadAction::Clear);
-            if (!commandList.BeginRenderPass(*frameData.mainSwapchain, passDesc))
+            const ErrorCode emptyFrameResult =
+                RecordSwapchainRasterPass(frameData, "EmptyPlayerFramePass", rhi::RhiLoadAction::Clear, rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f}, {});
+            if (emptyFrameResult != ErrorCode::None)
             {
                 const bool ended = commandList.End();
                 VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after empty frame failure.");
-                return ErrorCode::PlatformError;
+                return emptyFrameResult;
             }
-
-            commandList.EndRenderPass();
         }
 
         if (!commandList.End())

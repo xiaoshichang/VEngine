@@ -39,12 +39,17 @@ namespace ve
         const RendererData& rendererData;
     };
 
-    /// Owns one renderer invocation's logical resources and compiled pass order.
+    /// Owns one renderer invocation and enforces its Setup -> Compile -> Execute lifecycle.
     class FrameGraph final : public NonCopyable
     {
     public:
+        using GraphSetupFunction = std::function<ErrorCode(FrameGraph&)>;
+
         explicit FrameGraph(FrameGraphExecuteContext context);
         ~FrameGraph();
+
+        /// Setup phase: imports/creates resources, registers passes, declares accesses, and exports final resources.
+        [[nodiscard]] ErrorCode Setup(GraphSetupFunction setupFunction);
 
         template<typename PassData, typename SetupCallback, typename ExecuteCallback>
         void AddRasterPass(std::string name, SetupCallback&& setupCallback, ExecuteCallback&& executeCallback)
@@ -79,27 +84,27 @@ namespace ve
         [[nodiscard]] FrameGraphTextureHandle ImportTexture(std::string name, FrameGraphTextureDesc desc, ImportedFrameGraphTexture importedTexture);
         void Export(FrameGraphTextureHandle handle);
 
+        /// Compile phase: validates declarations, builds dependencies, culls/sorts passes, and analyzes transient lifetimes.
         [[nodiscard]] Error Compile();
+
+        /// Execute phase: resolves physical resources and records each compiled pass into the current command list.
         [[nodiscard]] ErrorCode Execute();
 
     private:
         friend class FrameGraphBuilder;
         friend class FrameGraphPassResources;
 
-        using SetupFunction = std::function<void(FrameGraphBuilder&)>;
+        using PassSetupFunction = std::function<void(FrameGraphBuilder&)>;
         using ExecuteFunction = std::function<ErrorCode(const FrameGraphPassResources&, RenderPassContext&)>;
 
-        void AddRasterPassInternal(std::string name, SetupFunction setupFunction, ExecuteFunction executeFunction);
+        void AddRasterPassInternal(std::string name, PassSetupFunction setupFunction, ExecuteFunction executeFunction);
         [[nodiscard]] FrameGraphTextureHandle ReadTexture(UInt32 passIndex, FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
         [[nodiscard]] FrameGraphTextureHandle WriteTexture(UInt32 passIndex, FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
-        void SetColorAttachment(
-            UInt32 passIndex, FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor);
-        void SetDepthAttachment(UInt32 passIndex,
-                                FrameGraphTextureHandle handle,
-                                rhi::RhiLoadAction loadAction,
-                                rhi::RhiStoreAction storeAction,
-                                rhi::RhiDepthStencilClearValue clearValue,
-                                bool readOnly);
+        [[nodiscard]] FrameGraphTextureHandle
+        WriteColorAttachment(UInt32 passIndex, FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiColor clearColor);
+        [[nodiscard]] FrameGraphTextureHandle
+        WriteDepthAttachment(UInt32 passIndex, FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, Float32 clearDepth);
+        [[nodiscard]] FrameGraphTextureHandle ReadDepthAttachment(UInt32 passIndex, FrameGraphTextureHandle handle);
         void SetRenderArea(UInt32 passIndex, const rhi::RhiRenderArea& renderArea) noexcept;
         void SetViewport(UInt32 passIndex, const rhi::RhiViewport& viewport) noexcept;
         void SetScissor(UInt32 passIndex, const rhi::RhiScissorRect& scissorRect) noexcept;

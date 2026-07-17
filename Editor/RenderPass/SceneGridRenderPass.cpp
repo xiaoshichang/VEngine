@@ -274,13 +274,11 @@ float AxisLine(float coordinate, float width)
             "SceneGridPass",
             [&graphData](FrameGraphBuilder& builder, GridPassData& passData)
             {
-                passData.color = builder.Write(graphData.color, FrameGraphTextureAccess::ColorAttachment);
-                builder.SetColorAttachment(passData.color, rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiColor{});
+                passData.color = builder.WriteColorAttachment(graphData.color, rhi::RhiLoadAction::Load);
                 graphData.color = passData.color;
                 if (graphData.depth.IsValid())
                 {
-                    passData.depth = builder.Read(graphData.depth, FrameGraphTextureAccess::DepthAttachment);
-                    builder.SetDepthAttachment(passData.depth, rhi::RhiLoadAction::Load, rhi::RhiStoreAction::Store, rhi::RhiDepthStencilClearValue{}, true);
+                    passData.depth = builder.ReadDepthAttachment(graphData.depth);
                 }
             },
             [this](const GridPassData&, RenderPassContext& context) { return Execute(context); });
@@ -302,7 +300,7 @@ float AxisLine(float coordinate, float width)
         }
         const SceneGridUniformData gridUniformData = BuildUniformData(initParam_);
         const UniformBufferAllocation gridUniform = context.frameData.UploadUniform(&gridUniformData, sizeof(gridUniformData));
-        const rhi::RhiRenderArea& renderArea = context.passData.renderPassDesc.renderArea;
+        const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
         const UniformBufferAllocation viewUniform =
             context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
 
@@ -332,9 +330,8 @@ float AxisLine(float coordinate, float width)
 
     void SceneGridRenderPass::EnsurePipeline(RenderPassContext& context)
     {
-        const bool depthEnabled = context.passData.renderPassDesc.hasDepthStencilAttachment;
-        const rhi::RhiFormat targetFormat =
-            initParam_.colorTexture != nullptr ? initParam_.colorTexture->GetDesc().colorFormat : context.frameData.mainSwapchain->GetColorFormat();
+        const bool depthEnabled = context.executionInfo.depthEnabled;
+        const rhi::RhiFormat targetFormat = context.executionInfo.colorFormat;
         if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineDepthEnabled_ == depthEnabled)
         {
             return;

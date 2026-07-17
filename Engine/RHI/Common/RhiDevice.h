@@ -116,8 +116,9 @@ namespace ve::rhi
         /// Finishes command recording.
         [[nodiscard]] virtual bool End() = 0;
 
-        /// Begins rendering into the current back buffer of a swapchain.
-        [[nodiscard]] virtual bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassDesc& desc) = 0;
+        /// Begins rendering with physical attachments resolved by the caller. A null color texture selects the
+        /// swapchain's current back buffer.
+        [[nodiscard]] virtual bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) = 0;
 
         /// Ends the active render pass.
         virtual void EndRenderPass() = 0;

@@ -14,15 +14,19 @@ namespace ve
     class FrameGraphBuilder final : public NonCopyable
     {
     public:
-        [[nodiscard]] FrameGraphTextureHandle Read(FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
-        [[nodiscard]] FrameGraphTextureHandle Write(FrameGraphTextureHandle handle, FrameGraphTextureAccess access);
+        /// Declares a shader read of an existing logical texture version.
+        [[nodiscard]] FrameGraphTextureHandle Read(FrameGraphTextureHandle handle);
 
-        void SetColorAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiStoreAction storeAction, rhi::RhiColor clearColor);
-        void SetDepthAttachment(FrameGraphTextureHandle handle,
-                                rhi::RhiLoadAction loadAction,
-                                rhi::RhiStoreAction storeAction,
-                                rhi::RhiDepthStencilClearValue clearValue,
-                                bool readOnly);
+        /// Declares the pass color output and returns the newly written logical version.
+        [[nodiscard]] FrameGraphTextureHandle
+        WriteColorAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiColor clearColor = {});
+
+        /// Declares a writable depth output and returns the newly written logical version.
+        [[nodiscard]] FrameGraphTextureHandle WriteDepthAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, Float32 clearDepth = 1.0f);
+
+        /// Declares an existing depth version as a read-only attachment.
+        [[nodiscard]] FrameGraphTextureHandle ReadDepthAttachment(FrameGraphTextureHandle handle);
+
         void SetRenderArea(const rhi::RhiRenderArea& renderArea) noexcept;
         void SetViewport(const rhi::RhiViewport& viewport) noexcept;
         void SetScissor(const rhi::RhiScissorRect& scissorRect) noexcept;

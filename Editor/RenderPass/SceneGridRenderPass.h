@@ -3,7 +3,6 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 
 #include <memory>
@@ -13,7 +12,6 @@ namespace ve
 {
     struct SceneGridRenderPassInitParam
     {
-        std::shared_ptr<RTRenderTexture> colorTexture;
         Float32 opacity = 0.45f;
         Float32 unitSize = 1.0f;
     };

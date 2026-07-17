@@ -8,7 +8,6 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphResource.h"
 
 #include <memory>
-#include <string>
 #include <vector>
 
 namespace ve
@@ -17,7 +16,6 @@ namespace ve
     class RTCamera;
     class RTRenderItem;
     class RTScene;
-    class RTShaderResource;
 
     /// Renderer-owned scene choices and the queue lists built once for one view.
     struct RendererData
@@ -35,18 +33,20 @@ namespace ve
         FrameGraphTextureHandle depth;
     };
 
-    struct RenderPassData
+    /// Logical raster state exposed to draw code after FrameGraph has resolved the native attachments.
+    struct RenderPassExecutionInfo
     {
-        rhi::RhiRenderPassDesc renderPassDesc = {};
-        rhi::RhiViewport viewport = {};
-        rhi::RhiScissorRect scissorRect = {};
+        rhi::RhiRenderArea renderArea = {};
+        rhi::RhiFormat colorFormat = rhi::RhiFormat::Unknown;
+        bool depthEnabled = false;
+        bool depthReadOnly = false;
     };
 
     struct RenderPassContextInitParam
     {
         const FrameRenderPipelineData& frameData;
         const RendererData& rendererData;
-        const RenderPassData& passData;
+        const RenderPassExecutionInfo& executionInfo;
     };
 
     /// Draw-time facade supplied after the frame graph has resolved and begun the native render pass.
@@ -57,7 +57,7 @@ namespace ve
 
         const FrameRenderPipelineData& frameData;
         const RendererData& rendererData;
-        const RenderPassData& passData;
+        const RenderPassExecutionInfo& executionInfo;
         rhi::RhiDevice& device;
         rhi::RhiCommandList& commandList;
     };
@@ -72,31 +72,4 @@ namespace ve
         virtual void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) = 0;
     };
 
-    struct SceneRenderPassSettings
-    {
-        std::string passName;
-        rhi::RhiFillMode fillMode = rhi::RhiFillMode::Solid;
-        bool transparent = false;
-    };
-
-    /// Shared static-mesh draw implementation used by opaque and transparent graph passes.
-    class SceneRenderPassExecutor final : public NonCopyable
-    {
-    public:
-        explicit SceneRenderPassExecutor(SceneRenderPassSettings settings);
-
-        [[nodiscard]] ErrorCode Draw(RenderPassContext& context, const std::vector<std::shared_ptr<RTRenderItem>>& items);
-
-    private:
-        [[nodiscard]] ErrorCode EnsurePipeline(RenderPassContext& context, const std::vector<std::shared_ptr<RTRenderItem>>& items);
-        [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
-        [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
-
-        SceneRenderPassSettings settings_;
-        rhi::RhiPipelineState* pipelineState_ = nullptr;
-        rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
-        rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
-        std::weak_ptr<RTShaderResource> pipelineShaderResource_;
-        bool pipelineDepthEnabled_ = false;
-    };
 } // namespace ve

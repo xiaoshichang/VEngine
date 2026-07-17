@@ -8,8 +8,8 @@ namespace ve
 {
     StandaloneRenderer::StandaloneRenderer(StandaloneRendererInitParam initParam)
         : BaseRenderer(static_cast<const BaseRendererInitParam&>(initParam))
-        , opaquePass_(OpaqueSceneRenderPassInitParam{initParam.fillMode, initParam.target.colorLoadAction, initParam.target.colorStoreAction})
-        , transparentPass_(TransparentSceneRenderPassInitParam{initParam.fillMode, initParam.target.colorStoreAction})
+        , opaquePass_(OpaqueSceneRenderPassInitParam{initParam.fillMode, initParam.target.colorLoadAction})
+        , transparentPass_(TransparentSceneRenderPassInitParam{initParam.fillMode})
         , additionalPasses_(std::move(initParam.additionalPasses))
     {
     }

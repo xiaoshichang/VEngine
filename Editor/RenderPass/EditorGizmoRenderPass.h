@@ -3,7 +3,6 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 
 #include <memory>
@@ -32,7 +31,6 @@ namespace ve
 
     struct EditorGizmoRenderPassInitParam
     {
-        std::shared_ptr<RTRenderTexture> colorTexture;
         std::shared_ptr<const EditorGizmoDrawList> drawList;
     };
 
@@ -48,8 +46,6 @@ namespace ve
         void EnsurePipeline(RenderPassContext& context);
         void EnsureIconResources(RenderPassContext& context);
         void UploadFrameResources(RenderPassContext& context);
-        [[nodiscard]] rhi::RhiFormat ResolveTargetFormat(const RenderPassContext& context) const noexcept;
-
         EditorGizmoRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiBuffer> lineVertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> iconVertexBuffer_;
