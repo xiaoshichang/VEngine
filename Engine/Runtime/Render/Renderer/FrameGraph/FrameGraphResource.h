@@ -65,6 +65,13 @@ namespace ve
         bool isSwapchain = false;
     };
 
+    /// Resolved physical texture supplied to a pass execute callback.
+    struct ResolvedFrameGraphTexture
+    {
+        rhi::RhiTexture* texture = nullptr;
+        bool isSwapchain = false;
+    };
+
     /// Converts graph-owned physical properties to the common RHI descriptor.
     [[nodiscard]] rhi::RhiTextureDesc BuildRhiTextureDesc(const FrameGraphTextureDesc& desc, const char* debugName) noexcept;
 } // namespace ve
