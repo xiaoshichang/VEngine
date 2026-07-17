@@ -1,10 +1,10 @@
-# Windows Editor DX12 Compatibility Implementation Plan
+# Windows DX12 Startup And Editor Compatibility Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Keep the Windows Editor on D3D11 by default while making `VEngineWinEditor.exe --dx12` render the complete Editor, Scene View, and Game View through D3D12.
+**Goal:** Keep Windows applications on D3D11 by default, make `--dx12` select D3D12 consistently for both Player and Editor, and render the complete Editor, Scene View, and Game View through D3D12.
 
-**Architecture:** The D3D12 device owns a shared shader-visible SRV heap and descriptor allocator used by both engine textures and Dear ImGui. Narrow opaque RHI hooks expose the allocator, swapchain metadata, and active native command list to the Windows Editor integration; the Editor dispatches to the existing DX11 backend or the new DX12 backend according to the device selected by the command line.
+**Architecture:** One Win32 platform helper parses the shared backend switch for both executable entry points. The D3D12 device owns a shared shader-visible SRV heap and descriptor allocator used by both engine textures and Dear ImGui; narrow opaque RHI hooks expose the allocator, swapchain metadata, and active native command list to the Windows Editor integration.
 
 **Tech Stack:** C++20, Win32, D3D11, D3D12, DXGI, Dear ImGui 1.92.8, CMake, MSVC, CTest.
 
@@ -18,9 +18,11 @@
 - `Engine/RHI/Metal/MetalRhi.mm`: report Metal's effective drawable count required by the common swapchain interface.
 - `Engine/Runtime/Render/RenderSystem.h/.cpp`: forward swapchain format/count and the native descriptor allocator through `RenderNativeHandles`.
 - `Editor/Windows/WinEditorRenderBackend.h/.cpp`: dispatch Dear ImGui initialization, frame begin, rendering, and shutdown between DX11 and DX12.
-- `Editor/Windows/main.cpp`: parse the exact `--dx12` switch while retaining D3D11 as default.
-- `CMake/Targets/Applications/Windows.cmake`: link `shell32` for `CommandLineToArgvW`.
-- `Docs/ArchitectureOverview.md`: document the Windows Editor backend selection contract.
+- `Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h/.cpp`: parse the exact `--dx12` switch once for both Windows applications.
+- `Editor/Windows/main.cpp`: select its backend through the shared Win32 helper.
+- `Player/Windows/main.cpp`: select its backend through the shared Win32 helper.
+- `CMake/Targets/Engine.cmake`: compile the shared Win32 helper and propagate its `shell32` dependency.
+- `Docs/ArchitectureOverview.md`: document the Windows Editor and Player backend selection contract.
 
 ## Task 1: Add The Common Native Descriptor Bridge
 
@@ -325,33 +327,49 @@ git add Editor/Windows/WinEditorRenderBackend.h Editor/Windows/WinEditorRenderBa
 git commit -m "editor: render ImGui through D3D12"
 ```
 
-## Task 4: Add The `--dx12` Startup Switch
+## Task 4: Add The Shared `--dx12` Startup Switch
 
 **Files:**
 
+- Create: `Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h`
+- Create: `Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.cpp`
 - Modify: `Editor/Windows/main.cpp`
-- Modify: `CMake/Targets/Applications/Windows.cmake`
+- Modify: `Player/Windows/main.cpp`
+- Modify: `CMake/Targets/Engine.cmake`
 
-- [ ] **Step 1: Add exact Win32 argument parsing**
+- [ ] **Step 1: Add the shared Win32 backend selector**
 
-Include `<shellapi.h>`. Add a local helper that always defaults to D3D11 and selects D3D12 only for an exact argument match:
+Declare a platform helper without exposing Windows SDK types:
 
 ```cpp
-[[nodiscard]] ve::RenderBackend SelectRenderBackend()
+#pragma once
+
+namespace ve
+{
+    enum class RenderBackend;
+
+    [[nodiscard]] RenderBackend SelectWin32RenderBackendFromCommandLine();
+} // namespace ve
+```
+
+In the `.cpp`, include `RenderSystem.h`, `Windows.h`, `<shellapi.h>`, and `<string_view>`. Implement an exact, case-sensitive scan that always defaults to D3D11:
+
+```cpp
+ve::RenderBackend ve::SelectWin32RenderBackendFromCommandLine()
 {
     int argumentCount = 0;
     LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &argumentCount);
     if (arguments == nullptr)
     {
-        return ve::RenderBackend::D3D11;
+        return RenderBackend::D3D11;
     }
 
-    ve::RenderBackend backend = ve::RenderBackend::D3D11;
+    RenderBackend backend = RenderBackend::D3D11;
     for (int argumentIndex = 1; argumentIndex < argumentCount; ++argumentIndex)
     {
         if (std::wstring_view(arguments[argumentIndex]) == L"--dx12")
         {
-            backend = ve::RenderBackend::D3D12;
+            backend = RenderBackend::D3D12;
             break;
         }
     }
@@ -361,35 +379,43 @@ Include `<shellapi.h>`. Add a local helper that always defaults to D3D11 and sel
 }
 ```
 
-Assign `initParam.runtime.renderSystem.device.backend = SelectRenderBackend();` and keep all other initialization unchanged.
+- [ ] **Step 2: Use the helper from Editor and Player**
 
-- [ ] **Step 2: Link the Win32 parser dependency**
+Include the new header in both Windows `main.cpp` files and replace their fixed assignments with:
 
-Add `shell32` to the private libraries of `VEngineWinEditor` in `CMake/Targets/Applications/Windows.cmake`:
+```cpp
+initParam.runtime.renderSystem.device.backend = ve::SelectWin32RenderBackendFromCommandLine();
+```
+
+Keep all other initialization unchanged.
+
+- [ ] **Step 3: Add the shared helper to the Windows engine target**
+
+Add both files to the `WIN32` `target_sources(VEngine)` block and propagate `shell32` with the existing Windows SDK libraries:
 
 ```cmake
-target_link_libraries(VEngineWinEditor
-    PRIVATE
-        VEngine
+target_link_libraries(VEngine
+    PUBLIC
+        user32
         shell32
 )
 ```
 
-- [ ] **Step 3: Build the final Editor executable**
+- [ ] **Step 4: Build both Windows executables**
 
 Run:
 
 ```powershell
-CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-debug --target VEngineWinEditor
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-debug --target VEngineWinEditor VEngineWinPlayer
 ```
 
-Expected: the Editor builds with no compile or link errors.
+Expected: both executables build with no compile or link errors and share one command-line parser implementation.
 
-- [ ] **Step 4: Commit startup selection**
+- [ ] **Step 5: Commit startup selection**
 
 ```powershell
-git add Editor/Windows/main.cpp CMake/Targets/Applications/Windows.cmake
-git commit -m "editor: add optional D3D12 startup mode"
+git add Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.cpp Editor/Windows/main.cpp Player/Windows/main.cpp CMake/Targets/Engine.cmake
+git commit -m "application: add shared D3D12 startup mode"
 ```
 
 ## Task 5: Document And Verify Both Backends
@@ -403,7 +429,7 @@ git commit -m "editor: add optional D3D12 startup mode"
 In the Windows Editor target section, state:
 
 ```markdown
-The Windows Editor uses D3D11 by default. Launching `VEngineWinEditor.exe --dx12` selects the D3D12 RHI and Dear ImGui renderer; an explicitly requested D3D12 startup failure is reported without falling back to D3D11.
+The Windows Editor and Player use D3D11 by default. Launching either executable with `--dx12` selects the D3D12 RHI; the Editor also selects the Dear ImGui D3D12 renderer. An explicitly requested D3D12 startup failure is reported without falling back to D3D11.
 ```
 
 - [ ] **Step 2: Run formatting and repository checks**
@@ -436,14 +462,22 @@ Launch `VEngineWinEditor.exe` from the preset output directory. Verify the title
 
 Launch `VEngineWinEditor.exe --dx12`. Verify the title reports D3D12, the main UI renders, Scene View and Game View display, both viewport panels survive repeated resizing, and shutdown produces no D3D12 descriptor or resource-state validation errors.
 
-- [ ] **Step 6: Commit documentation**
+- [ ] **Step 6: Smoke-test Player D3D11 mode**
+
+Launch `VEngineWinPlayer.exe`. Verify startup initializes D3D11 in the log, the normal scene/render path presents frames, and shutdown is clean.
+
+- [ ] **Step 7: Smoke-test Player D3D12 mode**
+
+Launch `VEngineWinPlayer.exe --dx12`. Verify startup initializes D3D12 in the log, the same scene/render path presents frames, and shutdown produces no D3D12 validation errors.
+
+- [ ] **Step 8: Commit documentation**
 
 ```powershell
 git add Docs/ArchitectureOverview.md
-git commit -m "docs: document Windows editor backend selection"
+git commit -m "docs: document Windows application backend selection"
 ```
 
-- [ ] **Step 7: Review the final change set**
+- [ ] **Step 9: Review the final change set**
 
 Run:
 
@@ -453,4 +487,4 @@ git log --oneline -6
 git diff HEAD~5 --stat
 ```
 
-Expected: the worktree is clean, the feature is represented by focused commits, and changes are limited to the RHI bridge, D3D12 descriptor implementation, Windows Editor integration, startup selection, and documentation.
+Expected: the worktree is clean, the feature is represented by focused commits, and changes are limited to the RHI bridge, D3D12 descriptor implementation, Windows Editor integration, shared Windows startup selection, and documentation.

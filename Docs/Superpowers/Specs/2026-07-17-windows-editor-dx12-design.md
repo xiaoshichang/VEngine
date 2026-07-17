@@ -1,29 +1,28 @@
-# Windows Editor DX12 Compatibility Design
+# Windows DX12 Startup And Editor Compatibility Design
 
 ## Goal
 
-Keep D3D11 as the default Windows Editor render backend and add an explicit `VEngineWinEditor.exe --dx12` startup mode that renders the complete Editor, including Scene View and Game View textures, through D3D12.
+Keep D3D11 as the default Windows application render backend, add a shared `--dx12` startup switch to both `VEngineWinEditor.exe` and `VEngineWinPlayer.exe`, and render the complete Editor, including Scene View and Game View textures, through D3D12.
 
 ## Scope
 
-This change covers Windows Editor backend selection, Dear ImGui D3D12 integration, the D3D12 command-list bridge, and D3D12 shader-resource descriptor handling required by editor viewport textures.
+This change covers shared Windows Editor and Player backend selection, Dear ImGui D3D12 integration, the D3D12 command-list bridge, and D3D12 shader-resource descriptor handling required by editor viewport textures.
 
 The following remain outside this change:
 
-- Changing the Windows Player backend selection.
 - Persisting the selected backend in project or user settings.
 - Automatically falling back from an explicitly requested D3D12 backend to D3D11.
 - Adding new rendering features or redesigning the common RHI.
 
 ## Startup Selection
 
-`Editor/Windows/main.cpp` parses the process command line with the Win32 wide-character argument API.
+`Engine/Runtime/Platform/Windows/Win32RenderBackendSelection` owns the Win32 wide-character command-line parsing used by both Windows executable entry points. Keeping parsing in one platform helper prevents Editor and Player behavior from drifting.
 
-- With no `--dx12` argument, the Editor selects `RenderBackend::D3D11` exactly as it does today.
-- With an exact, case-sensitive `--dx12` argument, the Editor selects `RenderBackend::D3D12`.
+- With no `--dx12` argument, both Editor and Player select `RenderBackend::D3D11` exactly as they do today.
+- With an exact, case-sensitive `--dx12` argument, both Editor and Player select `RenderBackend::D3D12`.
 - Other arguments do not change backend selection.
 
-The window title continues to display the active backend through the existing Editor backend-name path. If explicitly requested D3D12 initialization fails, startup reports the existing concrete initialization error and exits. It does not silently create a D3D11 device.
+The Editor window title continues to display the active backend through its existing backend-name path. If explicitly requested D3D12 initialization fails in either application, startup reports the existing concrete initialization error and exits. It does not silently create a D3D11 device.
 
 ## D3D12 Shader-Resource Descriptor Ownership
 
@@ -91,15 +90,18 @@ Repository guidance does not request new unit tests for this feature. Verificati
 - Run the existing Windows CTest preset, including RHI smoke coverage.
 - Launch `VEngineWinEditor.exe` and verify the title reports D3D11, the UI renders, and Scene View and Game View display.
 - Launch `VEngineWinEditor.exe --dx12` and verify the title reports D3D12, the UI renders, and Scene View and Game View display.
+- Launch `VEngineWinPlayer.exe` and verify the normal scene/render path runs through D3D11.
+- Launch `VEngineWinPlayer.exe --dx12` and verify the same scene/render path runs through D3D12.
 - Resize both viewport panels in D3D12 mode to exercise descriptor release and reallocation.
 - Close both modes cleanly and check the log and D3D12 debug layer for descriptor, resource-state, or lifetime errors.
 
 ## Acceptance Criteria
 
-- The Windows Editor still defaults to D3D11.
-- `--dx12` selects D3D12 without changing unrelated arguments or Player behavior.
+- The Windows Editor and Player still default to D3D11.
+- `--dx12` selects D3D12 consistently in both Windows applications without changing unrelated arguments.
 - The full Editor UI, Scene View, and Game View render correctly in both backends.
 - D3D12 ImGui commands use the Render Thread's existing RHI command list and submission path.
 - D3D12 viewport texture descriptors and ImGui-managed descriptors come from one shader-visible heap.
 - Explicit D3D12 startup failures are visible and never hidden by an automatic D3D11 fallback.
+- The Player renders through its existing pipeline in both D3D11 and D3D12 modes.
 - Existing Windows build and test presets pass.
