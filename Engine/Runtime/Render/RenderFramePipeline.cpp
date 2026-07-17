@@ -57,9 +57,9 @@ namespace ve
     ErrorCode EditorRenderFramePipeline::RenderFrame(const FrameRenderPipelineData& frameData)
     {
         VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT(frameData.commandList != nullptr);
+        rhi::RhiCommandList& commandList = frameData.GetCommandList();
 
-        if (!frameData.commandList->Begin())
+        if (!commandList.Begin())
         {
             return ErrorCode::PlatformError;
         }
@@ -74,12 +74,12 @@ namespace ve
         const ErrorCode overlayResult = RecordOverlayPass(frameData);
         if (overlayResult != ErrorCode::None)
         {
-            const bool ended = frameData.commandList->End();
+            const bool ended = commandList.End();
             VE_ASSERT_MESSAGE(ended, "EditorRenderFramePipeline failed to end command list after overlay failure.");
             return overlayResult;
         }
 
-        if (!frameData.commandList->End())
+        if (!commandList.End())
         {
             return ErrorCode::PlatformError;
         }
@@ -89,24 +89,24 @@ namespace ve
 
     ErrorCode EditorRenderFramePipeline::RecordOverlayPass(const FrameRenderPipelineData& frameData)
     {
-        VE_ASSERT(frameData.commandList != nullptr);
         VE_ASSERT(frameData.mainSwapchain != nullptr);
+        rhi::RhiCommandList& commandList = frameData.GetCommandList();
 
         const rhi::RhiRenderPassDesc passDesc = BuildOverlayRenderPassDesc(*frameData.mainSwapchain, overlayColorLoadAction_);
-        if (!frameData.commandList->BeginRenderPass(*frameData.mainSwapchain, passDesc))
+        if (!commandList.BeginRenderPass(*frameData.mainSwapchain, passDesc))
         {
             return ErrorCode::PlatformError;
         }
 
-        frameData.commandList->SetViewport(BuildMainViewport(*frameData.mainSwapchain));
-        frameData.commandList->SetScissor(BuildMainScissor(*frameData.mainSwapchain));
+        commandList.SetViewport(BuildMainViewport(*frameData.mainSwapchain));
+        commandList.SetScissor(BuildMainScissor(*frameData.mainSwapchain));
 
         if (overlayRenderCallback_)
         {
-            overlayRenderCallback_(*frameData.commandList);
+            overlayRenderCallback_(commandList);
         }
 
-        frameData.commandList->EndRenderPass();
+        commandList.EndRenderPass();
         return ErrorCode::None;
     }
 
@@ -120,12 +120,12 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(frameData.device != nullptr);
-        VE_ASSERT(frameData.commandList != nullptr);
         VE_ASSERT(frameData.mainSwapchain != nullptr);
+        rhi::RhiCommandList& commandList = frameData.GetCommandList();
 
         EnsureSceneColorTexture(*frameData.device, *frameData.mainSwapchain);
 
-        if (!frameData.commandList->Begin())
+        if (!commandList.Begin())
         {
             return ErrorCode::PlatformError;
         }
@@ -136,10 +136,10 @@ namespace ve
             ForwardRenderer sceneRenderer(std::move(sceneRenderer_));
             sceneRenderer.RenderScene();
 
-            const ErrorCode copyResult = CopySceneColorToSwapchain(*frameData.commandList, *frameData.mainSwapchain);
+            const ErrorCode copyResult = CopySceneColorToSwapchain(commandList, *frameData.mainSwapchain);
             if (copyResult != ErrorCode::None)
             {
-                const bool ended = frameData.commandList->End();
+                const bool ended = commandList.End();
                 VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after copy failure.");
                 return copyResult;
             }
@@ -147,17 +147,17 @@ namespace ve
         else
         {
             const rhi::RhiRenderPassDesc passDesc = BuildOverlayRenderPassDesc(*frameData.mainSwapchain, rhi::RhiLoadAction::Clear);
-            if (!frameData.commandList->BeginRenderPass(*frameData.mainSwapchain, passDesc))
+            if (!commandList.BeginRenderPass(*frameData.mainSwapchain, passDesc))
             {
-                const bool ended = frameData.commandList->End();
+                const bool ended = commandList.End();
                 VE_ASSERT_MESSAGE(ended, "PlayerRenderFramePipeline failed to end command list after empty frame failure.");
                 return ErrorCode::PlatformError;
             }
 
-            frameData.commandList->EndRenderPass();
+            commandList.EndRenderPass();
         }
 
-        if (!frameData.commandList->End())
+        if (!commandList.End())
         {
             return ErrorCode::PlatformError;
         }

@@ -29,11 +29,11 @@ namespace ve
     {
         UInt64 frameIndex = 0;
         rhi::RhiDevice* device = nullptr;
-        rhi::RhiCommandList* commandList = nullptr;
         rhi::RhiSwapchain* mainSwapchain = nullptr;
         ShaderManager* shaderManager = nullptr;
         FrameContext* frameContext = nullptr;
 
+        [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
         void RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource) const;
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size) const;
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene) const;

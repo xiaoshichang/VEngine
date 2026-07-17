@@ -83,7 +83,7 @@ namespace ve
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(frameRenderData_ != nullptr);
         VE_ASSERT(frameRenderData_->device != nullptr);
-        VE_ASSERT(frameRenderData_->commandList != nullptr);
+        VE_ASSERT(frameRenderData_->frameContext != nullptr);
         VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
         VE_ASSERT(frameRenderData_->shaderManager != nullptr);
         UpdateRenderWorld();
@@ -107,7 +107,7 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT_MESSAGE(frameRenderData_ != nullptr, "BaseRenderer::ExecutePassesInOrder requires active frame data.");
-        VE_ASSERT_MESSAGE(frameRenderData_->commandList != nullptr, "BaseRenderer::ExecutePassesInOrder requires an active command list.");
+        rhi::RhiCommandList& commandList = frameRenderData_->GetCommandList();
 
         for (SizeT passIndex = 0; passIndex < passes_.size(); ++passIndex)
         {
@@ -123,7 +123,7 @@ namespace ve
             RenderPassContext passContext(RenderPassContextInitParam{*frameRenderData_, rendererData_, passData});
             pass->Execute(passContext);
 
-            frameRenderData_->commandList->EndRenderPass();
+            commandList.EndRenderPass();
         }
     }
 
@@ -140,18 +140,18 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(frameRenderData_ != nullptr);
-        VE_ASSERT(frameRenderData_->commandList != nullptr);
         VE_ASSERT(frameRenderData_->mainSwapchain != nullptr);
+        rhi::RhiCommandList& commandList = frameRenderData_->GetCommandList();
 
-        const bool beganRenderPass = frameRenderData_->commandList->BeginRenderPass(*frameRenderData_->mainSwapchain, passData.renderPassDesc);
+        const bool beganRenderPass = commandList.BeginRenderPass(*frameRenderData_->mainSwapchain, passData.renderPassDesc);
         VE_ASSERT_MESSAGE(beganRenderPass, "BaseRenderer failed to begin render pass.");
         if (!beganRenderPass)
         {
             return false;
         }
 
-        frameRenderData_->commandList->SetViewport(passData.viewport);
-        frameRenderData_->commandList->SetScissor(passData.scissorRect);
+        commandList.SetViewport(passData.viewport);
+        commandList.SetScissor(passData.scissorRect);
         return true;
     }
 

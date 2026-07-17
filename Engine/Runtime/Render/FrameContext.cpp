@@ -137,6 +137,12 @@ namespace ve
         frameContext->RetainTransientResource(std::move(resource));
     }
 
+    rhi::RhiCommandList& FrameRenderPipelineData::GetCommandList() const
+    {
+        VE_ASSERT(frameContext != nullptr);
+        return frameContext->GetCommandList();
+    }
+
     UniformBufferAllocation FrameRenderPipelineData::UploadUniform(const void* data, UInt64 size) const
     {
         VE_ASSERT(frameContext != nullptr);

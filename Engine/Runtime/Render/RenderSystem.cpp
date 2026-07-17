@@ -183,7 +183,6 @@ namespace ve
             FrameRenderPipelineData frameData = {};
             frameData.frameIndex = frameIndex;
             frameData.device = impl.device.get();
-            frameData.commandList = &frameContext.GetCommandList();
             frameData.mainSwapchain = impl.mainSwapchain.get();
             frameData.shaderManager = &impl.shaderManager;
             frameData.frameContext = &frameContext;

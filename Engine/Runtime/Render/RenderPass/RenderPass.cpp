@@ -13,8 +13,7 @@ namespace ve
 
         [[nodiscard]] rhi::RhiCommandList& ResolveCommandList(const FrameRenderPipelineData& frameData) noexcept
         {
-            VE_ASSERT(frameData.commandList != nullptr);
-            return *frameData.commandList;
+            return frameData.GetCommandList();
         }
     } // namespace
 
