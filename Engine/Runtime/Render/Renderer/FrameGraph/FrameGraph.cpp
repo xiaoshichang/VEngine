@@ -11,6 +11,7 @@
 #include <queue>
 #include <sstream>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 namespace ve
@@ -69,6 +70,13 @@ namespace ve
 
     struct FrameGraph::Impl
     {
+        struct TransientTextureBacking
+        {
+            std::unique_ptr<rhi::RhiTexture> texture;
+        };
+
+        using TextureBacking = std::variant<TransientTextureBacking, ImportedFrameGraphTexture>;
+
         struct ResourceVersion
         {
             UInt32 producer = InvalidPassIndex;
@@ -79,12 +87,30 @@ namespace ve
         {
             std::string name;
             FrameGraphTextureDesc desc = {};
-            ImportedFrameGraphTexture importedTexture = {};
-            bool imported = false;
+            TextureBacking backing = TransientTextureBacking{};
             std::vector<ResourceVersion> versions{ResourceVersion{}};
             UInt32 firstUse = InvalidPassIndex;
             UInt32 lastUse = InvalidPassIndex;
-            std::unique_ptr<rhi::RhiTexture> physicalTexture;
+
+            [[nodiscard]] bool IsImported() const noexcept
+            {
+                return std::holds_alternative<ImportedFrameGraphTexture>(backing);
+            }
+
+            [[nodiscard]] const ImportedFrameGraphTexture* GetImportedBacking() const noexcept
+            {
+                return std::get_if<ImportedFrameGraphTexture>(&backing);
+            }
+
+            [[nodiscard]] TransientTextureBacking* GetTransientBacking() noexcept
+            {
+                return std::get_if<TransientTextureBacking>(&backing);
+            }
+
+            [[nodiscard]] const TransientTextureBacking* GetTransientBacking() const noexcept
+            {
+                return std::get_if<TransientTextureBacking>(&backing);
+            }
         };
 
         struct PassNode
@@ -245,8 +271,7 @@ namespace ve
         Impl::TextureResourceNode resource = {};
         resource.name = std::move(name);
         resource.desc = desc;
-        resource.importedTexture = importedTexture;
-        resource.imported = true;
+        resource.backing = importedTexture;
         impl_->textures.push_back(std::move(resource));
         return FrameGraphTextureHandle{index, 0};
     }
@@ -527,18 +552,23 @@ namespace ve
             {
                 return Error(ErrorCode::InvalidArgument, "Frame graph texture '" + resource.name + "' has an invalid physical descriptor.");
             }
-            if (resource.imported && !resource.importedTexture.isSwapchain && resource.importedTexture.texture == nullptr)
+
+            const ImportedFrameGraphTexture* importedBacking = resource.GetImportedBacking();
+            if (importedBacking == nullptr)
+            {
+                continue;
+            }
+            if (!importedBacking->isSwapchain && importedBacking->texture == nullptr)
             {
                 return Error(ErrorCode::InvalidArgument, "Imported frame graph texture '" + resource.name + "' has no native texture.");
             }
-            if (resource.importedTexture.isSwapchain && resource.importedTexture.texture != nullptr)
+            if (importedBacking->isSwapchain && importedBacking->texture != nullptr)
             {
                 return Error(ErrorCode::InvalidArgument, "Swapchain frame graph texture '" + resource.name + "' must not carry an RhiTexture pointer.");
             }
-            if (resource.imported && resource.importedTexture.texture != nullptr &&
-                (resource.importedTexture.texture->GetDimension() != resource.desc.dimension ||
-                 resource.importedTexture.texture->GetWidth() != resource.desc.width || resource.importedTexture.texture->GetHeight() != resource.desc.height ||
-                 resource.importedTexture.texture->GetFormat() != resource.desc.format))
+            if (importedBacking->texture != nullptr &&
+                (importedBacking->texture->GetDimension() != resource.desc.dimension || importedBacking->texture->GetWidth() != resource.desc.width ||
+                 importedBacking->texture->GetHeight() != resource.desc.height || importedBacking->texture->GetFormat() != resource.desc.format))
             {
                 return Error(ErrorCode::InvalidArgument, "Imported frame graph texture '" + resource.name + "' does not match its descriptor.");
             }
@@ -585,7 +615,7 @@ namespace ve
                 const ResourceVersion& inputVersion = resource.versions[access.input.version];
                 if (access.mode == TextureAccessMode::Read)
                 {
-                    if (!resource.imported && inputVersion.producer == InvalidPassIndex)
+                    if (!resource.IsImported() && inputVersion.producer == InvalidPassIndex)
                     {
                         return Error(ErrorCode::InvalidState,
                                      "Frame graph pass '" + pass.name + "' reads uninitialized transient texture '" + resource.name + "'.");
@@ -634,7 +664,7 @@ namespace ve
             {
                 return Error(ErrorCode::InvalidState, "Frame graph pass '" + pass.name + "' has an inconsistent color attachment declaration.");
             }
-            if (!colorResource.imported && colorResource.versions[colorAccessIt->input.version].producer == InvalidPassIndex &&
+            if (!colorResource.IsImported() && colorResource.versions[colorAccessIt->input.version].producer == InvalidPassIndex &&
                 colorAttachment.loadAction == rhi::RhiLoadAction::Load)
             {
                 return Error(ErrorCode::InvalidState,
@@ -645,7 +675,8 @@ namespace ve
             {
                 const DepthAttachmentRecord& depthAttachment = *pass.depthAttachment;
                 const TextureResourceNode& depthResource = textures[depthAttachment.handle.index];
-                if (depthResource.importedTexture.isSwapchain || depthResource.desc.format != rhi::RhiFormat::Depth32Float)
+                const ImportedFrameGraphTexture* depthImportedBacking = depthResource.GetImportedBacking();
+                if ((depthImportedBacking != nullptr && depthImportedBacking->isSwapchain) || depthResource.desc.format != rhi::RhiFormat::Depth32Float)
                 {
                     return Error(ErrorCode::InvalidArgument, "Frame graph pass '" + pass.name + "' has an invalid depth attachment format.");
                 }
@@ -669,7 +700,7 @@ namespace ve
                     return Error(ErrorCode::InvalidState, "Frame graph pass '" + pass.name + "' has an inconsistent depth attachment declaration.");
                 }
 
-                if (!depthAttachment.readOnly && !depthResource.imported && depthAttachment.loadAction == rhi::RhiLoadAction::Load)
+                if (!depthAttachment.readOnly && !depthResource.IsImported() && depthAttachment.loadAction == rhi::RhiLoadAction::Load)
                 {
                     if (depthResource.versions[depthAccessIt->input.version].producer == InvalidPassIndex)
                     {
@@ -834,7 +865,7 @@ namespace ve
             for (const TextureAccessRecord& access : pass.textureAccesses)
             {
                 TextureResourceNode& resource = textures[access.input.index];
-                if (resource.imported)
+                if (resource.IsImported())
                 {
                     continue;
                 }
@@ -853,24 +884,28 @@ namespace ve
         }
 
         const TextureResourceNode& resource = textures[handle.index];
-        if (resource.imported)
+        if (const ImportedFrameGraphTexture* importedBacking = resource.GetImportedBacking(); importedBacking != nullptr)
         {
-            return ResolvedFrameGraphTexture{resource.importedTexture.texture, resource.importedTexture.isSwapchain};
+            return ResolvedFrameGraphTexture{importedBacking->texture, importedBacking->isSwapchain};
         }
-        return ResolvedFrameGraphTexture{resource.physicalTexture.get(), false};
+
+        const TransientTextureBacking* transientBacking = resource.GetTransientBacking();
+        VE_ASSERT(transientBacking != nullptr);
+        return ResolvedFrameGraphTexture{transientBacking->texture.get(), false};
     }
 
     ErrorCode FrameGraph::Impl::AcquirePassTextures(UInt32 orderIndex, FrameGraphTransientResourcePool& transientPool)
     {
         for (TextureResourceNode& resource : textures)
         {
-            if (resource.imported || resource.firstUse != orderIndex)
+            TransientTextureBacking* transientBacking = resource.GetTransientBacking();
+            if (transientBacking == nullptr || resource.firstUse != orderIndex)
             {
                 continue;
             }
 
-            resource.physicalTexture = transientPool.AcquireTexture(resource.desc, resource.name.c_str());
-            if (resource.physicalTexture == nullptr)
+            transientBacking->texture = transientPool.AcquireTexture(resource.desc, resource.name.c_str());
+            if (transientBacking->texture == nullptr)
             {
                 return ErrorCode::OutOfMemory;
             }
@@ -920,9 +955,10 @@ namespace ve
     {
         for (TextureResourceNode& resource : textures)
         {
-            if (!resource.imported && resource.lastUse == orderIndex && resource.physicalTexture != nullptr)
+            TransientTextureBacking* transientBacking = resource.GetTransientBacking();
+            if (transientBacking != nullptr && resource.lastUse == orderIndex && transientBacking->texture != nullptr)
             {
-                transientPool.ReleaseTexture(resource.desc, std::move(resource.physicalTexture));
+                transientPool.ReleaseTexture(resource.desc, std::move(transientBacking->texture));
             }
         }
     }
@@ -931,9 +967,10 @@ namespace ve
     {
         for (TextureResourceNode& resource : textures)
         {
-            if (!resource.imported && resource.physicalTexture != nullptr)
+            TransientTextureBacking* transientBacking = resource.GetTransientBacking();
+            if (transientBacking != nullptr && transientBacking->texture != nullptr)
             {
-                transientPool.ReleaseTexture(resource.desc, std::move(resource.physicalTexture));
+                transientPool.ReleaseTexture(resource.desc, std::move(transientBacking->texture));
             }
         }
     }
