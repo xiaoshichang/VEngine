@@ -74,19 +74,20 @@ namespace ve::rhi
             }
         }
 
-        D3D12_FILTER ToD3D12Filter(RhiSamplerFilter filter)
+        D3D12_FILTER ToD3D12Filter(RhiSamplerFilter filter, RhiSamplerReductionMode reductionMode)
         {
+            const bool comparison = reductionMode == RhiSamplerReductionMode::Comparison;
             switch (filter)
             {
             case RhiSamplerFilter::Point:
-                return D3D12_FILTER_MIN_MAG_MIP_POINT;
+                return comparison ? D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT : D3D12_FILTER_MIN_MAG_MIP_POINT;
             case RhiSamplerFilter::Trilinear:
-                return D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+                return comparison ? D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR : D3D12_FILTER_MIN_MAG_MIP_LINEAR;
             case RhiSamplerFilter::Anisotropic:
-                return D3D12_FILTER_ANISOTROPIC;
+                return comparison ? D3D12_FILTER_COMPARISON_ANISOTROPIC : D3D12_FILTER_ANISOTROPIC;
             case RhiSamplerFilter::Bilinear:
             default:
-                return D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+                return comparison ? D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT : D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT;
             }
         }
 
@@ -291,6 +292,7 @@ namespace ve::rhi
                     return false;
                 }
 
+                heap_->SetName(L"VEngine Shared CBV SRV UAV Descriptor Heap");
                 fence_ = fence;
                 descriptorSize_ = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                 cpuStart_ = heap_->GetCPUDescriptorHandleForHeapStart();
@@ -840,6 +842,12 @@ namespace ve::rhi
 
             [[nodiscard]] bool Begin() override
             {
+                activeSwapchain_ = nullptr;
+                activeTexture_ = nullptr;
+                activeDepthTexture_ = nullptr;
+                activeResourceHeap_ = nullptr;
+                activeSamplerHeap_ = nullptr;
+
                 HRESULT result = commandAllocator_->Reset();
 
                 if (FAILED(result))
@@ -1407,6 +1415,15 @@ namespace ve::rhi
                     clearValue.DepthStencil.Stencil = 0;
                     clearValuePtr = &clearValue;
                 }
+                else if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0 && desc.hasOptimizedClearColor)
+                {
+                    clearValue.Format = ToDxgiFormat(desc.format);
+                    clearValue.Color[0] = desc.optimizedClearColor.r;
+                    clearValue.Color[1] = desc.optimizedClearColor.g;
+                    clearValue.Color[2] = desc.optimizedClearColor.b;
+                    clearValue.Color[3] = desc.optimizedClearColor.a;
+                    clearValuePtr = &clearValue;
+                }
 
                 ComPtr<ID3D12Resource> resource;
                 HRESULT result = device_->CreateCommittedResource(
@@ -1627,13 +1644,15 @@ namespace ve::rhi
                 }
 
                 D3D12_SAMPLER_DESC samplerDesc = {};
-                samplerDesc.Filter = ToD3D12Filter(desc.filter);
+                samplerDesc.Filter = ToD3D12Filter(desc.filter, desc.reductionMode);
                 samplerDesc.AddressU = ToD3D12AddressMode(desc.addressU);
                 samplerDesc.AddressV = ToD3D12AddressMode(desc.addressV);
                 samplerDesc.AddressW = ToD3D12AddressMode(desc.addressW);
                 samplerDesc.MipLODBias = desc.mipBias;
                 samplerDesc.MaxAnisotropy = desc.maxAnisotropy;
-                samplerDesc.ComparisonFunc = ToD3D12ComparisonFunc(desc.comparisonFunction);
+                samplerDesc.ComparisonFunc = desc.reductionMode == RhiSamplerReductionMode::Comparison
+                                                 ? ToD3D12ComparisonFunc(desc.comparisonFunction)
+                                                 : D3D12_COMPARISON_FUNC_NONE;
                 samplerDesc.BorderColor[0] = desc.borderColor.r;
                 samplerDesc.BorderColor[1] = desc.borderColor.g;
                 samplerDesc.BorderColor[2] = desc.borderColor.b;
@@ -1878,6 +1897,7 @@ namespace ve::rhi
                     return nullptr;
                 }
 
+                commandList->SetName(L"VEngine Frame Graphics Command List");
                 commandList->Close();
                 return std::make_unique<D3D12CommandList>(device_, commandAllocator, commandList);
             }

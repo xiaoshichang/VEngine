@@ -27,6 +27,7 @@
 #include <array>
 #include <exception>
 #include <optional>
+#include <vector>
 
 namespace ve
 {
@@ -49,6 +50,7 @@ namespace ve
         std::array<FrameContext, RenderFrameContextCount> frameContexts;
         MaterialUniformPool materialUniformPool;
         ShaderManager shaderManager;
+        std::vector<std::unique_ptr<rhi::RhiObject>> pendingRetiredResources;
         UInt64 nextFrameIndex = 1;
     };
 
@@ -198,8 +200,15 @@ namespace ve
             if (!ok)
             {
                 impl.device->WaitIdle();
+                impl.pendingRetiredResources.clear();
                 return ErrorCode::PlatformError;
             }
+
+            for (std::unique_ptr<rhi::RhiObject>& resource : impl.pendingRetiredResources)
+            {
+                frameContext.RetainTransientResource(std::move(resource));
+            }
+            impl.pendingRetiredResources.clear();
             frameContext.MarkSubmitted(submissionFenceValue);
 
             ok = impl.mainSwapchain->Present();
@@ -268,6 +277,7 @@ namespace ve
                 impl.device->WaitIdle();
             }
 
+            impl.pendingRetiredResources.clear();
             impl.shaderManager.Clear();
             DestroyFrameResources(impl);
             impl.mainSwapchain.reset();
@@ -539,7 +549,7 @@ namespace ve
                        [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           renderTexture->InitRenderResource(*impl_->device, std::move(desc));
+                           renderTexture->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
                        });
     }
 

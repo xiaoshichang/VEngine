@@ -149,7 +149,7 @@ namespace ve
         VE_ASSERT(frameData.mainSwapchain != nullptr);
         rhi::RhiCommandList& commandList = frameData.GetCommandList();
 
-        EnsureSceneColorTexture(*frameData.device, *frameData.mainSwapchain);
+        EnsureSceneColorTexture(frameData);
 
         if (!commandList.Begin())
         {
@@ -203,7 +203,7 @@ namespace ve
         return ErrorCode::None;
     }
 
-    void PlayerRenderFramePipeline::EnsureSceneColorTexture(rhi::RhiDevice& device, const rhi::RhiSwapchain& mainSwapchain)
+    void PlayerRenderFramePipeline::EnsureSceneColorTexture(const FrameRenderPipelineData& frameData)
     {
         VE_ASSERT_RENDER_THREAD();
         if (sceneColorTexture_ == nullptr)
@@ -211,7 +211,16 @@ namespace ve
             return;
         }
 
-        sceneColorTexture_->InitRenderResource(device, BuildSceneColorTextureDesc(mainSwapchain));
+        VE_ASSERT(frameData.device != nullptr);
+        VE_ASSERT(frameData.mainSwapchain != nullptr);
+        std::vector<std::unique_ptr<rhi::RhiObject>> retiredResources;
+        RenderTextureDesc desc = BuildSceneColorTextureDesc(*frameData.mainSwapchain);
+        desc.optimizedClearColor = sceneColorTexture_->GetDesc().optimizedClearColor;
+        sceneColorTexture_->InitRenderResource(*frameData.device, std::move(desc), retiredResources);
+        for (std::unique_ptr<rhi::RhiObject>& resource : retiredResources)
+        {
+            frameData.RetainTransientResource(std::move(resource));
+        }
     }
 
     ErrorCode PlayerRenderFramePipeline::CopySceneColorToSwapchain(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain)

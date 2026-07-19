@@ -18,7 +18,7 @@
 #include "Engine/Runtime/Scene/TransformComponent.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <imgui.h>
+#include <imgui_internal.h>
 
 #if VE_PLATFORM_WINDOWS
 #ifndef WIN32_LEAN_AND_MEAN
@@ -44,11 +44,102 @@ namespace ve::editor
     void ApplyMacMainWindowTitle(void* nativeWindowHandle, const std::string& title);
 #endif
 
+    struct EditorDrawListSnapshotEntry
+    {
+        ImDrawList* source = nullptr;
+        ImDrawList* snapshot = nullptr;
+        double lastUsedTime = 0.0;
+    };
+
     struct EditorFrameDrawData
     {
         ImDrawData drawData;
         ImVector<ImTextureData*> textureRefs;
-        std::vector<std::unique_ptr<ImDrawList>> ownedCmdLists;
+        ImPool<EditorDrawListSnapshotEntry> drawListCache;
+        float memoryCompactTimer = 20.0f;
+
+        ~EditorFrameDrawData()
+        {
+            Clear();
+        }
+
+        void Clear()
+        {
+            for (int cacheIndex = 0; cacheIndex < drawListCache.GetMapSize(); ++cacheIndex)
+            {
+                if (EditorDrawListSnapshotEntry* entry = drawListCache.TryGetMapData(cacheIndex); entry != nullptr)
+                {
+                    IM_DELETE(entry->snapshot);
+                }
+            }
+
+            drawListCache.Clear();
+            drawData.Clear();
+            textureRefs.clear();
+        }
+
+        [[nodiscard]] bool SnapUsingSwap(ImDrawData* sourceDrawData, double currentTime)
+        {
+            IM_ASSERT(sourceDrawData != nullptr && sourceDrawData != &drawData && sourceDrawData->Valid);
+
+            ImVector<ImDrawList*> sourceDrawLists;
+            sourceDrawLists.swap(sourceDrawData->CmdLists);
+            IM_ASSERT(sourceDrawData->CmdLists.Data == nullptr);
+            drawData = *sourceDrawData;
+            sourceDrawLists.swap(sourceDrawData->CmdLists);
+
+            textureRefs.clear();
+            bool hasTextureUpdates = false;
+            if (sourceDrawData->Textures != nullptr)
+            {
+                for (ImTextureData* textureData : *sourceDrawData->Textures)
+                {
+                    if (textureData->Status != ImTextureStatus_OK)
+                    {
+                        textureRefs.push_back(textureData);
+                        hasTextureUpdates = true;
+                    }
+                }
+            }
+            drawData.Textures = textureRefs.empty() ? nullptr : &textureRefs;
+
+            for (ImDrawList* sourceDrawList : sourceDrawData->CmdLists)
+            {
+                const ImGuiID drawListID = ImHashData(&sourceDrawList, sizeof(sourceDrawList));
+                EditorDrawListSnapshotEntry* entry = drawListCache.GetOrAddByKey(drawListID);
+                if (entry->snapshot == nullptr)
+                {
+                    entry->source = sourceDrawList;
+                    entry->snapshot = IM_NEW(ImDrawList)(sourceDrawList->_Data);
+                }
+
+                IM_ASSERT(entry->source == sourceDrawList);
+                entry->source->CmdBuffer.swap(entry->snapshot->CmdBuffer);
+                entry->source->IdxBuffer.swap(entry->snapshot->IdxBuffer);
+                entry->source->VtxBuffer.swap(entry->snapshot->VtxBuffer);
+                entry->source->CmdBuffer.reserve(entry->snapshot->CmdBuffer.Capacity);
+                entry->source->IdxBuffer.reserve(entry->snapshot->IdxBuffer.Capacity);
+                entry->source->VtxBuffer.reserve(entry->snapshot->VtxBuffer.Capacity);
+                entry->lastUsedTime = currentTime;
+                drawData.CmdLists.push_back(entry->snapshot);
+            }
+
+            const double garbageCollectThreshold = currentTime - memoryCompactTimer;
+            for (int cacheIndex = 0; cacheIndex < drawListCache.GetMapSize(); ++cacheIndex)
+            {
+                EditorDrawListSnapshotEntry* entry = drawListCache.TryGetMapData(cacheIndex);
+                if (entry == nullptr || entry->lastUsedTime > garbageCollectThreshold)
+                {
+                    continue;
+                }
+
+                const ImGuiID drawListID = ImHashData(&entry->source, sizeof(entry->source));
+                IM_DELETE(entry->snapshot);
+                drawListCache.Remove(drawListID, entry);
+            }
+
+            return hasTextureUpdates;
+        }
     };
 
     struct EditorFrameRenderViews
@@ -108,47 +199,6 @@ namespace ve::editor
                     CollectGameObjectResourceRoots(*rootObject, ids);
                 }
             }
-        }
-
-        [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CloneFrameDrawData(const ImDrawData* sourceDrawData)
-        {
-            if (sourceDrawData == nullptr || !sourceDrawData->Valid)
-            {
-                return nullptr;
-            }
-
-            auto frameDrawData = std::make_shared<EditorFrameDrawData>();
-            frameDrawData->drawData.Valid = sourceDrawData->Valid;
-            frameDrawData->drawData.TotalIdxCount = 0;
-            frameDrawData->drawData.TotalVtxCount = 0;
-            frameDrawData->drawData.DisplayPos = sourceDrawData->DisplayPos;
-            frameDrawData->drawData.DisplaySize = sourceDrawData->DisplaySize;
-            frameDrawData->drawData.FramebufferScale = sourceDrawData->FramebufferScale;
-            frameDrawData->drawData.OwnerViewport = sourceDrawData->OwnerViewport;
-            frameDrawData->drawData.Textures = nullptr;
-
-            if (sourceDrawData->Textures != nullptr)
-            {
-                frameDrawData->textureRefs.reserve(sourceDrawData->Textures->Size);
-                for (int textureIndex = 0; textureIndex < sourceDrawData->Textures->Size; ++textureIndex)
-                {
-                    frameDrawData->textureRefs.push_back((*sourceDrawData->Textures)[textureIndex]);
-                }
-                frameDrawData->drawData.Textures = &frameDrawData->textureRefs;
-            }
-
-            frameDrawData->ownedCmdLists.reserve(static_cast<size_t>(sourceDrawData->CmdListsCount));
-            for (int drawListIndex = 0; drawListIndex < sourceDrawData->CmdListsCount; ++drawListIndex)
-            {
-                ImDrawList* clonedDrawList = sourceDrawData->CmdLists[drawListIndex]->CloneOutput();
-                frameDrawData->ownedCmdLists.emplace_back(clonedDrawList);
-                frameDrawData->drawData.CmdLists.push_back(clonedDrawList);
-                frameDrawData->drawData.TotalIdxCount += clonedDrawList->IdxBuffer.Size;
-                frameDrawData->drawData.TotalVtxCount += clonedDrawList->VtxBuffer.Size;
-            }
-
-            frameDrawData->drawData.CmdListsCount = frameDrawData->drawData.CmdLists.Size;
-            return frameDrawData;
         }
     } // namespace
 
@@ -224,6 +274,12 @@ namespace ve::editor
             return;
         }
 
+        if (waitForImGuiTextureUpdates_)
+        {
+            renderSystem_->Flush();
+            waitForImGuiTextureUpdates_ = false;
+        }
+
         BeginRenderBackendFrame();
         input_.StartFrame();
         ImGui::NewFrame();
@@ -266,10 +322,25 @@ namespace ve::editor
         ImGui::Render();
     }
 
-    std::shared_ptr<EditorFrameDrawData> Editor::CaptureImGuiFrameDrawData() const
+    std::shared_ptr<EditorFrameDrawData> Editor::CaptureImGuiFrameDrawData()
     {
-        std::shared_ptr<EditorFrameDrawData> frameDrawData = CloneFrameDrawData(ImGui::GetDrawData());
-        VE_ASSERT_MESSAGE(frameDrawData != nullptr, "Editor::Render requires valid ImGui draw data.");
+        ImDrawData* sourceDrawData = ImGui::GetDrawData();
+        VE_ASSERT_MESSAGE(sourceDrawData != nullptr && sourceDrawData->Valid, "Editor::Render requires valid ImGui draw data.");
+        if (sourceDrawData == nullptr || !sourceDrawData->Valid)
+        {
+            return nullptr;
+        }
+
+        std::shared_ptr<EditorFrameDrawData>& snapshot = imguiDrawDataSnapshots_[nextImGuiDrawDataSnapshotIndex_];
+        if (snapshot == nullptr || snapshot.use_count() != 1)
+        {
+            snapshot = std::make_shared<EditorFrameDrawData>();
+        }
+
+        waitForImGuiTextureUpdates_ = snapshot->SnapUsingSwap(sourceDrawData, ImGui::GetTime());
+        std::shared_ptr<EditorFrameDrawData> frameDrawData = snapshot;
+        nextImGuiDrawDataSnapshotIndex_ =
+            static_cast<UInt32>((nextImGuiDrawDataSnapshotIndex_ + 1) % imguiDrawDataSnapshots_.size());
         return frameDrawData;
     }
 
@@ -393,6 +464,13 @@ namespace ve::editor
         {
             renderSystem_->Flush();
         }
+
+        for (std::shared_ptr<EditorFrameDrawData>& snapshot : imguiDrawDataSnapshots_)
+        {
+            snapshot.reset();
+        }
+        nextImGuiDrawDataSnapshotIndex_ = 0;
+        waitForImGuiTextureUpdates_ = false;
         ShutdownRenderBackend();
         retainedImGuiRenderTextures_.clear();
         resourceLoader_.Shutdown();

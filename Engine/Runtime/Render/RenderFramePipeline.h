@@ -75,7 +75,7 @@ namespace ve
         [[nodiscard]] ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) override;
 
     private:
-        void EnsureSceneColorTexture(rhi::RhiDevice& device, const rhi::RhiSwapchain& mainSwapchain);
+        void EnsureSceneColorTexture(const FrameRenderPipelineData& frameData);
         [[nodiscard]] ErrorCode CopySceneColorToSwapchain(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
 
         BaseRendererInitParam sceneRenderer_;

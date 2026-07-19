@@ -15,6 +15,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <string>
@@ -104,7 +105,7 @@ namespace ve::editor
         };
 
         void RenderActiveMainView();
-        [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CaptureImGuiFrameDrawData() const;
+        [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CaptureImGuiFrameDrawData();
         [[nodiscard]] EditorFrameRenderViews CollectFrameRenderViews() const;
         [[nodiscard]] EditorOverlayRenderCallback BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const;
         void AddSceneViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
@@ -151,6 +152,9 @@ namespace ve::editor
         ve::GameObject* selectedGameObject_ = nullptr;
         Path selectedAssetPath_;
         std::unique_ptr<EditorRenderBackend> editorRenderBackend_;
+        std::array<std::shared_ptr<EditorFrameDrawData>, 2> imguiDrawDataSnapshots_;
+        UInt32 nextImGuiDrawDataSnapshotIndex_ = 0;
+        bool waitForImGuiTextureUpdates_ = false;
         std::atomic_bool initialized_{false};
         MainView mainView_ = MainView::ProjectSelection;
         EditorPlayState playState_ = EditorPlayState::Editing;

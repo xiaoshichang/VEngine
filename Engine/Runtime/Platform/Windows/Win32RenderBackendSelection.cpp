@@ -21,10 +21,10 @@ namespace ve
         LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &argumentCount);
         if (arguments == nullptr)
         {
-            return RenderBackend::D3D11;
+            return RenderBackend::D3D12;
         }
 
-        RenderBackend backend = RenderBackend::D3D11;
+        RenderBackend backend = RenderBackend::D3D12;
         for (int argumentIndex = 1; argumentIndex < argumentCount; ++argumentIndex)
         {
             if (std::wstring_view(arguments[argumentIndex]) == L"--dx12")

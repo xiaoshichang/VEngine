@@ -241,6 +241,8 @@ namespace ve::rhi
         float g = 0.0f;
         float b = 0.0f;
         float a = 1.0f;
+
+        [[nodiscard]] bool operator==(const RhiColor&) const noexcept = default;
     };
 
     /// Describes a viewport rectangle and depth range.
@@ -402,6 +404,8 @@ namespace ve::rhi
         const void* initialData = nullptr;
         uint64_t initialDataSize = 0;
         uint32_t initialDataRowPitch = 0;
+        bool hasOptimizedClearColor = false;
+        RhiColor optimizedClearColor = {};
         const char* debugName = nullptr;
     };
 

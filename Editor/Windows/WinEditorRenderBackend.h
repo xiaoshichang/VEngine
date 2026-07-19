@@ -2,6 +2,8 @@
 
 #include "Editor/Core/EditorRenderBackend.h"
 
+struct ID3D12DescriptorHeap;
+
 namespace ve::editor
 {
     class WinEditorRenderBackend final : public EditorRenderBackend
@@ -19,6 +21,7 @@ namespace ve::editor
         void ShutdownD3D12() noexcept;
 
         rhi::RhiNativeShaderResourceDescriptorAllocator* shaderResourceDescriptorAllocator_ = nullptr;
+        ID3D12DescriptorHeap* shaderResourceDescriptorHeap_ = nullptr;
         bool initialized_ = false;
     };
 } // namespace ve::editor

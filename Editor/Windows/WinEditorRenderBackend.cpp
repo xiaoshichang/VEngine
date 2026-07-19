@@ -147,7 +147,9 @@ namespace ve::editor
             return ErrorCode::PlatformError;
         }
 
+        descriptorHeap->AddRef();
         shaderResourceDescriptorAllocator_ = descriptorAllocator;
+        shaderResourceDescriptorHeap_ = descriptorHeap;
         return ErrorCode::None;
     }
 
@@ -203,6 +205,11 @@ namespace ve::editor
     {
         ImGui_ImplDX12_Shutdown();
         shaderResourceDescriptorAllocator_ = nullptr;
+        if (shaderResourceDescriptorHeap_ != nullptr)
+        {
+            shaderResourceDescriptorHeap_->Release();
+            shaderResourceDescriptorHeap_ = nullptr;
+        }
     }
 
     void WinEditorRenderBackend::RenderDrawData(rhi::RhiCommandList& commandList, ImDrawData& drawData)
@@ -220,9 +227,13 @@ namespace ve::editor
         case RenderBackend::D3D12:
         {
             auto* nativeCommandList = static_cast<ID3D12GraphicsCommandList*>(commandList.GetNativeCommandBufferHandle());
+            ID3D12DescriptorHeap* descriptorHeap = shaderResourceDescriptorHeap_;
             VE_ASSERT_MESSAGE(nativeCommandList != nullptr, "Dear ImGui D3D12 rendering requires a native graphics command list.");
-            if (nativeCommandList != nullptr)
+            VE_ASSERT_MESSAGE(descriptorHeap != nullptr, "Dear ImGui D3D12 rendering requires its shader-visible descriptor heap.");
+            if (nativeCommandList != nullptr && descriptorHeap != nullptr)
             {
+                ID3D12DescriptorHeap* descriptorHeaps[] = {descriptorHeap};
+                nativeCommandList->SetDescriptorHeaps(1, descriptorHeaps);
                 ImGui_ImplDX12_RenderDrawData(&drawData, nativeCommandList);
             }
             break;

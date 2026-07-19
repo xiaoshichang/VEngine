@@ -52,6 +52,7 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
+        PrepareRenderTargetForClear();
         UpdateRenderWorld();
         BuildRenderQueues();
 
@@ -95,6 +96,32 @@ namespace ve
     const RendererData& BaseRenderer::GetRendererData() const noexcept
     {
         return rendererData_;
+    }
+
+    void BaseRenderer::PrepareRenderTargetForClear()
+    {
+        VE_ASSERT_RENDER_THREAD();
+        if (target_.colorLoadAction != rhi::RhiLoadAction::Clear || target_.colorTexture == nullptr || rendererData_.scene == nullptr ||
+            rendererData_.resolvedCamera == nullptr)
+        {
+            return;
+        }
+
+        const rhi::RhiColor& clearColor = rendererData_.resolvedCamera->GetClearColor();
+        if (target_.colorTexture->IsInitialized() && target_.colorTexture->GetDesc().optimizedClearColor == clearColor)
+        {
+            return;
+        }
+
+        RenderTextureDesc desc = target_.colorTexture->GetDesc();
+        desc.optimizedClearColor = clearColor;
+
+        std::vector<std::unique_ptr<rhi::RhiObject>> retiredResources;
+        target_.colorTexture->InitRenderResource(*frameRenderData_->device, std::move(desc), retiredResources);
+        for (std::unique_ptr<rhi::RhiObject>& resource : retiredResources)
+        {
+            frameRenderData_->RetainTransientResource(std::move(resource));
+        }
     }
 
     void BaseRenderer::UpdateRenderWorld()

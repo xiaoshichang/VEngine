@@ -10,6 +10,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace ve
 {
@@ -21,6 +22,7 @@ namespace ve
         std::string name = "RenderTexture";
         WindowExtent extent = {};
         rhi::RhiFormat colorFormat = rhi::RhiFormat::Bgra8Unorm;
+        rhi::RhiColor optimizedClearColor{0.05f, 0.07f, 0.10f, 1.0f};
     };
 
     /// Scene Thread object for a texture that can be both rendered into and sampled from.
@@ -75,8 +77,10 @@ namespace ve
         [[nodiscard]] const rhi::RhiTexture* GetDepthTexture() const noexcept;
         [[nodiscard]] void* GetRenderResourceViewHandle() const noexcept;
 
-        void InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc);
-        void ResetRenderResource() noexcept;
+        void InitRenderResource(rhi::RhiDevice& device,
+                                RenderTextureDesc desc,
+                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
+        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
 
     private:
         RenderTextureDesc desc_;

@@ -26,6 +26,8 @@ namespace ve
             textureDesc.mipLevelCount = 1;
             textureDesc.format = desc.colorFormat;
             textureDesc.usage = MakeRenderTextureUsage();
+            textureDesc.hasOptimizedClearColor = true;
+            textureDesc.optimizedClearColor = desc.optimizedClearColor;
             textureDesc.debugName = desc.name.c_str();
             return textureDesc;
         }
@@ -169,18 +171,26 @@ namespace ve
         return nativeSampledViewHandle_.load(std::memory_order_acquire);
     }
 
-    void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc)
+    void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device,
+                                             RenderTextureDesc desc,
+                                             std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
     {
         VE_ASSERT_RENDER_THREAD();
 
         const bool textureMatchesDesc = texture_ != nullptr && texture_->GetWidth() == desc.extent.width && texture_->GetHeight() == desc.extent.height &&
-                                        texture_->GetFormat() == desc.colorFormat;
+                                        texture_->GetFormat() == desc.colorFormat && desc_.optimizedClearColor == desc.optimizedClearColor;
 
         desc_ = std::move(desc);
         if (!textureMatchesDesc)
         {
-            texture_.reset();
-            depthTexture_.reset();
+            if (texture_ != nullptr)
+            {
+                retiredResources.push_back(std::move(texture_));
+            }
+            if (depthTexture_ != nullptr)
+            {
+                retiredResources.push_back(std::move(depthTexture_));
+            }
             nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
         }
 
@@ -205,11 +215,17 @@ namespace ve
         }
     }
 
-    void RTRenderTexture::ResetRenderResource() noexcept
+    void RTRenderTexture::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        texture_.reset();
-        depthTexture_.reset();
+        if (texture_ != nullptr)
+        {
+            retiredResources.push_back(std::move(texture_));
+        }
+        if (depthTexture_ != nullptr)
+        {
+            retiredResources.push_back(std::move(depthTexture_));
+        }
         nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
     }
 } // namespace ve
