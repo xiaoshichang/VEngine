@@ -44,7 +44,6 @@ namespace ve
         [[nodiscard]] const RendererData& GetRendererData() const noexcept;
 
     private:
-        void PrepareRenderTargetForClear();
         void UpdateRenderWorld();
         void BuildRenderQueues();
         [[nodiscard]] ErrorCode ImportRenderTargets(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const;

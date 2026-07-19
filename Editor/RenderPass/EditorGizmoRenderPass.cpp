@@ -245,8 +245,14 @@ struct VSOutput
         {
             return ErrorCode::InvalidState;
         }
-        EnsureIconResources(context);
-        UploadFrameResources(context);
+        if (!EnsureIconResources(context))
+        {
+            return ErrorCode::InvalidState;
+        }
+        if (!UploadFrameResources(context))
+        {
+            return ErrorCode::InvalidState;
+        }
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
         const UniformBufferAllocation viewUniform =
             context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
@@ -413,7 +419,7 @@ struct VSOutput
         pipelineColorFormat_ = targetFormat;
     }
 
-    void EditorGizmoRenderPass::EnsureIconResources(RenderPassContext& context)
+    bool EditorGizmoRenderPass::EnsureIconResources(RenderPassContext& context)
     {
         if (iconAtlasTexture_ == nullptr)
         {
@@ -431,17 +437,31 @@ struct VSOutput
             textureDesc.debugName = "BuiltinGizmoIconAtlas";
 
             iconAtlasTexture_ = context.device.CreateTexture(textureDesc);
-            VE_ASSERT_MESSAGE(iconAtlasTexture_ != nullptr, "EditorGizmoRenderPass failed to create builtin gizmo icon atlas texture.");
+            if (iconAtlasTexture_ == nullptr)
+            {
+                const std::string message =
+                    BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create builtin gizmo icon atlas texture.");
+                VE_ASSERT_MESSAGE(iconAtlasTexture_ != nullptr, message.c_str());
+                return false;
+            }
         }
 
         if (iconSampler_ == nullptr)
         {
             iconSampler_ = context.device.CreateSampler(rhi::StaticRenderStates::BilinearClampSampler);
-            VE_ASSERT_MESSAGE(iconSampler_ != nullptr, "EditorGizmoRenderPass failed to create builtin gizmo icon sampler.");
+            if (iconSampler_ == nullptr)
+            {
+                const std::string message =
+                    BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create builtin gizmo icon sampler.");
+                VE_ASSERT_MESSAGE(iconSampler_ != nullptr, message.c_str());
+                return false;
+            }
         }
+
+        return true;
     }
 
-    void EditorGizmoRenderPass::UploadFrameResources(RenderPassContext& context)
+    bool EditorGizmoRenderPass::UploadFrameResources(RenderPassContext& context)
     {
         VE_ASSERT(initParam_.drawList != nullptr);
         uploadedLineVertexCount_ = initParam_.drawList->lines.size();
@@ -453,7 +473,12 @@ struct VSOutput
                                                                            rhi::RhiBufferUsage::Vertex,
                                                                            initParam_.drawList->lines.data(),
                                                                            "EditorGizmoLineVertexBuffer"));
-            VE_ASSERT_MESSAGE(lineVertexBuffer_ != nullptr, "EditorGizmoRenderPass failed to create line vertex buffer.");
+            if (lineVertexBuffer_ == nullptr)
+            {
+                const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create line vertex buffer.");
+                VE_ASSERT_MESSAGE(lineVertexBuffer_ != nullptr, message.c_str());
+                return false;
+            }
         }
         else
         {
@@ -466,12 +491,18 @@ struct VSOutput
                                                                            rhi::RhiBufferUsage::Vertex,
                                                                            initParam_.drawList->icons.data(),
                                                                            "EditorGizmoIconVertexBuffer"));
-            VE_ASSERT_MESSAGE(iconVertexBuffer_ != nullptr, "EditorGizmoRenderPass failed to create icon vertex buffer.");
+            if (iconVertexBuffer_ == nullptr)
+            {
+                const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create icon vertex buffer.");
+                VE_ASSERT_MESSAGE(iconVertexBuffer_ != nullptr, message.c_str());
+                return false;
+            }
         }
         else
         {
             iconVertexBuffer_.reset();
         }
+        return true;
     }
 
 } // namespace ve

@@ -18,6 +18,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -105,6 +106,7 @@ namespace ve::editor
         };
 
         void RenderActiveMainView();
+        [[nodiscard]] bool HandleOSEvent(const OSEvent& event);
         [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CaptureImGuiFrameDrawData();
         [[nodiscard]] EditorFrameRenderViews CollectFrameRenderViews() const;
         [[nodiscard]] EditorOverlayRenderCallback BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const;
@@ -153,6 +155,7 @@ namespace ve::editor
         Path selectedAssetPath_;
         std::unique_ptr<EditorRenderBackend> editorRenderBackend_;
         std::array<std::shared_ptr<EditorFrameDrawData>, 2> imguiDrawDataSnapshots_;
+        mutable std::mutex imguiContextMutex_;
         UInt32 nextImGuiDrawDataSnapshotIndex_ = 0;
         bool waitForImGuiTextureUpdates_ = false;
         std::atomic_bool initialized_{false};

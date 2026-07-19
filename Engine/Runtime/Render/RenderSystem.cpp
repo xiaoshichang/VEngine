@@ -27,6 +27,7 @@
 #include <array>
 #include <exception>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ve
@@ -631,7 +632,22 @@ namespace ve
                        [this, framePipeline = std::move(framePipeline)]()
                        {
                            const ErrorCode result = RenderMainSwapchainFrame(*impl_, *framePipeline);
-                           VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem::RenderFrame failed.");
+                           if (result != ErrorCode::None)
+                           {
+                               std::string message = "RenderSystem::RenderFrame failed: ";
+                               message += ToString(result);
+                               if (impl_->device != nullptr)
+                               {
+                                   const char* backendError = impl_->device->GetLastErrorMessage();
+                                   if (backendError != nullptr && backendError[0] != '\0')
+                                   {
+                                       message += ". Backend error: ";
+                                       message += backendError;
+                                   }
+                               }
+                               VE_LOG_ERROR_CATEGORY("Render", message);
+                               VE_ASSERT_MESSAGE(false, message.c_str());
+                           }
                        });
     }
 

@@ -22,7 +22,6 @@ namespace ve
         std::string name = "RenderTexture";
         WindowExtent extent = {};
         rhi::RhiFormat colorFormat = rhi::RhiFormat::Bgra8Unorm;
-        rhi::RhiColor optimizedClearColor{0.05f, 0.07f, 0.10f, 1.0f};
     };
 
     /// Scene Thread object for a texture that can be both rendered into and sampled from.

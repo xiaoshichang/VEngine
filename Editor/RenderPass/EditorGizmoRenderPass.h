@@ -44,8 +44,8 @@ namespace ve
     private:
         [[nodiscard]] ErrorCode Execute(RenderPassContext& context);
         void EnsurePipeline(RenderPassContext& context);
-        void EnsureIconResources(RenderPassContext& context);
-        void UploadFrameResources(RenderPassContext& context);
+        [[nodiscard]] bool EnsureIconResources(RenderPassContext& context);
+        [[nodiscard]] bool UploadFrameResources(RenderPassContext& context);
         EditorGizmoRenderPassInitParam initParam_;
         std::unique_ptr<rhi::RhiBuffer> lineVertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> iconVertexBuffer_;

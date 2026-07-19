@@ -404,8 +404,6 @@ namespace ve::rhi
         const void* initialData = nullptr;
         uint64_t initialDataSize = 0;
         uint32_t initialDataRowPitch = 0;
-        bool hasOptimizedClearColor = false;
-        RhiColor optimizedClearColor = {};
         const char* debugName = nullptr;
     };
 

@@ -215,7 +215,6 @@ namespace ve
         VE_ASSERT(frameData.mainSwapchain != nullptr);
         std::vector<std::unique_ptr<rhi::RhiObject>> retiredResources;
         RenderTextureDesc desc = BuildSceneColorTextureDesc(*frameData.mainSwapchain);
-        desc.optimizedClearColor = sceneColorTexture_->GetDesc().optimizedClearColor;
         sceneColorTexture_->InitRenderResource(*frameData.device, std::move(desc), retiredResources);
         for (std::unique_ptr<rhi::RhiObject>& resource : retiredResources)
         {

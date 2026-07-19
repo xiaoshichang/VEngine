@@ -26,8 +26,6 @@ namespace ve
             textureDesc.mipLevelCount = 1;
             textureDesc.format = desc.colorFormat;
             textureDesc.usage = MakeRenderTextureUsage();
-            textureDesc.hasOptimizedClearColor = true;
-            textureDesc.optimizedClearColor = desc.optimizedClearColor;
             textureDesc.debugName = desc.name.c_str();
             return textureDesc;
         }
@@ -178,7 +176,7 @@ namespace ve
         VE_ASSERT_RENDER_THREAD();
 
         const bool textureMatchesDesc = texture_ != nullptr && texture_->GetWidth() == desc.extent.width && texture_->GetHeight() == desc.extent.height &&
-                                        texture_->GetFormat() == desc.colorFormat && desc_.optimizedClearColor == desc.optimizedClearColor;
+                                        texture_->GetFormat() == desc.colorFormat;
 
         desc_ = std::move(desc);
         if (!textureMatchesDesc)

@@ -1,6 +1,7 @@
 #include "Engine/RHI/D3D12/D3D12Rhi.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Logging/Log.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -31,6 +32,32 @@ namespace ve::rhi
     namespace
     {
         using Microsoft::WRL::ComPtr;
+
+        void AppendDredDiagnostics(ID3D12Device* device, std::string& message);
+
+        void CALLBACK LogD3D12DebugMessage(D3D12_MESSAGE_CATEGORY,
+                                           D3D12_MESSAGE_SEVERITY severity,
+                                           D3D12_MESSAGE_ID messageId,
+                                           LPCSTR description,
+                                           void* context)
+        {
+            if (messageId == D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE)
+            {
+                return;
+            }
+
+            if (severity == D3D12_MESSAGE_SEVERITY_CORRUPTION || severity == D3D12_MESSAGE_SEVERITY_ERROR)
+            {
+                std::string message = description != nullptr ? description : "";
+                if (messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_AT_FAULT ||
+                    messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_POSSIBLY_AT_FAULT ||
+                    messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_NOT_AT_FAULT)
+                {
+                    AppendDredDiagnostics(static_cast<ID3D12Device*>(context), message);
+                }
+                VE_LOG_ERROR_CATEGORY("D3D12", "Debug layer message {}: {}", static_cast<unsigned>(messageId), message);
+            }
+        }
 
         DXGI_FORMAT ToDxgiFormat(RhiFormat format)
         {
@@ -272,6 +299,142 @@ namespace ve::rhi
             return buffer;
         }
 
+        [[nodiscard]] std::string WideToUtf8(const wchar_t* text)
+        {
+            if (text == nullptr || text[0] == L'\0')
+            {
+                return {};
+            }
+
+            const int byteCount = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+            if (byteCount <= 1)
+            {
+                return {};
+            }
+
+            std::string result(static_cast<size_t>(byteCount), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, text, -1, result.data(), byteCount, nullptr, nullptr);
+            result.resize(static_cast<size_t>(byteCount - 1));
+            return result;
+        }
+
+        void AppendDredDiagnostics(ID3D12Device* device, std::string& message)
+        {
+            if (device == nullptr)
+            {
+                return;
+            }
+
+            const HRESULT removedReason = device->GetDeviceRemovedReason();
+            if (SUCCEEDED(removedReason))
+            {
+                return;
+            }
+
+            char buffer[256] = {};
+            std::snprintf(buffer, sizeof(buffer), "; device removed reason=0x%08X", static_cast<unsigned>(removedReason));
+            message += buffer;
+
+            ComPtr<ID3D12DeviceRemovedExtendedData1> dred;
+            if (FAILED(device->QueryInterface(IID_PPV_ARGS(&dred))))
+            {
+                return;
+            }
+
+            D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 breadcrumbs = {};
+            if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput1(&breadcrumbs)))
+            {
+                const D3D12_AUTO_BREADCRUMB_NODE1* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+                uint32_t reportedNodeCount = 0;
+                while (node != nullptr && reportedNodeCount < 8)
+                {
+                    const uint32_t completedOpCount = node->pLastBreadcrumbValue != nullptr ? *node->pLastBreadcrumbValue : 0;
+                    if (completedOpCount < node->BreadcrumbCount)
+                    {
+                        const std::string wideCommandListName = WideToUtf8(node->pCommandListDebugNameW);
+                        const char* commandListName = node->pCommandListDebugNameA != nullptr
+                                                          ? node->pCommandListDebugNameA
+                                                          : (wideCommandListName.empty() ? "Unnamed D3D12 command list" : wideCommandListName.c_str());
+                        const unsigned nextOp = node->pCommandHistory != nullptr
+                                                    ? static_cast<unsigned>(node->pCommandHistory[completedOpCount])
+                                                    : static_cast<unsigned>(D3D12_AUTO_BREADCRUMB_OP_SETMARKER);
+                        std::snprintf(buffer,
+                                      sizeof(buffer),
+                                      "; DRED breadcrumb list='%s' completed=%u/%u nextOp=%u",
+                                      commandListName,
+                                      completedOpCount,
+                                      node->BreadcrumbCount,
+                                      nextOp);
+                        message += buffer;
+
+                        if (node->pCommandHistory != nullptr)
+                        {
+                            message += "; nearbyOps=";
+                            const uint32_t firstOp = completedOpCount > 6 ? completedOpCount - 6 : 0;
+                            const uint32_t lastOp = (std::min)(node->BreadcrumbCount, completedOpCount + 5);
+                            for (uint32_t operationIndex = firstOp; operationIndex < lastOp; ++operationIndex)
+                            {
+                                message += operationIndex == completedOpCount ? ">" : "";
+                                message += std::to_string(static_cast<unsigned>(node->pCommandHistory[operationIndex]));
+                                if (operationIndex + 1 < lastOp)
+                                {
+                                    message += ",";
+                                }
+                            }
+                        }
+
+                        if (node->pBreadcrumbContexts != nullptr)
+                        {
+                            for (UINT contextIndex = 0; contextIndex < node->BreadcrumbContextsCount; ++contextIndex)
+                            {
+                                const D3D12_DRED_BREADCRUMB_CONTEXT& context = node->pBreadcrumbContexts[contextIndex];
+                                if (context.BreadcrumbIndex <= completedOpCount)
+                                {
+                                    const std::string contextName = WideToUtf8(context.pContextString);
+                                    if (!contextName.empty())
+                                    {
+                                        message += "; context='" + contextName + "'";
+                                    }
+                                }
+                            }
+                        }
+                        ++reportedNodeCount;
+                    }
+                    node = node->pNext;
+                }
+            }
+
+            D3D12_DRED_PAGE_FAULT_OUTPUT1 pageFault = {};
+            if (SUCCEEDED(dred->GetPageFaultAllocationOutput1(&pageFault)) && pageFault.PageFaultVA != 0)
+            {
+                std::snprintf(buffer, sizeof(buffer), "; DRED pageFaultVA=0x%016llX", static_cast<unsigned long long>(pageFault.PageFaultVA));
+                message += buffer;
+
+                const D3D12_DRED_ALLOCATION_NODE1* allocation = pageFault.pHeadExistingAllocationNode;
+                if (allocation == nullptr)
+                {
+                    allocation = pageFault.pHeadRecentFreedAllocationNode;
+                }
+                if (allocation != nullptr)
+                {
+                    const char* allocationName = allocation->ObjectNameA != nullptr ? allocation->ObjectNameA : "Unnamed D3D12 allocation";
+                    std::snprintf(buffer,
+                                  sizeof(buffer),
+                                  "; allocation='%s' type=%u",
+                                  allocationName,
+                                  static_cast<unsigned>(allocation->AllocationType));
+                    message += buffer;
+                }
+            }
+        }
+
+        std::string MakeD3D12Error(ID3D12Device* device, const char* operation, HRESULT result)
+        {
+            std::string message = MakeHResultError(operation, result);
+            AppendDredDiagnostics(device, message);
+            return message;
+        }
+
         class D3D12ShaderResourceDescriptorAllocator final : public RhiNativeShaderResourceDescriptorAllocator
         {
         public:
@@ -393,6 +556,147 @@ namespace ve::rhi
             }
 
             static constexpr uint32_t DescriptorCapacity = 4096;
+
+            ComPtr<ID3D12DescriptorHeap> heap_;
+            ComPtr<ID3D12Fence> fence_;
+            D3D12_CPU_DESCRIPTOR_HANDLE cpuStart_ = {};
+            D3D12_GPU_DESCRIPTOR_HANDLE gpuStart_ = {};
+            uint32_t descriptorSize_ = 0;
+            uint32_t nextIndex_ = 0;
+            std::vector<bool> allocatedSlots_;
+            std::vector<uint32_t> freeIndices_;
+            std::vector<RetiredDescriptor> retiredIndices_;
+            std::atomic<uint64_t> lastSubmittedFenceValue_{0};
+            std::mutex mutex_;
+        };
+
+        struct D3D12SamplerDescriptor
+        {
+            D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = {};
+            D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = {};
+        };
+
+        class D3D12SamplerDescriptorAllocator final
+        {
+        public:
+            [[nodiscard]] bool Initialize(ID3D12Device* device, ID3D12Fence* fence)
+            {
+                if (device == nullptr || fence == nullptr)
+                {
+                    return false;
+                }
+
+                D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+                heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+                heapDesc.NumDescriptors = DescriptorCapacity;
+                heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+
+                if (FAILED(device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&heap_))))
+                {
+                    return false;
+                }
+
+                heap_->SetName(L"VEngine Shared Sampler Descriptor Heap");
+                fence_ = fence;
+                descriptorSize_ = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+                cpuStart_ = heap_->GetCPUDescriptorHandleForHeapStart();
+                gpuStart_ = heap_->GetGPUDescriptorHandleForHeapStart();
+                allocatedSlots_.assign(DescriptorCapacity, false);
+                freeIndices_.reserve(DescriptorCapacity);
+                retiredIndices_.reserve(DescriptorCapacity);
+                return descriptorSize_ != 0;
+            }
+
+            [[nodiscard]] ID3D12DescriptorHeap* GetHeap() const noexcept
+            {
+                return heap_.Get();
+            }
+
+            [[nodiscard]] bool Allocate(D3D12SamplerDescriptor& outDescriptor)
+            {
+                std::scoped_lock lock(mutex_);
+                CollectCompletedSlots();
+
+                uint32_t descriptorIndex = 0;
+                if (!freeIndices_.empty())
+                {
+                    descriptorIndex = freeIndices_.back();
+                    freeIndices_.pop_back();
+                }
+                else
+                {
+                    if (nextIndex_ >= DescriptorCapacity)
+                    {
+                        outDescriptor = {};
+                        return false;
+                    }
+
+                    descriptorIndex = nextIndex_;
+                    ++nextIndex_;
+                }
+
+                VE_ASSERT_MESSAGE(!allocatedSlots_[descriptorIndex], "D3D12 sampler descriptor slot is already allocated.");
+                allocatedSlots_[descriptorIndex] = true;
+                outDescriptor.cpuHandle.ptr = cpuStart_.ptr + (static_cast<uint64_t>(descriptorIndex) * descriptorSize_);
+                outDescriptor.gpuHandle.ptr = gpuStart_.ptr + (static_cast<uint64_t>(descriptorIndex) * descriptorSize_);
+                return true;
+            }
+
+            void Release(D3D12SamplerDescriptor descriptor) noexcept
+            {
+                std::scoped_lock lock(mutex_);
+
+                const bool cpuHandleInRange = descriptor.cpuHandle.ptr >= cpuStart_.ptr;
+                const bool gpuHandleInRange = descriptor.gpuHandle.ptr >= gpuStart_.ptr;
+                const uint64_t cpuOffset = cpuHandleInRange ? descriptor.cpuHandle.ptr - cpuStart_.ptr : 0;
+                const uint64_t gpuOffset = gpuHandleInRange ? descriptor.gpuHandle.ptr - gpuStart_.ptr : 0;
+                const bool aligned = descriptorSize_ != 0 && cpuOffset % descriptorSize_ == 0 && gpuOffset % descriptorSize_ == 0;
+                const uint64_t cpuIndex = descriptorSize_ != 0 ? cpuOffset / descriptorSize_ : DescriptorCapacity;
+                const uint64_t gpuIndex = descriptorSize_ != 0 ? gpuOffset / descriptorSize_ : DescriptorCapacity;
+                const bool valid = cpuHandleInRange && gpuHandleInRange && aligned && cpuIndex == gpuIndex && cpuIndex < nextIndex_ &&
+                                   allocatedSlots_[static_cast<size_t>(cpuIndex)];
+                VE_ASSERT_MESSAGE(valid, "D3D12 sampler descriptor release is invalid or duplicated.");
+                if (!valid)
+                {
+                    return;
+                }
+
+                const uint32_t descriptorIndex = static_cast<uint32_t>(cpuIndex);
+                allocatedSlots_[descriptorIndex] = false;
+                retiredIndices_.push_back(RetiredDescriptor{descriptorIndex, lastSubmittedFenceValue_.load(std::memory_order_acquire)});
+            }
+
+            void NotifySubmission(uint64_t fenceValue) noexcept
+            {
+                lastSubmittedFenceValue_.store(fenceValue, std::memory_order_release);
+            }
+
+        private:
+            struct RetiredDescriptor
+            {
+                uint32_t index = 0;
+                uint64_t fenceValue = 0;
+            };
+
+            void CollectCompletedSlots()
+            {
+                const uint64_t completedFenceValue = fence_->GetCompletedValue();
+                auto removeBegin = std::remove_if(retiredIndices_.begin(),
+                                                  retiredIndices_.end(),
+                                                  [this, completedFenceValue](const RetiredDescriptor& retiredDescriptor)
+                                                  {
+                                                      if (retiredDescriptor.fenceValue > completedFenceValue)
+                                                      {
+                                                          return false;
+                                                      }
+
+                                                      freeIndices_.push_back(retiredDescriptor.index);
+                                                      return true;
+                                                  });
+                retiredIndices_.erase(removeBegin, retiredIndices_.end());
+            }
+
+            static constexpr uint32_t DescriptorCapacity = D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE;
 
             ComPtr<ID3D12DescriptorHeap> heap_;
             ComPtr<ID3D12Fence> fence_;
@@ -581,10 +885,18 @@ namespace ve::rhi
         class D3D12Sampler final : public RhiSampler
         {
         public:
-            D3D12Sampler(ComPtr<ID3D12DescriptorHeap> samplerHeap, RhiSamplerDesc desc)
-                : samplerHeap_(std::move(samplerHeap))
+            D3D12Sampler(std::shared_ptr<D3D12SamplerDescriptorAllocator> descriptorAllocator,
+                         D3D12SamplerDescriptor descriptor,
+                         RhiSamplerDesc desc)
+                : descriptorAllocator_(std::move(descriptorAllocator))
+                , descriptor_(descriptor)
                 , desc_(desc)
             {
+            }
+
+            ~D3D12Sampler() override
+            {
+                descriptorAllocator_->Release(descriptor_);
             }
 
             [[nodiscard]] RhiSamplerFilter GetFilter() const noexcept override
@@ -594,17 +906,17 @@ namespace ve::rhi
 
             [[nodiscard]] ID3D12DescriptorHeap* GetSamplerHeap() const noexcept
             {
-                return samplerHeap_.Get();
+                return descriptorAllocator_->GetHeap();
             }
 
             [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetSampler() const noexcept
             {
-                VE_ASSERT(samplerHeap_ != nullptr);
-                return samplerHeap_->GetGPUDescriptorHandleForHeapStart();
+                return descriptor_.gpuHandle;
             }
 
         private:
-            ComPtr<ID3D12DescriptorHeap> samplerHeap_;
+            std::shared_ptr<D3D12SamplerDescriptorAllocator> descriptorAllocator_;
+            D3D12SamplerDescriptor descriptor_ = {};
             RhiSamplerDesc desc_ = {};
         };
 
@@ -788,7 +1100,7 @@ namespace ve::rhi
 
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("IDXGISwapChain3::Present", result));
+                    SetLastError(MakeD3D12Error(device_.Get(), "IDXGISwapChain3::Present", result));
                     return false;
                 }
 
@@ -1143,6 +1455,12 @@ namespace ve::rhi
             {
                 WaitIdle();
 
+                if (infoQueue_ != nullptr && infoQueueCallbackRegistered_)
+                {
+                    infoQueue_->UnregisterMessageCallback(infoQueueCallbackCookie_);
+                    infoQueueCallbackRegistered_ = false;
+                }
+
                 if (fenceEvent_ != nullptr)
                 {
                     CloseHandle(fenceEvent_);
@@ -1162,6 +1480,14 @@ namespace ve::rhi
                     {
                         debugController->EnableDebugLayer();
                         factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+                    }
+
+                    ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> dredSettings;
+                    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dredSettings))))
+                    {
+                        dredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                        dredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+                        dredSettings->SetBreadcrumbContextEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
                     }
                 }
 
@@ -1187,6 +1513,27 @@ namespace ve::rhi
                     return false;
                 }
 
+                if (enableDebug_ && SUCCEEDED(device_.As(&infoQueue_)))
+                {
+                    D3D12_MESSAGE_ID ignoredMessageIds[] = {
+                        D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+                    };
+                    D3D12_INFO_QUEUE_FILTER filter = {};
+                    filter.DenyList.NumIDs = _countof(ignoredMessageIds);
+                    filter.DenyList.pIDList = ignoredMessageIds;
+                    const HRESULT filterResult = infoQueue_->AddStorageFilterEntries(&filter);
+                    if (FAILED(filterResult))
+                    {
+                        VE_LOG_WARN_CATEGORY("D3D12",
+                                             "Failed to configure the D3D12 debug message filter: HRESULT=0x{:08X}.",
+                                             static_cast<unsigned>(filterResult));
+                    }
+
+                    const HRESULT callbackResult = infoQueue_->RegisterMessageCallback(
+                        LogD3D12DebugMessage, D3D12_MESSAGE_CALLBACK_FLAG_NONE, device_.Get(), &infoQueueCallbackCookie_);
+                    infoQueueCallbackRegistered_ = SUCCEEDED(callbackResult);
+                }
+
                 D3D12_COMMAND_QUEUE_DESC queueDesc = {};
                 queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
                 queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
@@ -1198,6 +1545,7 @@ namespace ve::rhi
                     SetLastError(MakeHResultError("ID3D12Device::CreateCommandQueue", result));
                     return false;
                 }
+                queue_->SetName(L"VEngine Graphics Queue");
 
                 result = device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_));
 
@@ -1219,6 +1567,13 @@ namespace ve::rhi
                 if (!shaderResourceDescriptorAllocator_->Initialize(device_.Get(), fence_.Get()))
                 {
                     SetLastError("Failed to create the D3D12 shared shader-resource descriptor heap.");
+                    return false;
+                }
+
+                samplerDescriptorAllocator_ = std::make_shared<D3D12SamplerDescriptorAllocator>();
+                if (!samplerDescriptorAllocator_->Initialize(device_.Get(), fence_.Get()))
+                {
+                    SetLastError("Failed to create the D3D12 shared sampler descriptor heap.");
                     return false;
                 }
 
@@ -1327,7 +1682,7 @@ namespace ve::rhi
 
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("ID3D12Device::CreateCommittedResource buffer", result));
+                    SetLastError(MakeD3D12Error(device_.Get(), "ID3D12Device::CreateCommittedResource buffer", result));
                     return nullptr;
                 }
 
@@ -1415,15 +1770,6 @@ namespace ve::rhi
                     clearValue.DepthStencil.Stencil = 0;
                     clearValuePtr = &clearValue;
                 }
-                else if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::RenderTarget)) != 0 && desc.hasOptimizedClearColor)
-                {
-                    clearValue.Format = ToDxgiFormat(desc.format);
-                    clearValue.Color[0] = desc.optimizedClearColor.r;
-                    clearValue.Color[1] = desc.optimizedClearColor.g;
-                    clearValue.Color[2] = desc.optimizedClearColor.b;
-                    clearValue.Color[3] = desc.optimizedClearColor.a;
-                    clearValuePtr = &clearValue;
-                }
 
                 ComPtr<ID3D12Resource> resource;
                 HRESULT result = device_->CreateCommittedResource(
@@ -1431,7 +1777,7 @@ namespace ve::rhi
 
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("ID3D12Device::CreateCommittedResource texture", result));
+                    SetLastError(MakeD3D12Error(device_.Get(), "ID3D12Device::CreateCommittedResource texture", result));
                     return nullptr;
                 }
 
@@ -1474,7 +1820,7 @@ namespace ve::rhi
                                                               IID_PPV_ARGS(&uploadBuffer));
                     if (FAILED(result))
                     {
-                        SetLastError(MakeHResultError("ID3D12Device::CreateCommittedResource texture upload", result));
+                        SetLastError(MakeD3D12Error(device_.Get(), "ID3D12Device::CreateCommittedResource texture upload", result));
                         return nullptr;
                     }
 
@@ -1630,16 +1976,10 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override
             {
-                D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-                heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
-                heapDesc.NumDescriptors = 1;
-                heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-                ComPtr<ID3D12DescriptorHeap> samplerHeap;
-                HRESULT result = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&samplerHeap));
-                if (FAILED(result))
+                D3D12SamplerDescriptor descriptor = {};
+                if (!samplerDescriptorAllocator_->Allocate(descriptor))
                 {
-                    SetLastError(MakeHResultError("ID3D12Device::CreateDescriptorHeap sampler", result));
+                    SetLastError("D3D12 sampler descriptor heap is exhausted.");
                     return nullptr;
                 }
 
@@ -1659,9 +1999,9 @@ namespace ve::rhi
                 samplerDesc.BorderColor[3] = desc.borderColor.a;
                 samplerDesc.MinLOD = desc.minLod;
                 samplerDesc.MaxLOD = desc.maxLod;
-                device_->CreateSampler(&samplerDesc, samplerHeap->GetCPUDescriptorHandleForHeapStart());
+                device_->CreateSampler(&samplerDesc, descriptor.cpuHandle);
 
-                return std::make_unique<D3D12Sampler>(samplerHeap, desc);
+                return std::make_unique<D3D12Sampler>(samplerDescriptorAllocator_, descriptor, desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) override
@@ -1951,7 +2291,7 @@ namespace ve::rhi
                 const HRESULT result = queue_->Signal(d3dFence->GetNativeFence(), completionValue);
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("ID3D12CommandQueue::Signal completion fence", result));
+                    SetLastError(MakeD3D12Error(device_.Get(), "ID3D12CommandQueue::Signal completion fence", result));
                     return false;
                 }
 
@@ -1981,7 +2321,7 @@ namespace ve::rhi
 
                     if (FAILED(result))
                     {
-                        SetLastError(MakeHResultError("ID3D12Fence::SetEventOnCompletion", result));
+                        SetLastError(MakeD3D12Error(device_.Get(), "ID3D12Fence::SetEventOnCompletion", result));
                         return false;
                     }
 
@@ -1999,11 +2339,12 @@ namespace ve::rhi
                 const HRESULT result = queue_->Signal(fence_.Get(), outFenceValue);
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("ID3D12CommandQueue::Signal", result));
+                    SetLastError(MakeD3D12Error(device_.Get(), "ID3D12CommandQueue::Signal", result));
                     return false;
                 }
 
                 shaderResourceDescriptorAllocator_->NotifySubmission(outFenceValue);
+                samplerDescriptorAllocator_->NotifySubmission(outFenceValue);
                 return true;
             }
 
@@ -2018,8 +2359,12 @@ namespace ve::rhi
             ComPtr<ID3D12Device> device_;
             ComPtr<ID3D12CommandQueue> queue_;
             ComPtr<ID3D12Fence> fence_;
+            ComPtr<ID3D12InfoQueue1> infoQueue_;
             std::shared_ptr<D3D12ShaderResourceDescriptorAllocator> shaderResourceDescriptorAllocator_;
+            std::shared_ptr<D3D12SamplerDescriptorAllocator> samplerDescriptorAllocator_;
             HANDLE fenceEvent_ = nullptr;
+            DWORD infoQueueCallbackCookie_ = 0;
+            bool infoQueueCallbackRegistered_ = false;
             uint64_t nextFenceValue_ = 1;
             std::string lastError_;
         };

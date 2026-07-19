@@ -258,7 +258,7 @@ namespace ve::editor
         sceneSystem_->SetEditorCallback(SceneSystemEditorCallback{
             .onBeforeOSEvents = [this]() { input_.BeginOSEventFrame(); },
             .onStartFrame = [this]() { StartFrame(); },
-            .onOSEvent = [this](const OSEvent& event) { return input_.OnOSEvent(event); },
+            .onOSEvent = [this](const OSEvent& event) { return HandleOSEvent(event); },
             .onRender = [this]() { return Render(); },
         });
 
@@ -274,15 +274,7 @@ namespace ve::editor
             return;
         }
 
-        if (waitForImGuiTextureUpdates_)
-        {
-            renderSystem_->Flush();
-            waitForImGuiTextureUpdates_ = false;
-        }
-
-        BeginRenderBackendFrame();
-        input_.StartFrame();
-        ImGui::NewFrame();
+        // The ImGui frame starts in Render so the context lock does not cover scene, script, or physics updates.
     }
 
     std::shared_ptr<FrameRenderPipeline> Editor::Render()
@@ -293,9 +285,21 @@ namespace ve::editor
             return nullptr;
         }
 
-        RenderActiveMainView();
+        if (waitForImGuiTextureUpdates_)
+        {
+            renderSystem_->Flush();
+            waitForImGuiTextureUpdates_ = false;
+        }
 
-        std::shared_ptr<EditorFrameDrawData> frameDrawData = CaptureImGuiFrameDrawData();
+        std::shared_ptr<EditorFrameDrawData> frameDrawData;
+        {
+            const std::scoped_lock lock(imguiContextMutex_);
+            BeginRenderBackendFrame();
+            input_.StartFrame();
+            ImGui::NewFrame();
+            RenderActiveMainView();
+            frameDrawData = CaptureImGuiFrameDrawData();
+        }
         EditorFrameRenderViews views = CollectFrameRenderViews();
         std::shared_ptr<RTScene> renderScene = GetActiveRenderScene();
 
@@ -320,6 +324,12 @@ namespace ve::editor
         }
 
         ImGui::Render();
+    }
+
+    bool Editor::HandleOSEvent(const OSEvent& event)
+    {
+        const std::scoped_lock lock(imguiContextMutex_);
+        return input_.OnOSEvent(event);
     }
 
     std::shared_ptr<EditorFrameDrawData> Editor::CaptureImGuiFrameDrawData()
@@ -374,15 +384,18 @@ namespace ve::editor
     EditorOverlayRenderCallback Editor::BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const
     {
         EditorRenderBackend* renderBackend = editorRenderBackend_.get();
-        return [renderBackend, editorInitialized = &initialized_, frameDrawData = std::move(frameDrawData)](rhi::RhiCommandList& commandList)
+        std::mutex* imguiContextMutex = &imguiContextMutex_;
+        return [renderBackend, editorInitialized = &initialized_, imguiContextMutex, frameDrawData = std::move(frameDrawData)](rhi::RhiCommandList& commandList)
         {
             VE_ASSERT_RENDER_THREAD();
 
-            if (editorInitialized == nullptr || !editorInitialized->load(std::memory_order_acquire) || frameDrawData == nullptr || renderBackend == nullptr)
+            if (editorInitialized == nullptr || !editorInitialized->load(std::memory_order_acquire) || imguiContextMutex == nullptr ||
+                frameDrawData == nullptr || renderBackend == nullptr)
             {
                 return;
             }
 
+            const std::scoped_lock lock(*imguiContextMutex);
             renderBackend->RenderDrawData(commandList, frameDrawData->drawData);
         };
     }
