@@ -588,8 +588,8 @@ render work is assembled for the Render Thread.
 Renderer-owned code lives under `Engine/Runtime/Render/Renderer`. `StandaloneRenderer` is selected for Windows and
 macOS host products, while `MobileRenderer` owns the iOS topology. Both build scene work through typed, versioned Frame
 Graph texture handles; opaque and transparent passes consume only their preclassified queue lists. Each in-flight
-`FrameContext` owns one transient Frame Graph texture pool so reuse remains protected by that context's completion
-fence.
+`FrameContext` owns one transient Frame Graph texture pool and retains the submitted frame pipeline so transient
+allocations and render proxies referenced by that frame remain alive through the context's completion fence.
 
 Render-facing resource ownership follows an Unreal-style split between the Scene Thread and Render Thread:
 
@@ -617,12 +617,14 @@ Scene Thread:
 Render Thread:
   RTRenderTexture
     Owns RHI texture, render target view, and sampled/resource view references.
-    Receives initialization, resize, and release commands.
+    Receives initialization and release commands.
 ```
 
 This model lets Scene Thread code keep ordinary CPU descriptions while Render Thread code owns the backend-specific
 objects and timing-sensitive destruction. `RenderTexture` can be destroyed on the Scene Thread while `RTRenderTexture`
-survives until the last render command that captured it has completed.
+survives through queued render commands and the completion fence of the last submitted frame that references it.
+Texture-backed editor panels replace their `RenderTexture` when their extent changes instead of mutating the existing
+object, so old RHI resources are destroyed on the Render Thread when the retaining `FrameContext` is reset.
 
 The render layer should avoid directly depending on live `GameObject` instances on the Render Thread. It should consume
 render proxies, snapshots, or render commands produced by the Scene Thread.

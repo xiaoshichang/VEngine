@@ -27,6 +27,7 @@ namespace ve
     struct EditorRenderFramePipelineInitParam
     {
         std::vector<StandaloneRendererInitParam> sceneRenderers;
+        std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures;
         rhi::RhiLoadAction overlayColorLoadAction = rhi::RhiLoadAction::Clear;
         EditorOverlayRenderCallback overlayRenderCallback;
     };
@@ -63,6 +64,7 @@ namespace ve
         [[nodiscard]] ErrorCode RecordOverlayPass(const FrameRenderPipelineData& frameData);
 
         std::vector<StandaloneRendererInitParam> sceneRenderers_;
+        std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures_;
         rhi::RhiLoadAction overlayColorLoadAction_ = rhi::RhiLoadAction::Clear;
         EditorOverlayRenderCallback overlayRenderCallback_;
     };

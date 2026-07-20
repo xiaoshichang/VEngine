@@ -71,7 +71,6 @@ namespace ve::editor
         [[nodiscard]] ve::GameObject* GetSelectedGameObject() noexcept;
         [[nodiscard]] const ve::GameObject* GetSelectedGameObject() const noexcept;
         [[nodiscard]] const Path& GetSelectedAssetPath() const noexcept;
-        void KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture);
         [[nodiscard]] std::vector<AssetID> CollectActiveResourceRoots() const;
         void CollectUnusedResources();
         [[nodiscard]] bool IsPlaying() const noexcept;
@@ -163,9 +162,6 @@ namespace ve::editor
         EditorPlayState playState_ = EditorPlayState::Editing;
         UInt64 playSessionID_ = 0;
 
-        // ImGui consumes native texture handles as raw IDs. Keep the owning RenderTexture objects alive at editor
-        // scope, and let panels register those textures once when their editor-side view is initialized.
-        std::vector<std::shared_ptr<RenderTexture>> retainedImGuiRenderTextures_;
         std::vector<std::string> recentProjects_;
         std::string currentProjectPath_;
         std::string currentProjectName_;

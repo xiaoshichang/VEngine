@@ -86,6 +86,7 @@ namespace ve
 
     EditorRenderFramePipeline::EditorRenderFramePipeline(EditorRenderFramePipelineInitParam initParam)
         : sceneRenderers_(std::move(initParam.sceneRenderers))
+        , retainedRenderTextures_(std::move(initParam.retainedRenderTextures))
         , overlayColorLoadAction_(initParam.overlayColorLoadAction)
         , overlayRenderCallback_(std::move(initParam.overlayRenderCallback))
     {

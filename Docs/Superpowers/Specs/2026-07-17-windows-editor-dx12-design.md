@@ -74,7 +74,7 @@ The existing Editor frame pipeline remains authoritative:
 4. `WinEditorRenderBackend` records ImGui DX11 or DX12 commands into that pass.
 5. The existing RHI submission and presentation path submits and presents the frame.
 
-DX12 Scene View and Game View `ImTextureID` values are GPU descriptor handles from the shared shader-visible heap. Their render textures remain alive through the existing `KeepImGuiTextureAlive` mechanism, so copied ImGui draw data cannot outlive the descriptor-producing texture.
+DX12 Scene View and Game View `ImTextureID` values are GPU descriptor handles from the shared shader-visible heap. Each Editor frame pipeline retains the render textures referenced by its copied ImGui draw data, and the submitting `FrameContext` retains that pipeline through its completion fence. Resizing replaces the panel's `RenderTexture`, allowing the previous texture and descriptor to be destroyed safely on the Render Thread after the last referencing frame completes.
 
 ## Resource Lifetime And Failure Behavior
 

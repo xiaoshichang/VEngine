@@ -304,6 +304,14 @@ namespace ve::editor
         std::shared_ptr<RTScene> renderScene = GetActiveRenderScene();
 
         EditorRenderFramePipelineInitParam pipelineInitParam = {};
+        if (views.sceneViewTexture != nullptr)
+        {
+            pipelineInitParam.retainedRenderTextures.push_back(views.sceneViewTexture);
+        }
+        if (views.gameViewTexture != nullptr)
+        {
+            pipelineInitParam.retainedRenderTextures.push_back(views.gameViewTexture);
+        }
         AddSceneViewRenderer(pipelineInitParam, views, renderScene);
         AddGameViewRenderer(pipelineInitParam, views, renderScene);
         pipelineInitParam.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
@@ -485,7 +493,6 @@ namespace ve::editor
         nextImGuiDrawDataSnapshotIndex_ = 0;
         waitForImGuiTextureUpdates_ = false;
         ShutdownRenderBackend();
-        retainedImGuiRenderTextures_.clear();
         resourceLoader_.Shutdown();
         assetDatabase_.Shutdown();
 
@@ -640,19 +647,6 @@ namespace ve::editor
     const Path& Editor::GetSelectedAssetPath() const noexcept
     {
         return selectedAssetPath_;
-    }
-
-    void Editor::KeepImGuiTextureAlive(std::shared_ptr<RenderTexture> renderTexture)
-    {
-        VE_ASSERT_SCENE_THREAD();
-        if (renderTexture != nullptr)
-        {
-            const auto existing = std::find(retainedImGuiRenderTextures_.begin(), retainedImGuiRenderTextures_.end(), renderTexture);
-            if (existing == retainedImGuiRenderTextures_.end())
-            {
-                retainedImGuiRenderTextures_.push_back(std::move(renderTexture));
-            }
-        }
     }
 
     std::vector<AssetID> Editor::CollectActiveResourceRoots() const

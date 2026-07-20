@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <imgui.h>
+#include <utility>
 
 namespace ve::editor
 {
@@ -110,7 +111,6 @@ namespace ve::editor
             desc.name = "EditorSceneViewTexture";
             desc.colorFormat = rhi::RhiFormat::Bgra8Unorm;
             sceneViewTexture_ = std::make_shared<RenderTexture>(desc);
-            editor.KeepImGuiTextureAlive(sceneViewTexture_);
         }
 
         UpdateSceneViewCamera();
@@ -539,8 +539,14 @@ namespace ve::editor
     {
         VE_ASSERT_SCENE_THREAD();
 
-        sceneViewTexture_->Resize(extent);
-        sceneViewTexture_->InitRenderResource(editor.GetRenderSystem());
+        RenderTextureDesc desc = {};
+        desc.name = sceneViewTexture_->GetName();
+        desc.extent = extent;
+        desc.colorFormat = sceneViewTexture_->GetColorFormat();
+
+        auto renderTexture = std::make_shared<RenderTexture>(std::move(desc));
+        renderTexture->InitRenderResource(editor.GetRenderSystem());
+        sceneViewTexture_ = std::move(renderTexture);
         renderTargetExtent_ = extent;
     }
 

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <imgui.h>
+#include <utility>
 
 namespace ve::editor
 {
@@ -38,7 +39,6 @@ namespace ve::editor
                 .colorFormat = rhi::RhiFormat::Bgra8Unorm,
             };
             gameViewTexture_ = std::make_shared<RenderTexture>(desc);
-            editor.KeepImGuiTextureAlive(gameViewTexture_);
         }
     }
 
@@ -90,8 +90,14 @@ namespace ve::editor
     {
         VE_ASSERT_SCENE_THREAD();
 
-        gameViewTexture_->Resize(extent);
-        gameViewTexture_->InitRenderResource(editor.GetRenderSystem());
+        RenderTextureDesc desc = {};
+        desc.name = gameViewTexture_->GetName();
+        desc.extent = extent;
+        desc.colorFormat = gameViewTexture_->GetColorFormat();
+
+        auto renderTexture = std::make_shared<RenderTexture>(std::move(desc));
+        renderTexture->InitRenderResource(editor.GetRenderSystem());
+        gameViewTexture_ = std::move(renderTexture);
 
         renderTargetExtent_ = extent;
     }

@@ -24,6 +24,7 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
 
         void RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource);
+        void RetainSubmittedFrameObject(std::shared_ptr<void> object);
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size);
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene);
         [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent);
@@ -39,6 +40,7 @@ namespace ve
         std::unique_ptr<rhi::RhiCommandList> commandList_;
         std::unique_ptr<rhi::RhiFence> completionFence_;
         std::vector<std::unique_ptr<rhi::RhiObject>> transientResources_;
+        std::shared_ptr<void> submittedFrameObject_;
         FrameGraphTransientResourcePool transientResourcePool_;
         FrameUniformAllocator uniformAllocator_;
         RenderFrameUniformCache uniformCache_;

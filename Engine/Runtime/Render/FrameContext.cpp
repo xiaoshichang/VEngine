@@ -46,6 +46,7 @@ namespace ve
             return false;
         }
 
+        submittedFrameObject_.reset();
         transientResources_.clear();
         uniformCache_.Reset();
         uniformAllocator_.Reset();
@@ -85,6 +86,14 @@ namespace ve
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(resource != nullptr);
         transientResources_.push_back(std::move(resource));
+    }
+
+    void FrameContext::RetainSubmittedFrameObject(std::shared_ptr<void> object)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(object != nullptr);
+        VE_ASSERT(submittedFrameObject_ == nullptr);
+        submittedFrameObject_ = std::move(object);
     }
 
     UniformBufferAllocation FrameContext::UploadUniform(const void* data, UInt64 size)
