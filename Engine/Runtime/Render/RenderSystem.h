@@ -167,6 +167,12 @@ namespace ve
         /// Destroys the main swapchain on the Render Thread if one exists.
         void DestroyMainSwapchain() noexcept;
 
+        /// Requests an asynchronous resize of the main swapchain.
+        ///
+        /// Repeated requests are coalesced to the latest non-zero extent before the Render Thread recreates the
+        /// presentation buffers.
+        void RequestMainSwapchainResize(rhi::RhiExtent2D extent);
+
         /// Initializes a Scene Thread-owned render resource proxy on the Render Thread.
         ///
         /// The description is copied at submission time. This avoids sharing mutable CPU-side RenderTarget state with
@@ -195,6 +201,9 @@ namespace ve
         ///
         /// Flush() is a CPU render command queue fence. It does not wait for GPU idle or future RHI queue completion.
         void Flush();
+
+        /// Waits until all previously accepted render commands and GPU submissions have completed.
+        void WaitIdle();
 
     private:
         [[nodiscard]] ErrorCode ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function);

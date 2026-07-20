@@ -475,7 +475,7 @@ namespace ve::editor
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::UnInit requires renderSystem_ to be valid.");
         if (renderSystem_->IsInitialized())
         {
-            renderSystem_->Flush();
+            renderSystem_->WaitIdle();
         }
 
         for (std::shared_ptr<EditorFrameDrawData>& snapshot : imguiDrawDataSnapshots_)

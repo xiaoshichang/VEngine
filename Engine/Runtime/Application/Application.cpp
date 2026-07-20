@@ -306,6 +306,15 @@ namespace ve
             return swapchainResult;
         }
 
+        engineRuntime_.GetSceneSystem().SetRuntimeOSEventCallback(
+            [&renderSystem](const OSEvent& event)
+            {
+                if (event.type == OSEventType::WindowResized && event.width != 0 && event.height != 0)
+                {
+                    renderSystem.RequestMainSwapchainResize(rhi::RhiExtent2D{event.width, event.height});
+                }
+            });
+
         return ErrorCode::None;
     }
 

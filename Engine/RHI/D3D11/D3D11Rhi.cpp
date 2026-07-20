@@ -580,23 +580,45 @@ namespace ve::rhi
 
             [[nodiscard]] bool Initialize()
             {
-                HRESULT result = swapchain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer_));
+                return CreateBackBufferView();
+            }
 
-                if (FAILED(result))
+            [[nodiscard]] bool Resize(RhiExtent2D extent) override
+            {
+                if (extent.width == 0 || extent.height == 0)
                 {
-                    SetLastError(MakeHResultError("IDXGISwapChain::GetBuffer", result));
+                    SetLastError("D3D11 swapchain resize requires a non-empty extent.");
                     return false;
                 }
 
-                result = device_->CreateRenderTargetView(backBuffer_.Get(), nullptr, &renderTargetView_);
+                if (extent.width == extent_.width && extent.height == extent_.height)
+                {
+                    return true;
+                }
 
+                ComPtr<ID3D11DeviceContext> context;
+                device_->GetImmediateContext(&context);
+                if (context != nullptr)
+                {
+                    context->OMSetRenderTargets(0, nullptr, nullptr);
+                    context->Flush();
+                }
+
+                renderTargetView_.Reset();
+                backBuffer_.Reset();
+
+                const HRESULT result = swapchain_->ResizeBuffers(
+                    bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), 0);
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("ID3D11Device::CreateRenderTargetView", result));
+                    SetLastError(MakeHResultError("IDXGISwapChain::ResizeBuffers", result));
+                    const bool restored = CreateBackBufferView();
+                    static_cast<void>(restored);
                     return false;
                 }
 
-                return true;
+                extent_ = extent;
+                return CreateBackBufferView();
             }
 
             [[nodiscard]] RhiExtent2D GetExtent() const noexcept override
@@ -638,6 +660,26 @@ namespace ve::rhi
             }
 
         private:
+            [[nodiscard]] bool CreateBackBufferView()
+            {
+                HRESULT result = swapchain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer_));
+
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("IDXGISwapChain::GetBuffer", result));
+                    return false;
+                }
+
+                result = device_->CreateRenderTargetView(backBuffer_.Get(), nullptr, &renderTargetView_);
+
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateRenderTargetView", result));
+                    return false;
+                }
+
+                return true;
+            }
             void SetLastError(std::string error)
             {
                 if (lastError_ != nullptr)

@@ -104,6 +104,9 @@ namespace ve::rhi
         /// Returns the number of back buffers/drawables used by the swapchain.
         [[nodiscard]] virtual uint32_t GetBufferCount() const noexcept = 0;
 
+        /// Recreates the presentation buffers for a new non-zero drawable size.
+        [[nodiscard]] virtual bool Resize(RhiExtent2D extent) = 0;
+
         /// Presents the current back buffer to the screen.
         [[nodiscard]] virtual bool Present() = 0;
     };

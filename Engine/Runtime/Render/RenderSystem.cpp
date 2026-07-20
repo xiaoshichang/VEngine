@@ -52,6 +52,8 @@ namespace ve
         MaterialUniformPool materialUniformPool;
         ShaderManager shaderManager;
         std::vector<std::unique_ptr<rhi::RhiObject>> pendingRetiredResources;
+        Atomic<UInt64> pendingMainSwapchainExtent{0};
+        AtomicBool mainSwapchainResizeCommandQueued{false};
         UInt64 nextFrameIndex = 1;
     };
 
@@ -90,6 +92,19 @@ namespace ve
             }
 
             return ErrorCode::None;
+        }
+
+        [[nodiscard]] constexpr UInt64 PackExtent(rhi::RhiExtent2D extent) noexcept
+        {
+            return (static_cast<UInt64>(extent.width) << 32u) | static_cast<UInt64>(extent.height);
+        }
+
+        [[nodiscard]] constexpr rhi::RhiExtent2D UnpackExtent(UInt64 packedExtent) noexcept
+        {
+            return rhi::RhiExtent2D{
+                static_cast<UInt32>(packedExtent >> 32u),
+                static_cast<UInt32>(packedExtent & 0xffffffffu),
+            };
         }
 
         [[nodiscard]] rhi::RhiSwapchainDesc ToRhiSwapchainDesc(const RenderSurfaceDesc& desc)
@@ -279,6 +294,8 @@ namespace ve
             }
 
             impl.pendingRetiredResources.clear();
+            impl.pendingMainSwapchainExtent.store(0, std::memory_order_release);
+            impl.mainSwapchainResizeCommandQueued.store(false, std::memory_order_release);
             impl.shaderManager.Clear();
             DestroyFrameResources(impl);
             impl.mainSwapchain.reset();
@@ -297,6 +314,73 @@ namespace ve
             ErrorCode pushResult = impl.commandQueue.Push(std::move(command));
             VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "RenderSystem failed to enqueue an internal render command.");
             impl.commandSemaphore.Release();
+        }
+
+        void QueueMainSwapchainResizeCommand(RenderSystemImpl& impl);
+
+        void ProcessMainSwapchainResize(RenderSystemImpl& impl)
+        {
+            VE_ASSERT_RENDER_THREAD();
+
+            UInt64 packedExtent = impl.pendingMainSwapchainExtent.exchange(0, std::memory_order_acq_rel);
+            if (packedExtent != 0 && impl.mainSwapchain != nullptr)
+            {
+                rhi::RhiExtent2D requestedExtent = UnpackExtent(packedExtent);
+                const rhi::RhiExtent2D currentExtent = impl.mainSwapchain->GetExtent();
+                if (requestedExtent.width != currentExtent.width || requestedExtent.height != currentExtent.height)
+                {
+                    if (impl.device != nullptr)
+                    {
+                        // Frame completion fences are queued before Present. Waiting for the device's internal fence
+                        // here also covers presentation work that may still reference the old back buffers.
+                        impl.device->WaitIdle();
+                    }
+
+                    if (!WaitForAllFrameContexts(impl))
+                    {
+                        VE_LOG_ERROR_CATEGORY("Render", "Failed to wait for in-flight frames before resizing the main swapchain.");
+                    }
+                    else
+                    {
+                        const UInt64 newerPackedExtent = impl.pendingMainSwapchainExtent.exchange(0, std::memory_order_acq_rel);
+                        if (newerPackedExtent != 0)
+                        {
+                            requestedExtent = UnpackExtent(newerPackedExtent);
+                        }
+
+                        const rhi::RhiExtent2D resizedFromExtent = impl.mainSwapchain->GetExtent();
+                        if ((requestedExtent.width != resizedFromExtent.width || requestedExtent.height != resizedFromExtent.height) &&
+                            !impl.mainSwapchain->Resize(requestedExtent))
+                        {
+                            const char* backendError = impl.device != nullptr ? impl.device->GetLastErrorMessage() : nullptr;
+                            VE_LOG_ERROR_CATEGORY("Render",
+                                                  "Failed to resize the main swapchain to {}x{}. Backend error: {}",
+                                                  requestedExtent.width,
+                                                  requestedExtent.height,
+                                                  backendError != nullptr && backendError[0] != '\0' ? backendError : "Unknown");
+                        }
+                    }
+                }
+            }
+
+            impl.mainSwapchainResizeCommandQueued.store(false, std::memory_order_release);
+            if (impl.pendingMainSwapchainExtent.load(std::memory_order_acquire) == 0 ||
+                !impl.acceptingCommands.load(std::memory_order_acquire))
+            {
+                return;
+            }
+
+            bool expected = false;
+            if (impl.mainSwapchainResizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            {
+                QueueMainSwapchainResizeCommand(impl);
+            }
+        }
+
+        void QueueMainSwapchainResizeCommand(RenderSystemImpl& impl)
+        {
+            EnqueueInternalCommand(
+                impl, RenderCommand{"RenderSystemResizeMainSwapchain", [&impl]() { ProcessMainSwapchainResize(impl); }});
         }
 
         void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
@@ -541,6 +625,22 @@ namespace ve
         VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to destroy its main swapchain.");
     }
 
+    void RenderSystem::RequestMainSwapchainResize(rhi::RhiExtent2D extent)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        if (extent.width == 0 || extent.height == 0 || !impl_->acceptingCommands.load(std::memory_order_acquire))
+        {
+            return;
+        }
+
+        impl_->pendingMainSwapchainExtent.store(PackExtent(extent), std::memory_order_release);
+        bool expected = false;
+        if (impl_->mainSwapchainResizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        {
+            QueueMainSwapchainResizeCommand(*impl_);
+        }
+    }
+
     void RenderSystem::InitRenderResource(std::shared_ptr<RTRenderTexture> renderTexture, RenderTextureDesc desc)
     {
         VE_ASSERT_SCENE_THREAD();
@@ -663,6 +763,25 @@ namespace ve
         auto completed = std::make_shared<ManualResetEvent>(false);
         EnqueueCommand("RenderSystemFlush", [completed]() { completed->Set(); });
         completed->Wait();
+    }
+
+    void RenderSystem::WaitIdle()
+    {
+        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        {
+            return;
+        }
+
+        const ErrorCode result = ExecuteSynchronous("RenderSystemWaitIdle",
+                                                    [this]()
+                                                    {
+                                                        if (impl_->device != nullptr)
+                                                        {
+                                                            impl_->device->WaitIdle();
+                                                        }
+                                                        return ErrorCode::None;
+                                                    });
+        VE_ASSERT_MESSAGE(result == ErrorCode::None, "RenderSystem failed to wait for the GPU to become idle.");
     }
 
     ErrorCode RenderSystem::ExecuteSynchronous(std::string debugName, RenderSynchronousFunction function)

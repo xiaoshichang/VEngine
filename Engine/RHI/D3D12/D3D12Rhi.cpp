@@ -1059,24 +1059,39 @@ namespace ve::rhi
                 rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
                 renderTargets_.resize(bufferCount_);
 
-                D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+                return CreateRenderTargets();
+            }
 
-                for (uint32_t index = 0; index < bufferCount_; ++index)
+            [[nodiscard]] bool Resize(RhiExtent2D extent) override
+            {
+                if (extent.width == 0 || extent.height == 0)
                 {
-                    result = swapchain_->GetBuffer(index, IID_PPV_ARGS(&renderTargets_[index]));
-
-                    if (FAILED(result))
-                    {
-                        SetLastError(MakeHResultError("IDXGISwapChain3::GetBuffer", result));
-                        return false;
-                    }
-
-                    device_->CreateRenderTargetView(renderTargets_[index].Get(), nullptr, rtvHandle);
-                    rtvHandle.ptr += rtvDescriptorSize_;
+                    SetLastError("D3D12 swapchain resize requires a non-empty extent.");
+                    return false;
                 }
 
-                frameIndex_ = swapchain_->GetCurrentBackBufferIndex();
-                return true;
+                if (extent.width == extent_.width && extent.height == extent_.height)
+                {
+                    return true;
+                }
+
+                for (ComPtr<ID3D12Resource>& renderTarget : renderTargets_)
+                {
+                    renderTarget.Reset();
+                }
+
+                const HRESULT result = swapchain_->ResizeBuffers(
+                    bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), 0);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeD3D12Error(device_.Get(), "IDXGISwapChain3::ResizeBuffers", result));
+                    const bool restored = CreateRenderTargets();
+                    static_cast<void>(restored);
+                    return false;
+                }
+
+                extent_ = extent;
+                return CreateRenderTargets();
             }
 
             [[nodiscard]] RhiExtent2D GetExtent() const noexcept override
@@ -1121,6 +1136,32 @@ namespace ve::rhi
             }
 
         private:
+            [[nodiscard]] bool CreateRenderTargets()
+            {
+                for (ComPtr<ID3D12Resource>& renderTarget : renderTargets_)
+                {
+                    renderTarget.Reset();
+                }
+
+                D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+
+                for (uint32_t index = 0; index < bufferCount_; ++index)
+                {
+                    const HRESULT result = swapchain_->GetBuffer(index, IID_PPV_ARGS(&renderTargets_[index]));
+
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("IDXGISwapChain3::GetBuffer", result));
+                        return false;
+                    }
+
+                    device_->CreateRenderTargetView(renderTargets_[index].Get(), nullptr, rtvHandle);
+                    rtvHandle.ptr += rtvDescriptorSize_;
+                }
+
+                frameIndex_ = swapchain_->GetCurrentBackBufferIndex();
+                return true;
+            }
             void SetLastError(std::string error)
             {
                 if (lastError_ != nullptr)

@@ -587,6 +587,18 @@ namespace ve::rhi
                 return 3;
             }
 
+            [[nodiscard]] bool Resize(RhiExtent2D extent) override
+            {
+                if (extent.width == 0 || extent.height == 0)
+                {
+                    return false;
+                }
+
+                extent_ = extent;
+                layer_.drawableSize = CGSizeMake(extent.width, extent.height);
+                return true;
+            }
+
             [[nodiscard]] bool Present() override
             {
                 return true;
