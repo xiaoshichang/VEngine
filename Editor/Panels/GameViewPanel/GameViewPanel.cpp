@@ -66,11 +66,9 @@ namespace ve::editor
         const ImVec2 fittedImageSize =
             camera != nullptr && !camera->IsAspectRatioAutomatic() ? CalculateFittedImageSize(canvasSize, camera->GetAspectRatio()) : canvasSize;
         const WindowExtent desiredExtent = ToRenderTargetExtent(fittedImageSize);
-        bool textureRebuilt = false;
         if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !gameViewTexture_->IsValid())
         {
             RebuildGameViewTexture(*editor_, desiredExtent);
-            textureRebuilt = true;
         }
 
         const ImVec2 imageSize(static_cast<float>(desiredExtent.width), static_cast<float>(desiredExtent.height));
@@ -79,7 +77,7 @@ namespace ve::editor
         ImGui::SetCursorPos(ImVec2(cursorPosition.x + imageOffset.x, cursorPosition.y + imageOffset.y));
 
         void* resourceView = gameViewTexture_->GetRenderResourceViewHandle();
-        if (textureRebuilt || resourceView == nullptr)
+        if (resourceView == nullptr)
         {
             ImGui::Button("Game View texture pending", imageSize);
             return;

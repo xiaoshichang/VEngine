@@ -646,11 +646,13 @@ namespace ve
         VE_ASSERT_SCENE_THREAD();
         VE_ASSERT_MESSAGE(renderTexture != nullptr, "RenderSystem::InitRenderResource requires a render texture.");
 
+        const UInt64 requestRevision = renderTexture->RequestRenderResourceInit();
+
         EnqueueCommand("RenderSystemInitRenderResource",
-                       [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
+                       [this, renderTexture = std::move(renderTexture), desc = std::move(desc), requestRevision]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           renderTexture->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
+                           renderTexture->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources, requestRevision);
                        });
     }
 

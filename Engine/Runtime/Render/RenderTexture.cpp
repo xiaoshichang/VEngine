@@ -166,15 +166,37 @@ namespace ve
 
     void* RTRenderTexture::GetRenderResourceViewHandle() const noexcept
     {
-        return nativeSampledViewHandle_.load(std::memory_order_acquire);
+        const UInt64 requestedRevision = requestedInitRevision_.load(std::memory_order_acquire);
+        if (readyInitRevision_.load(std::memory_order_acquire) != requestedRevision)
+        {
+            return nullptr;
+        }
+
+        void* nativeHandle = nativeSampledViewHandle_.load(std::memory_order_acquire);
+        if (requestedInitRevision_.load(std::memory_order_acquire) != requestedRevision)
+        {
+            return nullptr;
+        }
+        return nativeHandle;
+    }
+
+    UInt64 RTRenderTexture::RequestRenderResourceInit() noexcept
+    {
+        VE_ASSERT_SCENE_THREAD();
+
+        const UInt64 requestRevision = requestedInitRevision_.fetch_add(1, std::memory_order_acq_rel) + 1;
+        nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
+        return requestRevision;
     }
 
     void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device,
                                              RenderTextureDesc desc,
-                                             std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
+                                             std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources,
+                                             UInt64 requestRevision)
     {
         VE_ASSERT_RENDER_THREAD();
 
+        const bool tracksSceneThreadRequest = requestRevision != 0;
         const bool textureMatchesDesc = texture_ != nullptr && texture_->GetWidth() == desc.extent.width && texture_->GetHeight() == desc.extent.height &&
                                         texture_->GetFormat() == desc.colorFormat;
 
@@ -194,22 +216,25 @@ namespace ve
 
         VE_ASSERT_MESSAGE(desc_.extent.width != 0 && desc_.extent.height != 0, "RTRenderTexture::InitRenderResource requires a valid extent.");
 
-        if (IsInitialized() && depthTexture_ != nullptr)
-        {
-            return;
-        }
-
         if (texture_ == nullptr)
         {
             texture_ = device.CreateTexture(MakeTextureDesc(desc_));
             VE_ASSERT_MESSAGE(texture_ != nullptr, "RTRenderTexture failed to create RHI texture.");
-            nativeSampledViewHandle_.store(texture_->GetNativeSampledViewHandle(), std::memory_order_release);
         }
 
         if (depthTexture_ == nullptr)
         {
             depthTexture_ = device.CreateTexture(MakeDepthTextureDesc(desc_));
             VE_ASSERT_MESSAGE(depthTexture_ != nullptr, "RTRenderTexture failed to create depth texture.");
+        }
+
+        if (!tracksSceneThreadRequest || requestedInitRevision_.load(std::memory_order_acquire) == requestRevision)
+        {
+            nativeSampledViewHandle_.store(texture_->GetNativeSampledViewHandle(), std::memory_order_release);
+            if (tracksSceneThreadRequest)
+            {
+                readyInitRevision_.store(requestRevision, std::memory_order_release);
+            }
         }
     }
 
@@ -225,5 +250,6 @@ namespace ve
             retiredResources.push_back(std::move(depthTexture_));
         }
         nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
+        readyInitRevision_.store(0, std::memory_order_release);
     }
 } // namespace ve

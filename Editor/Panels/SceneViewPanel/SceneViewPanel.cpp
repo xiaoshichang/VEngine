@@ -181,18 +181,16 @@ namespace ve::editor
 
         const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
         const WindowExtent desiredExtent = ToRenderTargetExtent(canvasSize);
-        bool textureRebuilt = false;
         if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !sceneViewTexture_->IsValid())
         {
             RebuildSceneViewTexture(*editor_, desiredExtent);
-            textureRebuilt = true;
         }
 
         UpdateSceneViewCamera();
 
         const ImVec2 imageSize(static_cast<float>(desiredExtent.width), static_cast<float>(desiredExtent.height));
         void* resourceView = sceneViewTexture_->GetRenderResourceViewHandle();
-        if (textureRebuilt || resourceView == nullptr)
+        if (resourceView == nullptr)
         {
             ImGui::Button("Scene View texture pending", imageSize);
             UpdateCameraFromInput(ImGui::IsItemHovered(), ImGui::IsItemClicked(), ImGui::IsItemClicked(ImGuiMouseButton_Right));

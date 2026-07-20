@@ -76,9 +76,16 @@ namespace ve
         [[nodiscard]] const rhi::RhiTexture* GetDepthTexture() const noexcept;
         [[nodiscard]] void* GetRenderResourceViewHandle() const noexcept;
 
+        /// Marks the sampled view unavailable until the matching Render Thread initialization completes.
+        ///
+        /// The returned revision must be passed to InitRenderResource. Revisions prevent an older resize command from
+        /// publishing a sampled view after a newer resize has already been requested by the Scene Thread.
+        [[nodiscard]] UInt64 RequestRenderResourceInit() noexcept;
+
         void InitRenderResource(rhi::RhiDevice& device,
                                 RenderTextureDesc desc,
-                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
+                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources,
+                                UInt64 requestRevision = 0);
         void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
 
     private:
@@ -86,5 +93,7 @@ namespace ve
         std::unique_ptr<rhi::RhiTexture> texture_;
         std::unique_ptr<rhi::RhiTexture> depthTexture_;
         std::atomic<void*> nativeSampledViewHandle_{nullptr};
+        std::atomic<UInt64> requestedInitRevision_{0};
+        std::atomic<UInt64> readyInitRevision_{0};
     };
 } // namespace ve
