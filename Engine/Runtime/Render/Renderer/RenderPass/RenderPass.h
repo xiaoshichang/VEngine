@@ -17,6 +17,7 @@ namespace ve
     class RTRenderItem;
     class RTRenderViewState;
     class RTScene;
+    struct VirtualShadowFramePacket;
 
     /// Renderer-owned scene choices and the queue lists built once for one view.
     struct RendererData
@@ -24,6 +25,7 @@ namespace ve
         std::shared_ptr<RTScene> scene;
         std::shared_ptr<RTCamera> resolvedCamera;
         std::shared_ptr<RTRenderViewState> viewState;
+        std::shared_ptr<VirtualShadowFramePacket> virtualShadowPacket;
         std::vector<std::shared_ptr<RTRenderItem>> opaqueItems;
         std::vector<std::shared_ptr<RTRenderItem>> transparentItems;
     };
@@ -33,6 +35,7 @@ namespace ve
     {
         FrameGraphTextureHandle color;
         FrameGraphTextureHandle depth;
+        FrameGraphTextureHandle virtualShadowAtlas;
     };
 
     /// Logical raster state exposed to draw code after FrameGraph has resolved the native attachments.

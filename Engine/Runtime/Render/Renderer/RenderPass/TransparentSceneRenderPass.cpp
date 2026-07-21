@@ -6,9 +6,11 @@
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <cstdint>
@@ -25,6 +27,7 @@ namespace ve
         {
             FrameGraphTextureHandle color;
             FrameGraphTextureHandle depth;
+            FrameGraphTextureHandle virtualShadowAtlas;
         };
 
         [[nodiscard]] std::shared_ptr<RTShaderResource> FindFirstShaderResource(const std::vector<std::shared_ptr<RTRenderItem>>& items) noexcept
@@ -82,11 +85,17 @@ namespace ve
                 {
                     passData.depth = builder.ReadDepthAttachment(graphData.depth);
                 }
+
+                if (graphData.virtualShadowAtlas.IsValid())
+                {
+                    passData.virtualShadowAtlas = builder.Read(graphData.virtualShadowAtlas);
+                }
             },
-            [this](const TransparentScenePassData&, RenderPassContext& context) { return Draw(context); });
+            [this](const TransparentScenePassData& passData, const FrameGraphPassResources& resources, RenderPassContext& context)
+            { return Draw(resources, passData.virtualShadowAtlas, context); });
     }
 
-    ErrorCode TransparentSceneRenderPass::Draw(RenderPassContext& context)
+    ErrorCode TransparentSceneRenderPass::Draw(const FrameGraphPassResources& resources, FrameGraphTextureHandle virtualShadowAtlas, RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
         const std::vector<std::shared_ptr<RTRenderItem>>& items = context.rendererData.transparentItems;
@@ -114,6 +123,24 @@ namespace ve
             context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *frameUniform.buffer, frameUniform.offset, frameUniform.size);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
+
+        VirtualShadowGpuConstants virtualShadowConstants = {};
+        if (context.rendererData.virtualShadowPacket != nullptr)
+        {
+            virtualShadowConstants = BuildVirtualShadowGpuConstants(*context.rendererData.virtualShadowPacket);
+        }
+        const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
+        commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 4, *virtualShadowUniform.buffer, virtualShadowUniform.offset, virtualShadowUniform.size);
+        if (virtualShadowConstants.enabled != 0u && virtualShadowAtlas.IsValid() && context.rendererData.viewState != nullptr)
+        {
+            const ResolvedFrameGraphTexture atlas = resources.GetTexture(virtualShadowAtlas);
+            rhi::RhiSampler* comparisonSampler = context.rendererData.viewState->GetVirtualShadowViewCache().GetComparisonSampler();
+            if (atlas.texture != nullptr && comparisonSampler != nullptr)
+            {
+                commandList.SetTexture(rhi::RhiShaderStage::Fragment, 1, *atlas.texture);
+                commandList.SetSampler(rhi::RhiShaderStage::Fragment, 1, *comparisonSampler);
+            }
+        }
 
         for (SizeT itemIndex = 0; itemIndex < items.size(); ++itemIndex)
         {
@@ -201,6 +228,9 @@ namespace ve
             {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 1},
             {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 2},
             {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 3},
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 4},
+            {rhi::RhiPipelineResourceKind::SampledTexture, rhi::RhiShaderStage::Fragment, 1},
+            {rhi::RhiPipelineResourceKind::Sampler, rhi::RhiShaderStage::Fragment, 1},
         };
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
         pipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;

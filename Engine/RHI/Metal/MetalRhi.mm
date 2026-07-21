@@ -846,6 +846,10 @@ namespace ve::rhi
                 [renderCommandEncoder_ setCullMode:ToMetalCullMode(rasterizerState.cullMode)];
                 [renderCommandEncoder_
                     setTriangleFillMode:rasterizerState.fillMode == RhiFillMode::Wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
+                constexpr Float32 D3DDepthBiasUnit = 1.0f / 8388608.0f;
+                [renderCommandEncoder_ setDepthBias:static_cast<Float32>(rasterizerState.depthBias) * D3DDepthBiasUnit
+                                         slopeScale:rasterizerState.slopeScaledDepthBias
+                                              clamp:rasterizerState.depthBiasClamp];
                 primitiveType_ = ToMetalPrimitiveType(metalPipelineState.GetTopology());
             }
 

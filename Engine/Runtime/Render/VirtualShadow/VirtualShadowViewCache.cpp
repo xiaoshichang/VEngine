@@ -1,5 +1,6 @@
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
 
+#include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/Runtime/Render/RenderCameraMath.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 
@@ -9,6 +10,8 @@
 
 namespace ve
 {
+    VirtualShadowViewCache::~VirtualShadowViewCache() = default;
+
     namespace
     {
         Aabb TransformBoundsToLightSpace(const VirtualShadowLightBasis& basis, const Aabb& worldBounds)
@@ -204,9 +207,9 @@ namespace ve
         for (SizeT lightIndex = 0; lightIndex < scene.GetLightCount(); ++lightIndex)
         {
             const std::shared_ptr<RTLight> sceneLight = scene.GetLight(lightIndex);
-            if (sceneLight != nullptr && sceneLight->GetType() == RTLightType::Directional && sceneLight->CastShadows())
+            if (sceneLight != nullptr && sceneLight->GetType() == RTLightType::Directional)
             {
-                light = VirtualShadowLightInput{true,
+                light = VirtualShadowLightInput{sceneLight->CastShadows(),
                                                 sceneLight->GetDirection(),
                                                 sceneLight->GetShadowDistance(),
                                                 sceneLight->GetDepthBias(),
@@ -247,6 +250,43 @@ namespace ve
         return PrepareFrame(input);
     }
 
+    bool VirtualShadowViewCache::EnsureGpuResources(rhi::RhiDevice& device, const std::string& viewName)
+    {
+        if (resourceDevice_ != &device)
+        {
+            comparisonSampler_.reset();
+            atlasTexture_.reset();
+            resourceDevice_ = &device;
+        }
+
+        if (atlasTexture_ == nullptr)
+        {
+            rhi::RhiTextureDesc atlasDesc = {};
+            atlasDesc.width = atlasExtent_;
+            atlasDesc.height = atlasExtent_;
+            atlasDesc.format = rhi::RhiFormat::Depth32Float;
+            atlasDesc.usage =
+                static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) | static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
+            const std::string debugName = viewName + ".VirtualShadowAtlas";
+            atlasDesc.debugName = debugName.c_str();
+            atlasTexture_ = device.CreateTexture(atlasDesc);
+        }
+
+        if (comparisonSampler_ == nullptr)
+        {
+            rhi::RhiSamplerDesc samplerDesc = {};
+            samplerDesc.filter = rhi::RhiSamplerFilter::Point;
+            samplerDesc.addressU = rhi::RhiSamplerAddressMode::Clamp;
+            samplerDesc.addressV = rhi::RhiSamplerAddressMode::Clamp;
+            samplerDesc.addressW = rhi::RhiSamplerAddressMode::Clamp;
+            samplerDesc.reductionMode = rhi::RhiSamplerReductionMode::Comparison;
+            samplerDesc.comparisonFunction = rhi::RhiCompareFunction::LessEqual;
+            comparisonSampler_ = device.CreateSampler(samplerDesc);
+        }
+
+        return atlasTexture_ != nullptr && comparisonSampler_ != nullptr;
+    }
+
     void VirtualShadowViewCache::MarkRendered(std::span<const VirtualShadowPageKey> keys)
     {
         pageCache_.MarkRendered(keys);
@@ -257,6 +297,26 @@ namespace ve
         return atlasExtent_;
     }
 
+    rhi::RhiTexture* VirtualShadowViewCache::GetAtlasTexture() noexcept
+    {
+        return atlasTexture_.get();
+    }
+
+    const rhi::RhiTexture* VirtualShadowViewCache::GetAtlasTexture() const noexcept
+    {
+        return atlasTexture_.get();
+    }
+
+    rhi::RhiSampler* VirtualShadowViewCache::GetComparisonSampler() noexcept
+    {
+        return comparisonSampler_.get();
+    }
+
+    const rhi::RhiSampler* VirtualShadowViewCache::GetComparisonSampler() const noexcept
+    {
+        return comparisonSampler_.get();
+    }
+
     VirtualShadowPageCache& VirtualShadowViewCache::GetPageCache() noexcept
     {
         return pageCache_;
@@ -265,5 +325,43 @@ namespace ve
     const VirtualShadowPageCache& VirtualShadowViewCache::GetPageCache() const noexcept
     {
         return pageCache_;
+    }
+
+    VirtualShadowGpuConstants BuildVirtualShadowGpuConstants(const VirtualShadowFramePacket& packet) noexcept
+    {
+        VirtualShadowGpuConstants constants = {};
+        if (!packet.valid || !packet.enabled || !packet.clipmaps.valid || packet.atlasExtent == 0)
+        {
+            return constants;
+        }
+
+        const VirtualShadowLightBasis& basis = packet.clipmaps.lightBasis;
+        constants.lightRight = Vector4(basis.right, 0.0f);
+        constants.lightUp = Vector4(basis.up, 0.0f);
+        constants.lightDirection = Vector4(basis.forward, 0.0f);
+        constants.atlasAndBias = Vector4(1.0f / static_cast<Float32>(packet.atlasExtent),
+                                         packet.depthBias,
+                                         packet.normalBias,
+                                         static_cast<Float32>(VirtualShadowPhysicalPageContentSize) / static_cast<Float32>(VirtualShadowPhysicalPageSize));
+        for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
+        {
+            const VirtualShadowClipmapLevel& level = packet.clipmaps.levels[levelIndex];
+            const Float32 depthCenter = static_cast<Float32>(level.depthEpoch) * packet.clipmaps.depthStep;
+            VirtualShadowGpuClipmap& gpuLevel = constants.clipmaps[levelIndex];
+            gpuLevel.lightOriginAndPageWorldSize = Vector4(static_cast<Float32>(level.originPageX) * level.pageWorldSize,
+                                                           static_cast<Float32>(level.originPageY) * level.pageWorldSize,
+                                                           depthCenter,
+                                                           level.pageWorldSize);
+            gpuLevel.radiusAndDepthRange = Vector4(
+                level.worldRadius, depthCenter - packet.clipmaps.shadowDistance, depthCenter + packet.clipmaps.shadowDistance, packet.clipmaps.depthStep);
+            gpuLevel.originPageX = level.originPageX;
+            gpuLevel.originPageY = level.originPageY;
+            gpuLevel.depthEpoch = level.depthEpoch;
+        }
+        constants.enabled = 1;
+        constants.atlasExtent = packet.atlasExtent;
+        const std::span<const VirtualShadowGpuPageEntry> entries = packet.residentPageTable.GetGpuEntries();
+        std::copy(entries.begin(), entries.end(), constants.entries);
+        return constants;
     }
 } // namespace ve

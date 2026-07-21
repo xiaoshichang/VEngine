@@ -10,7 +10,6 @@
 #endif
 #include <Windows.h>
 #include <shellapi.h>
-
 #include <string_view>
 
 namespace ve
@@ -27,7 +26,13 @@ namespace ve
         RenderBackend backend = RenderBackend::D3D12;
         for (int argumentIndex = 1; argumentIndex < argumentCount; ++argumentIndex)
         {
-            if (std::wstring_view(arguments[argumentIndex]) == L"--dx12")
+            const std::wstring_view argument(arguments[argumentIndex]);
+            if (argument == L"--dx11")
+            {
+                backend = RenderBackend::D3D11;
+                break;
+            }
+            if (argument == L"--dx12")
             {
                 backend = RenderBackend::D3D12;
                 break;

@@ -13,7 +13,6 @@
 
 #include <Windows.h>
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstring>
 #include <d3d11.h>
@@ -56,6 +55,7 @@ namespace ve::rhi
 
         [[nodiscard]] bool IsD3D11TextureDescSupported(const RhiTextureDesc& desc) noexcept
         {
+            const bool sampled = HasTextureUsage(desc.usage, RhiTextureUsage::Sampled);
             const bool depthStencil = HasTextureUsage(desc.usage, RhiTextureUsage::DepthStencil);
             const bool renderTarget = HasTextureUsage(desc.usage, RhiTextureUsage::RenderTarget);
             if (depthStencil)
@@ -63,7 +63,7 @@ namespace ve::rhi
                 return desc.format == RhiFormat::Depth32Float && !renderTarget;
             }
 
-            return desc.format != RhiFormat::Depth32Float;
+            return desc.format != RhiFormat::Depth32Float || (!sampled && !renderTarget);
         }
 
         [[nodiscard]] DXGI_FORMAT ToD3D11TextureResourceFormat(const RhiTextureDesc& desc) noexcept
@@ -752,6 +752,7 @@ namespace ve::rhi
             [[nodiscard]] bool Begin() override
             {
                 activePipeline_ = nullptr;
+                activeRenderTargetView_ = nullptr;
                 activeDepthTexture_ = nullptr;
                 return true;
             }
@@ -763,8 +764,7 @@ namespace ve::rhi
 
             [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) override
             {
-                auto* d3dSwapchain = dynamic_cast<D3D11Swapchain*>(&swapchain);
-                if (d3dSwapchain == nullptr || (!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
+                if ((!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
                     (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) ||
                     (!beginInfo.hasColorAttachment && !beginInfo.hasDepthAttachment))
                 {
@@ -777,6 +777,12 @@ namespace ve::rhi
                 if (beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain)
                 {
                     if (colorAttachment.texture != nullptr)
+                    {
+                        return false;
+                    }
+
+                    auto* d3dSwapchain = dynamic_cast<D3D11Swapchain*>(&swapchain);
+                    if (d3dSwapchain == nullptr)
                     {
                         return false;
                     }
@@ -813,10 +819,11 @@ namespace ve::rhi
                         return false;
                     }
 
-                    ClearMatchingShaderResourceBindings(*d3dDepthTexture);
+                    ClearShaderResourceBindings();
                     activeDepthTexture_ = d3dDepthTexture;
                 }
 
+                activeRenderTargetView_ = renderTargetView;
                 context_->OMSetRenderTargets(
                     beginInfo.hasColorAttachment ? 1u : 0u, beginInfo.hasColorAttachment ? &renderTargetView : nullptr, depthStencilView);
 
@@ -838,6 +845,7 @@ namespace ve::rhi
             void EndRenderPass() override
             {
                 context_->OMSetRenderTargets(0, nullptr, nullptr);
+                activeRenderTargetView_ = nullptr;
                 activeDepthTexture_ = nullptr;
             }
 
@@ -943,9 +951,10 @@ namespace ve::rhi
                 }
 
                 const auto& d3dTexture = static_cast<const D3D11Texture&>(texture);
-                if (activeDepthTexture_ != nullptr && d3dTexture.GetNativeTexture() == activeDepthTexture_->GetNativeTexture())
+                if (&d3dTexture == activeDepthTexture_)
                 {
-                    context_->OMSetRenderTargets(0, nullptr, nullptr);
+                    context_->OMSetRenderTargets(
+                        activeRenderTargetView_ != nullptr ? 1u : 0u, activeRenderTargetView_ != nullptr ? &activeRenderTargetView_ : nullptr, nullptr);
                     activeDepthTexture_ = nullptr;
                 }
                 ID3D11ShaderResourceView* shaderResourceView = d3dTexture.GetShaderResourceView();
@@ -954,20 +963,13 @@ namespace ve::rhi
                 {
                     return;
                 }
-                VE_ASSERT(slot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT);
-                if (slot >= D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT)
-                {
-                    return;
-                }
                 switch (stage)
                 {
                 case RhiShaderStage::Vertex:
                     context_->VSSetShaderResources(slot, 1, &shaderResourceView);
-                    vertexShaderResources_[slot] = d3dTexture.GetNativeTexture();
                     break;
                 case RhiShaderStage::Fragment:
                     context_->PSSetShaderResources(slot, 1, &shaderResourceView);
-                    fragmentShaderResources_[slot] = d3dTexture.GetNativeTexture();
                     break;
                 }
             }
@@ -1010,31 +1012,18 @@ namespace ve::rhi
                 return valid;
             }
 
-            void ClearMatchingShaderResourceBindings(const D3D11Texture& texture)
+            void ClearShaderResourceBindings()
             {
-                ID3D11Texture2D* nativeTexture = texture.GetNativeTexture();
-                ID3D11ShaderResourceView* nullView = nullptr;
-                for (uint32_t slot = 0; slot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT; ++slot)
-                {
-                    if (vertexShaderResources_[slot] == nativeTexture)
-                    {
-                        context_->VSSetShaderResources(slot, 1, &nullView);
-                        vertexShaderResources_[slot] = nullptr;
-                    }
-                    if (fragmentShaderResources_[slot] == nativeTexture)
-                    {
-                        context_->PSSetShaderResources(slot, 1, &nullView);
-                        fragmentShaderResources_[slot] = nullptr;
-                    }
-                }
+                ID3D11ShaderResourceView* nullViews[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT] = {};
+                context_->VSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullViews);
+                context_->PSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullViews);
             }
 
             ComPtr<ID3D11DeviceContext> context_;
             ComPtr<ID3D11DeviceContext1> context1_;
             const D3D11PipelineState* activePipeline_ = nullptr;
+            ID3D11RenderTargetView* activeRenderTargetView_ = nullptr;
             const D3D11Texture* activeDepthTexture_ = nullptr;
-            std::array<ID3D11Texture2D*, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> vertexShaderResources_ = {};
-            std::array<ID3D11Texture2D*, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> fragmentShaderResources_ = {};
         };
 
         class D3D11Device final : public RhiDevice

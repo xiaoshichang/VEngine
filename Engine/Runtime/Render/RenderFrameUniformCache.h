@@ -27,16 +27,19 @@ namespace ve
     {
         Matrix44 viewProjection = Matrix44::Identity();
         Vector4 cameraWorldPosition = Vector4::Zero();
+        Vector4 cameraWorldForward = Vector4(0.0f, 0.0f, 1.0f, 0.0f);
     };
 
     struct alignas(16) ObjectUniformData
     {
         Matrix44 localToWorld = Matrix44::Identity();
+        UInt32 receiveShadows = 1;
+        UInt32 padding[3] = {};
     };
 
     static_assert(sizeof(FrameUniformData) == 48);
-    static_assert(sizeof(ViewUniformData) == 80);
-    static_assert(sizeof(ObjectUniformData) == 64);
+    static_assert(sizeof(ViewUniformData) == 96);
+    static_assert(sizeof(ObjectUniformData) == 80);
     static_assert(std::is_trivially_copyable_v<FrameUniformData>);
     static_assert(std::is_trivially_copyable_v<ViewUniformData>);
     static_assert(std::is_trivially_copyable_v<ObjectUniformData>);

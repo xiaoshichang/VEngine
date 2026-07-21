@@ -90,6 +90,8 @@ namespace ve
         /// Execute phase: resolves physical resources and records each compiled pass into the current command list.
         [[nodiscard]] ErrorCode Execute();
 
+        [[nodiscard]] const RendererData& GetRendererData() const noexcept;
+
     private:
         friend class FrameGraphBuilder;
         friend class FrameGraphPassResources;
@@ -109,7 +111,6 @@ namespace ve
         void SetViewport(UInt32 passIndex, const rhi::RhiViewport& viewport) noexcept;
         void SetScissor(UInt32 passIndex, const rhi::RhiScissorRect& scissorRect) noexcept;
         void SetSideEffect(UInt32 passIndex) noexcept;
-        [[nodiscard]] const RendererData& GetRendererData() const noexcept;
         [[nodiscard]] ResolvedFrameGraphTexture ResolveTexture(FrameGraphTextureHandle handle) const noexcept;
         [[nodiscard]] ResolvedFrameGraphTexture ResolvePassTexture(UInt32 passIndex, FrameGraphTextureHandle handle) const noexcept;
 

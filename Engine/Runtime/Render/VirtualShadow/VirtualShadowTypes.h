@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Math/Vector4.h"
 
 #include <cmath>
 #include <limits>
@@ -152,4 +153,31 @@ namespace ve
     static_assert(sizeof(VirtualShadowGpuPageEntry) == 16);
 
     constexpr UInt32 VirtualShadowGpuPageEntryValid = 1u << 0u;
+
+    struct alignas(16) VirtualShadowGpuClipmap
+    {
+        Vector4 lightOriginAndPageWorldSize = Vector4::Zero();
+        Vector4 radiusAndDepthRange = Vector4::Zero();
+        Int32 originPageX = 0;
+        Int32 originPageY = 0;
+        Int32 depthEpoch = 0;
+        Int32 padding = 0;
+    };
+
+    struct alignas(16) VirtualShadowGpuConstants
+    {
+        Vector4 lightRight = Vector4::Zero();
+        Vector4 lightUp = Vector4::Zero();
+        Vector4 lightDirection = Vector4::Zero();
+        Vector4 atlasAndBias = Vector4::Zero();
+        VirtualShadowGpuClipmap clipmaps[VirtualShadowClipmapLevelCount] = {};
+        UInt32 enabled = 0;
+        UInt32 atlasExtent = 0;
+        UInt32 physicalPageSize = VirtualShadowPhysicalPageSize;
+        UInt32 clipmapLevelCount = VirtualShadowClipmapLevelCount;
+        VirtualShadowGpuPageEntry entries[VirtualShadowPageTableCapacity] = {};
+    };
+
+    static_assert(sizeof(VirtualShadowGpuClipmap) == 48);
+    static_assert(sizeof(VirtualShadowGpuConstants) <= 65536);
 } // namespace ve

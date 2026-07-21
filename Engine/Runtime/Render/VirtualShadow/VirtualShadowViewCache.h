@@ -4,7 +4,9 @@
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowRequestBuilder.h"
 
+#include <memory>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ve
@@ -12,6 +14,13 @@ namespace ve
     class RTCamera;
     class RTRenderItem;
     class RTScene;
+
+    namespace rhi
+    {
+        class RhiDevice;
+        class RhiSampler;
+        class RhiTexture;
+    } // namespace rhi
 
     struct VirtualShadowLightInput
     {
@@ -84,13 +93,19 @@ namespace ve
     {
     public:
         explicit VirtualShadowViewCache(UInt32 atlasExtent);
+        ~VirtualShadowViewCache();
 
         [[nodiscard]] VirtualShadowFramePacket PrepareFrame(const VirtualShadowPrepareInput& input);
         [[nodiscard]] VirtualShadowFramePacket
         PrepareFrame(UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
+        [[nodiscard]] bool EnsureGpuResources(rhi::RhiDevice& device, const std::string& viewName);
         void MarkRendered(std::span<const VirtualShadowPageKey> keys);
 
         [[nodiscard]] UInt32 GetAtlasExtent() const noexcept;
+        [[nodiscard]] rhi::RhiTexture* GetAtlasTexture() noexcept;
+        [[nodiscard]] const rhi::RhiTexture* GetAtlasTexture() const noexcept;
+        [[nodiscard]] rhi::RhiSampler* GetComparisonSampler() noexcept;
+        [[nodiscard]] const rhi::RhiSampler* GetComparisonSampler() const noexcept;
         [[nodiscard]] VirtualShadowPageCache& GetPageCache() noexcept;
         [[nodiscard]] const VirtualShadowPageCache& GetPageCache() const noexcept;
 
@@ -102,5 +117,10 @@ namespace ve
         bool hasCameraCutRevision_ = false;
         Float32 lastShadowDistance_ = 0.0f;
         bool hasShadowDistance_ = false;
+        rhi::RhiDevice* resourceDevice_ = nullptr;
+        std::unique_ptr<rhi::RhiTexture> atlasTexture_;
+        std::unique_ptr<rhi::RhiSampler> comparisonSampler_;
     };
+
+    [[nodiscard]] VirtualShadowGpuConstants BuildVirtualShadowGpuConstants(const VirtualShadowFramePacket& packet) noexcept;
 } // namespace ve

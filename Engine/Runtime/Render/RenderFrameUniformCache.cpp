@@ -49,6 +49,12 @@ namespace ve
             {
                 const Matrix44& localToWorld = camera->GetLocalToWorld();
                 data.cameraWorldPosition = Vector4(localToWorld.Get(0, 3), localToWorld.Get(1, 3), localToWorld.Get(2, 3), 1.0f);
+                Vector3 cameraForward = localToWorld.TransformDirection(Vector3::UnitZ()).Normalized();
+                if (cameraForward.LengthSquared() == 0.0f)
+                {
+                    cameraForward = Vector3::UnitZ();
+                }
+                data.cameraWorldForward = Vector4(cameraForward, 0.0f);
             }
             return data;
         }
@@ -57,6 +63,7 @@ namespace ve
         {
             ObjectUniformData data = {};
             data.localToWorld = item.GetLocalToWorld().Transposed();
+            data.receiveShadows = item.ReceiveShadows() ? 1u : 0u;
             return data;
         }
     } // namespace

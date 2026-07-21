@@ -4,7 +4,9 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -18,6 +20,12 @@ namespace ve
         {
             return static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::Sampled) |
                                                      static_cast<UInt32>(rhi::RhiTextureUsage::RenderTarget));
+        }
+
+        [[nodiscard]] rhi::RhiTextureUsage MakeSampledDepthUsage() noexcept
+        {
+            return static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) |
+                                                     static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
         }
 
         [[nodiscard]] FrameGraphTextureDesc MakeTextureDesc(const rhi::RhiTexture& texture, rhi::RhiTextureUsage usage) noexcept
@@ -61,6 +69,7 @@ namespace ve
 
         UpdateRenderWorld();
         BuildRenderQueues();
+        PrepareVirtualShadows();
 
         FrameGraph frameGraph(FrameGraphExecuteContext{*frameRenderData_, rendererData_});
         RendererFrameGraphData graphData = {};
@@ -74,6 +83,7 @@ namespace ve
                 {
                     return importResult;
                 }
+                ImportVirtualShadowResources(setupGraph, graphData);
 
                 // Setup step 2: register the renderer topology and let each pass declare its resource accesses.
                 if (rendererData_.scene != nullptr && rendererData_.resolvedCamera != nullptr)
@@ -167,6 +177,42 @@ namespace ve
                          });
     }
 
+    void BaseRenderer::PrepareVirtualShadows()
+    {
+        rendererData_.virtualShadowPacket.reset();
+        if (rendererData_.scene == nullptr || rendererData_.resolvedCamera == nullptr || rendererData_.viewState == nullptr || frameRenderData_ == nullptr ||
+            frameRenderData_->device == nullptr || frameRenderData_->mainSwapchain == nullptr)
+        {
+            return;
+        }
+
+        rhi::RhiExtent2D targetExtent = frameRenderData_->mainSwapchain->GetExtent();
+        if (target_.colorTexture != nullptr && target_.colorTexture->GetTexture() != nullptr)
+        {
+            targetExtent.width = target_.colorTexture->GetTexture()->GetWidth();
+            targetExtent.height = target_.colorTexture->GetTexture()->GetHeight();
+        }
+        if (targetExtent.width == 0 || targetExtent.height == 0)
+        {
+            return;
+        }
+
+        VirtualShadowViewCache& cache = rendererData_.viewState->GetVirtualShadowViewCache();
+        auto packet = std::make_shared<VirtualShadowFramePacket>(cache.PrepareFrame(frameRenderData_->frameIndex,
+                                                                                    rendererData_.viewState->GetCameraCutRevision(),
+                                                                                    *rendererData_.resolvedCamera,
+                                                                                    *rendererData_.scene,
+                                                                                    targetExtent.width,
+                                                                                    targetExtent.height));
+        if (packet->enabled && !cache.EnsureGpuResources(*frameRenderData_->device, rendererData_.viewState->GetDesc().name))
+        {
+            packet->valid = false;
+            packet->enabled = false;
+            packet->dirtyPages.clear();
+        }
+        rendererData_.virtualShadowPacket = std::move(packet);
+    }
+
     ErrorCode BaseRenderer::ImportRenderTargets(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const
     {
         if (target_.colorTexture != nullptr)
@@ -196,5 +242,21 @@ namespace ve
         colorDesc.usage = rhi::RhiTextureUsage::RenderTarget;
         graphData.color = frameGraph.ImportTexture("MainSwapchainColor", colorDesc, ImportedFrameGraphTexture{nullptr, true});
         return ErrorCode::None;
+    }
+
+    void BaseRenderer::ImportVirtualShadowResources(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const
+    {
+        if (rendererData_.viewState == nullptr || rendererData_.virtualShadowPacket == nullptr || !rendererData_.virtualShadowPacket->enabled)
+        {
+            return;
+        }
+
+        rhi::RhiTexture* atlas = rendererData_.viewState->GetVirtualShadowViewCache().GetAtlasTexture();
+        if (atlas == nullptr)
+        {
+            return;
+        }
+        graphData.virtualShadowAtlas =
+            frameGraph.ImportTexture("VirtualShadowAtlas", MakeTextureDesc(*atlas, MakeSampledDepthUsage()), ImportedFrameGraphTexture{atlas, false});
     }
 } // namespace ve

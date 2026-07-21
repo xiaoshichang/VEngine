@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.h"
 
 #include <memory>
 #include <vector>
@@ -23,6 +24,7 @@ namespace ve
     private:
         void BuildFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
 
+        VirtualShadowDepthRenderPass virtualShadowDepthPass_;
         OpaqueSceneRenderPass opaquePass_;
         TransparentSceneRenderPass transparentPass_;
         std::vector<std::unique_ptr<RenderPass>> additionalPasses_;
