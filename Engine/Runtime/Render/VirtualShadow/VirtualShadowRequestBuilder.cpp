@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <unordered_map>
 
 namespace ve
@@ -47,6 +48,50 @@ namespace ve
             const UInt32 distanceBits = static_cast<UInt32>(std::clamp(inverseDistance, 0.0f, 1.0f) * 16383.0f);
             return ((3u - levelIndex) << 28u) | (coverageBits << 14u) | distanceBits;
         }
+
+        std::optional<Aabb>
+        BuildLightSpaceFrustumSliceBounds(const VirtualShadowRequestBuildInput& input, Float32 requestedNearDepth, Float32 requestedFarDepth) noexcept
+        {
+            const Matrix44 projection = input.viewProjection * input.cameraLocalToWorld;
+            const Float32 depthScale = projection.Get(2, 2);
+            const Float32 depthOffset = projection.Get(2, 3);
+            if (std::abs(projection.Get(0, 0)) <= Math::DefaultEpsilon || std::abs(projection.Get(1, 1)) <= Math::DefaultEpsilon ||
+                std::abs(depthScale) <= Math::DefaultEpsilon)
+            {
+                return std::nullopt;
+            }
+
+            const bool perspective = std::abs(projection.Get(3, 2)) > Math::DefaultEpsilon;
+            const Float32 cameraNearDepth = -depthOffset / depthScale;
+            const Float32 cameraFarDepth = perspective ? depthOffset / (1.0f - depthScale) : (1.0f - depthOffset) / depthScale;
+            const Float32 sliceNearDepth = std::max(requestedNearDepth, cameraNearDepth);
+            const Float32 sliceFarDepth = std::min(requestedFarDepth, cameraFarDepth);
+            if (!std::isfinite(sliceNearDepth) || !std::isfinite(sliceFarDepth) || sliceNearDepth > sliceFarDepth)
+            {
+                return std::nullopt;
+            }
+
+            Vector3 lightMinimum(std::numeric_limits<Float32>::max(), std::numeric_limits<Float32>::max(), std::numeric_limits<Float32>::max());
+            Vector3 lightMaximum(std::numeric_limits<Float32>::lowest(), std::numeric_limits<Float32>::lowest(), std::numeric_limits<Float32>::lowest());
+            for (UInt32 depthIndex = 0; depthIndex < 2; ++depthIndex)
+            {
+                const Float32 depth = depthIndex == 0 ? sliceNearDepth : sliceFarDepth;
+                const Float32 halfWidth = perspective ? depth / std::abs(projection.Get(0, 0)) : 1.0f / std::abs(projection.Get(0, 0));
+                const Float32 halfHeight = perspective ? depth / std::abs(projection.Get(1, 1)) : 1.0f / std::abs(projection.Get(1, 1));
+                for (UInt32 cornerIndex = 0; cornerIndex < 4; ++cornerIndex)
+                {
+                    const Vector3 cameraCorner((cornerIndex & 1u) != 0u ? halfWidth : -halfWidth, (cornerIndex & 2u) != 0u ? halfHeight : -halfHeight, depth);
+                    const Vector3 lightCorner = input.clipmaps.lightBasis.TransformPoint(input.cameraLocalToWorld.TransformPoint(cameraCorner));
+                    lightMinimum.SetX(std::min(lightMinimum.GetX(), lightCorner.GetX()));
+                    lightMinimum.SetY(std::min(lightMinimum.GetY(), lightCorner.GetY()));
+                    lightMinimum.SetZ(std::min(lightMinimum.GetZ(), lightCorner.GetZ()));
+                    lightMaximum.SetX(std::max(lightMaximum.GetX(), lightCorner.GetX()));
+                    lightMaximum.SetY(std::max(lightMaximum.GetY(), lightCorner.GetY()));
+                    lightMaximum.SetZ(std::max(lightMaximum.GetZ(), lightCorner.GetZ()));
+                }
+            }
+            return Aabb(lightMinimum, lightMaximum);
+        }
     } // namespace
 
     std::vector<VirtualShadowPageRequest> BuildVirtualShadowPageRequests(const VirtualShadowRequestBuildInput& input)
@@ -68,8 +113,10 @@ namespace ve
 
             Float32 minimumLightX = std::numeric_limits<Float32>::max();
             Float32 minimumLightY = std::numeric_limits<Float32>::max();
+            Float32 minimumLightZ = std::numeric_limits<Float32>::max();
             Float32 maximumLightX = std::numeric_limits<Float32>::lowest();
             Float32 maximumLightY = std::numeric_limits<Float32>::lowest();
+            Float32 maximumLightZ = std::numeric_limits<Float32>::lowest();
             Float32 minimumCameraDepth = std::numeric_limits<Float32>::max();
             Float32 maximumCameraDepth = std::numeric_limits<Float32>::lowest();
             const Vector3 cameraPosition(input.cameraLocalToWorld.Get(0, 3), input.cameraLocalToWorld.Get(1, 3), input.cameraLocalToWorld.Get(2, 3));
@@ -84,8 +131,10 @@ namespace ve
                              const Vector3 lightCorner = input.clipmaps.lightBasis.TransformPoint(corner);
                              minimumLightX = std::min(minimumLightX, lightCorner.GetX());
                              minimumLightY = std::min(minimumLightY, lightCorner.GetY());
+                             minimumLightZ = std::min(minimumLightZ, lightCorner.GetZ());
                              maximumLightX = std::max(maximumLightX, lightCorner.GetX());
                              maximumLightY = std::max(maximumLightY, lightCorner.GetY());
+                             maximumLightZ = std::max(maximumLightZ, lightCorner.GetZ());
                              const Float32 cameraDepth = Vector3::Dot(corner - cameraPosition, cameraForward);
                              minimumCameraDepth = std::min(minimumCameraDepth, cameraDepth);
                              maximumCameraDepth = std::max(maximumCameraDepth, cameraDepth);
@@ -99,14 +148,24 @@ namespace ve
                 {
                     continue;
                 }
+                const std::optional<Aabb> sliceLightBounds = BuildLightSpaceFrustumSliceBounds(input, sliceMinimumDepth, level.worldRadius);
+                const Aabb receiverLightBounds(Vector3(minimumLightX, minimumLightY, minimumLightZ), Vector3(maximumLightX, maximumLightY, maximumLightZ));
+                if (!sliceLightBounds.has_value() || !receiverLightBounds.Intersects(*sliceLightBounds))
+                {
+                    continue;
+                }
                 const Int32 workingMinimumX = level.originPageX - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
                 const Int32 workingMinimumY = level.originPageY - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
                 const Int32 workingMaximumX = workingMinimumX + static_cast<Int32>(VirtualShadowPagesPerAxis) - 1;
                 const Int32 workingMaximumY = workingMinimumY + static_cast<Int32>(VirtualShadowPagesPerAxis) - 1;
-                const Int32 receiverMinimumX = static_cast<Int32>(std::floor(minimumLightX / level.pageWorldSize));
-                const Int32 receiverMinimumY = static_cast<Int32>(std::floor(minimumLightY / level.pageWorldSize));
-                const Int32 receiverMaximumX = static_cast<Int32>(std::floor(maximumLightX / level.pageWorldSize));
-                const Int32 receiverMaximumY = static_cast<Int32>(std::floor(maximumLightY / level.pageWorldSize));
+                const Float32 clippedMinimumLightX = std::max(minimumLightX, sliceLightBounds->GetMinimum().GetX());
+                const Float32 clippedMinimumLightY = std::max(minimumLightY, sliceLightBounds->GetMinimum().GetY());
+                const Float32 clippedMaximumLightX = std::min(maximumLightX, sliceLightBounds->GetMaximum().GetX());
+                const Float32 clippedMaximumLightY = std::min(maximumLightY, sliceLightBounds->GetMaximum().GetY());
+                const Int32 receiverMinimumX = static_cast<Int32>(std::floor(clippedMinimumLightX / level.pageWorldSize));
+                const Int32 receiverMinimumY = static_cast<Int32>(std::floor(clippedMinimumLightY / level.pageWorldSize));
+                const Int32 receiverMaximumX = static_cast<Int32>(std::floor(clippedMaximumLightX / level.pageWorldSize));
+                const Int32 receiverMaximumY = static_cast<Int32>(std::floor(clippedMaximumLightY / level.pageWorldSize));
 
                 const Int32 minimumPageX = std::max(receiverMinimumX, workingMinimumX);
                 const Int32 minimumPageY = std::max(receiverMinimumY, workingMinimumY);

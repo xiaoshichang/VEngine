@@ -261,6 +261,32 @@ namespace
                                                  { return request.key.GetClipmapLevel() == expectedLevel; }),
                              "A receiver should request only clipmap levels whose camera-depth slices overlap it");
         }
+
+        const ve::VirtualShadowClipmapSet xyClipmaps = ve::BuildVirtualShadowClipmaps(cameraLocalToWorld, ve::Vector3::UnitZ(), 80.0f);
+        const ve::VirtualShadowReceiver wideReceiver = {
+            20, ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 15.0f), ve::Vector3(19.0f, 0.25f, 0.25f)), true};
+        const ve::VirtualShadowRequestBuildInput widePerspectiveInput{ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f),
+                                                                      cameraLocalToWorld,
+                                                                      xyClipmaps,
+                                                                      std::span<const ve::VirtualShadowReceiver>(&wideReceiver, 1)};
+        const ve::VirtualShadowRequestBuildInput wideOrthographicInput{ve::BuildOrthographicProjection(10.0f, 1.0f, 0.1f, 100.0f),
+                                                                       cameraLocalToWorld,
+                                                                       xyClipmaps,
+                                                                       std::span<const ve::VirtualShadowReceiver>(&wideReceiver, 1)};
+        const std::vector<ve::VirtualShadowPageRequest> widePerspectiveRequests = ve::BuildVirtualShadowPageRequests(widePerspectiveInput);
+        const std::vector<ve::VirtualShadowPageRequest> wideOrthographicRequests = ve::BuildVirtualShadowPageRequests(wideOrthographicInput);
+        passed &=
+            Expect(!widePerspectiveRequests.empty() &&
+                       std::ranges::all_of(widePerspectiveRequests,
+                                           [](const ve::VirtualShadowPageRequest& request)
+                                           { return request.key.GetClipmapLevel() == 1 && request.key.GetPageX() >= -37 && request.key.GetPageX() <= 36; }),
+                   "Perspective requests should clip receiver XY coverage to the selected camera frustum slice");
+        passed &=
+            Expect(!wideOrthographicRequests.empty() &&
+                       std::ranges::all_of(wideOrthographicRequests,
+                                           [](const ve::VirtualShadowPageRequest& request)
+                                           { return request.key.GetClipmapLevel() == 1 && request.key.GetPageX() >= -16 && request.key.GetPageX() <= 16; }),
+                   "Orthographic requests should clip receiver XY coverage to the selected camera frustum slice");
         return passed;
     }
 
