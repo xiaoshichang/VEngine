@@ -12,6 +12,7 @@
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
+#include <iterator>
 #include <string>
 #include <utility>
 
@@ -371,6 +372,10 @@ float AxisLine(float coordinate, float width)
         normalAttribute.offset = sizeof(Float32) * 3;
 
         const rhi::RhiVertexAttributeDesc vertexAttributes[] = {positionAttribute, normalAttribute};
+        const rhi::RhiPipelineResourceBindingDesc resourceBindings[] = {
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 1},
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 0},
+        };
 
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
         pipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
@@ -381,7 +386,10 @@ float AxisLine(float coordinate, float width)
         pipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
         pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
         pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(RTMeshVertex);
+        pipelineDesc.resourceLayout.bindings = resourceBindings;
+        pipelineDesc.resourceLayout.bindingCount = static_cast<UInt32>(std::size(resourceBindings));
         pipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
+        pipelineDesc.colorAttachmentCount = 1;
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = "SceneGridPipeline";
 

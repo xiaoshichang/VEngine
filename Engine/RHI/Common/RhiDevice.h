@@ -122,7 +122,7 @@ namespace ve::rhi
         [[nodiscard]] virtual bool End() = 0;
 
         /// Begins rendering with physical attachments resolved by the caller. A null color texture selects the
-        /// swapchain's current back buffer.
+        /// swapchain's current back buffer only when both color attachment flags are set.
         [[nodiscard]] virtual bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) = 0;
 
         /// Ends the active render pass.

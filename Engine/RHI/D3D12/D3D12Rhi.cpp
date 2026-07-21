@@ -1,5 +1,6 @@
 #include "Engine/RHI/D3D12/D3D12Rhi.h"
 
+#include "Engine/RHI/Common/RhiUtils.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 
@@ -35,11 +36,8 @@ namespace ve::rhi
 
         void AppendDredDiagnostics(ID3D12Device* device, std::string& message);
 
-        void CALLBACK LogD3D12DebugMessage(D3D12_MESSAGE_CATEGORY,
-                                           D3D12_MESSAGE_SEVERITY severity,
-                                           D3D12_MESSAGE_ID messageId,
-                                           LPCSTR description,
-                                           void* context)
+        void CALLBACK
+        LogD3D12DebugMessage(D3D12_MESSAGE_CATEGORY, D3D12_MESSAGE_SEVERITY severity, D3D12_MESSAGE_ID messageId, LPCSTR description, void* context)
         {
             if (messageId == D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE)
             {
@@ -49,8 +47,7 @@ namespace ve::rhi
             if (severity == D3D12_MESSAGE_SEVERITY_CORRUPTION || severity == D3D12_MESSAGE_SEVERITY_ERROR)
             {
                 std::string message = description != nullptr ? description : "";
-                if (messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_AT_FAULT ||
-                    messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_POSSIBLY_AT_FAULT ||
+                if (messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_AT_FAULT || messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_POSSIBLY_AT_FAULT ||
                     messageId == D3D12_MESSAGE_ID_DEVICE_REMOVAL_PROCESS_NOT_AT_FAULT)
                 {
                     AppendDredDiagnostics(static_cast<ID3D12Device*>(context), message);
@@ -75,6 +72,39 @@ namespace ve::rhi
             default:
                 return DXGI_FORMAT_UNKNOWN;
             }
+        }
+
+        [[nodiscard]] bool HasTextureUsage(RhiTextureUsage usage, RhiTextureUsage flag) noexcept
+        {
+            return (static_cast<uint32_t>(usage) & static_cast<uint32_t>(flag)) != 0;
+        }
+
+        [[nodiscard]] bool IsD3D12TextureDescSupported(const RhiTextureDesc& desc) noexcept
+        {
+            const bool depthStencil = HasTextureUsage(desc.usage, RhiTextureUsage::DepthStencil);
+            const bool renderTarget = HasTextureUsage(desc.usage, RhiTextureUsage::RenderTarget);
+            if (depthStencil)
+            {
+                return desc.format == RhiFormat::Depth32Float && !renderTarget;
+            }
+
+            return desc.format != RhiFormat::Depth32Float;
+        }
+
+        [[nodiscard]] DXGI_FORMAT ToD3D12TextureResourceFormat(const RhiTextureDesc& desc) noexcept
+        {
+            if (desc.format == RhiFormat::Depth32Float && HasTextureUsage(desc.usage, RhiTextureUsage::Sampled) &&
+                HasTextureUsage(desc.usage, RhiTextureUsage::DepthStencil))
+            {
+                return DXGI_FORMAT_R32_TYPELESS;
+            }
+
+            return ToDxgiFormat(desc.format);
+        }
+
+        [[nodiscard]] D3D12_SHADER_VISIBILITY ToD3D12ShaderVisibility(RhiShaderStage stage) noexcept
+        {
+            return stage == RhiShaderStage::Vertex ? D3D12_SHADER_VISIBILITY_VERTEX : D3D12_SHADER_VISIBILITY_PIXEL;
         }
 
         D3D12_PRIMITIVE_TOPOLOGY_TYPE ToD3D12TopologyType(RhiPrimitiveTopology topology)
@@ -355,9 +385,8 @@ namespace ve::rhi
                         const char* commandListName = node->pCommandListDebugNameA != nullptr
                                                           ? node->pCommandListDebugNameA
                                                           : (wideCommandListName.empty() ? "Unnamed D3D12 command list" : wideCommandListName.c_str());
-                        const unsigned nextOp = node->pCommandHistory != nullptr
-                                                    ? static_cast<unsigned>(node->pCommandHistory[completedOpCount])
-                                                    : static_cast<unsigned>(D3D12_AUTO_BREADCRUMB_OP_SETMARKER);
+                        const unsigned nextOp = node->pCommandHistory != nullptr ? static_cast<unsigned>(node->pCommandHistory[completedOpCount])
+                                                                                 : static_cast<unsigned>(D3D12_AUTO_BREADCRUMB_OP_SETMARKER);
                         std::snprintf(buffer,
                                       sizeof(buffer),
                                       "; DRED breadcrumb list='%s' completed=%u/%u nextOp=%u",
@@ -418,11 +447,7 @@ namespace ve::rhi
                 if (allocation != nullptr)
                 {
                     const char* allocationName = allocation->ObjectNameA != nullptr ? allocation->ObjectNameA : "Unnamed D3D12 allocation";
-                    std::snprintf(buffer,
-                                  sizeof(buffer),
-                                  "; allocation='%s' type=%u",
-                                  allocationName,
-                                  static_cast<unsigned>(allocation->AllocationType));
+                    std::snprintf(buffer, sizeof(buffer), "; allocation='%s' type=%u", allocationName, static_cast<unsigned>(allocation->AllocationType));
                     message += buffer;
                 }
             }
@@ -885,9 +910,7 @@ namespace ve::rhi
         class D3D12Sampler final : public RhiSampler
         {
         public:
-            D3D12Sampler(std::shared_ptr<D3D12SamplerDescriptorAllocator> descriptorAllocator,
-                         D3D12SamplerDescriptor descriptor,
-                         RhiSamplerDesc desc)
+            D3D12Sampler(std::shared_ptr<D3D12SamplerDescriptorAllocator> descriptorAllocator, D3D12SamplerDescriptor descriptor, RhiSamplerDesc desc)
                 : descriptorAllocator_(std::move(descriptorAllocator))
                 , descriptor_(descriptor)
                 , desc_(desc)
@@ -993,13 +1016,25 @@ namespace ve::rhi
             ComPtr<ID3DBlob> bytecode_;
         };
 
+        struct D3D12RootBinding
+        {
+            RhiPipelineResourceKind kind = RhiPipelineResourceKind::UniformBuffer;
+            RhiShaderStage stage = RhiShaderStage::Vertex;
+            uint32_t slot = 0;
+            uint32_t rootParameterIndex = 0;
+        };
+
         class D3D12PipelineState final : public RhiPipelineState
         {
         public:
-            D3D12PipelineState(RhiPrimitiveTopology topology, ComPtr<ID3D12RootSignature> rootSignature, ComPtr<ID3D12PipelineState> pipelineState)
+            D3D12PipelineState(RhiPrimitiveTopology topology,
+                               ComPtr<ID3D12RootSignature> rootSignature,
+                               ComPtr<ID3D12PipelineState> pipelineState,
+                               std::vector<D3D12RootBinding> rootBindings)
                 : topology_(topology)
                 , rootSignature_(std::move(rootSignature))
                 , pipelineState_(std::move(pipelineState))
+                , rootBindings_(std::move(rootBindings))
             {
             }
 
@@ -1018,10 +1053,24 @@ namespace ve::rhi
                 return pipelineState_.Get();
             }
 
+            [[nodiscard]] bool FindRootParameter(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot, UINT& rootParameterIndex) const noexcept
+            {
+                for (const D3D12RootBinding& binding : rootBindings_)
+                {
+                    if (binding.kind == kind && binding.stage == stage && binding.slot == slot)
+                    {
+                        rootParameterIndex = binding.rootParameterIndex;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
             ComPtr<ID3D12RootSignature> rootSignature_;
             ComPtr<ID3D12PipelineState> pipelineState_;
+            std::vector<D3D12RootBinding> rootBindings_;
         };
 
         class D3D12Swapchain final : public RhiSwapchain
@@ -1080,8 +1129,7 @@ namespace ve::rhi
                     renderTarget.Reset();
                 }
 
-                const HRESULT result = swapchain_->ResizeBuffers(
-                    bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), 0);
+                const HRESULT result = swapchain_->ResizeBuffers(bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), 0);
                 if (FAILED(result))
                 {
                     SetLastError(MakeD3D12Error(device_.Get(), "IDXGISwapChain3::ResizeBuffers", result));
@@ -1198,8 +1246,11 @@ namespace ve::rhi
                 activeSwapchain_ = nullptr;
                 activeTexture_ = nullptr;
                 activeDepthTexture_ = nullptr;
+                activeDepthShouldTransitionToShaderRead_ = false;
+                activePipeline_ = nullptr;
                 activeResourceHeap_ = nullptr;
                 activeSamplerHeap_ = nullptr;
+                boundDescriptorTables_.clear();
 
                 HRESULT result = commandAllocator_->Reset();
 
@@ -1221,7 +1272,9 @@ namespace ve::rhi
             {
                 auto* d3dSwapchain = dynamic_cast<D3D12Swapchain*>(&swapchain);
 
-                if (d3dSwapchain == nullptr)
+                if (d3dSwapchain == nullptr || (!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
+                    (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) ||
+                    (!beginInfo.hasColorAttachment && !beginInfo.hasDepthAttachment))
                 {
                     return false;
                 }
@@ -1234,7 +1287,19 @@ namespace ve::rhi
                 D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = {};
                 D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
 
-                if (colorAttachment.texture != nullptr)
+                if (beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain)
+                {
+                    if (colorAttachment.texture != nullptr)
+                    {
+                        return false;
+                    }
+
+                    activeSwapchain_ = d3dSwapchain;
+                    renderTarget = d3dSwapchain->GetCurrentRenderTarget();
+                    rtvHandle = d3dSwapchain->GetCurrentRtv();
+                    TransitionResource(renderTarget, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                }
+                else if (beginInfo.hasColorAttachment)
                 {
                     auto* d3dTexture = dynamic_cast<D3D12Texture*>(colorAttachment.texture);
                     if (d3dTexture == nullptr || !d3dTexture->HasRenderTargetView())
@@ -1247,13 +1312,6 @@ namespace ve::rhi
                     rtvHandle = d3dTexture->GetRenderTargetView();
                     TransitionResource(renderTarget, d3dTexture->GetResourceState(), D3D12_RESOURCE_STATE_RENDER_TARGET);
                     d3dTexture->SetResourceState(D3D12_RESOURCE_STATE_RENDER_TARGET);
-                }
-                else
-                {
-                    activeSwapchain_ = d3dSwapchain;
-                    renderTarget = d3dSwapchain->GetCurrentRenderTarget();
-                    rtvHandle = d3dSwapchain->GetCurrentRtv();
-                    TransitionResource(renderTarget, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
                 }
 
                 if (beginInfo.hasDepthAttachment)
@@ -1270,11 +1328,16 @@ namespace ve::rhi
                         beginInfo.depthAttachment.readOnly ? D3D12_RESOURCE_STATE_DEPTH_READ : D3D12_RESOURCE_STATE_DEPTH_WRITE;
                     TransitionResource(d3dDepthTexture->GetNativeResource(), d3dDepthTexture->GetResourceState(), depthState);
                     d3dDepthTexture->SetResourceState(depthState);
+                    activeDepthShouldTransitionToShaderRead_ =
+                        beginInfo.depthAttachment.storeAction == RhiStoreAction::Store && d3dDepthTexture->HasShaderResourceView();
                 }
 
-                commandList_->OMSetRenderTargets(1, &rtvHandle, FALSE, beginInfo.hasDepthAttachment ? &dsvHandle : nullptr);
+                commandList_->OMSetRenderTargets(beginInfo.hasColorAttachment ? 1u : 0u,
+                                                 beginInfo.hasColorAttachment ? &rtvHandle : nullptr,
+                                                 FALSE,
+                                                 beginInfo.hasDepthAttachment ? &dsvHandle : nullptr);
 
-                if (colorAttachment.loadAction == RhiLoadAction::Clear)
+                if (beginInfo.hasColorAttachment && colorAttachment.loadAction == RhiLoadAction::Clear)
                 {
                     const float clearColor[4] = {
                         colorAttachment.clearColor.r, colorAttachment.clearColor.g, colorAttachment.clearColor.b, colorAttachment.clearColor.a};
@@ -1299,13 +1362,20 @@ namespace ve::rhi
 
                 if (activeTexture_ != nullptr && activeTexture_->HasShaderResourceView())
                 {
-                    TransitionResource(
-                        activeTexture_->GetNativeResource(), activeTexture_->GetResourceState(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    TransitionResource(activeTexture_->GetNativeResource(), activeTexture_->GetResourceState(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
                     activeTexture_->SetResourceState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                }
+
+                if (activeDepthTexture_ != nullptr && activeDepthShouldTransitionToShaderRead_)
+                {
+                    TransitionResource(
+                        activeDepthTexture_->GetNativeResource(), activeDepthTexture_->GetResourceState(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                    activeDepthTexture_->SetResourceState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
                 }
 
                 activeTexture_ = nullptr;
                 activeDepthTexture_ = nullptr;
+                activeDepthShouldTransitionToShaderRead_ = false;
             }
 
             [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
@@ -1335,6 +1405,10 @@ namespace ve::rhi
             void SetPipeline(const RhiPipelineState& pipelineState) override
             {
                 const auto& d3dPipeline = static_cast<const D3D12PipelineState&>(pipelineState);
+                activePipeline_ = &d3dPipeline;
+                activeResourceHeap_ = nullptr;
+                activeSamplerHeap_ = nullptr;
+                boundDescriptorTables_.clear();
                 commandList_->SetGraphicsRootSignature(d3dPipeline.GetRootSignature());
                 commandList_->SetPipelineState(d3dPipeline.GetPipelineState());
                 commandList_->IASetPrimitiveTopology(ToD3DTopology(d3dPipeline.GetTopology()));
@@ -1388,31 +1462,54 @@ namespace ve::rhi
 
             void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
             {
+                UINT rootParameterIndex = 0;
+                if (!ResolveRootParameter(RhiPipelineResourceKind::UniformBuffer, stage, slot, rootParameterIndex))
+                {
+                    return;
+                }
+
                 VE_ASSERT(size > 0);
                 VE_ASSERT(offset % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT == 0);
                 VE_ASSERT(offset + size <= buffer.GetSize());
                 const auto& d3dBuffer = static_cast<const D3D12Buffer&>(buffer);
-                const UINT rootParameterIndex = ResolveUniformRootParameter(stage, slot);
                 commandList_->SetGraphicsRootConstantBufferView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
             }
 
             void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
             {
-                VE_ASSERT(stage == RhiShaderStage::Fragment && slot == 0);
-                const auto& d3dTexture = static_cast<const D3D12Texture&>(texture);
+                UINT rootParameterIndex = 0;
+                if (!ResolveRootParameter(RhiPipelineResourceKind::SampledTexture, stage, slot, rootParameterIndex))
+                {
+                    return;
+                }
+
+                auto& d3dTexture = const_cast<D3D12Texture&>(static_cast<const D3D12Texture&>(texture));
                 VE_ASSERT(d3dTexture.HasShaderResourceView());
+                if (!d3dTexture.HasShaderResourceView())
+                {
+                    return;
+                }
+                const D3D12_RESOURCE_STATES shaderReadState =
+                    stage == RhiShaderStage::Vertex ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+                TransitionResource(d3dTexture.GetNativeResource(), d3dTexture.GetResourceState(), shaderReadState);
+                d3dTexture.SetResourceState(shaderReadState);
                 activeResourceHeap_ = d3dTexture.GetShaderResourceViewHeap();
-                ApplyDescriptorHeaps();
-                commandList_->SetGraphicsRootDescriptorTable(4, d3dTexture.GetShaderResourceView());
+                UpdateDescriptorTable(rootParameterIndex, d3dTexture.GetShaderResourceView());
+                ApplyDescriptorHeapsAndTables();
             }
 
             void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) override
             {
-                VE_ASSERT(stage == RhiShaderStage::Fragment && slot == 0);
+                UINT rootParameterIndex = 0;
+                if (!ResolveRootParameter(RhiPipelineResourceKind::Sampler, stage, slot, rootParameterIndex))
+                {
+                    return;
+                }
+
                 const auto& d3dSampler = static_cast<const D3D12Sampler&>(sampler);
                 activeSamplerHeap_ = d3dSampler.GetSamplerHeap();
-                ApplyDescriptorHeaps();
-                commandList_->SetGraphicsRootDescriptorTable(5, d3dSampler.GetSampler());
+                UpdateDescriptorTable(rootParameterIndex, d3dSampler.GetSampler());
+                ApplyDescriptorHeapsAndTables();
             }
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
@@ -1431,6 +1528,12 @@ namespace ve::rhi
             }
 
         private:
+            struct BoundDescriptorTable
+            {
+                UINT rootParameterIndex = 0;
+                D3D12_GPU_DESCRIPTOR_HANDLE handle = {};
+            };
+
             void TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
             {
                 if (resource == nullptr || before == after)
@@ -1448,14 +1551,28 @@ namespace ve::rhi
                 commandList_->ResourceBarrier(1, &barrier);
             }
 
-            [[nodiscard]] static UINT ResolveUniformRootParameter(RhiShaderStage stage, uint32_t slot) noexcept
+            [[nodiscard]] bool ResolveRootParameter(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot, UINT& rootParameterIndex) const noexcept
             {
-                static_cast<void>(stage);
-                VE_ASSERT(slot < 4);
-                return slot;
+                const bool found = activePipeline_ != nullptr && activePipeline_->FindRootParameter(kind, stage, slot, rootParameterIndex);
+                VE_ASSERT_MESSAGE(found, "D3D12 resource binding is absent from the active pipeline layout.");
+                return found;
             }
 
-            void ApplyDescriptorHeaps()
+            void UpdateDescriptorTable(UINT rootParameterIndex, D3D12_GPU_DESCRIPTOR_HANDLE handle)
+            {
+                const auto existing =
+                    std::find_if(boundDescriptorTables_.begin(),
+                                 boundDescriptorTables_.end(),
+                                 [rootParameterIndex](const BoundDescriptorTable& table) { return table.rootParameterIndex == rootParameterIndex; });
+                if (existing != boundDescriptorTables_.end())
+                {
+                    existing->handle = handle;
+                    return;
+                }
+                boundDescriptorTables_.push_back(BoundDescriptorTable{rootParameterIndex, handle});
+            }
+
+            void ApplyDescriptorHeapsAndTables()
             {
                 ID3D12DescriptorHeap* heaps[2] = {};
                 UINT heapCount = 0;
@@ -1471,6 +1588,10 @@ namespace ve::rhi
                 if (heapCount > 0)
                 {
                     commandList_->SetDescriptorHeaps(heapCount, heaps);
+                    for (const BoundDescriptorTable& table : boundDescriptorTables_)
+                    {
+                        commandList_->SetGraphicsRootDescriptorTable(table.rootParameterIndex, table.handle);
+                    }
                 }
             }
 
@@ -1480,8 +1601,11 @@ namespace ve::rhi
             D3D12Swapchain* activeSwapchain_ = nullptr;
             D3D12Texture* activeTexture_ = nullptr;
             D3D12Texture* activeDepthTexture_ = nullptr;
+            bool activeDepthShouldTransitionToShaderRead_ = false;
+            const D3D12PipelineState* activePipeline_ = nullptr;
             ID3D12DescriptorHeap* activeResourceHeap_ = nullptr;
             ID3D12DescriptorHeap* activeSamplerHeap_ = nullptr;
+            std::vector<BoundDescriptorTable> boundDescriptorTables_;
         };
 
         class D3D12Device final : public RhiDevice
@@ -1565,9 +1689,8 @@ namespace ve::rhi
                     const HRESULT filterResult = infoQueue_->AddStorageFilterEntries(&filter);
                     if (FAILED(filterResult))
                     {
-                        VE_LOG_WARN_CATEGORY("D3D12",
-                                             "Failed to configure the D3D12 debug message filter: HRESULT=0x{:08X}.",
-                                             static_cast<unsigned>(filterResult));
+                        VE_LOG_WARN_CATEGORY(
+                            "D3D12", "Failed to configure the D3D12 debug message filter: HRESULT=0x{:08X}.", static_cast<unsigned>(filterResult));
                     }
 
                     if (SUCCEEDED(infoQueue_.As(&infoQueue1_)))
@@ -1787,6 +1910,11 @@ namespace ve::rhi
                     SetLastError("D3D12 texture requires a non-empty 2D descriptor.");
                     return nullptr;
                 }
+                if (!IsD3D12TextureDescSupported(desc))
+                {
+                    SetLastError("D3D12 texture descriptor has an unsupported depth sampling combination.");
+                    return nullptr;
+                }
 
                 D3D12_HEAP_PROPERTIES heapProperties = {};
                 heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -1799,7 +1927,7 @@ namespace ve::rhi
                 resourceDesc.Height = desc.height;
                 resourceDesc.DepthOrArraySize = 1;
                 resourceDesc.MipLevels = static_cast<UINT16>(desc.mipLevelCount);
-                resourceDesc.Format = ToDxgiFormat(desc.format);
+                resourceDesc.Format = ToD3D12TextureResourceFormat(desc);
                 resourceDesc.SampleDesc.Count = 1;
                 resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
                 resourceDesc.Flags = ToD3D12TextureFlags(desc.usage);
@@ -1809,7 +1937,7 @@ namespace ve::rhi
                 const auto usageValue = static_cast<uint32_t>(desc.usage);
                 if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
                 {
-                    clearValue.Format = ToDxgiFormat(desc.format);
+                    clearValue.Format = DXGI_FORMAT_D32_FLOAT;
                     clearValue.DepthStencil.Depth = 1.0f;
                     clearValue.DepthStencil.Stencil = 0;
                     clearValuePtr = &clearValue;
@@ -1986,7 +2114,7 @@ namespace ve::rhi
 
                     dsvDescriptorSize = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
                     D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-                    dsvDesc.Format = ToDxgiFormat(desc.format);
+                    dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
                     dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
                     dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 
@@ -2007,7 +2135,7 @@ namespace ve::rhi
                     }
 
                     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-                    srvDesc.Format = ToDxgiFormat(desc.format);
+                    srvDesc.Format = desc.format == RhiFormat::Depth32Float ? DXGI_FORMAT_R32_FLOAT : ToDxgiFormat(desc.format);
                     srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
                     srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
                     srvDesc.Texture2D.MipLevels = desc.mipLevelCount;
@@ -2105,48 +2233,68 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
-                const RhiBoundShaderStateDesc& boundShaderState = desc.boundShaderState;
-                const auto* vertexShaderModule = dynamic_cast<const D3D12ShaderModule*>(boundShaderState.vertexShader);
-                const auto* fragmentShaderModule = dynamic_cast<const D3D12ShaderModule*>(boundShaderState.fragmentShader);
-
-                if (vertexShaderModule == nullptr || fragmentShaderModule == nullptr)
+                if (!IsPipelineResourceLayoutValid(desc.resourceLayout))
                 {
-                    SetLastError("D3D12 graphics pipeline requires D3D12 shader modules.");
+                    SetLastError("D3D12 graphics pipeline resource layout is invalid or contains duplicate bindings.");
+                    return nullptr;
+                }
+                if (desc.colorAttachmentCount > 1 || (desc.colorAttachmentCount == 0 && desc.colorFormat != RhiFormat::Unknown) ||
+                    (desc.colorAttachmentCount == 1 && (desc.colorFormat == RhiFormat::Unknown || desc.colorFormat == RhiFormat::Depth32Float)))
+                {
+                    SetLastError("D3D12 graphics pipeline requires zero or one valid color attachment format.");
                     return nullptr;
                 }
 
-                D3D12_DESCRIPTOR_RANGE descriptorRanges[2] = {};
-                descriptorRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-                descriptorRanges[0].NumDescriptors = 1;
-                descriptorRanges[0].BaseShaderRegister = 0;
-                descriptorRanges[0].RegisterSpace = 0;
-                descriptorRanges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-                descriptorRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
-                descriptorRanges[1].NumDescriptors = 1;
-                descriptorRanges[1].BaseShaderRegister = 0;
-                descriptorRanges[1].RegisterSpace = 0;
-                descriptorRanges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                const RhiBoundShaderStateDesc& boundShaderState = desc.boundShaderState;
+                const auto* vertexShaderModule = dynamic_cast<const D3D12ShaderModule*>(boundShaderState.vertexShader);
+                const auto* fragmentShaderModule =
+                    boundShaderState.fragmentShader != nullptr ? dynamic_cast<const D3D12ShaderModule*>(boundShaderState.fragmentShader) : nullptr;
 
-                D3D12_ROOT_PARAMETER rootParameters[6] = {};
-                for (UINT slot = 0; slot < 4; ++slot)
+                if (vertexShaderModule == nullptr || vertexShaderModule->GetStage() != RhiShaderStage::Vertex ||
+                    (boundShaderState.fragmentShader != nullptr &&
+                     (fragmentShaderModule == nullptr || fragmentShaderModule->GetStage() != RhiShaderStage::Fragment)) ||
+                    (desc.colorAttachmentCount == 1 && fragmentShaderModule == nullptr))
                 {
-                    rootParameters[slot].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-                    rootParameters[slot].Descriptor.ShaderRegister = slot;
-                    rootParameters[slot].Descriptor.RegisterSpace = 0;
-                    rootParameters[slot].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+                    SetLastError("D3D12 graphics pipeline requires a D3D12 vertex shader and a fragment shader for color output.");
+                    return nullptr;
                 }
-                rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-                rootParameters[4].DescriptorTable.NumDescriptorRanges = 1;
-                rootParameters[4].DescriptorTable.pDescriptorRanges = &descriptorRanges[0];
-                rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-                rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-                rootParameters[5].DescriptorTable.NumDescriptorRanges = 1;
-                rootParameters[5].DescriptorTable.pDescriptorRanges = &descriptorRanges[1];
-                rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+                std::vector<RhiPipelineResourceBindingDesc> resourceBindings;
+                if (desc.resourceLayout.bindingCount != 0)
+                {
+                    resourceBindings.assign(desc.resourceLayout.bindings, desc.resourceLayout.bindings + desc.resourceLayout.bindingCount);
+                }
+
+                std::vector<D3D12_DESCRIPTOR_RANGE> descriptorRanges(resourceBindings.size());
+                std::vector<D3D12_ROOT_PARAMETER> rootParameters(resourceBindings.size());
+                for (uint32_t index = 0; index < resourceBindings.size(); ++index)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = resourceBindings[index];
+                    D3D12_ROOT_PARAMETER& rootParameter = rootParameters[index];
+                    rootParameter.ShaderVisibility = ToD3D12ShaderVisibility(binding.stage);
+                    if (binding.kind == RhiPipelineResourceKind::UniformBuffer)
+                    {
+                        rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                        rootParameter.Descriptor.ShaderRegister = binding.slot;
+                        rootParameter.Descriptor.RegisterSpace = 0;
+                        continue;
+                    }
+
+                    D3D12_DESCRIPTOR_RANGE& descriptorRange = descriptorRanges[index];
+                    descriptorRange.RangeType =
+                        binding.kind == RhiPipelineResourceKind::SampledTexture ? D3D12_DESCRIPTOR_RANGE_TYPE_SRV : D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                    descriptorRange.NumDescriptors = 1;
+                    descriptorRange.BaseShaderRegister = binding.slot;
+                    descriptorRange.RegisterSpace = 0;
+                    descriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                    rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                    rootParameter.DescriptorTable.NumDescriptorRanges = 1;
+                    rootParameter.DescriptorTable.pDescriptorRanges = &descriptorRange;
+                }
 
                 D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-                rootSignatureDesc.NumParameters = 6;
-                rootSignatureDesc.pParameters = rootParameters;
+                rootSignatureDesc.NumParameters = static_cast<UINT>(rootParameters.size());
+                rootSignatureDesc.pParameters = rootParameters.empty() ? nullptr : rootParameters.data();
                 rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
                 ComPtr<ID3DBlob> signature;
@@ -2235,15 +2383,15 @@ namespace ve::rhi
                 D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = {};
                 pipelineDesc.pRootSignature = rootSignature.Get();
                 pipelineDesc.VS = vertexShaderModule->GetBytecode();
-                pipelineDesc.PS = fragmentShaderModule->GetBytecode();
+                pipelineDesc.PS = fragmentShaderModule != nullptr ? fragmentShaderModule->GetBytecode() : D3D12_SHADER_BYTECODE{};
                 pipelineDesc.BlendState = blendDesc;
                 pipelineDesc.SampleMask = UINT_MAX;
                 pipelineDesc.RasterizerState = rasterizerDesc;
                 pipelineDesc.DepthStencilState = depthStencilDesc;
                 pipelineDesc.InputLayout = {inputElements.data(), static_cast<UINT>(inputElements.size())};
                 pipelineDesc.PrimitiveTopologyType = ToD3D12TopologyType(desc.primitiveType);
-                pipelineDesc.NumRenderTargets = 1;
-                pipelineDesc.RTVFormats[0] = ToDxgiFormat(desc.colorFormat);
+                pipelineDesc.NumRenderTargets = desc.colorAttachmentCount;
+                pipelineDesc.RTVFormats[0] = desc.colorAttachmentCount == 0 ? DXGI_FORMAT_UNKNOWN : ToDxgiFormat(desc.colorFormat);
                 pipelineDesc.DSVFormat = desc.depthStencilState.depthTestEnabled ? ToDxgiFormat(desc.depthFormat) : DXGI_FORMAT_UNKNOWN;
                 pipelineDesc.SampleDesc.Count = 1;
 
@@ -2256,7 +2404,15 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D12PipelineState>(desc.primitiveType, rootSignature, pipelineState);
+                std::vector<D3D12RootBinding> rootBindings;
+                rootBindings.reserve(resourceBindings.size());
+                for (uint32_t index = 0; index < resourceBindings.size(); ++index)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = resourceBindings[index];
+                    rootBindings.push_back(D3D12RootBinding{binding.kind, binding.stage, binding.slot, index});
+                }
+
+                return std::make_unique<D3D12PipelineState>(desc.primitiveType, rootSignature, pipelineState, std::move(rootBindings));
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

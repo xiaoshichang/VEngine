@@ -461,6 +461,13 @@ namespace ve
             return {};
         }
         pass.depthAttachment = DepthAttachmentRecord{output, loadAction, rhi::RhiStoreAction::DontCare, clearDepth, false};
+        if (!pass.colorAttachment.has_value())
+        {
+            const FrameGraphTextureDesc& desc = impl_->textures[output.index].desc;
+            pass.renderArea = rhi::RhiRenderArea{0, 0, desc.width, desc.height};
+            pass.viewport = rhi::RhiViewport{0.0f, 0.0f, static_cast<Float32>(desc.width), static_cast<Float32>(desc.height), 0.0f, 1.0f};
+            pass.scissorRect = rhi::RhiScissorRect{0, 0, desc.width, desc.height};
+        }
         return output;
     }
 
@@ -490,6 +497,13 @@ namespace ve
             return {};
         }
         pass.depthAttachment = DepthAttachmentRecord{input, rhi::RhiLoadAction::Load, rhi::RhiStoreAction::DontCare, 1.0f, true};
+        if (!pass.colorAttachment.has_value())
+        {
+            const FrameGraphTextureDesc& desc = impl_->textures[input.index].desc;
+            pass.renderArea = rhi::RhiRenderArea{0, 0, desc.width, desc.height};
+            pass.viewport = rhi::RhiViewport{0.0f, 0.0f, static_cast<Float32>(desc.width), static_cast<Float32>(desc.height), 0.0f, 1.0f};
+            pass.scissorRect = rhi::RhiScissorRect{0, 0, desc.width, desc.height};
+        }
         return input;
     }
 
@@ -640,35 +654,39 @@ namespace ve
     {
         for (const PassNode& pass : passes)
         {
-            if (!pass.colorAttachment.has_value())
+            if (!pass.colorAttachment.has_value() && !pass.depthAttachment.has_value())
             {
-                return Error(ErrorCode::InvalidArgument, "Frame graph raster pass '" + pass.name + "' requires one color attachment.");
+                return Error(ErrorCode::InvalidArgument, "Frame graph raster pass '" + pass.name + "' requires at least one attachment.");
             }
 
-            const ColorAttachmentRecord& colorAttachment = *pass.colorAttachment;
-            const TextureResourceNode& colorResource = textures[colorAttachment.handle.index];
-            if (colorResource.desc.format == rhi::RhiFormat::Depth32Float)
+            const TextureResourceNode* colorResource = nullptr;
+            if (pass.colorAttachment.has_value())
             {
-                return Error(ErrorCode::InvalidArgument, "Frame graph pass '" + pass.name + "' uses a depth format as a color attachment.");
-            }
+                const ColorAttachmentRecord& colorAttachment = *pass.colorAttachment;
+                colorResource = &textures[colorAttachment.handle.index];
+                if (colorResource->desc.format == rhi::RhiFormat::Depth32Float)
+                {
+                    return Error(ErrorCode::InvalidArgument, "Frame graph pass '" + pass.name + "' uses a depth format as a color attachment.");
+                }
 
-            const auto colorAccessIt = std::find_if(pass.textureAccesses.begin(),
-                                                    pass.textureAccesses.end(),
-                                                    [&colorAttachment](const TextureAccessRecord& access)
-                                                    {
-                                                        return access.mode == TextureAccessMode::Write &&
-                                                               access.access == FrameGraphTextureAccess::ColorAttachment &&
-                                                               access.output == colorAttachment.handle;
-                                                    });
-            if (colorAccessIt == pass.textureAccesses.end())
-            {
-                return Error(ErrorCode::InvalidState, "Frame graph pass '" + pass.name + "' has an inconsistent color attachment declaration.");
-            }
-            if (!colorResource.IsImported() && colorResource.versions[colorAccessIt->input.version].producer == InvalidPassIndex &&
-                colorAttachment.loadAction == rhi::RhiLoadAction::Load)
-            {
-                return Error(ErrorCode::InvalidState,
-                             "Frame graph pass '" + pass.name + "' loads uninitialized transient color texture '" + colorResource.name + "'.");
+                const auto colorAccessIt = std::find_if(pass.textureAccesses.begin(),
+                                                        pass.textureAccesses.end(),
+                                                        [&colorAttachment](const TextureAccessRecord& access)
+                                                        {
+                                                            return access.mode == TextureAccessMode::Write &&
+                                                                   access.access == FrameGraphTextureAccess::ColorAttachment &&
+                                                                   access.output == colorAttachment.handle;
+                                                        });
+                if (colorAccessIt == pass.textureAccesses.end())
+                {
+                    return Error(ErrorCode::InvalidState, "Frame graph pass '" + pass.name + "' has an inconsistent color attachment declaration.");
+                }
+                if (!colorResource->IsImported() && colorResource->versions[colorAccessIt->input.version].producer == InvalidPassIndex &&
+                    colorAttachment.loadAction == rhi::RhiLoadAction::Load)
+                {
+                    return Error(ErrorCode::InvalidState,
+                                 "Frame graph pass '" + pass.name + "' loads uninitialized transient color texture '" + colorResource->name + "'.");
+                }
             }
 
             if (pass.depthAttachment.has_value())
@@ -680,7 +698,8 @@ namespace ve
                 {
                     return Error(ErrorCode::InvalidArgument, "Frame graph pass '" + pass.name + "' has an invalid depth attachment format.");
                 }
-                if (depthResource.desc.width != colorResource.desc.width || depthResource.desc.height != colorResource.desc.height)
+                if (colorResource != nullptr &&
+                    (depthResource.desc.width != colorResource->desc.width || depthResource.desc.height != colorResource->desc.height))
                 {
                     return Error(ErrorCode::InvalidArgument, "Frame graph pass '" + pass.name + "' color and depth attachment extents do not match.");
                 }
@@ -846,9 +865,11 @@ namespace ve
         for (UInt32 orderIndex = 0; orderIndex < compiledPassOrder.size(); ++orderIndex)
         {
             PassNode& pass = passes[compiledPassOrder[orderIndex]];
-            VE_ASSERT(pass.colorAttachment.has_value());
-            pass.colorAttachment->storeAction =
-                isNeededAfterPass(pass.colorAttachment->handle, orderIndex) ? rhi::RhiStoreAction::Store : rhi::RhiStoreAction::DontCare;
+            if (pass.colorAttachment.has_value())
+            {
+                pass.colorAttachment->storeAction =
+                    isNeededAfterPass(pass.colorAttachment->handle, orderIndex) ? rhi::RhiStoreAction::Store : rhi::RhiStoreAction::DontCare;
+            }
             if (pass.depthAttachment.has_value())
             {
                 pass.depthAttachment->storeAction =
@@ -915,16 +936,22 @@ namespace ve
 
     rhi::RhiRenderPassBeginInfo FrameGraph::Impl::BuildRenderPassBeginInfo(const PassNode& pass) const
     {
-        VE_ASSERT(pass.colorAttachment.has_value());
-        const ColorAttachmentRecord& colorAttachment = *pass.colorAttachment;
-
         rhi::RhiRenderPassBeginInfo beginInfo = {};
         beginInfo.debugName = pass.name.c_str();
-        beginInfo.colorAttachment.texture = ResolveTexture(colorAttachment.handle).texture;
-        beginInfo.colorAttachment.loadAction = colorAttachment.loadAction;
-        beginInfo.colorAttachment.storeAction = colorAttachment.storeAction;
-        beginInfo.colorAttachment.clearColor = colorAttachment.clearColor;
+        beginInfo.hasColorAttachment = pass.colorAttachment.has_value();
+        beginInfo.colorAttachmentIsSwapchain = false;
+        if (pass.colorAttachment.has_value())
+        {
+            const ColorAttachmentRecord& colorAttachment = *pass.colorAttachment;
+            const ResolvedFrameGraphTexture resolvedColor = ResolveTexture(colorAttachment.handle);
+            beginInfo.colorAttachment.texture = resolvedColor.texture;
+            beginInfo.colorAttachment.loadAction = colorAttachment.loadAction;
+            beginInfo.colorAttachment.storeAction = colorAttachment.storeAction;
+            beginInfo.colorAttachment.clearColor = colorAttachment.clearColor;
+            beginInfo.colorAttachmentIsSwapchain = resolvedColor.isSwapchain;
+        }
 
+        beginInfo.hasDepthAttachment = pass.depthAttachment.has_value();
         if (pass.depthAttachment.has_value())
         {
             const DepthAttachmentRecord& attachment = *pass.depthAttachment;
@@ -933,7 +960,6 @@ namespace ve
             beginInfo.depthAttachment.storeAction = attachment.storeAction;
             beginInfo.depthAttachment.clearDepth = attachment.clearDepth;
             beginInfo.depthAttachment.readOnly = attachment.readOnly;
-            beginInfo.hasDepthAttachment = true;
         }
 
         return beginInfo;
@@ -941,11 +967,13 @@ namespace ve
 
     RenderPassExecutionInfo FrameGraph::Impl::BuildRenderPassExecutionInfo(const PassNode& pass) const
     {
-        VE_ASSERT(pass.colorAttachment.has_value());
-
         RenderPassExecutionInfo executionInfo = {};
         executionInfo.renderArea = pass.renderArea;
-        executionInfo.colorFormat = textures[pass.colorAttachment->handle.index].desc.format;
+        if (pass.colorAttachment.has_value())
+        {
+            executionInfo.colorFormat = textures[pass.colorAttachment->handle.index].desc.format;
+            executionInfo.colorAttachmentCount = 1;
+        }
         executionInfo.depthEnabled = pass.depthAttachment.has_value();
         executionInfo.depthReadOnly = pass.depthAttachment.has_value() && pass.depthAttachment->readOnly;
         return executionInfo;

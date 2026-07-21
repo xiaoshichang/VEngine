@@ -10,6 +10,7 @@
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <iterator>
 #include <string>
 #include <utility>
 
@@ -349,6 +350,9 @@ struct VSOutput
         colorAttribute.offset = sizeof(Float32) * 3;
 
         const rhi::RhiVertexAttributeDesc vertexAttributes[] = {positionAttribute, colorAttribute};
+        const rhi::RhiPipelineResourceBindingDesc lineResourceBindings[] = {
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 1},
+        };
 
         rhi::RhiRasterizerStateDesc lineRasterizer = rhi::StaticRenderStates::SolidNoCullRasterizer;
         lineRasterizer.antialiasedLineEnabled = true;
@@ -362,7 +366,10 @@ struct VSOutput
         linePipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
         linePipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
         linePipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoVertex);
+        linePipelineDesc.resourceLayout.bindings = lineResourceBindings;
+        linePipelineDesc.resourceLayout.bindingCount = static_cast<UInt32>(std::size(lineResourceBindings));
         linePipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::LineList;
+        linePipelineDesc.colorAttachmentCount = 1;
         linePipelineDesc.colorFormat = targetFormat;
         linePipelineDesc.debugName = "EditorGizmoLinePipeline";
 
@@ -394,6 +401,11 @@ struct VSOutput
         iconColorAttribute.offset = sizeof(Float32) * 6;
 
         const rhi::RhiVertexAttributeDesc iconVertexAttributes[] = {iconPositionAttribute, iconUvAttribute, iconColorAttribute};
+        const rhi::RhiPipelineResourceBindingDesc iconResourceBindings[] = {
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 1},
+            {rhi::RhiPipelineResourceKind::SampledTexture, rhi::RhiShaderStage::Fragment, 0},
+            {rhi::RhiPipelineResourceKind::Sampler, rhi::RhiShaderStage::Fragment, 0},
+        };
 
         rhi::RhiGraphicsPipelineDesc iconPipelineDesc = {};
         iconPipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
@@ -404,7 +416,10 @@ struct VSOutput
         iconPipelineDesc.boundShaderState.vertexDeclaration.attributes = iconVertexAttributes;
         iconPipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 3;
         iconPipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoIconVertex);
+        iconPipelineDesc.resourceLayout.bindings = iconResourceBindings;
+        iconPipelineDesc.resourceLayout.bindingCount = static_cast<UInt32>(std::size(iconResourceBindings));
         iconPipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
+        iconPipelineDesc.colorAttachmentCount = 1;
         iconPipelineDesc.colorFormat = targetFormat;
         iconPipelineDesc.debugName = "EditorGizmoIconPipeline";
 
@@ -451,8 +466,7 @@ struct VSOutput
             iconSampler_ = context.device.CreateSampler(rhi::StaticRenderStates::BilinearClampSampler);
             if (iconSampler_ == nullptr)
             {
-                const std::string message =
-                    BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create builtin gizmo icon sampler.");
+                const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create builtin gizmo icon sampler.");
                 VE_ASSERT_MESSAGE(iconSampler_ != nullptr, message.c_str());
                 return false;
             }

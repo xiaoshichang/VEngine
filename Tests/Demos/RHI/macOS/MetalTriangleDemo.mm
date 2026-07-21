@@ -117,7 +117,9 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         pipelineDesc.boundShaderState.vertexDeclaration.attributes = &positionAttribute;
         pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 1;
         pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(TriangleVertex);
+        pipelineDesc.resourceLayout = {};
         pipelineDesc.primitiveType = ve::rhi::RhiPrimitiveTopology::TriangleList;
+        pipelineDesc.colorAttachmentCount = 1;
         pipelineDesc.colorFormat = swapchain->GetColorFormat();
         pipelineDesc.debugName = "TrianglePipeline";
 
@@ -135,6 +137,8 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
 
         ve::rhi::RhiRenderPassBeginInfo renderPassBeginInfo = {};
         renderPassBeginInfo.debugName = "MetalTriangleDemoPass";
+        renderPassBeginInfo.hasColorAttachment = true;
+        renderPassBeginInfo.colorAttachmentIsSwapchain = true;
         renderPassBeginInfo.colorAttachment.loadAction = ve::rhi::RhiLoadAction::Clear;
         renderPassBeginInfo.colorAttachment.storeAction = ve::rhi::RhiStoreAction::Store;
         renderPassBeginInfo.colorAttachment.clearColor = {0.05f, 0.07f, 0.10f, 1.0f};

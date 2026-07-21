@@ -12,6 +12,7 @@
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <cstdint>
+#include <iterator>
 #include <string>
 
 namespace ve
@@ -202,6 +203,12 @@ namespace ve
         normalAttribute.offset = sizeof(Float32) * 3;
 
         const rhi::RhiVertexAttributeDesc vertexAttributes[] = {positionAttribute, normalAttribute};
+        const rhi::RhiPipelineResourceBindingDesc resourceBindings[] = {
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 0},
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 1},
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 2},
+            {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 3},
+        };
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
         pipelineDesc.blendState = rhi::StaticRenderStates::OpaqueBlend;
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
@@ -212,7 +219,10 @@ namespace ve
         pipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
         pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
         pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(RTMeshVertex);
+        pipelineDesc.resourceLayout.bindings = resourceBindings;
+        pipelineDesc.resourceLayout.bindingCount = static_cast<UInt32>(std::size(resourceBindings));
         pipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
+        pipelineDesc.colorAttachmentCount = 1;
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = OpaqueScenePassName;
 

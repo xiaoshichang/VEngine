@@ -23,6 +23,14 @@ namespace ve::rhi
         Fragment,
     };
 
+    /// Identifies one shader-visible resource category declared by a graphics pipeline.
+    enum class RhiPipelineResourceKind
+    {
+        UniformBuffer,
+        SampledTexture,
+        Sampler,
+    };
+
     /// Describes the primitive topology consumed by a graphics pipeline.
     enum class RhiPrimitiveTopology
     {
@@ -329,8 +337,8 @@ namespace ve::rhi
 
     /// Resolved color attachment consumed when beginning one native render pass.
     ///
-    /// texture may be null to target the swapchain's current back buffer. Logical resource declarations and
-    /// dependency information belong to the frame graph and are intentionally absent here.
+    /// texture may be null only when the enclosing render-pass packet explicitly selects the swapchain. Logical
+    /// resource declarations and dependency information belong to the frame graph and are intentionally absent here.
     struct RhiRenderPassColorAttachmentInfo
     {
         RhiTexture* texture = nullptr;
@@ -351,13 +359,15 @@ namespace ve::rhi
 
     /// Physical parameters needed to begin one native render pass.
     ///
-    /// The current RHI supports one color attachment and one optional depth attachment. Frame-graph setup owns the
+    /// The current RHI supports zero or one color attachment and one optional depth attachment. Frame-graph setup owns the
     /// logical attachment declarations and resolves them into this short-lived execution packet.
     struct RhiRenderPassBeginInfo
     {
         const char* debugName = nullptr;
         RhiRenderPassColorAttachmentInfo colorAttachment = {};
         RhiRenderPassDepthAttachmentInfo depthAttachment = {};
+        bool hasColorAttachment = true;
+        bool colorAttachmentIsSwapchain = true;
         bool hasDepthAttachment = false;
     };
 
@@ -442,6 +452,21 @@ namespace ve::rhi
         uint32_t stride = 0;
     };
 
+    /// Declares one shader-visible pipeline binding.
+    struct RhiPipelineResourceBindingDesc
+    {
+        RhiPipelineResourceKind kind = RhiPipelineResourceKind::UniformBuffer;
+        RhiShaderStage stage = RhiShaderStage::Vertex;
+        uint32_t slot = 0;
+    };
+
+    /// Declares every shader-visible resource binding used by a graphics pipeline.
+    struct RhiPipelineResourceLayoutDesc
+    {
+        const RhiPipelineResourceBindingDesc* bindings = nullptr;
+        uint32_t bindingCount = 0;
+    };
+
     class RhiShaderModule;
 
     struct RhiBlendStateDesc
@@ -491,7 +516,9 @@ namespace ve::rhi
         RhiRasterizerStateDesc rasterizerState = {};
         RhiDepthStencilStateDesc depthStencilState = {};
         RhiBoundShaderStateDesc boundShaderState = {};
+        RhiPipelineResourceLayoutDesc resourceLayout = {};
         RhiPrimitiveTopology primitiveType = RhiPrimitiveTopology::TriangleList;
+        uint32_t colorAttachmentCount = 1;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
         RhiFormat depthFormat = RhiFormat::Depth32Float;
         const char* debugName = nullptr;

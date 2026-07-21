@@ -38,6 +38,7 @@ namespace ve
     {
         rhi::RhiRenderArea renderArea = {};
         rhi::RhiFormat colorFormat = rhi::RhiFormat::Unknown;
+        UInt32 colorAttachmentCount = 0;
         bool depthEnabled = false;
         bool depthReadOnly = false;
     };
