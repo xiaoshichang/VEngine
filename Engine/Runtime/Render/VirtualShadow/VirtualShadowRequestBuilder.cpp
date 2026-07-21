@@ -40,12 +40,14 @@ namespace ve
                              maximumX = std::max(maximumX, ndc.GetX());
                              maximumY = std::max(maximumY, ndc.GetY());
                          });
-            const Float32 screenCoverage = std::clamp((maximumX - minimumX) * (maximumY - minimumY) * 0.25f, 0.0f, 1.0f);
+            const Float32 rawScreenCoverage = (maximumX - minimumX) * (maximumY - minimumY) * 0.25f;
+            const Float32 screenCoverage = std::isfinite(rawScreenCoverage) ? std::clamp(rawScreenCoverage, 0.0f, 1.0f) : 0.0f;
             const Vector3 cameraPosition(input.cameraLocalToWorld.Get(0, 3), input.cameraLocalToWorld.Get(1, 3), input.cameraLocalToWorld.Get(2, 3));
             const Float32 distance = (receiver.worldBounds.GetCenter() - cameraPosition).Length();
-            const Float32 inverseDistance = 1.0f / (1.0f + distance);
+            const Float32 rawInverseDistance = 1.0f / (1.0f + distance);
+            const Float32 inverseDistance = std::isfinite(rawInverseDistance) ? std::clamp(rawInverseDistance, 0.0f, 1.0f) : 0.0f;
             const UInt32 coverageBits = static_cast<UInt32>(screenCoverage * 16383.0f);
-            const UInt32 distanceBits = static_cast<UInt32>(std::clamp(inverseDistance, 0.0f, 1.0f) * 16383.0f);
+            const UInt32 distanceBits = static_cast<UInt32>(inverseDistance * 16383.0f);
             return ((3u - levelIndex) << 28u) | (coverageBits << 14u) | distanceBits;
         }
 
@@ -154,18 +156,28 @@ namespace ve
                 {
                     continue;
                 }
-                const Int32 workingMinimumX = level.originPageX - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
-                const Int32 workingMinimumY = level.originPageY - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
-                const Int32 workingMaximumX = workingMinimumX + static_cast<Int32>(VirtualShadowPagesPerAxis) - 1;
-                const Int32 workingMaximumY = workingMinimumY + static_cast<Int32>(VirtualShadowPagesPerAxis) - 1;
+                Int32 workingMinimumX = 0;
+                Int32 workingMinimumY = 0;
+                Int32 workingMaximumX = 0;
+                Int32 workingMaximumY = 0;
+                if (!TryBuildVirtualShadowWorkingRegion(level.originPageX, workingMinimumX, workingMaximumX) ||
+                    !TryBuildVirtualShadowWorkingRegion(level.originPageY, workingMinimumY, workingMaximumY))
+                {
+                    continue;
+                }
                 const Float32 clippedMinimumLightX = std::max(minimumLightX, sliceLightBounds->GetMinimum().GetX());
                 const Float32 clippedMinimumLightY = std::max(minimumLightY, sliceLightBounds->GetMinimum().GetY());
                 const Float32 clippedMaximumLightX = std::min(maximumLightX, sliceLightBounds->GetMaximum().GetX());
                 const Float32 clippedMaximumLightY = std::min(maximumLightY, sliceLightBounds->GetMaximum().GetY());
-                const Int32 receiverMinimumX = static_cast<Int32>(std::floor(clippedMinimumLightX / level.pageWorldSize));
-                const Int32 receiverMinimumY = static_cast<Int32>(std::floor(clippedMinimumLightY / level.pageWorldSize));
-                const Int32 receiverMaximumX = static_cast<Int32>(std::floor(clippedMaximumLightX / level.pageWorldSize));
-                const Int32 receiverMaximumY = static_cast<Int32>(std::floor(clippedMaximumLightY / level.pageWorldSize));
+                Int32 receiverMinimumX = 0;
+                Int32 receiverMinimumY = 0;
+                Int32 receiverMaximumX = 0;
+                Int32 receiverMaximumY = 0;
+                if (!TryQuantizeVirtualShadowPageRange(clippedMinimumLightX, clippedMaximumLightX, level.pageWorldSize, receiverMinimumX, receiverMaximumX) ||
+                    !TryQuantizeVirtualShadowPageRange(clippedMinimumLightY, clippedMaximumLightY, level.pageWorldSize, receiverMinimumY, receiverMaximumY))
+                {
+                    continue;
+                }
 
                 const Int32 minimumPageX = std::max(receiverMinimumX, workingMinimumX);
                 const Int32 minimumPageY = std::max(receiverMinimumY, workingMinimumY);

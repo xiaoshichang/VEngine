@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Types.h"
 
+#include <cmath>
 #include <limits>
 
 namespace ve
@@ -16,6 +17,52 @@ namespace ve
     constexpr UInt32 VirtualShadowPhysicalPageContentSize = VirtualShadowPhysicalPageSize - (2u * VirtualShadowPageGutter);
     constexpr UInt32 VirtualShadowPageTableCapacity = 2048;
     constexpr UInt32 VirtualShadowPageTableMaxProbes = 16;
+    constexpr Int32 VirtualShadowMinimumDepthEpoch = -(1 << 23);
+    constexpr Int32 VirtualShadowMaximumDepthEpoch = (1 << 23) - 1;
+
+    [[nodiscard]] inline bool TryQuantizeVirtualShadowCoordinate(Float32 coordinate, Float32 step, Int32& result) noexcept
+    {
+        if (!std::isfinite(coordinate) || !std::isfinite(step) || step <= 0.0f)
+        {
+            return false;
+        }
+
+        const double quantized = std::floor(static_cast<double>(coordinate) / static_cast<double>(step));
+        if (!std::isfinite(quantized) || quantized < static_cast<double>(std::numeric_limits<Int32>::min()) ||
+            quantized > static_cast<double>(std::numeric_limits<Int32>::max()))
+        {
+            return false;
+        }
+
+        result = static_cast<Int32>(quantized);
+        return true;
+    }
+
+    [[nodiscard]] inline bool TryBuildVirtualShadowWorkingRegion(Int32 originPage, Int32& minimumPage, Int32& maximumPage) noexcept
+    {
+        const Int64 minimum = static_cast<Int64>(originPage) - static_cast<Int64>(VirtualShadowPagesPerAxis / 2u);
+        const Int64 maximum = minimum + static_cast<Int64>(VirtualShadowPagesPerAxis) - 1;
+        if (minimum < std::numeric_limits<Int16>::min() || maximum > std::numeric_limits<Int16>::max())
+        {
+            return false;
+        }
+
+        minimumPage = static_cast<Int32>(minimum);
+        maximumPage = static_cast<Int32>(maximum);
+        return true;
+    }
+
+    [[nodiscard]] inline bool TryQuantizeVirtualShadowPageRange(
+        Float32 minimumCoordinate, Float32 maximumCoordinate, Float32 pageWorldSize, Int32& minimumPage, Int32& maximumPage) noexcept
+    {
+        return minimumCoordinate <= maximumCoordinate && TryQuantizeVirtualShadowCoordinate(minimumCoordinate, pageWorldSize, minimumPage) &&
+               TryQuantizeVirtualShadowCoordinate(maximumCoordinate, pageWorldSize, maximumPage);
+    }
+
+    [[nodiscard]] inline bool IsVirtualShadowDepthEpochRepresentable(Int32 depthEpoch) noexcept
+    {
+        return depthEpoch >= VirtualShadowMinimumDepthEpoch && depthEpoch <= VirtualShadowMaximumDepthEpoch;
+    }
 
     struct VirtualShadowPageKey
     {
@@ -26,11 +73,8 @@ namespace ve
         {
             constexpr Int32 MinimumCoordinate = std::numeric_limits<Int16>::min();
             constexpr Int32 MaximumCoordinate = std::numeric_limits<Int16>::max();
-            constexpr Int32 MinimumDepthEpoch = -(1 << 23);
-            constexpr Int32 MaximumDepthEpoch = (1 << 23) - 1;
-
             if (pageX < MinimumCoordinate || pageX > MaximumCoordinate || pageY < MinimumCoordinate || pageY > MaximumCoordinate ||
-                clipmapLevel >= VirtualShadowClipmapLevelCount || depthEpoch < MinimumDepthEpoch || depthEpoch > MaximumDepthEpoch)
+                clipmapLevel >= VirtualShadowClipmapLevelCount || !IsVirtualShadowDepthEpochRepresentable(depthEpoch))
             {
                 return {};
             }

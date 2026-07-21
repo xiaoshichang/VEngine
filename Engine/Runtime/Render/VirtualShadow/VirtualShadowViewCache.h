@@ -28,6 +28,7 @@ namespace ve
         UInt64 renderItemID = 0;
         UInt64 revision = 0;
         Aabb worldBounds = Aabb(Vector3::Zero(), Vector3::Zero());
+        bool opaque = true;
         bool castShadows = true;
         bool receiveShadows = true;
         const RTRenderItem* renderItem = nullptr;

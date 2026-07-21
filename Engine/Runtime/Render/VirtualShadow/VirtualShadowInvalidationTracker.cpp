@@ -59,14 +59,28 @@ namespace ve
                 continue;
             }
 
-            const Int32 workingMinimumX = level.originPageX - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
-            const Int32 workingMinimumY = level.originPageY - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
-            const Int32 workingMaximumX = workingMinimumX + static_cast<Int32>(VirtualShadowPagesPerAxis) - 1;
-            const Int32 workingMaximumY = workingMinimumY + static_cast<Int32>(VirtualShadowPagesPerAxis) - 1;
-            const Int32 minimumPageX = std::max(static_cast<Int32>(std::floor(lightBounds.GetMinimum().GetX() / level.pageWorldSize)), workingMinimumX);
-            const Int32 minimumPageY = std::max(static_cast<Int32>(std::floor(lightBounds.GetMinimum().GetY() / level.pageWorldSize)), workingMinimumY);
-            const Int32 maximumPageX = std::min(static_cast<Int32>(std::floor(lightBounds.GetMaximum().GetX() / level.pageWorldSize)), workingMaximumX);
-            const Int32 maximumPageY = std::min(static_cast<Int32>(std::floor(lightBounds.GetMaximum().GetY() / level.pageWorldSize)), workingMaximumY);
+            Int32 workingMinimumX = 0;
+            Int32 workingMinimumY = 0;
+            Int32 workingMaximumX = 0;
+            Int32 workingMaximumY = 0;
+            Int32 boundsMinimumX = 0;
+            Int32 boundsMinimumY = 0;
+            Int32 boundsMaximumX = 0;
+            Int32 boundsMaximumY = 0;
+            if (!TryBuildVirtualShadowWorkingRegion(level.originPageX, workingMinimumX, workingMaximumX) ||
+                !TryBuildVirtualShadowWorkingRegion(level.originPageY, workingMinimumY, workingMaximumY) ||
+                !TryQuantizeVirtualShadowPageRange(
+                    lightBounds.GetMinimum().GetX(), lightBounds.GetMaximum().GetX(), level.pageWorldSize, boundsMinimumX, boundsMaximumX) ||
+                !TryQuantizeVirtualShadowPageRange(
+                    lightBounds.GetMinimum().GetY(), lightBounds.GetMaximum().GetY(), level.pageWorldSize, boundsMinimumY, boundsMaximumY))
+            {
+                continue;
+            }
+
+            const Int32 minimumPageX = std::max(boundsMinimumX, workingMinimumX);
+            const Int32 minimumPageY = std::max(boundsMinimumY, workingMinimumY);
+            const Int32 maximumPageX = std::min(boundsMaximumX, workingMaximumX);
+            const Int32 maximumPageY = std::min(boundsMaximumY, workingMaximumY);
             for (Int32 pageY = minimumPageY; pageY <= maximumPageY; ++pageY)
             {
                 for (Int32 pageX = minimumPageX; pageX <= maximumPageX; ++pageX)

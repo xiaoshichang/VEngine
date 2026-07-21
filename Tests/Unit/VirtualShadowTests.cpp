@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <limits>
 #include <unordered_set>
 #include <vector>
 
@@ -198,6 +199,27 @@ namespace
         passed &= Expect(first.levels[0].worldRadius == 25.0f && first.levels[1].worldRadius == 50.0f && first.levels[2].worldRadius == 100.0f,
                          "The first three clipmap levels should use D/8, D/4, and D/2 radii");
         passed &= Expect(first.levels[3].worldRadius == 200.0f, "Last clipmap should cover the shadow distance");
+        passed &= Expect(!ve::BuildVirtualShadowClipmaps(ve::Matrix44::Identity(), lightDirection, ve::Math::DefaultEpsilon * 0.5f).valid,
+                         "A shadow distance too small for stable page quantization should be rejected");
+        passed &= Expect(!ve::BuildVirtualShadowClipmaps(ve::Matrix44::Identity(), lightDirection, std::numeric_limits<ve::Float32>::max()).valid,
+                         "A shadow distance that overflows derived clipmap values should be rejected");
+        passed &= Expect(
+            !ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(std::numeric_limits<ve::Float32>::max(), 0.0f, 0.0f)), lightDirection, 200.0f)
+                 .valid,
+            "A camera origin beyond checked page coordinates should be rejected");
+
+        const ve::Float32 finestPageWorldSize = first.levels[0].pageWorldSize;
+        const ve::VirtualShadowClipmapSet lastRepresentableRegion =
+            ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(32704.0f * finestPageWorldSize, 0.0f, 0.0f)), lightDirection, 200.0f);
+        const ve::VirtualShadowClipmapSet overflowingRegion =
+            ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(32705.0f * finestPageWorldSize, 0.0f, 0.0f)), lightDirection, 200.0f);
+        passed &= Expect(lastRepresentableRegion.valid, "A full working region ending at signed-16 maximum should remain valid");
+        passed &= Expect(!overflowingRegion.valid, "A working region exceeding signed-16 page coordinates should be rejected");
+
+        const ve::Float32 depthStep = 200.0f / 64.0f;
+        const ve::VirtualShadowClipmapSet overflowingDepth =
+            ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(0.0f, 0.0f, 8388608.0f * depthStep)), lightDirection, 200.0f);
+        passed &= Expect(!overflowingDepth.valid, "A depth epoch exceeding signed 24-bit packing should be rejected");
         return passed;
     }
 
@@ -287,6 +309,32 @@ namespace
                                            [](const ve::VirtualShadowPageRequest& request)
                                            { return request.key.GetClipmapLevel() == 1 && request.key.GetPageX() >= -16 && request.key.GetPageX() <= 16; }),
                    "Orthographic requests should clip receiver XY coverage to the selected camera frustum slice");
+
+        const ve::VirtualShadowReceiver enormousReceiver = {
+            21, ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 15.0f), ve::Vector3(1.0e20f, 0.25f, 0.25f)), true};
+        ve::Int32 quantizedCoordinate = 0;
+        passed &= Expect(!ve::TryQuantizeVirtualShadowCoordinate(1.0e20f, 1.0f, quantizedCoordinate),
+                         "Page coordinates outside Int32 range should be rejected by checked quantization");
+        passed &= Expect(ve::BuildVirtualShadowPageKeysForBounds(xyClipmaps, enormousReceiver.worldBounds).empty(),
+                         "Invalidation page coordinates outside checked Int32 range should be rejected without undefined conversion");
+
+        ve::VirtualShadowClipmapSet unsafeClipmaps = xyClipmaps;
+        for (ve::VirtualShadowClipmapLevel& level : unsafeClipmaps.levels)
+        {
+            level.originPageX = std::numeric_limits<ve::Int32>::max();
+        }
+        ve::VirtualShadowRequestBuildInput unsafeInput = widePerspectiveInput;
+        unsafeInput.clipmaps = unsafeClipmaps;
+        passed &= Expect(ve::BuildVirtualShadowPageRequests(unsafeInput).empty(),
+                         "Request building should reject a working region that cannot fit signed-16 page coordinates");
+
+        for (ve::VirtualShadowClipmapLevel& level : unsafeClipmaps.levels)
+        {
+            level.originPageX = 0;
+            level.pageWorldSize = 0.0f;
+        }
+        unsafeInput.clipmaps = unsafeClipmaps;
+        passed &= Expect(ve::BuildVirtualShadowPageRequests(unsafeInput).empty(), "Request building should reject non-positive page quantization steps");
         return passed;
     }
 
@@ -370,22 +418,27 @@ namespace
     {
         ve::VirtualShadowViewCache viewCache(520);
         const ve::Aabb bounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3::One());
-        const ve::VirtualShadowSceneItem item = {42, 1, bounds, true, true, nullptr};
+        const ve::VirtualShadowSceneItem items[] = {
+            {42, 1, bounds, true, true, true, nullptr},
+            {43, 1, bounds, false, true, true, nullptr},
+        };
         ve::VirtualShadowPrepareInput input;
         input.frameIndex = 1;
         input.cameraCutRevision = 0;
         input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
-        input.items = std::span<const ve::VirtualShadowSceneItem>(&item, 1);
+        input.items = items;
         input.light = {true, ve::Vector3(0.0f, -1.0f, 0.0f), 200.0f, 0.001f, 0.05f, 1};
 
         const ve::VirtualShadowFramePacket packet = viewCache.PrepareFrame(input);
+        bool passed = true;
         bool foundCaster = false;
         for (const ve::VirtualShadowDirtyPageDraw& draw : packet.dirtyPages)
         {
             foundCaster |= std::ranges::find(draw.casterRenderItemIDs, 42u) != draw.casterRenderItemIDs.end();
+            passed &= Expect(std::ranges::find(draw.casterRenderItemIDs, 43u) == draw.casterRenderItemIDs.end(),
+                             "Transparent render items should not enter first-stage caster draw lists");
         }
 
-        bool passed = true;
         passed &= Expect(packet.valid && packet.enabled, "A suitable directional light should produce an enabled valid packet");
         passed &= Expect(packet.statistics.requested > 0 && !packet.dirtyPages.empty(), "The CPU view cache should request and prepare dirty pages");
         passed &= Expect(foundCaster, "A dirty page should include an overlapping opaque caster");
@@ -398,6 +451,7 @@ namespace
         viewCache.MarkRendered(renderedKeys);
 
         input.frameIndex = 2;
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&items[0], 1);
         input.light.depthBias = 0.002f;
         input.light.normalBias = 0.1f;
         input.light.revision = 2;
@@ -436,6 +490,12 @@ namespace
         const ve::VirtualShadowFramePacket disabledPacket = viewCache.PrepareFrame(disabledInput);
         passed &= Expect(disabledPacket.valid && !disabledPacket.enabled && disabledPacket.dirtyPages.empty(),
                          "No suitable light should return a disabled but valid frame packet");
+
+        ve::VirtualShadowPrepareInput invalidInput = input;
+        invalidInput.frameIndex = 7;
+        invalidInput.light.shadowDistance = ve::Math::DefaultEpsilon * 0.5f;
+        const ve::VirtualShadowFramePacket invalidPacket = viewCache.PrepareFrame(invalidInput);
+        passed &= Expect(!invalidPacket.valid && !invalidPacket.enabled, "Unsafe clipmap quantization should return a disabled invalid frame packet");
         return passed;
     }
 } // namespace

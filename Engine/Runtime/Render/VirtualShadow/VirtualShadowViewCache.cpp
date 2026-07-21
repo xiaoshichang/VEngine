@@ -86,8 +86,21 @@ namespace ve
             lastCameraCutRevision_ = input.cameraCutRevision;
         }
 
-        if (pageCache_.GetCapacity() == 0 || !input.light.enabled)
+        if (pageCache_.GetCapacity() == 0)
         {
+            packet.valid = false;
+            return packet;
+        }
+
+        if (!input.light.enabled)
+        {
+            return packet;
+        }
+
+        packet.clipmaps = BuildVirtualShadowClipmaps(input.cameraLocalToWorld, input.light.direction, input.light.shadowDistance);
+        if (!packet.clipmaps.valid)
+        {
+            packet.valid = false;
             return packet;
         }
 
@@ -100,12 +113,6 @@ namespace ve
         {
             pageCache_.InvalidateAll();
             lastShadowDistance_ = input.light.shadowDistance;
-        }
-
-        packet.clipmaps = BuildVirtualShadowClipmaps(input.cameraLocalToWorld, input.light.direction, input.light.shadowDistance);
-        if (!packet.clipmaps.valid)
-        {
-            return packet;
         }
 
         packet.enabled = true;
@@ -126,7 +133,7 @@ namespace ve
             {
                 receivers.push_back({item.renderItemID, item.worldBounds, true});
             }
-            if (item.castShadows)
+            if (item.opaque && item.castShadows)
             {
                 casters.push_back({item.renderItemID, item.revision, item.worldBounds, true});
             }
@@ -164,7 +171,7 @@ namespace ve
             draw.pageViewProjection = BuildPageViewProjection(packet.clipmaps.lightBasis, pageBounds);
             for (const VirtualShadowSceneItem& item : input.items)
             {
-                if (!item.castShadows || !item.worldBounds.IsFiniteAndValid() ||
+                if (!item.opaque || !item.castShadows || !item.worldBounds.IsFiniteAndValid() ||
                     !TransformBoundsToLightSpace(packet.clipmaps.lightBasis, item.worldBounds).Intersects(pageBounds))
                 {
                     continue;
@@ -219,9 +226,12 @@ namespace ve
                 continue;
             }
             const Aabb localBounds = Aabb::FromCenterExtents(renderItem->GetBoundsCenter(), renderItem->GetBoundsExtents());
+            const std::shared_ptr<RTMaterialResource> material = std::dynamic_pointer_cast<RTMaterialResource>(renderItem->GetMaterialResource());
+            const bool opaque = material != nullptr && material->GetDesc().renderQueue == RenderQueue::Opaque;
             items.push_back({renderItem->GetRenderItemID(),
                              renderItem->GetRevision(),
                              localBounds.Transformed(renderItem->GetLocalToWorld()),
+                             opaque,
                              renderItem->CastShadows(),
                              renderItem->ReceiveShadows(),
                              renderItem.get()});
