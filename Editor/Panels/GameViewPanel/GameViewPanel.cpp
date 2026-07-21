@@ -25,6 +25,7 @@ namespace ve::editor
 
     GameViewPanel::GameViewPanel()
         : gameViewTexture_(nullptr)
+        , gameViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorGameView", 4096}))
     {
     }
 
@@ -50,6 +51,25 @@ namespace ve::editor
     RenderTexture& GameViewPanel::GetGameViewTexture() noexcept
     {
         return *gameViewTexture_;
+    }
+
+    std::shared_ptr<RenderViewState> GameViewPanel::GetRenderViewState() const noexcept
+    {
+        return gameViewState_;
+    }
+
+    void GameViewPanel::TrackActiveCamera(std::shared_ptr<RTCamera> camera)
+    {
+        if (activeCamera_.get() != camera.get())
+        {
+            gameViewState_->RequestCameraCut();
+            activeCamera_ = std::move(camera);
+        }
+    }
+
+    void GameViewPanel::RequestCameraCut() noexcept
+    {
+        gameViewState_->RequestCameraCut();
     }
 
     const char* GameViewPanel::GetName() const noexcept

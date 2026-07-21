@@ -15,6 +15,7 @@ namespace ve
     class FrameGraph;
     class RTCamera;
     class RTRenderItem;
+    class RTRenderViewState;
     class RTScene;
 
     /// Renderer-owned scene choices and the queue lists built once for one view.
@@ -22,6 +23,7 @@ namespace ve
     {
         std::shared_ptr<RTScene> scene;
         std::shared_ptr<RTCamera> resolvedCamera;
+        std::shared_ptr<RTRenderViewState> viewState;
         std::vector<std::shared_ptr<RTRenderItem>> opaqueItems;
         std::vector<std::shared_ptr<RTRenderItem>> transparentItems;
     };

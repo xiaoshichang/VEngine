@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <imgui.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ve::editor
@@ -135,6 +136,27 @@ namespace ve::editor
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept
     {
         return gameViewPanel_.GetGameViewTexture().GetRTRenderTexture();
+    }
+
+    std::shared_ptr<RenderViewState> ProjectEditingView::GetSceneRenderViewState() const noexcept
+    {
+        return sceneViewPanel_.GetRenderViewState();
+    }
+
+    std::shared_ptr<RenderViewState> ProjectEditingView::GetGameRenderViewState() const noexcept
+    {
+        return gameViewPanel_.GetRenderViewState();
+    }
+
+    void ProjectEditingView::TrackGameViewCamera(std::shared_ptr<RTCamera> camera)
+    {
+        gameViewPanel_.TrackActiveCamera(std::move(camera));
+    }
+
+    void ProjectEditingView::RequestRenderViewCameraCuts() noexcept
+    {
+        sceneViewPanel_.RequestCameraCut();
+        gameViewPanel_.RequestCameraCut();
     }
 
     void ProjectEditingView::RenderMainMenu(Editor& editor)

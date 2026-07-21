@@ -93,6 +93,7 @@ namespace ve::editor
     SceneViewPanel::SceneViewPanel()
         : sceneViewTexture_(nullptr)
         , sceneViewCamera_(nullptr)
+        , sceneViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorSceneView", 2048}))
     {
         sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
     }
@@ -164,6 +165,16 @@ namespace ve::editor
     Matrix44 SceneViewPanel::GetSceneViewCameraLocalToWorld() const noexcept
     {
         return BuildCameraLocalToWorld();
+    }
+
+    std::shared_ptr<RenderViewState> SceneViewPanel::GetRenderViewState() const noexcept
+    {
+        return sceneViewState_;
+    }
+
+    void SceneViewPanel::RequestCameraCut() noexcept
+    {
+        sceneViewState_->RequestCameraCut();
     }
 
     const char* SceneViewPanel::GetName() const noexcept
@@ -290,6 +301,12 @@ namespace ve::editor
         }
         ImGui::DragFloat("Near", &camera_.nearClipPlane, 0.01f, 0.001f, 1000.0f, "%.3f");
         ImGui::DragFloat("Far", &camera_.farClipPlane, 1.0f, 0.001f, 100000.0f, "%.3f");
+
+        if (ImGui::Button("Reset Camera"))
+        {
+            camera_ = SceneViewCameraState{};
+            sceneViewState_->RequestCameraCut();
+        }
 
         std::array<float, 4> clearColor = ToFloat4(camera_.clearColor);
         if (ImGui::ColorEdit4("Clear Color", clearColor.data()))

@@ -25,6 +25,7 @@ namespace ve
         const FrameRenderPipelineData* frameData = nullptr;
         std::shared_ptr<RTScene> scene;
         std::shared_ptr<RTCamera> camera;
+        std::shared_ptr<RTRenderViewState> viewState;
         RendererRenderTarget target;
         rhi::RhiFillMode fillMode = rhi::RhiFillMode::Solid;
     };

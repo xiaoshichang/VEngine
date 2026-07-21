@@ -3,10 +3,16 @@
 #include "Editor/Panels/BasePanel/BasePanel.h"
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 
 #include <memory>
 
 struct ImVec2;
+
+namespace ve
+{
+    class RTCamera;
+}
 
 namespace ve::editor
 {
@@ -21,6 +27,9 @@ namespace ve::editor
 
         [[nodiscard]] const RenderTexture& GetGameViewTexture() const noexcept;
         [[nodiscard]] RenderTexture& GetGameViewTexture() noexcept;
+        [[nodiscard]] std::shared_ptr<RenderViewState> GetRenderViewState() const noexcept;
+        void TrackActiveCamera(std::shared_ptr<RTCamera> camera);
+        void RequestCameraCut() noexcept;
 
     private:
         [[nodiscard]] const char* GetName() const noexcept override;
@@ -31,6 +40,8 @@ namespace ve::editor
         [[nodiscard]] static ImVec2 CalculateFittedImageSize(const ImVec2& canvasSize, float aspectRatio) noexcept;
 
         std::shared_ptr<RenderTexture> gameViewTexture_;
+        std::shared_ptr<RenderViewState> gameViewState_;
+        std::shared_ptr<RTCamera> activeCamera_;
         WindowExtent renderTargetExtent_ = {};
         Editor* editor_ = nullptr;
     };

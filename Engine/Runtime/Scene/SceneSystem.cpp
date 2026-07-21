@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
@@ -40,6 +41,8 @@ namespace ve
         std::function<void()> runtimeStartFrameCallback;
         std::function<void(const OSEvent& event)> runtimeOSEventCallback;
         std::shared_ptr<RTRenderTexture> playerSceneColorTexture;
+        std::shared_ptr<RenderViewState> playerViewState;
+        std::shared_ptr<RTCamera> activePlayerCamera;
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
@@ -174,6 +177,13 @@ namespace ve
             rendererInitParam.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
             CameraComponent* camera = impl.scene != nullptr ? impl.scene->GetCamera() : nullptr;
             rendererInitParam.camera = camera != nullptr ? camera->GetRTCamera() : nullptr;
+            VE_ASSERT_MESSAGE(impl.playerViewState != nullptr, "Player rendering requires a persistent render view state.");
+            if (impl.activePlayerCamera.get() != rendererInitParam.camera.get())
+            {
+                impl.playerViewState->RequestCameraCut();
+                impl.activePlayerCamera = rendererInitParam.camera;
+            }
+            rendererInitParam.viewState = impl.playerViewState->GetRTRenderViewState();
             rendererInitParam.target.colorTexture = impl.playerSceneColorTexture;
 
             PlayerRenderFramePipelineInitParam pipelineInitParam = {};
@@ -475,6 +485,8 @@ namespace ve
         impl_->inputSystem = &inputSystem;
         impl_->renderSystem = &renderSystem;
         impl_->physicsSystem = &physicsSystem;
+        impl_->playerViewState = std::make_shared<RenderViewState>(RenderViewStateDesc{"PlayerView", 4096});
+        impl_->activePlayerCamera.reset();
         impl_->stopRequested.store(false, std::memory_order_release);
         impl_->startLoopEvent.Reset();
 
@@ -558,6 +570,8 @@ namespace ve
         impl_->runtimeStartFrameCallback = nullptr;
         impl_->runtimeOSEventCallback = nullptr;
         impl_->playerSceneColorTexture.reset();
+        impl_->activePlayerCamera.reset();
+        impl_->playerViewState.reset();
         impl_->osEventQueue.ClearForConsumer();
     }
 
@@ -623,6 +637,10 @@ namespace ve
 
         // 3. If the Scene was successfully built, set it as the active Scene and call its OnLoad() callback.
         impl_->scene->OnLoad();
+        if (impl_->playerViewState != nullptr)
+        {
+            impl_->playerViewState->RequestCameraCut();
+        }
         return Error();
     }
 

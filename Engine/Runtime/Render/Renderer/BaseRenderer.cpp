@@ -41,6 +41,7 @@ namespace ve
         VE_ASSERT_RENDER_THREAD();
         rendererData_.scene = std::move(initParam.scene);
         rendererData_.resolvedCamera = std::move(initParam.camera);
+        rendererData_.viewState = std::move(initParam.viewState);
     }
 
     ErrorCode BaseRenderer::RenderScene()
@@ -49,6 +50,12 @@ namespace ve
         if (frameRenderData_ == nullptr || frameRenderData_->device == nullptr || frameRenderData_->frameContext == nullptr ||
             frameRenderData_->mainSwapchain == nullptr || frameRenderData_->shaderManager == nullptr)
         {
+            return ErrorCode::InvalidState;
+        }
+
+        if (rendererData_.scene != nullptr && rendererData_.resolvedCamera != nullptr && rendererData_.viewState == nullptr)
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "A scene renderer with an active camera requires a persistent render view state.");
             return ErrorCode::InvalidState;
         }
 

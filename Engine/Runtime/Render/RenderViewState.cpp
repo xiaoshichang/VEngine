@@ -1,0 +1,41 @@
+#include "Engine/Runtime/Render/RenderViewState.h"
+
+#include <utility>
+
+namespace ve
+{
+    RTRenderViewState::RTRenderViewState(RenderViewStateDesc desc)
+        : desc_(std::move(desc))
+    {
+    }
+
+    const RenderViewStateDesc& RTRenderViewState::GetDesc() const noexcept
+    {
+        return desc_;
+    }
+
+    UInt64 RTRenderViewState::GetCameraCutRevision() const noexcept
+    {
+        return cameraCutRevision_.load(std::memory_order_acquire);
+    }
+
+    void RTRenderViewState::RequestCameraCut() noexcept
+    {
+        cameraCutRevision_.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    RenderViewState::RenderViewState(RenderViewStateDesc desc)
+        : rtViewState_(std::make_shared<RTRenderViewState>(std::move(desc)))
+    {
+    }
+
+    std::shared_ptr<RTRenderViewState> RenderViewState::GetRTRenderViewState() const noexcept
+    {
+        return rtViewState_;
+    }
+
+    void RenderViewState::RequestCameraCut() noexcept
+    {
+        rtViewState_->RequestCameraCut();
+    }
+} // namespace ve

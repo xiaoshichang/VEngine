@@ -36,6 +36,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/MaterialUniformPool.cpp
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
+            Engine/Runtime/Render/RenderViewState.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderCameraMath.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
@@ -133,6 +134,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/MaterialUniformPool.h
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
+            Engine/Runtime/Render/RenderViewState.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderCameraMath.h
             Engine/Runtime/Render/RenderFramePipeline.h

@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 
 #include <memory>
 
@@ -30,6 +31,8 @@ namespace ve::editor
         [[nodiscard]] Gizmos& GetGizmos() noexcept;
         [[nodiscard]] const Gizmos& GetGizmos() const noexcept;
         [[nodiscard]] Matrix44 GetSceneViewCameraLocalToWorld() const noexcept;
+        [[nodiscard]] std::shared_ptr<RenderViewState> GetRenderViewState() const noexcept;
+        void RequestCameraCut() noexcept;
 
     private:
         struct SceneViewCameraState
@@ -87,6 +90,7 @@ namespace ve::editor
 
         std::shared_ptr<RenderTexture> sceneViewTexture_;
         std::shared_ptr<RTCamera> sceneViewCamera_;
+        std::shared_ptr<RenderViewState> sceneViewState_;
         WindowExtent renderTargetExtent_ = {};
         Editor* editor_ = nullptr;
         SceneViewCameraState camera_;
