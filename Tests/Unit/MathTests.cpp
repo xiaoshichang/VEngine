@@ -134,14 +134,20 @@ namespace
     {
         const ve::Aabb visibleBounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3::One());
         const ve::Aabb distantBounds = ve::Aabb::FromCenterExtents(ve::Vector3(1000.0f, 0.0f, 5.0f), ve::Vector3::One());
+        const ve::Aabb beforeNearBounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 0.075f), ve::Vector3(0.01f, 0.01f, 0.01f));
+        const ve::Aabb beyondFarBounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 101.0f), ve::Vector3(0.5f, 0.5f, 0.5f));
         const ve::Frustum perspective = ve::Frustum::FromViewProjection(ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 16.0f / 9.0f, 0.1f, 100.0f));
         const ve::Frustum orthographic = ve::Frustum::FromViewProjection(ve::BuildOrthographicProjection(10.0f, 1.0f, 0.1f, 100.0f));
 
         bool passed = true;
         passed &= Expect(perspective.Intersects(visibleBounds), "Perspective frustum should intersect centered bounds inside its depth range");
         passed &= Expect(!perspective.Intersects(distantBounds), "Perspective frustum should reject distant horizontal bounds");
+        passed &= Expect(!perspective.Intersects(beforeNearBounds), "Perspective frustum should reject bounds wholly before its near plane");
+        passed &= Expect(!perspective.Intersects(beyondFarBounds), "Perspective frustum should reject bounds wholly beyond its far plane");
         passed &= Expect(orthographic.Intersects(visibleBounds), "Orthographic frustum should intersect centered bounds inside its depth range");
         passed &= Expect(!orthographic.Intersects(distantBounds), "Orthographic frustum should reject distant horizontal bounds");
+        passed &= Expect(!orthographic.Intersects(beforeNearBounds), "Orthographic frustum should reject bounds wholly before its near plane");
+        passed &= Expect(!orthographic.Intersects(beyondFarBounds), "Orthographic frustum should reject bounds wholly beyond its far plane");
         return passed;
     }
 
