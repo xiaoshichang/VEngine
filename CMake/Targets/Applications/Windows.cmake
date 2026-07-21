@@ -48,6 +48,8 @@ function(ve_add_windows_editor)
         Editor/Windows/WinEditorProjectRegistryBackend.h
         Editor/Windows/WinEditorRenderBackend.cpp
         Editor/Windows/WinEditorRenderBackend.h
+        Editor/Windows/WinEditorWindowPlacement.cpp
+        Editor/Windows/WinEditorWindowPlacement.h
         Editor/Windows/WindowsEditorApplication.cpp
         Editor/Windows/WindowsEditorApplication.h
     )

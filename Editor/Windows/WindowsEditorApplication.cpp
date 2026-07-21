@@ -1,5 +1,6 @@
 #include "Editor/Windows/WindowsEditorApplication.h"
 
+#include "Editor/Windows/WinEditorWindowPlacement.h"
 #include "Engine/Runtime/Logging/Log.h"
 
 #include <utility>
@@ -31,6 +32,8 @@ namespace ve::editor
             VE_LOG_ERROR("Editor::Init failed: {}", ToString(editorResult));
             return 1;
         }
+
+        PlaceWindowsEditorStartupWindows(GetMainWindowNativeHandle());
 
         return result;
     }

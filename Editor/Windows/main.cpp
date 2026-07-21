@@ -34,7 +34,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.name = "VEngineWinEditor";
     initParam.mainWindow.title = "VEngine Win Editor";
     initParam.mainWindow.width = 2400;
-    initParam.mainWindow.height = 1200;
+    initParam.mainWindow.height = 800;
     initParam.mainWindow.visible = true;
     initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineWinEditorJobWorker";
     initParam.runtime.ioSystem.threadName = "VEngineWinEditorIOThread";

@@ -1,7 +1,6 @@
-#include "Engine/Runtime/Platform/Windows/Win32DebugConsoleBackend.h"
-
 #include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Platform/Windows/Win32DebugConsoleBackend.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -702,6 +701,28 @@ namespace ve
         }
 
         WriteSimpleConsoleLog(severity, line);
+    }
+
+    void Win32DebugConsoleBackend::PlaceNearWindow(void* nativeWindowHandle)
+    {
+#if VE_BUILD_DEBUG
+        HWND editorWindow = static_cast<HWND>(nativeWindowHandle);
+        HWND consoleWindow = GetConsoleWindow();
+        if (editorWindow == nullptr || consoleWindow == nullptr || IsWindow(editorWindow) == FALSE)
+        {
+            return;
+        }
+
+        RECT editorRect = {};
+        if (GetWindowRect(editorWindow, &editorRect) == FALSE)
+        {
+            return;
+        }
+
+        (void)SetWindowPos(consoleWindow, nullptr, editorRect.left, editorRect.bottom, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+#else
+        (void)nativeWindowHandle;
+#endif
     }
 
     std::unique_ptr<DebugConsoleBackend> CreateWin32DebugConsoleBackend()
