@@ -59,6 +59,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/ShaderManager.cpp
             Engine/Runtime/Render/ViewportClient.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowPageTable.cpp
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.cpp
             Engine/Runtime/Resource/AssetID.cpp
             Engine/Runtime/Resource/AssetRef.cpp
             Engine/Runtime/Resource/AssetManifest.cpp
@@ -159,6 +160,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/ShaderManager.h
             Engine/Runtime/Render/ViewportClient.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowPageTable.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h
             Engine/Runtime/Resource/AssetID.h
             Engine/Runtime/Resource/AssetRecord.h
