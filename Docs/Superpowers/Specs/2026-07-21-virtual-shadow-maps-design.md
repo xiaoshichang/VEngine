@@ -497,17 +497,18 @@ The user-approved design explicitly requires focused tests for new CPU page-mana
 - Old and new caster-bounds invalidation.
 - Caster add and remove invalidation.
 - Full invalidation after light orientation changes.
-- Complete isolation between two `RTRenderViewState` instances.
+- Complete isolation between two pure CPU `VirtualShadowPageCache` instances.
 
-### RHI Smoke Coverage
+### RHI Integration Coverage
 
-- Create a texture with `DepthStencil | Sampled` usage.
-- Record a depth-only pass without a fragment shader.
-- Sample the depth result in a following color pass.
-- Bind multiple sampled textures and samplers using the pipeline resource layout.
-- Validate comparison-sampler results.
-- Exercise D3D12 `DepthWrite -> ShaderRead -> DepthWrite` transitions.
-- Verify D3D11 DSV/SRV hazard unbinding.
+RHI, FrameGraph, renderer, window, and device-lifetime behavior is not covered by additional unit-test or CTest executables. It is verified through the existing Editor and Player integration paths with backend debug layers enabled:
+
+- Create and use a `DepthStencil | Sampled` atlas through a real Editor or Player view.
+- Record a depth-only pass without a fragment shader, then sample the result from a following scene pass.
+- Bind multiple sampled textures and samplers through the pipeline resource layout.
+- Validate comparison-sampler output through the shadow acceptance scene.
+- Exercise D3D12 `DepthWrite -> ShaderRead -> DepthWrite` transitions without debug-layer errors.
+- Exercise D3D11 DSV/SRV hazard unbinding without debug-layer errors.
 
 ### Scene Acceptance
 
@@ -537,7 +538,7 @@ The feature should be implemented through independently verifiable stages:
 8. Editor statistics, visualizations, pool-pressure diagnostics, and default tuning.
 9. Complete Windows D3D11/D3D12 validation followed by Metal compile and runtime validation.
 
-Each stage must leave the existing unshadowed renderer functional. Before shader integration is enabled, VSM resources and passes can be exercised through smoke tests and debug visualization without changing the default scene output.
+Each stage must leave the existing unshadowed renderer functional. Before shader integration is enabled, VSM resources and passes are exercised through the existing Editor and Player integration paths and debug visualization without changing the default scene output.
 
 ## Completion Criteria
 

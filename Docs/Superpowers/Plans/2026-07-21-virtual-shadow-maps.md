@@ -40,8 +40,6 @@ New tests:
 
 - `Tests/Unit/VirtualShadowTests.cpp`: math, keys, hash table, LRU, request generation, invalidation, and view isolation.
 - `CMake/Targets/Tests/VirtualShadowTests.cmake`: CTest target registration.
-- `Tests/Smoke/RhiVirtualShadowSmokeTests.cpp`: hidden-window D3D11/D3D12 command-recording smoke test.
-- `CMake/Targets/Tests/RhiVirtualShadowSmokeTests.cmake`: smoke target registration.
 
 Existing integration points:
 
@@ -460,79 +458,36 @@ CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests --target VE
 
 Expected: Windows `VEngine` builds with both D3D11 and D3D12 enabled.
 
-## Task 6: Implement the same RHI contract on Metal and add backend smoke coverage
+## Task 6: Implement the same RHI contract on Metal and verify backend integration
 
 **Files:**
 
 - Modify: `Engine/RHI/Metal/MetalRhi.mm`
-- Create: `Tests/Smoke/RhiVirtualShadowSmokeTests.cpp`
-- Create: `CMake/Targets/Tests/RhiVirtualShadowSmokeTests.cmake`
-- Modify: `CMake/Targets/Tests.cmake`
 
 - [ ] **Step 1: Implement the Metal mappings**
 
 Use `MTLPixelFormatDepth32Float` for sampled depth. Configure a depth-only `MTLRenderPassDescriptor` without `colorAttachments[0].texture`, set `colorAttachments[0].pixelFormat = MTLPixelFormatInvalid`, and allow a nil fragment function. Copy the common resource layout into `MetalPipelineState` and validate buffer, texture, and sampler indices before calling the native encoder.
 
-- [ ] **Step 2: Write the Windows RHI smoke test**
-
-The test creates a hidden Win32 window, then runs the same function once with `CreateD3D11Device(true)` and once with `CreateD3D12Device(true)`. Its core must exercise this sequence:
-
-```cpp
-rhi::RhiTextureDesc atlasDesc = {};
-atlasDesc.width = 256;
-atlasDesc.height = 256;
-atlasDesc.format = rhi::RhiFormat::Depth32Float;
-atlasDesc.usage = static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) |
-                                                    static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
-std::unique_ptr<rhi::RhiTexture> atlas = device.CreateTexture(atlasDesc);
-passed &= Expect(atlas != nullptr && atlas->GetNativeSampledViewHandle() != nullptr, "Sampled depth atlas should expose an SRV");
-
-rhi::RhiRenderPassBeginInfo depthPass = {};
-depthPass.debugName = "VirtualShadowSmokeDepth";
-depthPass.hasColorAttachment = false;
-depthPass.colorAttachmentIsSwapchain = false;
-depthPass.hasDepthAttachment = true;
-depthPass.depthAttachment.texture = atlas.get();
-depthPass.depthAttachment.loadAction = rhi::RhiLoadAction::Clear;
-depthPass.depthAttachment.storeAction = rhi::RhiStoreAction::Store;
-passed &= Expect(commandList->BeginRenderPass(*swapchain, depthPass), "Depth-only pass should begin");
-commandList->EndRenderPass();
-commandList->SetTexture(rhi::RhiShaderStage::Fragment, 1, *atlas);
-commandList->SetSampler(rhi::RhiShaderStage::Fragment, 1, *comparisonSampler);
-```
-
-Compile tiny in-memory `VSMain` and `PSMain` modules. Create one zero-color vertex-only pipeline for the depth pass and one color pipeline whose layout declares `t1/s1`. The smoke passes when command recording, submission, fence wait, and debug-layer processing complete without an RHI error.
-
-- [ ] **Step 3: Register the smoke test**
-
-Add:
-
-```cmake
-function(ve_add_rhi_virtual_shadow_smoke_tests)
-    add_executable(VEngineRhiVirtualShadowSmokeTests Tests/Smoke/RhiVirtualShadowSmokeTests.cpp)
-    target_link_libraries(VEngineRhiVirtualShadowSmokeTests PRIVATE VEngine)
-    ve_configure_target(VEngineRhiVirtualShadowSmokeTests)
-    add_test(NAME VEngineRhiVirtualShadowSmokeTests COMMAND $<TARGET_FILE:VEngineRhiVirtualShadowSmokeTests>)
-endfunction()
-```
-
-Include the file and call the function from `ve_add_tests()`.
-
-- [ ] **Step 4: Run Windows backend verification**
+- [ ] **Step 2: Build the existing Windows integration targets**
 
 Run:
 
 ```text
-CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests --target VEngineRhiVirtualShadowSmokeTests
-CMake/Scripts/WithMsvc.bat ctest --test-dir Build/windows-msvc-tests -C Debug -R VEngineRhiVirtualShadowSmokeTests --output-on-failure
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-debug --target VEngineEditor VEnginePlayer
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests
+CMake/Scripts/WithMsvc.bat ctest --preset windows-msvc-tests --output-on-failure
 ```
 
-Expected: the smoke test passes for D3D11 and D3D12 with no debug-layer DSV/SRV or resource-state error.
+Expected: Editor, Player, and the existing test suite build; all previously registered tests pass. No new RHI, FrameGraph, renderer, window, or device-lifetime unit-test executable is added.
 
-- [ ] **Step 5: Commit the complete RHI prerequisite**
+- [ ] **Step 3: Verify the RHI contract through existing product paths**
+
+Launch the existing Editor and Player first with D3D11 and then with D3D12 debug layers enabled. Exercise a normal unshadowed frame after the explicit-layout migration. Once the VSM render pass is integrated, use the same paths to verify depth-only atlas writes, following-pass sampling, D3D11 DSV/SRV hazard unbinding, and D3D12 depth-write/shader-read transitions. Fail the checkpoint on any backend debug-layer error.
+
+- [ ] **Step 4: Commit the complete RHI prerequisite**
 
 ```text
-git add Engine/RHI Engine/Runtime/Render/Renderer/FrameGraph Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h Tests/Smoke CMake/Targets/Tests.cmake CMake/Targets/Tests/RhiVirtualShadowSmokeTests.cmake
+git add Engine/RHI Engine/Runtime/Render/Renderer/FrameGraph Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.cpp Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.cpp Editor/RenderPass Tests/Demos/RHI/macOS/MetalTriangleDemo.mm
 git commit -m "rhi: support virtual shadow depth passes"
 ```
 
@@ -547,38 +502,8 @@ git commit -m "rhi: support virtual shadow depth passes"
 - Modify: `Engine/Runtime/Scene/LightComponent.h`
 - Modify: `Engine/Runtime/Scene/LightComponent.cpp`
 - Modify: `Engine/Runtime/Scene/SceneSerialization.cpp`
-- Modify: `Tests/Unit/ResourceRenderTests.cpp`
 
-- [ ] **Step 1: Write failing proxy propagation tests**
-
-Add a test that constructs `RTRenderItem` and `RTLight` directly and checks:
-
-```cpp
-ve::RTRenderItemInitParam itemParam = {};
-itemParam.renderItemID = 42;
-itemParam.castShadows = true;
-itemParam.receiveShadows = false;
-itemParam.revision = 7;
-ve::RTRenderItem item(itemParam);
-passed &= Expect(item.GetRenderItemID() == 42, "Render item ID should persist");
-passed &= Expect(item.CastShadows(), "Caster flag should persist");
-passed &= Expect(!item.ReceiveShadows(), "Receiver flag should persist");
-passed &= Expect(item.GetRevision() == 7, "Render item revision should persist");
-```
-
-Also verify `RTLight` retains `shadowDistance`, `depthBias`, `normalBias`, and `shadowRevision`.
-
-- [ ] **Step 2: Run the resource-render test and verify failure**
-
-Run:
-
-```text
-CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests --target VEngineResourceRenderTests
-```
-
-Expected: compilation fails on the new fields and getters.
-
-- [ ] **Step 3: Extend render-item data**
+- [ ] **Step 1: Extend render-item data**
 
 Add `Shadows = 1u << 4` and `Revision = 1u << 5` dirty flags and these init/update fields:
 
@@ -591,7 +516,7 @@ UInt64 revision = 1;
 
 Expose `GetRenderItemID()`, `CastShadows()`, `ReceiveShadows()`, and `GetRevision()` on `RTRenderItem`. Every mesh, bounds, transform, cast-shadow, or receive-shadow change increments the component revision before submitting an update; material-only color changes do not increment the shadow revision.
 
-- [ ] **Step 4: Generate component-lifetime stable IDs**
+- [ ] **Step 2: Generate component-lifetime stable IDs**
 
 In `MeshRenderComponent.cpp`, use a process-local atomic counter:
 
@@ -613,7 +538,7 @@ MeshRenderComponent::MeshRenderComponent(Scene& scene, GameObject& owner)
 
 Serialize `castShadows` and `receiveShadows`, defaulting both to true when fields are absent. The runtime-generated ID and revision are not serialized.
 
-- [ ] **Step 5: Extend directional-light shadow configuration**
+- [ ] **Step 3: Extend directional-light shadow configuration**
 
 Add component defaults and proxy fields:
 
@@ -626,21 +551,22 @@ UInt64 shadowRevision_ = 1;
 
 Expose getters/setters, serialize the three tunable floats, and increment `shadowRevision_` when cast-shadows, distance, bias, normal bias, or transform changes. The view cache compares light direction separately so a direction change triggers full invalidation.
 
-- [ ] **Step 6: Run the focused tests**
+- [ ] **Step 4: Build the existing integration targets**
 
 Run:
 
 ```text
-CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests --target VEngineResourceRenderTests
-CMake/Scripts/WithMsvc.bat ctest --test-dir Build/windows-msvc-tests -C Debug -R VEngineResourceRenderTests --output-on-failure
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-debug --target VEngineEditor VEnginePlayer
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests
+CMake/Scripts/WithMsvc.bat ctest --preset windows-msvc-tests --output-on-failure
 ```
 
-Expected: `VEngineResourceRenderTests` passes.
+Expected: Editor and Player compile with the extended proxy contract, and all existing tests remain green. Do not add a dedicated unit/CTest executable for scene-proxy propagation or component lifecycle behavior.
 
-- [ ] **Step 7: Commit scene shadow metadata**
+- [ ] **Step 5: Commit scene shadow metadata**
 
 ```text
-git add Engine/Runtime/Render/RenderScene.h Engine/Runtime/Render/RenderScene.cpp Engine/Runtime/Scene/MeshRenderComponent.h Engine/Runtime/Scene/MeshRenderComponent.cpp Engine/Runtime/Scene/LightComponent.h Engine/Runtime/Scene/LightComponent.cpp Engine/Runtime/Scene/SceneSerialization.cpp Tests/Unit/ResourceRenderTests.cpp
+git add Engine/Runtime/Render/RenderScene.h Engine/Runtime/Render/RenderScene.cpp Engine/Runtime/Scene/MeshRenderComponent.h Engine/Runtime/Scene/MeshRenderComponent.cpp Engine/Runtime/Scene/LightComponent.h Engine/Runtime/Scene/LightComponent.cpp Engine/Runtime/Scene/SceneSerialization.cpp
 git commit -m "scene: expose virtual shadow metadata"
 ```
 
@@ -1041,9 +967,9 @@ Do not create RHI resources yet; return a disabled but valid frame packet when n
 
 Treat light-direction changes as full invalidation. Shadow-distance changes rebuild clipmap requests through new stable keys. Depth-bias and normal-bias revisions update only the GPU sampling constants and must not dirty resident pages.
 
-- [ ] **Step 4: Add end-to-end CPU isolation tests**
+- [ ] **Step 4: Add pure CPU cache-isolation tests**
 
-Construct two `RTRenderViewState` instances with atlas extents 2048 and 4096, prepare them with different cameras against the same proxy snapshots, and assert different clipmap origins, physical capacities 256 and 1024, distinct page mappings, and independent invalidation/statistics.
+Construct two independent `VirtualShadowPageCache` instances with capacities 256 and 1024 and feed them different absolute page-key request and invalidation sequences. Assert distinct mappings, independent LRU/pinning state, and independent statistics. Exercise clipmap origin and caster-overlap math through value-only inputs. Do not construct `RTRenderViewState`, renderer, scene, RHI device, window, or frame-pipeline objects in this test.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -1054,7 +980,7 @@ CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests --target VE
 CMake/Scripts/WithMsvc.bat ctest --test-dir Build/windows-msvc-tests -C Debug -R VEngineVirtualShadowTests --output-on-failure
 ```
 
-Expected: invalidation, caster culling, and two-view isolation tests pass.
+Expected: pure CPU page invalidation, caster-overlap math, and cache-isolation tests pass. View ownership and engine lifecycle isolation remain Editor/Player integration checks.
 
 ```text
 git add Engine/Runtime/Render/VirtualShadow Engine/Runtime/Render/RenderViewState.cpp Tests/Unit/VirtualShadowTests.cpp CMake/Targets/Engine.cmake
@@ -1382,7 +1308,7 @@ CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests
 CMake/Scripts/WithMsvc.bat ctest --preset windows-msvc-tests --output-on-failure
 ```
 
-Expected: all existing tests plus `VEngineVirtualShadowTests` and `VEngineRhiVirtualShadowSmokeTests` pass.
+Expected: all existing tests plus the pure CPU `VEngineVirtualShadowTests` pass. No additional RHI or renderer-bound unit-test executable is registered.
 
 - [ ] **Step 2: Run D3D11 scene acceptance**
 
@@ -1428,5 +1354,5 @@ git commit -m "render: complete per-view virtual shadow maps"
 - [ ] Three-by-three PCF never samples an adjacent physical slot.
 - [ ] View resize, closure, target replacement, and shutdown are fence-safe.
 - [ ] Metal implements and passes the common sampled-depth and depth-only contracts.
-- [ ] Automated CPU and RHI smoke tests pass.
+- [ ] Automated math and pure CPU virtual-shadow tests pass; engine-bound RHI behavior passes product-path integration validation.
 - [ ] Canonical render and development documentation reflects the implemented limits.
