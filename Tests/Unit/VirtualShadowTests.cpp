@@ -1,8 +1,12 @@
-#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageTable.h"
+#include "Engine/Runtime/Render/RenderCameraMath.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageTable.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowRequestBuilder.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
 
 #include <iostream>
+#include <unordered_set>
 #include <vector>
 
 namespace
@@ -65,13 +69,16 @@ namespace
         ve::VirtualShadowPageTable loadedTable;
         for (ve::UInt32 index = 0; index < 1024; ++index)
         {
-            const ve::VirtualShadowPageKey key = ve::VirtualShadowPageKey::Create(static_cast<ve::Int32>(index), static_cast<ve::Int32>(index / 64), index % 4, 0);
+            const ve::VirtualShadowPageKey key =
+                ve::VirtualShadowPageKey::Create(static_cast<ve::Int32>(index), static_cast<ve::Int32>(index / 64), index % 4, 0);
             passed &= Expect(loadedTable.Insert(key, index), "A half-full resident table should accept deterministic entries");
         }
         for (ve::UInt32 index = 0; index < 1024; ++index)
         {
-            const ve::VirtualShadowPageKey key = ve::VirtualShadowPageKey::Create(static_cast<ve::Int32>(index), static_cast<ve::Int32>(index / 64), index % 4, 0);
-            passed &= Expect(loadedTable.Find(key).value_or(ve::InvalidVirtualShadowPhysicalPage) == index, "A half-full resident table should resolve every entry");
+            const ve::VirtualShadowPageKey key =
+                ve::VirtualShadowPageKey::Create(static_cast<ve::Int32>(index), static_cast<ve::Int32>(index / 64), index % 4, 0);
+            passed &=
+                Expect(loadedTable.Find(key).value_or(ve::InvalidVirtualShadowPhysicalPage) == index, "A half-full resident table should resolve every entry");
         }
 
         const std::vector<ve::VirtualShadowPageKey> collidingKeys = FindCollidingKeys(ve::VirtualShadowPageTableMaxProbes + 1u);
@@ -158,11 +165,77 @@ namespace
 
         return passed;
     }
+
+    bool TestClipmapQuantization()
+    {
+        const ve::Vector3 lightDirection = ve::Vector3::UnitZ();
+        const ve::VirtualShadowClipmapSet first =
+            ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(10.0f, 0.0f, 5.0f)), lightDirection, 200.0f);
+        const ve::VirtualShadowClipmapSet subPage =
+            ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(10.1f, 0.0f, 5.0f)), lightDirection, 200.0f);
+        const ve::VirtualShadowClipmapSet crossedPage =
+            ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(10.5f, 0.0f, 5.0f)), lightDirection, 200.0f);
+        const ve::VirtualShadowClipmapSet crossedDepth =
+            ve::BuildVirtualShadowClipmaps(ve::Matrix44::Translation(ve::Vector3(10.0f, 0.0f, 8.2f)), lightDirection, 200.0f);
+
+        bool passed = true;
+        passed &= Expect(first.levels[0].originPageX == subPage.levels[0].originPageX, "Sub-page motion should preserve origin");
+        passed &= Expect(crossedPage.levels[0].originPageX == first.levels[0].originPageX + 1, "Crossing a page should advance the finest origin once");
+        passed &= Expect(crossedDepth.levels[0].depthEpoch == first.levels[0].depthEpoch + 1, "Crossing the depth step should advance depth epoch");
+        passed &= Expect(first.levels[0].worldRadius == 25.0f && first.levels[1].worldRadius == 50.0f && first.levels[2].worldRadius == 100.0f,
+                         "The first three clipmap levels should use D/8, D/4, and D/2 radii");
+        passed &= Expect(first.levels[3].worldRadius == 200.0f, "Last clipmap should cover the shadow distance");
+        return passed;
+    }
+
+    bool RequestsAreUniqueAndValid(std::span<const ve::VirtualShadowPageRequest> requests)
+    {
+        std::unordered_set<ve::VirtualShadowPageKey, ve::VirtualShadowPageKeyHash> keys;
+        for (const ve::VirtualShadowPageRequest& request : requests)
+        {
+            if (request.key.GetClipmapLevel() >= ve::VirtualShadowClipmapLevelCount || !keys.insert(request.key).second)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool TestReceiverRequests()
+    {
+        const ve::Matrix44 cameraLocalToWorld = ve::Matrix44::Identity();
+        const ve::VirtualShadowClipmapSet clipmaps = ve::BuildVirtualShadowClipmaps(cameraLocalToWorld, -ve::Vector3::UnitY(), 200.0f);
+        const ve::VirtualShadowReceiver receivers[] = {
+            {1, ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3::One()), true},
+            {2, ve::Aabb::FromCenterExtents(ve::Vector3(1000.0f, 0.0f, 5.0f), ve::Vector3::One()), true},
+            {3, ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3::One()), true},
+        };
+        const ve::VirtualShadowRequestBuildInput perspectiveInput{
+            ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f), cameraLocalToWorld, clipmaps, receivers};
+        const ve::VirtualShadowRequestBuildInput orthographicInput{
+            ve::BuildOrthographicProjection(10.0f, 1.0f, 0.1f, 100.0f), cameraLocalToWorld, clipmaps, receivers};
+
+        const std::vector<ve::VirtualShadowPageRequest> perspectiveRequests = ve::BuildVirtualShadowPageRequests(perspectiveInput);
+        const std::vector<ve::VirtualShadowPageRequest> orthographicRequests = ve::BuildVirtualShadowPageRequests(orthographicInput);
+
+        bool passed = true;
+        passed &= Expect(!perspectiveRequests.empty(), "A visible perspective receiver should request pages");
+        passed &= Expect(!orthographicRequests.empty(), "A visible orthographic receiver should request pages");
+        passed &= Expect(RequestsAreUniqueAndValid(perspectiveRequests), "Perspective requests should be deduplicated and use levels zero through three");
+        passed &= Expect(RequestsAreUniqueAndValid(orthographicRequests), "Orthographic requests should be deduplicated and use levels zero through three");
+
+        const ve::VirtualShadowReceiver disabledReceiver = {4, ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3::One()), false};
+        ve::VirtualShadowRequestBuildInput disabledInput = perspectiveInput;
+        disabledInput.receivers = std::span<const ve::VirtualShadowReceiver>(&disabledReceiver, 1);
+        passed &= Expect(ve::BuildVirtualShadowPageRequests(disabledInput).empty(), "A receiver with shadows disabled should not request pages");
+        return passed;
+    }
 } // namespace
 
 int main()
 {
-    if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation())
+    if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation() &&
+        TestClipmapQuantization() && TestReceiverRequests())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;
