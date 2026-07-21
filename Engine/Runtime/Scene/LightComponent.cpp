@@ -1,8 +1,12 @@
 #include "Engine/Runtime/Scene/LightComponent.h"
 
+#include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+
+#include <exception>
+#include <limits>
 
 namespace ve
 {
@@ -24,6 +28,16 @@ namespace ve
         [[nodiscard]] Vector3 GetDirectionFromTransform(const TransformComponent* transform) noexcept
         {
             return transform != nullptr ? transform->GetWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized() : Vector3::UnitZ();
+        }
+
+        void IncrementShadowRevision(UInt64& shadowRevision) noexcept
+        {
+            if (shadowRevision == std::numeric_limits<UInt64>::max())
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Light shadow revision exhausted.");
+                std::terminate();
+            }
+            ++shadowRevision;
         }
     } // namespace
 
@@ -115,6 +129,10 @@ namespace ve
 
     void LightComponent::SetCastShadows(bool castShadows) noexcept
     {
+        if (castShadows_ == castShadows)
+        {
+            return;
+        }
         castShadows_ = castShadows;
         MarkLightShadowDirty();
     }
@@ -126,6 +144,10 @@ namespace ve
 
     void LightComponent::SetShadowDistance(Float32 shadowDistance) noexcept
     {
+        if (shadowDistance_ == shadowDistance)
+        {
+            return;
+        }
         shadowDistance_ = shadowDistance;
         MarkLightShadowDirty();
     }
@@ -137,6 +159,10 @@ namespace ve
 
     void LightComponent::SetDepthBias(Float32 depthBias) noexcept
     {
+        if (depthBias_ == depthBias)
+        {
+            return;
+        }
         depthBias_ = depthBias;
         MarkLightShadowDirty();
     }
@@ -148,6 +174,10 @@ namespace ve
 
     void LightComponent::SetNormalBias(Float32 normalBias) noexcept
     {
+        if (normalBias_ == normalBias)
+        {
+            return;
+        }
         normalBias_ = normalBias;
         MarkLightShadowDirty();
     }
@@ -224,7 +254,7 @@ namespace ve
 
     void LightComponent::MarkLightShadowDirty() noexcept
     {
-        ++shadowRevision_;
+        IncrementShadowRevision(shadowRevision_);
         MarkLightDirty();
     }
 

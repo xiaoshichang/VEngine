@@ -1,10 +1,13 @@
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 
+#include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <atomic>
+#include <exception>
+#include <limits>
 #include <utility>
 
 namespace ve
@@ -12,11 +15,32 @@ namespace ve
     namespace
     {
         std::atomic<UInt64> nextRenderItemID{1};
+
+        [[nodiscard]] UInt64 AllocateRenderItemID() noexcept
+        {
+            const UInt64 renderItemID = nextRenderItemID.fetch_add(1, std::memory_order_relaxed);
+            if (renderItemID == std::numeric_limits<UInt64>::max())
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Mesh render item ID exhausted.");
+                std::terminate();
+            }
+            return renderItemID;
+        }
+
+        void IncrementShadowRevision(UInt64& shadowRevision) noexcept
+        {
+            if (shadowRevision == std::numeric_limits<UInt64>::max())
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Mesh shadow revision exhausted.");
+                std::terminate();
+            }
+            ++shadowRevision;
+        }
     } // namespace
 
     MeshRenderComponent::MeshRenderComponent(Scene& scene, GameObject& owner)
         : Component(scene, owner)
-        , renderItemID_(nextRenderItemID.fetch_add(1, std::memory_order_relaxed))
+        , renderItemID_(AllocateRenderItemID())
         , rtRenderItem_(nullptr)
     {
         BuildRenderItem();
@@ -36,6 +60,10 @@ namespace ve
 
     void MeshRenderComponent::SetMesh(AssetRef<MeshResource> mesh)
     {
+        if (mesh_.GetAssetID() == mesh.GetAssetID() && mesh_.Get() == mesh.Get())
+        {
+            return;
+        }
         mesh_ = std::move(mesh);
         MarkRenderItemShadowDirty();
     }
@@ -47,6 +75,10 @@ namespace ve
 
     void MeshRenderComponent::SetMeshAssetID(AssetID meshAssetID)
     {
+        if (mesh_.GetAssetID() == meshAssetID)
+        {
+            return;
+        }
         mesh_.SetAssetID(std::move(meshAssetID));
         MarkRenderItemShadowDirty();
     }
@@ -80,6 +112,10 @@ namespace ve
 
     void MeshRenderComponent::SetBoundsCenter(const Vector3& boundsCenter) noexcept
     {
+        if (boundsCenter_ == boundsCenter)
+        {
+            return;
+        }
         boundsCenter_ = boundsCenter;
         MarkRenderItemShadowDirty();
     }
@@ -91,6 +127,10 @@ namespace ve
 
     void MeshRenderComponent::SetBoundsExtents(const Vector3& boundsExtents) noexcept
     {
+        if (boundsExtents_ == boundsExtents)
+        {
+            return;
+        }
         boundsExtents_ = boundsExtents;
         MarkRenderItemShadowDirty();
     }
@@ -107,6 +147,10 @@ namespace ve
 
     void MeshRenderComponent::SetCastShadows(bool castShadows) noexcept
     {
+        if (castShadows_ == castShadows)
+        {
+            return;
+        }
         castShadows_ = castShadows;
         MarkRenderItemShadowDirty();
     }
@@ -118,6 +162,10 @@ namespace ve
 
     void MeshRenderComponent::SetReceiveShadows(bool receiveShadows) noexcept
     {
+        if (receiveShadows_ == receiveShadows)
+        {
+            return;
+        }
         receiveShadows_ = receiveShadows;
         MarkRenderItemShadowDirty();
     }
@@ -242,7 +290,7 @@ namespace ve
 
     void MeshRenderComponent::MarkRenderItemShadowDirty() noexcept
     {
-        ++shadowRevision_;
+        IncrementShadowRevision(shadowRevision_);
         MarkRenderItemDirty();
     }
 
