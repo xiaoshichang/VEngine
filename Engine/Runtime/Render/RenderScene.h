@@ -20,7 +20,9 @@ namespace ve
         MaterialResource = 1u << 1,
         Bounds = 1u << 2,
         Transform = 1u << 3,
-        All = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3),
+        Shadows = 1u << 4,
+        Revision = 1u << 5,
+        All = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 5),
     };
 
     template<>
@@ -40,6 +42,10 @@ namespace ve
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
         Matrix44 localToWorld = Matrix44::Identity();
+        UInt64 renderItemID = 0;
+        bool castShadows = true;
+        bool receiveShadows = true;
+        UInt64 revision = 1;
     };
 
     struct RTRenderItemUpdateParam
@@ -50,6 +56,10 @@ namespace ve
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
         Matrix44 localToWorld = Matrix44::Identity();
+        UInt64 renderItemID = 0;
+        bool castShadows = true;
+        bool receiveShadows = true;
+        UInt64 revision = 1;
     };
 
     enum class RTCameraProjectionMode
@@ -143,6 +153,10 @@ namespace ve
         Float32 innerConeAngleRadians = 0.0f;
         Float32 outerConeAngleRadians = 0.0f;
         bool castShadows = false;
+        Float32 shadowDistance = 200.0f;
+        Float32 depthBias = 0.001f;
+        Float32 normalBias = 0.05f;
+        UInt64 shadowRevision = 1;
         Matrix44 localToWorld = Matrix44::Identity();
     };
 
@@ -157,6 +171,10 @@ namespace ve
         Float32 innerConeAngleRadians = 0.0f;
         Float32 outerConeAngleRadians = 0.0f;
         bool castShadows = false;
+        Float32 shadowDistance = 200.0f;
+        Float32 depthBias = 0.001f;
+        Float32 normalBias = 0.05f;
+        UInt64 shadowRevision = 1;
         Matrix44 localToWorld = Matrix44::Identity();
     };
 
@@ -176,6 +194,10 @@ namespace ve
         [[nodiscard]] const Vector3& GetBoundsCenter() const noexcept;
         [[nodiscard]] const Vector3& GetBoundsExtents() const noexcept;
         [[nodiscard]] const Matrix44& GetLocalToWorld() const noexcept;
+        [[nodiscard]] UInt64 GetRenderItemID() const noexcept;
+        [[nodiscard]] bool CastShadows() const noexcept;
+        [[nodiscard]] bool ReceiveShadows() const noexcept;
+        [[nodiscard]] UInt64 GetRevision() const noexcept;
 
     private:
         std::shared_ptr<RHIResource> meshResource_;
@@ -183,6 +205,10 @@ namespace ve
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
         Matrix44 localToWorld_ = Matrix44::Identity();
+        UInt64 renderItemID_ = 0;
+        bool castShadows_ = true;
+        bool receiveShadows_ = true;
+        UInt64 revision_ = 1;
     };
 
     /// Render-thread representation of one CameraComponent.
@@ -241,6 +267,10 @@ namespace ve
         [[nodiscard]] Float32 GetInnerConeAngleRadians() const noexcept;
         [[nodiscard]] Float32 GetOuterConeAngleRadians() const noexcept;
         [[nodiscard]] bool CastShadows() const noexcept;
+        [[nodiscard]] Float32 GetShadowDistance() const noexcept;
+        [[nodiscard]] Float32 GetDepthBias() const noexcept;
+        [[nodiscard]] Float32 GetNormalBias() const noexcept;
+        [[nodiscard]] UInt64 GetShadowRevision() const noexcept;
         [[nodiscard]] const Matrix44& GetLocalToWorld() const noexcept;
 
         [[nodiscard]] const std::shared_ptr<RHIResource>& GetUniformBufferResource() const noexcept;
@@ -255,6 +285,10 @@ namespace ve
         Float32 innerConeAngleRadians_ = 0.0f;
         Float32 outerConeAngleRadians_ = 0.0f;
         bool castShadows_ = false;
+        Float32 shadowDistance_ = 200.0f;
+        Float32 depthBias_ = 0.001f;
+        Float32 normalBias_ = 0.05f;
+        UInt64 shadowRevision_ = 1;
         Matrix44 localToWorld_ = Matrix44::Identity();
         std::shared_ptr<RHIResource> uniformBufferResource_;
     };

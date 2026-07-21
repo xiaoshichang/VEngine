@@ -11,6 +11,10 @@ namespace ve
         , boundsCenter_(initParam.boundsCenter)
         , boundsExtents_(initParam.boundsExtents)
         , localToWorld_(initParam.localToWorld)
+        , renderItemID_(initParam.renderItemID)
+        , castShadows_(initParam.castShadows)
+        , receiveShadows_(initParam.receiveShadows)
+        , revision_(initParam.revision)
     {
     }
 
@@ -35,6 +39,18 @@ namespace ve
         if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Transform))
         {
             localToWorld_ = updateParam.localToWorld;
+        }
+
+        if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Shadows))
+        {
+            castShadows_ = updateParam.castShadows;
+            receiveShadows_ = updateParam.receiveShadows;
+        }
+
+        if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Revision))
+        {
+            renderItemID_ = updateParam.renderItemID;
+            revision_ = updateParam.revision;
         }
     }
 
@@ -71,6 +87,26 @@ namespace ve
     const Matrix44& RTRenderItem::GetLocalToWorld() const noexcept
     {
         return localToWorld_;
+    }
+
+    UInt64 RTRenderItem::GetRenderItemID() const noexcept
+    {
+        return renderItemID_;
+    }
+
+    bool RTRenderItem::CastShadows() const noexcept
+    {
+        return castShadows_;
+    }
+
+    bool RTRenderItem::ReceiveShadows() const noexcept
+    {
+        return receiveShadows_;
+    }
+
+    UInt64 RTRenderItem::GetRevision() const noexcept
+    {
+        return revision_;
     }
 
     RTCamera::RTCamera(RTCameraInitParam initParam)
@@ -174,6 +210,10 @@ namespace ve
         , innerConeAngleRadians_(initParam.innerConeAngleRadians)
         , outerConeAngleRadians_(initParam.outerConeAngleRadians)
         , castShadows_(initParam.castShadows)
+        , shadowDistance_(initParam.shadowDistance)
+        , depthBias_(initParam.depthBias)
+        , normalBias_(initParam.normalBias)
+        , shadowRevision_(initParam.shadowRevision)
         , localToWorld_(initParam.localToWorld)
     {
     }
@@ -209,6 +249,10 @@ namespace ve
         if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Shadows))
         {
             castShadows_ = updateParam.castShadows;
+            shadowDistance_ = updateParam.shadowDistance;
+            depthBias_ = updateParam.depthBias;
+            normalBias_ = updateParam.normalBias;
+            shadowRevision_ = updateParam.shadowRevision;
         }
 
         if (HasRTLightDirtyFlag(updateParam.dirtyFlags, RTLightDirtyFlags::Transform))
@@ -256,6 +300,26 @@ namespace ve
     bool RTLight::CastShadows() const noexcept
     {
         return castShadows_;
+    }
+
+    Float32 RTLight::GetShadowDistance() const noexcept
+    {
+        return shadowDistance_;
+    }
+
+    Float32 RTLight::GetDepthBias() const noexcept
+    {
+        return depthBias_;
+    }
+
+    Float32 RTLight::GetNormalBias() const noexcept
+    {
+        return normalBias_;
+    }
+
+    UInt64 RTLight::GetShadowRevision() const noexcept
+    {
+        return shadowRevision_;
     }
 
     const Matrix44& RTLight::GetLocalToWorld() const noexcept

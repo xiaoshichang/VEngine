@@ -571,6 +571,8 @@ namespace ve
             object["material"] = WriteAssetRef(mesh.GetMaterial());
             object["boundsCenter"] = WriteVector3(mesh.GetBoundsCenter());
             object["boundsExtents"] = WriteVector3(mesh.GetBoundsExtents());
+            object["castShadows"] = mesh.CastShadows();
+            object["receiveShadows"] = mesh.ReceiveShadows();
             return object;
         }
 
@@ -602,6 +604,9 @@ namespace ve
             object["innerConeAngleRadians"] = light.GetInnerConeAngleRadians();
             object["outerConeAngleRadians"] = light.GetOuterConeAngleRadians();
             object["castShadows"] = light.CastShadows();
+            object["shadowDistance"] = light.GetShadowDistance();
+            object["depthBias"] = light.GetDepthBias();
+            object["normalBias"] = light.GetNormalBias();
             return object;
         }
 
@@ -823,6 +828,8 @@ namespace ve
                 mesh->SetBoundsExtents(result.GetValue());
             }
 
+            mesh->SetCastShadows(ReadBool(object, "castShadows", true));
+            mesh->SetReceiveShadows(ReadBool(object, "receiveShadows", true));
             mesh->SetEnabled(ReadBool(object, "enabled", mesh->IsEnabled()));
             return ErrorCode::None;
         }
@@ -893,6 +900,9 @@ namespace ve
             light->SetInnerConeAngleRadians(ReadFloat(object, "innerConeAngleRadians", light->GetInnerConeAngleRadians()));
             light->SetOuterConeAngleRadians(ReadFloat(object, "outerConeAngleRadians", light->GetOuterConeAngleRadians()));
             light->SetCastShadows(ReadBool(object, "castShadows", light->CastShadows()));
+            light->SetShadowDistance(ReadFloat(object, "shadowDistance", light->GetShadowDistance()));
+            light->SetDepthBias(ReadFloat(object, "depthBias", light->GetDepthBias()));
+            light->SetNormalBias(ReadFloat(object, "normalBias", light->GetNormalBias()));
             light->SetEnabled(ReadBool(object, "enabled", light->IsEnabled()));
             return ErrorCode::None;
         }

@@ -4,12 +4,19 @@
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
+#include <atomic>
 #include <utility>
 
 namespace ve
 {
+    namespace
+    {
+        std::atomic<UInt64> nextRenderItemID{1};
+    } // namespace
+
     MeshRenderComponent::MeshRenderComponent(Scene& scene, GameObject& owner)
         : Component(scene, owner)
+        , renderItemID_(nextRenderItemID.fetch_add(1, std::memory_order_relaxed))
         , rtRenderItem_(nullptr)
     {
         BuildRenderItem();
@@ -30,7 +37,7 @@ namespace ve
     void MeshRenderComponent::SetMesh(AssetRef<MeshResource> mesh)
     {
         mesh_ = std::move(mesh);
-        MarkRenderItemDirty();
+        MarkRenderItemShadowDirty();
     }
 
     const AssetID& MeshRenderComponent::GetMeshAssetID() const noexcept
@@ -41,7 +48,7 @@ namespace ve
     void MeshRenderComponent::SetMeshAssetID(AssetID meshAssetID)
     {
         mesh_.SetAssetID(std::move(meshAssetID));
-        MarkRenderItemDirty();
+        MarkRenderItemShadowDirty();
     }
 
     const AssetRef<MaterialResource>& MeshRenderComponent::GetMaterial() const noexcept
@@ -74,7 +81,7 @@ namespace ve
     void MeshRenderComponent::SetBoundsCenter(const Vector3& boundsCenter) noexcept
     {
         boundsCenter_ = boundsCenter;
-        MarkRenderItemDirty();
+        MarkRenderItemShadowDirty();
     }
 
     const Vector3& MeshRenderComponent::GetBoundsExtents() const noexcept
@@ -85,7 +92,39 @@ namespace ve
     void MeshRenderComponent::SetBoundsExtents(const Vector3& boundsExtents) noexcept
     {
         boundsExtents_ = boundsExtents;
-        MarkRenderItemDirty();
+        MarkRenderItemShadowDirty();
+    }
+
+    UInt64 MeshRenderComponent::GetRenderItemID() const noexcept
+    {
+        return renderItemID_;
+    }
+
+    bool MeshRenderComponent::CastShadows() const noexcept
+    {
+        return castShadows_;
+    }
+
+    void MeshRenderComponent::SetCastShadows(bool castShadows) noexcept
+    {
+        castShadows_ = castShadows;
+        MarkRenderItemShadowDirty();
+    }
+
+    bool MeshRenderComponent::ReceiveShadows() const noexcept
+    {
+        return receiveShadows_;
+    }
+
+    void MeshRenderComponent::SetReceiveShadows(bool receiveShadows) noexcept
+    {
+        receiveShadows_ = receiveShadows;
+        MarkRenderItemShadowDirty();
+    }
+
+    UInt64 MeshRenderComponent::GetShadowRevision() const noexcept
+    {
+        return shadowRevision_;
     }
 
     std::shared_ptr<RTRenderItem> MeshRenderComponent::GetRTRenderItem() noexcept
@@ -111,6 +150,10 @@ namespace ve
             boundsCenter_,
             boundsExtents_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            renderItemID_,
+            castShadows_,
+            receiveShadows_,
+            shadowRevision_,
         };
     }
 
@@ -128,6 +171,10 @@ namespace ve
             boundsCenter_,
             boundsExtents_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            renderItemID_,
+            castShadows_,
+            receiveShadows_,
+            shadowRevision_,
         };
     }
 
@@ -193,6 +240,12 @@ namespace ve
         renderItemDirty_ = true;
     }
 
+    void MeshRenderComponent::MarkRenderItemShadowDirty() noexcept
+    {
+        ++shadowRevision_;
+        MarkRenderItemDirty();
+    }
+
     void MeshRenderComponent::ClearRenderItemDirty() noexcept
     {
         renderItemDirty_ = false;
@@ -204,7 +257,7 @@ namespace ve
         VE_ASSERT(transform != nullptr);
         if (transform != nullptr)
         {
-            transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkRenderItemDirty(); });
+            transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkRenderItemShadowDirty(); });
         }
     }
 

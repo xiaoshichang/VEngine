@@ -33,7 +33,7 @@ namespace ve
     {
         TransformComponent* transform = owner.GetComponent<TransformComponent>();
         VE_ASSERT(transform != nullptr);
-        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkLightDirty(); });
+        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkLightShadowDirty(); });
     }
 
     LightComponent::~LightComponent()
@@ -116,7 +116,45 @@ namespace ve
     void LightComponent::SetCastShadows(bool castShadows) noexcept
     {
         castShadows_ = castShadows;
-        MarkLightDirty();
+        MarkLightShadowDirty();
+    }
+
+    Float32 LightComponent::GetShadowDistance() const noexcept
+    {
+        return shadowDistance_;
+    }
+
+    void LightComponent::SetShadowDistance(Float32 shadowDistance) noexcept
+    {
+        shadowDistance_ = shadowDistance;
+        MarkLightShadowDirty();
+    }
+
+    Float32 LightComponent::GetDepthBias() const noexcept
+    {
+        return depthBias_;
+    }
+
+    void LightComponent::SetDepthBias(Float32 depthBias) noexcept
+    {
+        depthBias_ = depthBias;
+        MarkLightShadowDirty();
+    }
+
+    Float32 LightComponent::GetNormalBias() const noexcept
+    {
+        return normalBias_;
+    }
+
+    void LightComponent::SetNormalBias(Float32 normalBias) noexcept
+    {
+        normalBias_ = normalBias;
+        MarkLightShadowDirty();
+    }
+
+    UInt64 LightComponent::GetShadowRevision() const noexcept
+    {
+        return shadowRevision_;
     }
 
     std::shared_ptr<RTLight> LightComponent::GetRTLight() noexcept
@@ -143,6 +181,10 @@ namespace ve
             innerConeAngleRadians_,
             outerConeAngleRadians_,
             castShadows_,
+            shadowDistance_,
+            depthBias_,
+            normalBias_,
+            shadowRevision_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
         };
     }
@@ -162,6 +204,10 @@ namespace ve
             innerConeAngleRadians_,
             outerConeAngleRadians_,
             castShadows_,
+            shadowDistance_,
+            depthBias_,
+            normalBias_,
+            shadowRevision_,
             transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
         };
     }
@@ -174,6 +220,12 @@ namespace ve
     void LightComponent::MarkLightDirty() noexcept
     {
         lightDirty_ = true;
+    }
+
+    void LightComponent::MarkLightShadowDirty() noexcept
+    {
+        ++shadowRevision_;
+        MarkLightDirty();
     }
 
     void LightComponent::ClearLightDirty() noexcept
