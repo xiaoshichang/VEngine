@@ -1,3 +1,5 @@
+#include "Engine/Runtime/Math/Bounds.h"
+#include "Engine/Runtime/Math/Frustum.h"
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Quaternion.h"
@@ -5,6 +7,7 @@
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Math/Vector4.h"
 #include "Engine/Runtime/Memory/PoolAllocator.h"
+#include "Engine/Runtime/Render/RenderCameraMath.h"
 
 #include <iostream>
 #include <new>
@@ -115,6 +118,33 @@ namespace
         return passed;
     }
 
+    bool TestAabb()
+    {
+        const ve::Aabb bounds = ve::Aabb::FromCenterExtents(ve::Vector3::Zero(), ve::Vector3(1.0f, 2.0f, 3.0f));
+        const ve::Matrix44 transform = ve::Matrix44::Translation(ve::Vector3(5.0f, 0.0f, -2.0f)) * ve::Matrix44::RotationY(ve::Math::HalfPi);
+        const ve::Aabb transformed = bounds.Transformed(transform);
+
+        bool passed = true;
+        passed &= Expect(transformed.GetCenter().IsNearlyEqual(ve::Vector3(5.0f, 0.0f, -2.0f)), "Aabb transform should preserve the transformed center");
+        passed &= Expect(transformed.GetExtents().IsNearlyEqual(ve::Vector3(3.0f, 2.0f, 1.0f)), "Aabb transform should recompute axis-aligned extents");
+        return passed;
+    }
+
+    bool TestFrustum()
+    {
+        const ve::Aabb visibleBounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3::One());
+        const ve::Aabb distantBounds = ve::Aabb::FromCenterExtents(ve::Vector3(1000.0f, 0.0f, 5.0f), ve::Vector3::One());
+        const ve::Frustum perspective = ve::Frustum::FromViewProjection(ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 16.0f / 9.0f, 0.1f, 100.0f));
+        const ve::Frustum orthographic = ve::Frustum::FromViewProjection(ve::BuildOrthographicProjection(10.0f, 1.0f, 0.1f, 100.0f));
+
+        bool passed = true;
+        passed &= Expect(perspective.Intersects(visibleBounds), "Perspective frustum should intersect centered bounds inside its depth range");
+        passed &= Expect(!perspective.Intersects(distantBounds), "Perspective frustum should reject distant horizontal bounds");
+        passed &= Expect(orthographic.Intersects(visibleBounds), "Orthographic frustum should intersect centered bounds inside its depth range");
+        passed &= Expect(!orthographic.Intersects(distantBounds), "Orthographic frustum should reject distant horizontal bounds");
+        return passed;
+    }
+
     bool TestQuaternion()
     {
         bool passed = true;
@@ -182,6 +212,8 @@ int main()
     passed &= TestVector3();
     passed &= TestVector4();
     passed &= TestMatrix44();
+    passed &= TestAabb();
+    passed &= TestFrustum();
     passed &= TestQuaternion();
     passed &= TestMathTypesFitPoolAllocatedObjects();
 

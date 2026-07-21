@@ -23,6 +23,7 @@ function(ve_add_engine)
             Engine/Runtime/IO/IOSystem.cpp
             Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
+            Engine/Runtime/Math/Frustum.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Platform/DebugConsole.cpp
             Engine/Runtime/Platform/Window.cpp
@@ -36,6 +37,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
+            Engine/Runtime/Render/RenderCameraMath.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
             Engine/Runtime/Render/RenderFrameUniformCache.cpp
             Engine/Runtime/Render/RenderResource.cpp
@@ -108,8 +110,11 @@ function(ve_add_engine)
             Engine/Runtime/IO/IOSystem.h
             Engine/Runtime/Jobs/JobSystem.h
             Engine/Runtime/Logging/Log.h
+            Engine/Runtime/Math/Bounds.h
+            Engine/Runtime/Math/Frustum.h
             Engine/Runtime/Math/Math.h
             Engine/Runtime/Math/Matrix44.h
+            Engine/Runtime/Math/Plane.h
             Engine/Runtime/Math/Quaternion.h
             Engine/Runtime/Math/Vector2.h
             Engine/Runtime/Math/Vector3.h
@@ -129,6 +134,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
             Engine/Runtime/Render/RenderCommandQueue.h
+            Engine/Runtime/Render/RenderCameraMath.h
             Engine/Runtime/Render/RenderFramePipeline.h
             Engine/Runtime/Render/RenderFrameUniformCache.h
             Engine/Runtime/Render/RenderResource.h
