@@ -51,6 +51,7 @@ namespace ve
         void BeginFrame(UInt64 frameIndex) noexcept;
         [[nodiscard]] std::optional<UInt32> Request(VirtualShadowPageRequest request);
         [[nodiscard]] VirtualShadowRequestResolution ResolveRequests(std::span<const VirtualShadowPageRequest> requests);
+        void ClearRequestHistory() noexcept;
         void MarkRendered(std::span<const VirtualShadowPageKey> keys);
         [[nodiscard]] bool Invalidate(VirtualShadowPageKey key) noexcept;
         void InvalidateAll() noexcept;
@@ -61,6 +62,7 @@ namespace ve
         [[nodiscard]] UInt32 GetCachedPageCount() const noexcept;
         [[nodiscard]] UInt32 GetResidentPageCount() const noexcept;
         [[nodiscard]] UInt32 GetDirtyPageCount() const noexcept;
+        [[nodiscard]] UInt32 GetRequestHistorySize() const noexcept;
         [[nodiscard]] std::span<const VirtualShadowPhysicalPage> GetPhysicalPages() const noexcept;
         [[nodiscard]] std::vector<UInt32> GetDirtyPhysicalPageIndices() const;
         [[nodiscard]] VirtualShadowPageTable BuildResidentPageTable() const;
@@ -73,6 +75,7 @@ namespace ve
         std::vector<VirtualShadowPhysicalPage> pages_;
         std::vector<UInt32> freePages_;
         std::unordered_map<VirtualShadowPageKey, UInt32, VirtualShadowPageKeyHash> mappings_;
+        std::unordered_map<VirtualShadowPageKey, UInt32, VirtualShadowPageKeyHash> requestPriorityHistory_;
         UInt64 currentFrame_ = 0;
         UInt32 evictionsThisFrame_ = 0;
     };

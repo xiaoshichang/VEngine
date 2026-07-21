@@ -82,13 +82,24 @@ namespace ve
         }
         else if (lastCameraCutRevision_ != input.cameraCutRevision)
         {
-            pageCache_.InvalidateAll();
+            pageCache_.ClearRequestHistory();
             lastCameraCutRevision_ = input.cameraCutRevision;
         }
 
         if (pageCache_.GetCapacity() == 0 || !input.light.enabled)
         {
             return packet;
+        }
+
+        if (!hasShadowDistance_)
+        {
+            lastShadowDistance_ = input.light.shadowDistance;
+            hasShadowDistance_ = true;
+        }
+        else if (!NearlyEqual(lastShadowDistance_, input.light.shadowDistance))
+        {
+            pageCache_.InvalidateAll();
+            lastShadowDistance_ = input.light.shadowDistance;
         }
 
         packet.clipmaps = BuildVirtualShadowClipmaps(input.cameraLocalToWorld, input.light.direction, input.light.shadowDistance);
@@ -142,7 +153,8 @@ namespace ve
         {
             const VirtualShadowPhysicalPage& physicalPage = physicalPages[physicalPageIndex];
             const VirtualShadowClipmapLevel& level = packet.clipmaps.levels[physicalPage.key.GetClipmapLevel()];
-            const Float32 gutterWorldSize = level.pageWorldSize * static_cast<Float32>(VirtualShadowPageGutter) / static_cast<Float32>(VirtualShadowPageSize);
+            const Float32 gutterWorldSize =
+                level.pageWorldSize * static_cast<Float32>(VirtualShadowPageGutter) / static_cast<Float32>(VirtualShadowPhysicalPageContentSize);
             const Aabb pageBounds = GetVirtualShadowPageLightSpaceBounds(packet.clipmaps, physicalPage.key, gutterWorldSize);
 
             VirtualShadowDirtyPageDraw draw;

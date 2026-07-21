@@ -70,6 +70,14 @@ namespace ve
             Float32 minimumLightY = std::numeric_limits<Float32>::max();
             Float32 maximumLightX = std::numeric_limits<Float32>::lowest();
             Float32 maximumLightY = std::numeric_limits<Float32>::lowest();
+            Float32 minimumCameraDepth = std::numeric_limits<Float32>::max();
+            Float32 maximumCameraDepth = std::numeric_limits<Float32>::lowest();
+            const Vector3 cameraPosition(input.cameraLocalToWorld.Get(0, 3), input.cameraLocalToWorld.Get(1, 3), input.cameraLocalToWorld.Get(2, 3));
+            Vector3 cameraForward = input.cameraLocalToWorld.TransformDirection(Vector3::UnitZ()).Normalized();
+            if (cameraForward.LengthSquared() == 0.0f)
+            {
+                cameraForward = Vector3::UnitZ();
+            }
             VisitCorners(receiver.worldBounds,
                          [&](const Vector3& corner)
                          {
@@ -78,11 +86,19 @@ namespace ve
                              minimumLightY = std::min(minimumLightY, lightCorner.GetY());
                              maximumLightX = std::max(maximumLightX, lightCorner.GetX());
                              maximumLightY = std::max(maximumLightY, lightCorner.GetY());
+                             const Float32 cameraDepth = Vector3::Dot(corner - cameraPosition, cameraForward);
+                             minimumCameraDepth = std::min(minimumCameraDepth, cameraDepth);
+                             maximumCameraDepth = std::max(maximumCameraDepth, cameraDepth);
                          });
 
             for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
             {
                 const VirtualShadowClipmapLevel& level = input.clipmaps.levels[levelIndex];
+                const Float32 sliceMinimumDepth = levelIndex == 0 ? 0.0f : input.clipmaps.levels[levelIndex - 1u].worldRadius;
+                if (maximumCameraDepth < sliceMinimumDepth || minimumCameraDepth > level.worldRadius)
+                {
+                    continue;
+                }
                 const Int32 workingMinimumX = level.originPageX - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
                 const Int32 workingMinimumY = level.originPageY - static_cast<Int32>(VirtualShadowPagesPerAxis / 2u);
                 const Int32 workingMaximumX = workingMinimumX + static_cast<Int32>(VirtualShadowPagesPerAxis) - 1;

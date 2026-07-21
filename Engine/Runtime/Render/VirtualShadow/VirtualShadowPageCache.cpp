@@ -7,23 +7,21 @@ namespace ve
 {
     VirtualShadowPhysicalPageOrigin GetVirtualShadowPhysicalPageOrigin(UInt32 physicalPageIndex, UInt32 atlasExtent) noexcept
     {
-        constexpr UInt32 PageStride = VirtualShadowPageSize + (2u * VirtualShadowPageGutter);
-        const UInt32 pagesPerRow = atlasExtent / PageStride;
+        const UInt32 pagesPerRow = atlasExtent / VirtualShadowPhysicalPageSize;
         if (pagesPerRow == 0)
         {
             return {};
         }
 
         return VirtualShadowPhysicalPageOrigin{
-            ((physicalPageIndex % pagesPerRow) * PageStride) + VirtualShadowPageGutter,
-            ((physicalPageIndex / pagesPerRow) * PageStride) + VirtualShadowPageGutter,
+            ((physicalPageIndex % pagesPerRow) * VirtualShadowPhysicalPageSize) + VirtualShadowPageGutter,
+            ((physicalPageIndex / pagesPerRow) * VirtualShadowPhysicalPageSize) + VirtualShadowPageGutter,
         };
     }
 
     UInt32 GetVirtualShadowPhysicalPageCapacity(UInt32 atlasExtent) noexcept
     {
-        constexpr UInt32 PageStride = VirtualShadowPageSize + (2u * VirtualShadowPageGutter);
-        const UInt32 pagesPerAxis = atlasExtent / PageStride;
+        const UInt32 pagesPerAxis = atlasExtent / VirtualShadowPhysicalPageSize;
         return pagesPerAxis * pagesPerAxis;
     }
 
@@ -102,6 +100,7 @@ namespace ve
                 iterator->second = std::max(iterator->second, request.priority);
             }
         }
+        requestPriorityHistory_ = priorities;
 
         VirtualShadowRequestResolution result;
         result.requested = static_cast<UInt32>(priorities.size());
@@ -120,17 +119,19 @@ namespace ve
             }
         }
 
-        std::ranges::sort(misses, [](const VirtualShadowPageRequest& left, const VirtualShadowPageRequest& right) {
-            if (left.priority != right.priority)
-            {
-                return left.priority > right.priority;
-            }
-            if (left.key.key0 != right.key.key0)
-            {
-                return left.key.key0 < right.key.key0;
-            }
-            return left.key.key1 < right.key.key1;
-        });
+        std::ranges::sort(misses,
+                          [](const VirtualShadowPageRequest& left, const VirtualShadowPageRequest& right)
+                          {
+                              if (left.priority != right.priority)
+                              {
+                                  return left.priority > right.priority;
+                              }
+                              if (left.key.key0 != right.key.key0)
+                              {
+                                  return left.key.key0 < right.key.key0;
+                              }
+                              return left.key.key1 < right.key.key1;
+                          });
 
         const UInt32 initialEvictions = evictionsThisFrame_;
         for (const VirtualShadowPageRequest& request : misses)
@@ -146,6 +147,11 @@ namespace ve
         }
         result.evicted = evictionsThisFrame_ - initialEvictions;
         return result;
+    }
+
+    void VirtualShadowPageCache::ClearRequestHistory() noexcept
+    {
+        requestPriorityHistory_.clear();
     }
 
     void VirtualShadowPageCache::MarkRendered(std::span<const VirtualShadowPageKey> keys)
@@ -210,16 +216,19 @@ namespace ve
 
     UInt32 VirtualShadowPageCache::GetResidentPageCount() const noexcept
     {
-        return static_cast<UInt32>(std::ranges::count_if(pages_, [](const VirtualShadowPhysicalPage& page) {
-            return page.state == VirtualShadowPhysicalPageState::ResidentClean;
-        }));
+        return static_cast<UInt32>(
+            std::ranges::count_if(pages_, [](const VirtualShadowPhysicalPage& page) { return page.state == VirtualShadowPhysicalPageState::ResidentClean; }));
     }
 
     UInt32 VirtualShadowPageCache::GetDirtyPageCount() const noexcept
     {
-        return static_cast<UInt32>(std::ranges::count_if(pages_, [](const VirtualShadowPhysicalPage& page) {
-            return page.state == VirtualShadowPhysicalPageState::ResidentDirty;
-        }));
+        return static_cast<UInt32>(
+            std::ranges::count_if(pages_, [](const VirtualShadowPhysicalPage& page) { return page.state == VirtualShadowPhysicalPageState::ResidentDirty; }));
+    }
+
+    UInt32 VirtualShadowPageCache::GetRequestHistorySize() const noexcept
+    {
+        return static_cast<UInt32>(requestPriorityHistory_.size());
     }
 
     std::span<const VirtualShadowPhysicalPage> VirtualShadowPageCache::GetPhysicalPages() const noexcept

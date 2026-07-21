@@ -99,5 +99,7 @@ namespace ve
         VirtualShadowInvalidationTracker invalidationTracker_;
         UInt64 lastCameraCutRevision_ = 0;
         bool hasCameraCutRevision_ = false;
+        Float32 lastShadowDistance_ = 0.0f;
+        bool hasShadowDistance_ = false;
     };
 } // namespace ve

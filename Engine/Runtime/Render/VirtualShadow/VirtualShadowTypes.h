@@ -10,8 +10,10 @@ namespace ve
     constexpr UInt32 VirtualShadowClipmapLevelCount = 4;
     constexpr UInt32 VirtualShadowVirtualResolution = 16384;
     constexpr UInt32 VirtualShadowPageSize = 128;
+    constexpr UInt32 VirtualShadowPhysicalPageSize = 128;
     constexpr UInt32 VirtualShadowPagesPerAxis = VirtualShadowVirtualResolution / VirtualShadowPageSize;
     constexpr UInt32 VirtualShadowPageGutter = 1;
+    constexpr UInt32 VirtualShadowPhysicalPageContentSize = VirtualShadowPhysicalPageSize - (2u * VirtualShadowPageGutter);
     constexpr UInt32 VirtualShadowPageTableCapacity = 2048;
     constexpr UInt32 VirtualShadowPageTableMaxProbes = 16;
 
@@ -104,4 +106,6 @@ namespace ve
     };
 
     static_assert(sizeof(VirtualShadowGpuPageEntry) == 16);
+
+    constexpr UInt32 VirtualShadowGpuPageEntryValid = 1u << 0u;
 } // namespace ve

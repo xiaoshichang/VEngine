@@ -23,7 +23,7 @@ namespace ve
             VirtualShadowGpuPageEntry& entry = entries_[(firstIndex + probe) & (VirtualShadowPageTableCapacity - 1u)];
             if (entry.physicalPageIndex == InvalidVirtualShadowPhysicalPage)
             {
-                entry = VirtualShadowGpuPageEntry{key.key0, key.key1, physicalPageIndex, 0};
+                entry = VirtualShadowGpuPageEntry{key.key0, key.key1, physicalPageIndex, VirtualShadowGpuPageEntryValid};
                 ++size_;
                 return true;
             }

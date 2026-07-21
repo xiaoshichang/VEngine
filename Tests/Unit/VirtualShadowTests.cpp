@@ -38,6 +38,10 @@ namespace
         passed &= Expect(table.Insert(key, 19), "Resident mapping should insert");
         passed &= Expect(table.Find(key).value_or(ve::InvalidVirtualShadowPhysicalPage) == 19, "Resident mapping should resolve");
         passed &= Expect(!table.Find(ve::VirtualShadowPageKey::Create(9, 9, 0, 0)).has_value(), "Missing key should remain missing");
+        const auto insertedEntry = std::ranges::find_if(
+            table.GetGpuEntries(), [&key](const ve::VirtualShadowGpuPageEntry& entry) { return entry.key0 == key.key0 && entry.key1 == key.key1; });
+        passed &= Expect(insertedEntry != table.GetGpuEntries().end() && (insertedEntry->flags & ve::VirtualShadowGpuPageEntryValid) != 0u,
+                         "Inserted GPU mappings should set the valid flag");
 
         return passed;
     }
@@ -146,6 +150,10 @@ namespace
         const ve::VirtualShadowRequestResolution resolution = pressureCache.ResolveRequests(requests);
         passed &= Expect(resolution.allocated == 2 && resolution.missing == 2, "Over-capacity requests should degrade to two allocations and two misses");
         passed &= Expect(pressureCache.Contains(MakeKey(1)) && pressureCache.Contains(MakeKey(2)), "Higher-priority requests should allocate first");
+        const ve::UInt32 dirtyBeforeHistoryClear = pressureCache.GetDirtyPageCount();
+        pressureCache.ClearRequestHistory();
+        passed &= Expect(pressureCache.GetRequestHistorySize() == 0 && pressureCache.GetDirtyPageCount() == dirtyBeforeHistoryClear,
+                         "Clearing request history should not dirty or discard physical pages");
 
         ve::VirtualShadowPageCache firstCache(2);
         ve::VirtualShadowPageCache secondCache(2);
@@ -164,7 +172,9 @@ namespace
         const ve::VirtualShadowPhysicalPageOrigin firstOrigin = ve::GetVirtualShadowPhysicalPageOrigin(0, 520);
         const ve::VirtualShadowPhysicalPageOrigin secondOrigin = ve::GetVirtualShadowPhysicalPageOrigin(1, 520);
         passed &= Expect(firstOrigin.x == 1 && firstOrigin.y == 1, "Physical page interiors should begin after the gutter");
-        passed &= Expect(secondOrigin.x == 131 && secondOrigin.y == 1, "Physical slots should reserve gutters on both sides");
+        passed &= Expect(secondOrigin.x == 129 && secondOrigin.y == 1, "A 128-pixel physical slot should contain both gutters");
+        passed &= Expect(ve::GetVirtualShadowPhysicalPageCapacity(4096) == 1024 && ve::GetVirtualShadowPhysicalPageCapacity(2048) == 256,
+                         "Committed atlas capacity should use 128-pixel physical slots");
 
         return passed;
     }
@@ -231,6 +241,26 @@ namespace
         ve::VirtualShadowRequestBuildInput disabledInput = perspectiveInput;
         disabledInput.receivers = std::span<const ve::VirtualShadowReceiver>(&disabledReceiver, 1);
         passed &= Expect(ve::BuildVirtualShadowPageRequests(disabledInput).empty(), "A receiver with shadows disabled should not request pages");
+
+        const ve::VirtualShadowClipmapSet slicedClipmaps = ve::BuildVirtualShadowClipmaps(cameraLocalToWorld, -ve::Vector3::UnitY(), 80.0f);
+        for (ve::UInt32 expectedLevel = 0; expectedLevel < ve::VirtualShadowClipmapLevelCount; ++expectedLevel)
+        {
+            constexpr ve::Float32 ReceiverDepths[] = {5.0f, 15.0f, 30.0f, 60.0f};
+            const ve::VirtualShadowReceiver slicedReceiver = {
+                10 + expectedLevel,
+                ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, ReceiverDepths[expectedLevel]), ve::Vector3(0.25f, 0.25f, 0.25f)),
+                true};
+            const ve::VirtualShadowRequestBuildInput slicedInput{ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f),
+                                                                 cameraLocalToWorld,
+                                                                 slicedClipmaps,
+                                                                 std::span<const ve::VirtualShadowReceiver>(&slicedReceiver, 1)};
+            const std::vector<ve::VirtualShadowPageRequest> slicedRequests = ve::BuildVirtualShadowPageRequests(slicedInput);
+            passed &= Expect(!slicedRequests.empty(), "A receiver inside a clipmap camera-depth slice should request pages");
+            passed &= Expect(std::ranges::all_of(slicedRequests,
+                                                 [expectedLevel](const ve::VirtualShadowPageRequest& request)
+                                                 { return request.key.GetClipmapLevel() == expectedLevel; }),
+                             "A receiver should request only clipmap levels whose camera-depth slices overlap it");
+        }
         return passed;
     }
 
@@ -347,25 +377,35 @@ namespace
         input.light.revision = 2;
         const ve::VirtualShadowFramePacket biasPacket = viewCache.PrepareFrame(input);
         passed &= Expect(biasPacket.statistics.dirty == 0, "Bias-only revisions should not dirty resident pages");
+        const auto stableKey = renderedKeys.front();
+        const auto stableSlot = viewCache.GetPageCache().FindPhysicalPage(stableKey);
 
         input.frameIndex = 3;
         input.cameraCutRevision = 1;
         const ve::VirtualShadowFramePacket cameraCutPacket = viewCache.PrepareFrame(input);
-        passed &= Expect(cameraCutPacket.statistics.dirty > 0, "A new camera-cut revision should invalidate the view-owned cache");
+        passed &= Expect(cameraCutPacket.statistics.dirty == 0, "A camera cut should clear request history without dirtying stable resident pages");
+        passed &= Expect(stableSlot.has_value() && viewCache.GetPageCache().FindPhysicalPage(stableKey) == stableSlot,
+                         "A camera cut should preserve stable-key physical mappings");
+
+        input.frameIndex = 4;
+        input.light.shadowDistance = 220.0f;
+        const ve::VirtualShadowFramePacket distancePacket = viewCache.PrepareFrame(input);
+        passed &= Expect(distancePacket.statistics.dirty > 0, "Changing shadow distance should invalidate clean mappings with the old projection");
+
         renderedKeys.clear();
-        for (const ve::VirtualShadowDirtyPageDraw& draw : cameraCutPacket.dirtyPages)
+        for (const ve::VirtualShadowDirtyPageDraw& draw : distancePacket.dirtyPages)
         {
             renderedKeys.push_back(draw.key);
         }
         viewCache.MarkRendered(renderedKeys);
 
-        input.frameIndex = 4;
+        input.frameIndex = 5;
         input.light.direction = ve::Vector3::UnitX();
         const ve::VirtualShadowFramePacket directionPacket = viewCache.PrepareFrame(input);
         passed &= Expect(directionPacket.statistics.dirty > 0, "A light-direction change should dirty resident pages");
 
         ve::VirtualShadowPrepareInput disabledInput = input;
-        disabledInput.frameIndex = 5;
+        disabledInput.frameIndex = 6;
         disabledInput.light.enabled = false;
         const ve::VirtualShadowFramePacket disabledPacket = viewCache.PrepareFrame(disabledInput);
         passed &= Expect(disabledPacket.valid && !disabledPacket.enabled && disabledPacket.dirtyPages.empty(),
