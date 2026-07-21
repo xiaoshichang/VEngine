@@ -23,12 +23,12 @@ namespace ve
     {
     public:
         explicit RTRenderViewState(RenderViewStateDesc desc);
+        ~RTRenderViewState();
 
         [[nodiscard]] const RenderViewStateDesc& GetDesc() const noexcept;
         [[nodiscard]] UInt64 GetCameraCutRevision() const noexcept;
-
-        // VirtualShadowViewCache ownership and access are added with the CPU cache implementation. Keeping that
-        // extension out of this contract avoids exposing a callable accessor before the cache type is complete.
+        [[nodiscard]] VirtualShadowViewCache& GetVirtualShadowViewCache() noexcept;
+        [[nodiscard]] const VirtualShadowViewCache& GetVirtualShadowViewCache() const noexcept;
 
     private:
         friend class RenderViewState;
@@ -37,6 +37,7 @@ namespace ve
 
         RenderViewStateDesc desc_;
         Atomic<UInt64> cameraCutRevision_{0};
+        std::unique_ptr<VirtualShadowViewCache> virtualShadowViewCache_;
     };
 
     /// Scene Thread owner for the persistent state of one logical render view.

@@ -1,10 +1,13 @@
 #include "Engine/Runtime/Render/RenderCameraMath.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageTable.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowRequestBuilder.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
 
+#include <algorithm>
 #include <iostream>
 #include <unordered_set>
 #include <vector>
@@ -230,12 +233,152 @@ namespace
         passed &= Expect(ve::BuildVirtualShadowPageRequests(disabledInput).empty(), "A receiver with shadows disabled should not request pages");
         return passed;
     }
+
+    bool ContainsKey(std::span<const ve::VirtualShadowPageKey> keys, ve::VirtualShadowPageKey expected)
+    {
+        return std::ranges::find(keys, expected) != keys.end();
+    }
+
+    bool HasKeyNotIn(std::span<const ve::VirtualShadowPageKey> left, std::span<const ve::VirtualShadowPageKey> right)
+    {
+        return std::ranges::any_of(left, [right](ve::VirtualShadowPageKey key) { return !ContainsKey(right, key); });
+    }
+
+    bool TestCasterInvalidationHistory()
+    {
+        const ve::Vector3 firstDirection = ve::Vector3::UnitZ();
+        const ve::VirtualShadowClipmapSet clipmaps = ve::BuildVirtualShadowClipmaps(ve::Matrix44::Identity(), firstDirection, 200.0f);
+        const ve::Aabb a = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3(0.1f, 0.1f, 0.1f));
+        const ve::Aabb b = ve::Aabb::FromCenterExtents(ve::Vector3(5.0f, 0.0f, 5.0f), ve::Vector3(0.1f, 0.1f, 0.1f));
+        const std::vector<ve::VirtualShadowPageKey> aKeys = ve::BuildVirtualShadowPageKeysForBounds(clipmaps, a);
+        const std::vector<ve::VirtualShadowPageKey> bKeys = ve::BuildVirtualShadowPageKeysForBounds(clipmaps, b);
+
+        ve::VirtualShadowInvalidationTracker tracker;
+        const ve::VirtualShadowCasterSnapshot atA[] = {{7, 1, a, true}};
+        const ve::VirtualShadowInvalidationResult added = tracker.Update(1, clipmaps, firstDirection, atA);
+        const ve::VirtualShadowCasterSnapshot atB[] = {{7, 2, b, true}};
+        const ve::VirtualShadowInvalidationResult moved = tracker.Update(2, clipmaps, firstDirection, atB);
+        const ve::VirtualShadowInvalidationResult removed = tracker.Update(3, clipmaps, firstDirection, {});
+
+        bool passed = true;
+        passed &= Expect(!aKeys.empty() && !bKeys.empty(), "Caster bounds should overlap clipmap pages");
+        passed &= Expect(HasKeyNotIn(aKeys, bKeys) && HasKeyNotIn(bKeys, aKeys), "Separated caster bounds should have distinct page coverage");
+        passed &= Expect(std::ranges::all_of(aKeys, [&added](ve::VirtualShadowPageKey key) { return ContainsKey(added.invalidatedKeys, key); }),
+                         "Adding a caster should invalidate its new bounds");
+        passed &= Expect(std::ranges::all_of(aKeys, [&moved](ve::VirtualShadowPageKey key) { return ContainsKey(moved.invalidatedKeys, key); }) &&
+                             std::ranges::all_of(bKeys, [&moved](ve::VirtualShadowPageKey key) { return ContainsKey(moved.invalidatedKeys, key); }),
+                         "Moving a caster should invalidate old and new bounds");
+        passed &= Expect(std::ranges::all_of(bKeys, [&removed](ve::VirtualShadowPageKey key) { return ContainsKey(removed.invalidatedKeys, key); }),
+                         "Removing a caster should invalidate its saved bounds");
+
+        const ve::VirtualShadowClipmapSet changedClipmaps = ve::BuildVirtualShadowClipmaps(ve::Matrix44::Identity(), ve::Vector3::UnitX(), 200.0f);
+        const ve::VirtualShadowInvalidationResult directionChanged = tracker.Update(4, changedClipmaps, ve::Vector3::UnitX(), {});
+        passed &= Expect(directionChanged.fullInvalidation, "Changing light direction should request full invalidation");
+
+        ve::VirtualShadowInvalidationTracker firstTracker;
+        ve::VirtualShadowInvalidationTracker secondTracker;
+        (void)firstTracker.Update(1, clipmaps, firstDirection, atA);
+        (void)secondTracker.Update(1, clipmaps, firstDirection, atA);
+        (void)firstTracker.Update(2, clipmaps, firstDirection, {});
+        passed &= Expect(firstTracker.GetTrackedCasterCount() == 0 && secondTracker.GetTrackedCasterCount() == 1,
+                         "Consuming one tracker should not alter another view's history");
+        return passed;
+    }
+
+    bool TestLargePageCacheIsolation()
+    {
+        ve::VirtualShadowPageCache sceneCache(256);
+        ve::VirtualShadowPageCache gameCache(1024);
+        sceneCache.BeginFrame(10);
+        gameCache.BeginFrame(30);
+
+        const ve::VirtualShadowPageKey sceneKey = ve::VirtualShadowPageKey::Create(-20, 5, 1, -2);
+        const ve::VirtualShadowPageKey gameKey = ve::VirtualShadowPageKey::Create(40, -7, 3, 8);
+        const auto sceneSlot = sceneCache.Request({sceneKey, 100});
+        const auto gameSlot = gameCache.Request({gameKey, 200});
+        sceneCache.MarkRendered(std::span<const ve::VirtualShadowPageKey>(&sceneKey, 1));
+        gameCache.MarkRendered(std::span<const ve::VirtualShadowPageKey>(&gameKey, 1));
+        sceneCache.InvalidateAll();
+
+        bool passed = true;
+        passed &= Expect(sceneCache.GetCapacity() == 256 && gameCache.GetCapacity() == 1024, "Views should preserve distinct physical capacities");
+        passed &= Expect(sceneSlot.has_value() && gameSlot.has_value(), "Both large caches should allocate independently");
+        passed &= Expect(sceneCache.Contains(sceneKey) && !sceneCache.Contains(gameKey), "Scene cache should contain only its absolute key sequence");
+        passed &= Expect(gameCache.Contains(gameKey) && !gameCache.Contains(sceneKey), "Game cache should contain only its absolute key sequence");
+        passed &= Expect(sceneCache.GetDirtyPageCount() == 1 && gameCache.GetDirtyPageCount() == 0,
+                         "Invalidation and clean-state statistics should remain independent");
+        return passed;
+    }
+
+    bool TestCpuViewCachePacketAndOverlap()
+    {
+        ve::VirtualShadowViewCache viewCache(520);
+        const ve::Aabb bounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3::One());
+        const ve::VirtualShadowSceneItem item = {42, 1, bounds, true, true, nullptr};
+        ve::VirtualShadowPrepareInput input;
+        input.frameIndex = 1;
+        input.cameraCutRevision = 0;
+        input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&item, 1);
+        input.light = {true, ve::Vector3(0.0f, -1.0f, 0.0f), 200.0f, 0.001f, 0.05f, 1};
+
+        const ve::VirtualShadowFramePacket packet = viewCache.PrepareFrame(input);
+        bool foundCaster = false;
+        for (const ve::VirtualShadowDirtyPageDraw& draw : packet.dirtyPages)
+        {
+            foundCaster |= std::ranges::find(draw.casterRenderItemIDs, 42u) != draw.casterRenderItemIDs.end();
+        }
+
+        bool passed = true;
+        passed &= Expect(packet.valid && packet.enabled, "A suitable directional light should produce an enabled valid packet");
+        passed &= Expect(packet.statistics.requested > 0 && !packet.dirtyPages.empty(), "The CPU view cache should request and prepare dirty pages");
+        passed &= Expect(foundCaster, "A dirty page should include an overlapping opaque caster");
+
+        std::vector<ve::VirtualShadowPageKey> renderedKeys;
+        for (const ve::VirtualShadowDirtyPageDraw& draw : packet.dirtyPages)
+        {
+            renderedKeys.push_back(draw.key);
+        }
+        viewCache.MarkRendered(renderedKeys);
+
+        input.frameIndex = 2;
+        input.light.depthBias = 0.002f;
+        input.light.normalBias = 0.1f;
+        input.light.revision = 2;
+        const ve::VirtualShadowFramePacket biasPacket = viewCache.PrepareFrame(input);
+        passed &= Expect(biasPacket.statistics.dirty == 0, "Bias-only revisions should not dirty resident pages");
+
+        input.frameIndex = 3;
+        input.cameraCutRevision = 1;
+        const ve::VirtualShadowFramePacket cameraCutPacket = viewCache.PrepareFrame(input);
+        passed &= Expect(cameraCutPacket.statistics.dirty > 0, "A new camera-cut revision should invalidate the view-owned cache");
+        renderedKeys.clear();
+        for (const ve::VirtualShadowDirtyPageDraw& draw : cameraCutPacket.dirtyPages)
+        {
+            renderedKeys.push_back(draw.key);
+        }
+        viewCache.MarkRendered(renderedKeys);
+
+        input.frameIndex = 4;
+        input.light.direction = ve::Vector3::UnitX();
+        const ve::VirtualShadowFramePacket directionPacket = viewCache.PrepareFrame(input);
+        passed &= Expect(directionPacket.statistics.dirty > 0, "A light-direction change should dirty resident pages");
+
+        ve::VirtualShadowPrepareInput disabledInput = input;
+        disabledInput.frameIndex = 5;
+        disabledInput.light.enabled = false;
+        const ve::VirtualShadowFramePacket disabledPacket = viewCache.PrepareFrame(disabledInput);
+        passed &= Expect(disabledPacket.valid && !disabledPacket.enabled && disabledPacket.dirtyPages.empty(),
+                         "No suitable light should return a disabled but valid frame packet");
+        return passed;
+    }
 } // namespace
 
 int main()
 {
     if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation() &&
-        TestClipmapQuantization() && TestReceiverRequests())
+        TestClipmapQuantization() && TestReceiverRequests() && TestCasterInvalidationHistory() && TestLargePageCacheIsolation() &&
+        TestCpuViewCachePacketAndOverlap())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;
