@@ -298,6 +298,18 @@ namespace ve::editor
             const std::string materialAssetPath = assetDatabase != nullptr ? ResolveAssetPathFromID(*assetDatabase, mesh.GetMaterialAssetID()) : "";
             RenderAssetReferenceField("Material", "##MaterialReferencePath", "##MaterialReference", materialAssetPath);
 
+            bool castShadows = mesh.CastShadows();
+            if (RenderFieldCheckbox("Cast Shadows", &castShadows))
+            {
+                mesh.SetCastShadows(castShadows);
+            }
+
+            bool receiveShadows = mesh.ReceiveShadows();
+            if (RenderFieldCheckbox("Receive Shadows", &receiveShadows))
+            {
+                mesh.SetReceiveShadows(receiveShadows);
+            }
+
             std::array<float, 3> boundsCenter = ToFloat3(mesh.GetBoundsCenter());
             if (RenderFieldDragFloat3("Bounds Center", boundsCenter.data(), BoundsDragSpeed))
             {
