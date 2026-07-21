@@ -13,6 +13,7 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstring>
 #include <d3d11.h>
@@ -812,7 +813,7 @@ namespace ve::rhi
                         return false;
                     }
 
-                    ClearShaderResourceBindings();
+                    ClearMatchingShaderResourceBindings(*d3dDepthTexture);
                     activeDepthTexture_ = d3dDepthTexture;
                 }
 
@@ -942,7 +943,7 @@ namespace ve::rhi
                 }
 
                 const auto& d3dTexture = static_cast<const D3D11Texture&>(texture);
-                if (&d3dTexture == activeDepthTexture_)
+                if (activeDepthTexture_ != nullptr && d3dTexture.GetNativeTexture() == activeDepthTexture_->GetNativeTexture())
                 {
                     context_->OMSetRenderTargets(0, nullptr, nullptr);
                     activeDepthTexture_ = nullptr;
@@ -953,13 +954,20 @@ namespace ve::rhi
                 {
                     return;
                 }
+                VE_ASSERT(slot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT);
+                if (slot >= D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT)
+                {
+                    return;
+                }
                 switch (stage)
                 {
                 case RhiShaderStage::Vertex:
                     context_->VSSetShaderResources(slot, 1, &shaderResourceView);
+                    vertexShaderResources_[slot] = d3dTexture.GetNativeTexture();
                     break;
                 case RhiShaderStage::Fragment:
                     context_->PSSetShaderResources(slot, 1, &shaderResourceView);
+                    fragmentShaderResources_[slot] = d3dTexture.GetNativeTexture();
                     break;
                 }
             }
@@ -1002,17 +1010,31 @@ namespace ve::rhi
                 return valid;
             }
 
-            void ClearShaderResourceBindings()
+            void ClearMatchingShaderResourceBindings(const D3D11Texture& texture)
             {
-                ID3D11ShaderResourceView* nullViews[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT] = {};
-                context_->VSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullViews);
-                context_->PSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullViews);
+                ID3D11Texture2D* nativeTexture = texture.GetNativeTexture();
+                ID3D11ShaderResourceView* nullView = nullptr;
+                for (uint32_t slot = 0; slot < D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT; ++slot)
+                {
+                    if (vertexShaderResources_[slot] == nativeTexture)
+                    {
+                        context_->VSSetShaderResources(slot, 1, &nullView);
+                        vertexShaderResources_[slot] = nullptr;
+                    }
+                    if (fragmentShaderResources_[slot] == nativeTexture)
+                    {
+                        context_->PSSetShaderResources(slot, 1, &nullView);
+                        fragmentShaderResources_[slot] = nullptr;
+                    }
+                }
             }
 
             ComPtr<ID3D11DeviceContext> context_;
             ComPtr<ID3D11DeviceContext1> context1_;
             const D3D11PipelineState* activePipeline_ = nullptr;
             const D3D11Texture* activeDepthTexture_ = nullptr;
+            std::array<ID3D11Texture2D*, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> vertexShaderResources_ = {};
+            std::array<ID3D11Texture2D*, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> fragmentShaderResources_ = {};
         };
 
         class D3D11Device final : public RhiDevice

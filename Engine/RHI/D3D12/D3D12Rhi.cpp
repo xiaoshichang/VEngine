@@ -1490,7 +1490,7 @@ namespace ve::rhi
                     return;
                 }
                 const D3D12_RESOURCE_STATES shaderReadState =
-                    stage == RhiShaderStage::Vertex ? D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+                    static_cast<D3D12_RESOURCE_STATES>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
                 TransitionResource(d3dTexture.GetNativeResource(), d3dTexture.GetResourceState(), shaderReadState);
                 d3dTexture.SetResourceState(shaderReadState);
                 activeResourceHeap_ = d3dTexture.GetShaderResourceViewHeap();
