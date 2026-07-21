@@ -2031,9 +2031,7 @@ namespace ve::rhi
                 samplerDesc.AddressW = ToD3D12AddressMode(desc.addressW);
                 samplerDesc.MipLODBias = desc.mipBias;
                 samplerDesc.MaxAnisotropy = desc.maxAnisotropy;
-                samplerDesc.ComparisonFunc = desc.reductionMode == RhiSamplerReductionMode::Comparison
-                                                 ? ToD3D12ComparisonFunc(desc.comparisonFunction)
-                                                 : D3D12_COMPARISON_FUNC_NONE;
+                samplerDesc.ComparisonFunc = ToD3D12ComparisonFunc(desc.comparisonFunction);
                 samplerDesc.BorderColor[0] = desc.borderColor.r;
                 samplerDesc.BorderColor[1] = desc.borderColor.g;
                 samplerDesc.BorderColor[2] = desc.borderColor.b;
