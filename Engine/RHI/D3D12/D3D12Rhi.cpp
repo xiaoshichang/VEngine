@@ -1496,9 +1496,9 @@ namespace ve::rhi
             {
                 WaitIdle();
 
-                if (infoQueue_ != nullptr && infoQueueCallbackRegistered_)
+                if (infoQueue1_ != nullptr && infoQueueCallbackRegistered_)
                 {
-                    infoQueue_->UnregisterMessageCallback(infoQueueCallbackCookie_);
+                    infoQueue1_->UnregisterMessageCallback(infoQueueCallbackCookie_);
                     infoQueueCallbackRegistered_ = false;
                 }
 
@@ -1570,9 +1570,12 @@ namespace ve::rhi
                                              static_cast<unsigned>(filterResult));
                     }
 
-                    const HRESULT callbackResult = infoQueue_->RegisterMessageCallback(
-                        LogD3D12DebugMessage, D3D12_MESSAGE_CALLBACK_FLAG_NONE, device_.Get(), &infoQueueCallbackCookie_);
-                    infoQueueCallbackRegistered_ = SUCCEEDED(callbackResult);
+                    if (SUCCEEDED(infoQueue_.As(&infoQueue1_)))
+                    {
+                        const HRESULT callbackResult = infoQueue1_->RegisterMessageCallback(
+                            LogD3D12DebugMessage, D3D12_MESSAGE_CALLBACK_FLAG_NONE, device_.Get(), &infoQueueCallbackCookie_);
+                        infoQueueCallbackRegistered_ = SUCCEEDED(callbackResult);
+                    }
                 }
 
                 D3D12_COMMAND_QUEUE_DESC queueDesc = {};
@@ -2398,7 +2401,8 @@ namespace ve::rhi
             ComPtr<ID3D12Device> device_;
             ComPtr<ID3D12CommandQueue> queue_;
             ComPtr<ID3D12Fence> fence_;
-            ComPtr<ID3D12InfoQueue1> infoQueue_;
+            ComPtr<ID3D12InfoQueue> infoQueue_;
+            ComPtr<ID3D12InfoQueue1> infoQueue1_;
             std::shared_ptr<D3D12ShaderResourceDescriptorAllocator> shaderResourceDescriptorAllocator_;
             std::shared_ptr<D3D12SamplerDescriptorAllocator> samplerDescriptorAllocator_;
             HANDLE fenceEvent_ = nullptr;
