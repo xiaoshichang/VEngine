@@ -54,7 +54,8 @@ Expected: both targets build successfully. The existing missing ATL/MFC library-
 Run:
 
 ```powershell
-Build/windows-msvc-debug/Debug/VEngineShaderTool.exe compile --source Assets/Builtin/Shaders/BasicMesh.hlsl --output Build/Generated/VirtualShadowPageYOrientation --name BasicMesh --dxc ThirdParty/DirectXShaderCompiler/Build/Windows64/1.9.2602.17/Tools/x64/dxc.exe --fxc fxc --slang ThirdParty/Slang/slang-2026.12-windows-x86_64/bin/slangc.exe
+[System.Environment]::SetEnvironmentVariable('PATH', $null, [System.EnvironmentVariableTarget]::Process)
+CMake/Scripts/WithMsvc.bat .\Build\windows-msvc-debug\Debug\VEngineShaderTool.exe compile --source Assets\Builtin\Shaders\BasicMesh.hlsl --output Build\Generated\VirtualShadowPageYOrientation --name BasicMesh --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe --fxc fxc --slang ThirdParty\Slang\slang-2026.12-windows-x86_64\bin\slangc.exe
 ```
 
 Expected: exit code `0`, with generated D3D11, D3D12, and Metal shader artifacts and no binding or syntax error.
