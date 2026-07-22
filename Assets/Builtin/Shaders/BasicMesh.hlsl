@@ -118,7 +118,8 @@ float SampleVirtualShadowPage(uint physicalPageIndex, float2 pagePosition, float
     float2 contentOrigin = float2(physicalPage * virtualShadowPhysicalPageSize) + 1.0f;
     float2 minimumPixel = contentOrigin + 0.5f;
     float2 maximumPixel = contentOrigin + contentSize - 0.5f;
-    float2 centerPixel = minimumPixel + saturate(pagePosition) * (contentSize - 1.0f);
+    float2 samplePagePosition = float2(pagePosition.x, 1.0f - pagePosition.y);
+    float2 centerPixel = minimumPixel + saturate(samplePagePosition) * (contentSize - 1.0f);
 
     float visibility = 0.0f;
     [unroll]
