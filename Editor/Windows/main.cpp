@@ -1,4 +1,5 @@
 #include "Editor/Windows/WindowsEditorApplication.h"
+#include "Editor/Core/EditorStartup.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/DebugConsole.h"
@@ -13,7 +14,54 @@
 #endif
 
 #include <Windows.h>
+#include <shellapi.h>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
+
+namespace
+{
+    [[nodiscard]] std::string WideToUtf8(std::wstring_view text)
+    {
+        if (text.empty())
+        {
+            return {};
+        }
+
+        const int requiredLength = WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+        if (requiredLength <= 0)
+        {
+            return {};
+        }
+
+        std::string result(static_cast<size_t>(requiredLength), '\0');
+        if (WideCharToMultiByte(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), result.data(), requiredLength, nullptr, nullptr) <= 0)
+        {
+            return {};
+        }
+        return result;
+    }
+
+    [[nodiscard]] std::vector<std::string> GetUtf8CommandLineArguments()
+    {
+        int argumentCount = 0;
+        LPWSTR* nativeArguments = CommandLineToArgvW(GetCommandLineW(), &argumentCount);
+        if (nativeArguments == nullptr)
+        {
+            return {};
+        }
+
+        std::vector<std::string> arguments;
+        arguments.reserve(static_cast<size_t>(argumentCount));
+        for (int argumentIndex = 0; argumentIndex < argumentCount; ++argumentIndex)
+        {
+            arguments.push_back(WideToUtf8(nativeArguments[argumentIndex]));
+        }
+        LocalFree(nativeArguments);
+        return arguments;
+    }
+} // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR commandLine, int showCommand)
 {
@@ -48,7 +96,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         initParam.runtime.scriptingSystem.dotNetRuntimeRoot = editorLocalDotNetRoot;
     }
 
-    ve::editor::WindowsEditorApplication application(std::move(initParam));
+    const std::vector<std::string> arguments = GetUtf8CommandLineArguments();
+    ve::editor::EditorStartupOptions startupOptions = ve::editor::ParseEditorStartupOptions(arguments);
+    ve::editor::WindowsEditorApplication application(std::move(initParam), std::move(startupOptions));
     int exitCode = application.Init();
     if (exitCode == 0)
     {

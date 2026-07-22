@@ -32,10 +32,11 @@ Startup order:
 1. Initialize the base `Application` and runtime systems.
 2. Initialize `Editor` and its project-selection view.
 3. Place the Editor windows using the existing platform behavior.
-4. If a non-empty startup project path was supplied, call `Editor::OpenProject()` on the main thread.
-5. Enter the normal application loop.
+4. If a non-empty startup project path was supplied, queue it on `Editor` before entering the application loop.
+5. Start the Scene Thread and normal application loop.
+6. Consume the queued path from the first Scene Thread render callback and call `Editor::OpenProject()` there.
 
-This reuses the existing project preparation, asset scan/import, script compilation, scene load, recent-project update, and editing-view transition. No second project-opening path is introduced.
+Project opening must be deferred because `Editor::OpenProject()` constructs scene objects and therefore requires the registered Scene Thread. This reuses the existing project preparation, asset scan/import, script compilation, scene load, recent-project update, and editing-view transition. No second project-opening path is introduced.
 
 ## Failure Behavior and Logging
 
@@ -70,3 +71,5 @@ Because this feature is tied to the Editor application lifecycle, verification u
 3. Launch with `--project <DemoProject>` and confirm the project and start scene open without a UI click.
 4. Launch with a missing project value and confirm a clear log entry while the Editor remains usable.
 5. Run the existing test preset to detect regressions in shared code.
+
+After the option is available, repository guidance must require Editor project smoke tests and rendering diagnostics to launch the Editor with `--project <path>`. Automated mouse movement, coordinate clicks, or other simulated project-selection UI input must not be used to open the project under test.

@@ -287,6 +287,13 @@ namespace ve::editor
             return nullptr;
         }
 
+        if (!pendingProjectPath_.empty())
+        {
+            std::string projectPath = std::move(pendingProjectPath_);
+            pendingProjectPath_.clear();
+            OpenProject(std::move(projectPath));
+        }
+
         if (waitForImGuiTextureUpdates_)
         {
             renderSystem_->Flush();
@@ -511,6 +518,7 @@ namespace ve::editor
         ShutdownRenderBackend();
         resourceLoader_.Shutdown();
         assetDatabase_.Shutdown();
+        pendingProjectPath_.clear();
 
         delete projectSelectionView_;
         delete projectEditingView_;
@@ -1057,6 +1065,16 @@ namespace ve::editor
         CollectUnusedResources();
         EnqueueMainWindowTitleUpdate();
         VE_LOG_INFO_CATEGORY("Editor", "Opened editor project: {}", currentProjectPath_);
+    }
+
+    void Editor::RequestOpenProject(std::string projectPath)
+    {
+        if (!initialized_.load(std::memory_order_acquire) || projectPath.empty())
+        {
+            return;
+        }
+
+        pendingProjectPath_ = std::move(projectPath);
     }
 
     void Editor::OpenProject(std::string projectPath)

@@ -79,6 +79,7 @@ namespace ve::editor
         void StartPlay();
         void StopPlay();
 
+        void RequestOpenProject(std::string projectPath);
         void OpenProject(std::string projectPath);
         void ShowProjectSelection();
         void OpenScene(Path scenePath);
@@ -164,6 +165,7 @@ namespace ve::editor
         UInt64 playSessionID_ = 0;
 
         std::vector<std::string> recentProjects_;
+        std::string pendingProjectPath_;
         std::string currentProjectPath_;
         std::string currentProjectName_;
         std::string imguiIniFilename_;

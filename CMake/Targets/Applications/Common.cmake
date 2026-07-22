@@ -3,6 +3,8 @@ include_guard(GLOBAL)
 set(VE_EDITOR_COMMON_SOURCES
     Editor/Core/Editor.cpp
     Editor/Core/Editor.h
+    Editor/Core/EditorStartup.cpp
+    Editor/Core/EditorStartup.h
     Editor/Core/EditorAssetDatabase.cpp
     Editor/Core/EditorAssetDatabase.h
     Editor/Core/EditorAssetPath.cpp

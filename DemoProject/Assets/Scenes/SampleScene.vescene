@@ -28,7 +28,7 @@
                         }
                     },
                     "boundsCenter": [0E0, 0E0, 0E0],
-                    "boundsExtents": [8E0, 2.5E-1, 5E0],
+                    "boundsExtents": [5E-1, 5E-1, 5E-1],
                     "castShadows": true,
                     "receiveShadows": true
                 },
@@ -1281,7 +1281,7 @@
                     "type": "TransformComponent",
                     "enabled": true,
                     "localPosition": [0E0, 8.449999809265137E0, 0E0],
-                    "localRotation": [5.774016976356506E-1, 2.891317307949066E-1, 2.9011330008506775E-1, 7.062892317771912E-1],
+                    "localRotation": [7.071067811865476E-1, 0E0, 0E0, 7.071067811865476E-1],
                     "localScale": [1E0, 1E0, 1E0]
                 },
                 {
@@ -1294,7 +1294,7 @@
                     "innerConeAngleRadians": 0E0,
                     "outerConeAngleRadians": 0E0,
                     "castShadows": true,
-                    "shadowDistance": 2E2,
+                    "shadowDistance": 5.12E2,
                     "depthBias": 1.0000000474974513E-3,
                     "normalBias": 5.000000074505806E-2
                 }

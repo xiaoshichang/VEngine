@@ -329,6 +329,49 @@ namespace ve::rhi
             return buffer;
         }
 
+        [[nodiscard]] uint64_t GetStoredDebugMessageCount(ID3D12InfoQueue* infoQueue) noexcept
+        {
+            return infoQueue != nullptr ? infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter() : 0;
+        }
+
+        void AppendD3D12DebugMessages(ID3D12InfoQueue* infoQueue, uint64_t firstMessageIndex, std::string& message)
+        {
+            if (infoQueue == nullptr)
+            {
+                return;
+            }
+
+            const uint64_t messageCount = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+            for (uint64_t messageIndex = firstMessageIndex; messageIndex < messageCount; ++messageIndex)
+            {
+                SIZE_T messageSize = 0;
+                if (FAILED(infoQueue->GetMessage(messageIndex, nullptr, &messageSize)) || messageSize < sizeof(D3D12_MESSAGE))
+                {
+                    continue;
+                }
+
+                std::vector<uint8_t> messageStorage(messageSize);
+                auto* debugMessage = reinterpret_cast<D3D12_MESSAGE*>(messageStorage.data());
+                if (FAILED(infoQueue->GetMessage(messageIndex, debugMessage, &messageSize)) ||
+                    debugMessage->ID == D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE)
+                {
+                    continue;
+                }
+
+                message += "; D3D12 debug message ";
+                message += std::to_string(static_cast<unsigned>(debugMessage->ID));
+                message += ": ";
+                message += debugMessage->pDescription != nullptr ? debugMessage->pDescription : "<no description>";
+            }
+        }
+
+        [[nodiscard]] std::string MakeD3D12ValidationError(ID3D12InfoQueue* infoQueue, const char* operation, HRESULT result, uint64_t firstMessageIndex)
+        {
+            std::string message = MakeHResultError(operation, result);
+            AppendD3D12DebugMessages(infoQueue, firstMessageIndex, message);
+            return message;
+        }
+
         [[nodiscard]] std::string WideToUtf8(const wchar_t* text)
         {
             if (text == nullptr || text[0] == L'\0')
@@ -1698,6 +1741,10 @@ namespace ve::rhi
                         const HRESULT callbackResult = infoQueue1_->RegisterMessageCallback(
                             LogD3D12DebugMessage, D3D12_MESSAGE_CALLBACK_FLAG_NONE, device_.Get(), &infoQueueCallbackCookie_);
                         infoQueueCallbackRegistered_ = SUCCEEDED(callbackResult);
+                        if (FAILED(callbackResult))
+                        {
+                            VE_LOG_WARN_CATEGORY("D3D12", "{}", MakeHResultError("ID3D12InfoQueue1::RegisterMessageCallback", callbackResult));
+                        }
                     }
                 }
 
@@ -2316,11 +2363,12 @@ namespace ve::rhi
                 }
 
                 ComPtr<ID3D12RootSignature> rootSignature;
+                const uint64_t firstRootSignatureMessage = GetStoredDebugMessageCount(infoQueue_.Get());
                 result = device_->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("ID3D12Device::CreateRootSignature", result));
+                    SetLastError(MakeD3D12ValidationError(infoQueue_.Get(), "ID3D12Device::CreateRootSignature", result, firstRootSignatureMessage));
                     return nullptr;
                 }
 
@@ -2396,11 +2444,12 @@ namespace ve::rhi
                 pipelineDesc.SampleDesc.Count = 1;
 
                 ComPtr<ID3D12PipelineState> pipelineState;
+                const uint64_t firstPipelineMessage = GetStoredDebugMessageCount(infoQueue_.Get());
                 result = device_->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(&pipelineState));
 
                 if (FAILED(result))
                 {
-                    SetLastError(MakeHResultError("ID3D12Device::CreateGraphicsPipelineState", result));
+                    SetLastError(MakeD3D12ValidationError(infoQueue_.Get(), "ID3D12Device::CreateGraphicsPipelineState", result, firstPipelineMessage));
                     return nullptr;
                 }
 
