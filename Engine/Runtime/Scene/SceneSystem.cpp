@@ -86,7 +86,7 @@ namespace ve
 
         void UpdateScene(SceneSystemImpl& impl, Float32 deltaSeconds)
         {
-            if (impl.scene != nullptr && impl.scene->GetExecutionMode() == SceneExecutionMode::Runtime)
+            if (deltaSeconds > 0.0f && impl.scene != nullptr && impl.scene->GetExecutionMode() == SceneExecutionMode::Runtime)
             {
                 impl.scene->Update(deltaSeconds);
                 impl.scene->LateUpdate(deltaSeconds);
