@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Resource/MaterialProperty.h"
 
 #include "Engine/Runtime/Core/Guid.h"
+#include "Engine/Runtime/Core/JsonUtils.h"
 
 #include <algorithm>
 #include <cstring>
@@ -199,15 +200,15 @@ namespace ve
         switch (value.type)
         {
         case MaterialPropertyType::Float:
-            return value.floatValue;
+            return JsonUtils::MakeFloat(value.floatValue);
         case MaterialPropertyType::Float4:
         case MaterialPropertyType::Color:
         {
             boost::json::array array;
-            array.emplace_back(value.vectorValue.GetX());
-            array.emplace_back(value.vectorValue.GetY());
-            array.emplace_back(value.vectorValue.GetZ());
-            array.emplace_back(value.vectorValue.GetW());
+            array.emplace_back(JsonUtils::MakeFloat(value.vectorValue.GetX()));
+            array.emplace_back(JsonUtils::MakeFloat(value.vectorValue.GetY()));
+            array.emplace_back(JsonUtils::MakeFloat(value.vectorValue.GetZ()));
+            array.emplace_back(JsonUtils::MakeFloat(value.vectorValue.GetW()));
             return array;
         }
         case MaterialPropertyType::Texture2D:

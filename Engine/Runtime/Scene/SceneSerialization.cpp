@@ -54,9 +54,9 @@ namespace ve
         {
             boost::json::array array;
             array.reserve(3);
-            array.push_back(value.GetX());
-            array.push_back(value.GetY());
-            array.push_back(value.GetZ());
+            array.push_back(JsonUtils::MakeFloat(value.GetX()));
+            array.push_back(JsonUtils::MakeFloat(value.GetY()));
+            array.push_back(JsonUtils::MakeFloat(value.GetZ()));
             return array;
         }
 
@@ -64,10 +64,10 @@ namespace ve
         {
             boost::json::array array;
             array.reserve(4);
-            array.push_back(value.GetX());
-            array.push_back(value.GetY());
-            array.push_back(value.GetZ());
-            array.push_back(value.GetW());
+            array.push_back(JsonUtils::MakeFloat(value.GetX()));
+            array.push_back(JsonUtils::MakeFloat(value.GetY()));
+            array.push_back(JsonUtils::MakeFloat(value.GetZ()));
+            array.push_back(JsonUtils::MakeFloat(value.GetW()));
             return array;
         }
 
@@ -75,10 +75,10 @@ namespace ve
         {
             boost::json::array array;
             array.reserve(4);
-            array.push_back(value.r);
-            array.push_back(value.g);
-            array.push_back(value.b);
-            array.push_back(value.a);
+            array.push_back(JsonUtils::MakeFloat(value.r));
+            array.push_back(JsonUtils::MakeFloat(value.g));
+            array.push_back(JsonUtils::MakeFloat(value.b));
+            array.push_back(JsonUtils::MakeFloat(value.a));
             return array;
         }
 
@@ -582,12 +582,12 @@ namespace ve
             object["type"] = "CameraComponent";
             object["enabled"] = camera.IsEnabled();
             object["projectionMode"] = ToString(camera.GetProjectionMode());
-            object["verticalFieldOfViewRadians"] = camera.GetVerticalFieldOfViewRadians();
-            object["orthographicSize"] = camera.GetOrthographicSize();
+            object["verticalFieldOfViewRadians"] = JsonUtils::MakeFloat(camera.GetVerticalFieldOfViewRadians());
+            object["orthographicSize"] = JsonUtils::MakeFloat(camera.GetOrthographicSize());
             object["automaticAspectRatio"] = camera.IsAspectRatioAutomatic();
-            object["aspectRatio"] = camera.GetAspectRatio();
-            object["nearClipPlane"] = camera.GetNearClipPlane();
-            object["farClipPlane"] = camera.GetFarClipPlane();
+            object["aspectRatio"] = JsonUtils::MakeFloat(camera.GetAspectRatio());
+            object["nearClipPlane"] = JsonUtils::MakeFloat(camera.GetNearClipPlane());
+            object["farClipPlane"] = JsonUtils::MakeFloat(camera.GetFarClipPlane());
             object["clearColor"] = WriteColor(camera.GetClearColor());
             return object;
         }
@@ -599,14 +599,14 @@ namespace ve
             object["enabled"] = light.IsEnabled();
             object["lightType"] = ToString(light.GetLightType());
             object["color"] = WriteVector3(light.GetColor());
-            object["intensity"] = light.GetIntensity();
-            object["range"] = light.GetRange();
-            object["innerConeAngleRadians"] = light.GetInnerConeAngleRadians();
-            object["outerConeAngleRadians"] = light.GetOuterConeAngleRadians();
+            object["intensity"] = JsonUtils::MakeFloat(light.GetIntensity());
+            object["range"] = JsonUtils::MakeFloat(light.GetRange());
+            object["innerConeAngleRadians"] = JsonUtils::MakeFloat(light.GetInnerConeAngleRadians());
+            object["outerConeAngleRadians"] = JsonUtils::MakeFloat(light.GetOuterConeAngleRadians());
             object["castShadows"] = light.CastShadows();
-            object["shadowDistance"] = light.GetShadowDistance();
-            object["depthBias"] = light.GetDepthBias();
-            object["normalBias"] = light.GetNormalBias();
+            object["shadowDistance"] = JsonUtils::MakeFloat(light.GetShadowDistance());
+            object["depthBias"] = JsonUtils::MakeFloat(light.GetDepthBias());
+            object["normalBias"] = JsonUtils::MakeFloat(light.GetNormalBias());
             return object;
         }
 
@@ -621,12 +621,12 @@ namespace ve
             object["isTrigger"] = desc.trigger;
             object["center"] = WriteVector3(desc.center);
             object["size"] = WriteVector3(desc.size);
-            object["radius"] = desc.radius;
-            object["height"] = desc.height;
+            object["radius"] = JsonUtils::MakeFloat(desc.radius);
+            object["height"] = JsonUtils::MakeFloat(desc.height);
             object["direction"] = ToString(desc.direction);
-            object["staticFriction"] = desc.staticFriction;
-            object["dynamicFriction"] = desc.dynamicFriction;
-            object["bounciness"] = desc.bounciness;
+            object["staticFriction"] = JsonUtils::MakeFloat(desc.staticFriction);
+            object["dynamicFriction"] = JsonUtils::MakeFloat(desc.dynamicFriction);
+            object["bounciness"] = JsonUtils::MakeFloat(desc.bounciness);
             return object;
         }
 
@@ -637,9 +637,9 @@ namespace ve
             boost::json::object object;
             object["type"] = "RigidbodyComponent";
             object["enabled"] = rigidbody.IsEnabled();
-            object["mass"] = desc.mass;
-            object["linearDamping"] = desc.linearDamping;
-            object["angularDamping"] = desc.angularDamping;
+            object["mass"] = JsonUtils::MakeFloat(desc.mass);
+            object["linearDamping"] = JsonUtils::MakeFloat(desc.linearDamping);
+            object["angularDamping"] = JsonUtils::MakeFloat(desc.angularDamping);
             object["useGravity"] = desc.useGravity;
             object["isKinematic"] = desc.kinematic;
             object["detectCollisions"] = desc.detectCollisions;
