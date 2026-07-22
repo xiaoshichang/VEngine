@@ -13,7 +13,6 @@
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <cmath>
 #include <cstdint>
 #include <iterator>
 #include <string>
@@ -54,17 +53,13 @@ vertex VSOutput VSMain(uint vertexID [[vertex_id]])
             FrameGraphTextureHandle atlas;
         };
 
-        [[nodiscard]] std::string BuildCasterPipelineName(const RTShaderResource& shaderResource, Float32 depthBias, Float32 normalBias)
+        [[nodiscard]] std::string BuildCasterPipelineName(const RTShaderResource& shaderResource)
         {
             std::string name = VirtualShadowDepthPassName;
             name += ":";
             name += shaderResource.GetDesc().name;
             name += ":VS=";
             name += std::to_string(reinterpret_cast<std::uintptr_t>(shaderResource.GetVertexShader()));
-            name += ":DB=";
-            name += std::to_string(depthBias);
-            name += ":NB=";
-            name += std::to_string(normalBias);
             return name;
         }
     } // namespace
@@ -139,7 +134,7 @@ vertex VSOutput VSMain(uint vertexID [[vertex_id]])
                     continue;
                 }
 
-                rhi::RhiPipelineState* casterPipeline = GetCasterPipeline(context, *materialResource->GetShaderResource(), *packet);
+                rhi::RhiPipelineState* casterPipeline = GetCasterPipeline(context, *materialResource->GetShaderResource());
                 if (casterPipeline == nullptr)
                 {
                     return ErrorCode::PlatformError;
@@ -207,7 +202,7 @@ vertex VSOutput VSMain(uint vertexID [[vertex_id]])
     }
 
     rhi::RhiPipelineState*
-    VirtualShadowDepthRenderPass::GetCasterPipeline(RenderPassContext& context, RTShaderResource& shaderResource, const VirtualShadowFramePacket& packet)
+    VirtualShadowDepthRenderPass::GetCasterPipeline(RenderPassContext& context, RTShaderResource& shaderResource)
     {
         ShaderManager* shaderManager = context.frameData.shaderManager;
         rhi::RhiShaderModule* vertexShader = shaderResource.GetVertexShader();
@@ -233,8 +228,6 @@ vertex VSOutput VSMain(uint vertexID [[vertex_id]])
         pipelineDesc.blendState = rhi::StaticRenderStates::OpaqueBlend;
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
         pipelineDesc.rasterizerState.scissorEnabled = true;
-        pipelineDesc.rasterizerState.depthBias = static_cast<Int32>(std::lround(packet.depthBias * 8388608.0f));
-        pipelineDesc.rasterizerState.slopeScaledDepthBias = packet.normalBias;
         pipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthReadWriteLessEqual;
         pipelineDesc.boundShaderState.vertexShader = vertexShader;
         pipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
@@ -246,7 +239,7 @@ vertex VSOutput VSMain(uint vertexID [[vertex_id]])
         pipelineDesc.colorFormat = rhi::RhiFormat::Unknown;
         pipelineDesc.depthFormat = rhi::RhiFormat::Depth32Float;
         pipelineDesc.debugName = VirtualShadowDepthPassName;
-        const std::string pipelineName = BuildCasterPipelineName(shaderResource, packet.depthBias, packet.normalBias);
+        const std::string pipelineName = BuildCasterPipelineName(shaderResource);
         return shaderManager->GetOrCreateGraphicsPipeline(context.device, GraphicsPipelineID{pipelineName, 0}, pipelineDesc);
     }
 } // namespace ve

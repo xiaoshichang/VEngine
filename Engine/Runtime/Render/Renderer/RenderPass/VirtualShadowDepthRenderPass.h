@@ -16,6 +16,6 @@ namespace ve
         [[nodiscard]] ErrorCode Draw(RenderPassContext& context);
         [[nodiscard]] rhi::RhiPipelineState* GetClearPipeline(RenderPassContext& context);
         [[nodiscard]] rhi::RhiPipelineState*
-        GetCasterPipeline(RenderPassContext& context, RTShaderResource& shaderResource, const VirtualShadowFramePacket& packet);
+        GetCasterPipeline(RenderPassContext& context, RTShaderResource& shaderResource);
     };
 } // namespace ve

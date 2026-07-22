@@ -65,6 +65,16 @@ namespace ve
         return depthEpoch >= VirtualShadowMinimumDepthEpoch && depthEpoch <= VirtualShadowMaximumDepthEpoch;
     }
 
+    [[nodiscard]] inline Float32 ConvertVirtualShadowWorldDepthBiasToNormalized(Float32 worldDepthBias, Float32 depthRange) noexcept
+    {
+        if (!std::isfinite(worldDepthBias) || !std::isfinite(depthRange) || worldDepthBias < 0.0f || depthRange <= 0.0f)
+        {
+            return 0.0f;
+        }
+
+        return worldDepthBias / depthRange;
+    }
+
     struct VirtualShadowPageKey
     {
         UInt32 key0 = 0xFFFFFFFFu;

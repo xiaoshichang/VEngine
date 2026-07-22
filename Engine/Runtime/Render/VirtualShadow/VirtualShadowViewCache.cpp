@@ -339,8 +339,10 @@ namespace ve
         constants.lightRight = Vector4(basis.right, 0.0f);
         constants.lightUp = Vector4(basis.up, 0.0f);
         constants.lightDirection = Vector4(basis.forward, 0.0f);
+        const Float32 normalizedDepthBias =
+            ConvertVirtualShadowWorldDepthBiasToNormalized(packet.depthBias, packet.clipmaps.shadowDistance * 2.0f);
         constants.atlasAndBias = Vector4(1.0f / static_cast<Float32>(packet.atlasExtent),
-                                         packet.depthBias,
+                                         normalizedDepthBias,
                                          packet.normalBias,
                                          static_cast<Float32>(VirtualShadowPhysicalPageContentSize) / static_cast<Float32>(VirtualShadowPhysicalPageSize));
         for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)

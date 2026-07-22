@@ -498,13 +498,31 @@ namespace
         passed &= Expect(!invalidPacket.valid && !invalidPacket.enabled, "Unsafe clipmap quantization should return a disabled invalid frame packet");
         return passed;
     }
+
+    bool TestWorldDepthBiasConversion()
+    {
+        constexpr ve::Float32 WorldDepthBias = 0.001f;
+        constexpr ve::Float32 DepthRange = 1024.0f;
+        constexpr ve::Float32 ExpectedNormalizedBias = WorldDepthBias / DepthRange;
+
+        bool passed = true;
+        passed &= Expect(std::abs(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(WorldDepthBias, DepthRange) - ExpectedNormalizedBias) < 1.0e-10f,
+                         "World-space depth bias should be normalized by the shadow depth range");
+        passed &= Expect(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(-WorldDepthBias, DepthRange) == 0.0f,
+                         "Negative world-space depth bias should be rejected");
+        passed &= Expect(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(WorldDepthBias, 0.0f) == 0.0f,
+                         "A non-positive shadow depth range should be rejected");
+        passed &= Expect(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(std::numeric_limits<ve::Float32>::infinity(), DepthRange) == 0.0f,
+                         "A non-finite world-space depth bias should be rejected");
+        return passed;
+    }
 } // namespace
 
 int main()
 {
     if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation() &&
         TestClipmapQuantization() && TestReceiverRequests() && TestCasterInvalidationHistory() && TestLargePageCacheIsolation() &&
-        TestCpuViewCachePacketAndOverlap())
+        TestCpuViewCachePacketAndOverlap() && TestWorldDepthBiasConversion())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;
