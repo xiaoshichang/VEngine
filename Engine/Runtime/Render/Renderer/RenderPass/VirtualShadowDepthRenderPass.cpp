@@ -232,7 +232,6 @@ vertex VSOutput VSMain(uint vertexID [[vertex_id]])
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
         pipelineDesc.blendState = rhi::StaticRenderStates::OpaqueBlend;
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
-        pipelineDesc.rasterizerState.cullMode = rhi::RhiCullMode::Front;
         pipelineDesc.rasterizerState.scissorEnabled = true;
         pipelineDesc.rasterizerState.depthBias = static_cast<Int32>(std::lround(packet.depthBias * 8388608.0f));
         pipelineDesc.rasterizerState.slopeScaledDepthBias = packet.normalBias;
