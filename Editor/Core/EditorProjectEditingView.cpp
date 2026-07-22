@@ -230,7 +230,7 @@ namespace ve::editor
         constexpr ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
                                                  ImGuiWindowFlags_NoScrollWithMouse;
-        constexpr float ButtonWidth = 72.0F;
+        constexpr float ButtonWidth = 64.0F;
 
         ImGui::SetNextWindowPos(position);
         ImGui::SetNextWindowSize(size);
@@ -242,7 +242,9 @@ namespace ve::editor
             return;
         }
 
-        const float buttonX = (std::max)(0.0F, (ImGui::GetContentRegionAvail().x - ButtonWidth) * 0.5F);
+        const float buttonSpacing = ImGui::GetStyle().ItemSpacing.x;
+        const float groupWidth = ButtonWidth * 3.0F + buttonSpacing * 2.0F;
+        const float buttonX = (std::max)(0.0F, (ImGui::GetContentRegionAvail().x - groupWidth) * 0.5F);
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + buttonX);
 
         if (editor.IsPlaying())
@@ -269,6 +271,45 @@ namespace ve::editor
             {
                 ImGui::EndDisabled();
             }
+        }
+
+        ImGui::SameLine();
+        const bool canTogglePause = editor.CanTogglePause();
+        const bool isPaused = editor.IsPaused();
+        if (!canTogglePause)
+        {
+            ImGui::BeginDisabled();
+        }
+        if (isPaused)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        if (ImGui::Button("Pause", ImVec2(ButtonWidth, 0.0F)))
+        {
+            editor.TogglePause();
+        }
+        if (isPaused)
+        {
+            ImGui::PopStyleColor();
+        }
+        if (!canTogglePause)
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+        const bool canStepPlay = editor.CanStepPlay();
+        if (!canStepPlay)
+        {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::Button("Step", ImVec2(ButtonWidth, 0.0F)))
+        {
+            editor.StepPlay();
+        }
+        if (!canStepPlay)
+        {
+            ImGui::EndDisabled();
         }
 
         ImGui::End();
