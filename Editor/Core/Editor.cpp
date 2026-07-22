@@ -496,6 +496,11 @@ namespace ve::editor
             return;
         }
 
+        if (runtime_ != nullptr)
+        {
+            runtime_->GetTimeSystem().SetPaused(false);
+        }
+
         initialized_.store(false, std::memory_order_release);
         if (sceneSystem_ != nullptr)
         {
@@ -712,7 +717,22 @@ namespace ve::editor
 
     bool Editor::IsPlaying() const noexcept
     {
-        return playState_ == EditorPlayState::Playing;
+        return playState_ != EditorPlayState::Editing;
+    }
+
+    bool Editor::IsPaused() const noexcept
+    {
+        return playState_ == EditorPlayState::Paused;
+    }
+
+    bool Editor::CanTogglePause() const noexcept
+    {
+        return IsPlaying() && runtime_ != nullptr;
+    }
+
+    bool Editor::CanStepPlay() const noexcept
+    {
+        return IsPaused() && runtime_ != nullptr;
     }
 
     bool Editor::CanStartPlay() const noexcept
@@ -723,7 +743,7 @@ namespace ve::editor
 
     bool Editor::CanStopPlay() const noexcept
     {
-        return playState_ == EditorPlayState::Playing && sceneSystem_ != nullptr && runtime_ != nullptr && !editingSceneSnapshot_.empty();
+        return IsPlaying() && sceneSystem_ != nullptr && runtime_ != nullptr && !editingSceneSnapshot_.empty();
     }
 
     void Editor::StartPlay()
@@ -771,6 +791,7 @@ namespace ve::editor
         }
 
         editingSceneSnapshot_ = snapshot.MoveValue();
+        runtime_->GetTimeSystem().SetPaused(false);
         playState_ = EditorPlayState::Playing;
         ++playSessionID_;
         RequestRenderViewCameraCuts();
@@ -804,6 +825,7 @@ namespace ve::editor
             return;
         }
 
+        runtime_->GetTimeSystem().SetPaused(false);
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
         ++playSessionID_;
@@ -812,8 +834,43 @@ namespace ve::editor
         VE_LOG_INFO_CATEGORY("Editor", "Exited Play mode.");
     }
 
+    void Editor::TogglePause()
+    {
+        if (!CanTogglePause())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped Pause because Play mode is not active.");
+            return;
+        }
+
+        VE_ASSERT(runtime_ != nullptr);
+        const bool shouldPause = playState_ == EditorPlayState::Playing;
+        runtime_->GetTimeSystem().SetPaused(shouldPause);
+        playState_ = shouldPause ? EditorPlayState::Paused : EditorPlayState::Playing;
+        VE_LOG_INFO_CATEGORY("Editor", shouldPause ? "Paused Play mode." : "Resumed Play mode.");
+    }
+
+    void Editor::StepPlay()
+    {
+        if (!CanStepPlay())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped Step because Play mode is not paused.");
+            return;
+        }
+
+        VE_ASSERT(runtime_ != nullptr);
+        if (!runtime_->GetTimeSystem().RequestStep())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to queue a paused Play step.");
+        }
+    }
+
     void Editor::ShutdownOpenProjectState() noexcept
     {
+        if (runtime_ != nullptr)
+        {
+            runtime_->GetTimeSystem().SetPaused(false);
+        }
+
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
 

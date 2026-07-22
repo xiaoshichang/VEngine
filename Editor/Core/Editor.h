@@ -74,10 +74,15 @@ namespace ve::editor
         [[nodiscard]] std::vector<AssetID> CollectActiveResourceRoots() const;
         void CollectUnusedResources();
         [[nodiscard]] bool IsPlaying() const noexcept;
+        [[nodiscard]] bool IsPaused() const noexcept;
+        [[nodiscard]] bool CanTogglePause() const noexcept;
+        [[nodiscard]] bool CanStepPlay() const noexcept;
         [[nodiscard]] bool CanStartPlay() const noexcept;
         [[nodiscard]] bool CanStopPlay() const noexcept;
         void StartPlay();
         void StopPlay();
+        void TogglePause();
+        void StepPlay();
 
         void RequestOpenProject(std::string projectPath);
         void OpenProject(std::string projectPath);
@@ -103,6 +108,7 @@ namespace ve::editor
         {
             Editing,
             Playing,
+            Paused,
         };
 
         void RenderActiveMainView();
