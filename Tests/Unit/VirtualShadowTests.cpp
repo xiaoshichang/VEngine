@@ -707,6 +707,11 @@ namespace
         return passed;
     }
 
+    bool TestVirtualShadowPageClearGeometry()
+    {
+        return Expect(ve::VirtualShadowPageClearVertexCount == 6, "GPU physical-page clearing should use two exact triangles");
+    }
+
     bool TestWorldDepthBiasConversion()
     {
         constexpr ve::Float32 WorldDepthBias = 0.001f;
@@ -749,7 +754,7 @@ int main()
         TestClipmapQuantization() && TestReceiverRequests() && TestCasterInvalidationHistory() && TestLargePageCacheIsolation() &&
         TestCpuViewCachePacketAndOverlap() && TestGpuViewCacheLocalInvalidation() && TestGpuViewCacheDefersUnsubmittedState() &&
         TestGpuViewCacheDormantPageInvalidation() && TestGpuViewCacheDefersSceneRevisionReset() && TestVirtualShadowNormalizedPageGutter() &&
-        TestWorldDepthBiasConversion() && TestRenderViewStateVirtualShadowCacheRevision())
+        TestVirtualShadowPageClearGeometry() && TestWorldDepthBiasConversion() && TestRenderViewStateVirtualShadowCacheRevision())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;

@@ -262,7 +262,10 @@ Output VSMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     Output output;
     PhysicalPage page = PhysicalPages[instanceID];
     if ((page.flags & 6u) != 6u) { output.position = float4(2.0f, 2.0f, 1.0f, 1.0f); return output; }
-    const float2 vertices[3] = {float2(0.0f, 0.0f), float2(0.0f, 2.0f), float2(2.0f, 0.0f)};
+    const float2 vertices[6] = {
+        float2(0.0f, 0.0f), float2(0.0f, 1.0f), float2(1.0f, 0.0f),
+        float2(1.0f, 0.0f), float2(0.0f, 1.0f), float2(1.0f, 1.0f)
+    };
     uint pagesPerRow = atlasExtent / physicalPageSize;
     float2 slot = float2(instanceID % pagesPerRow, instanceID / pagesPerRow) * physicalPageSize;
     float2 pixel = slot + vertices[vertexID] * physicalPageSize;
@@ -750,7 +753,7 @@ Output VSMain(Input input, uint instanceID : SV_InstanceID)
         context.commandList.SetPipeline(*clearPipeline);
         context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 4, *constants.buffer, constants.offset, constants.size);
         context.commandList.SetStorageBuffer(rhi::RhiShaderStage::Vertex, 2, *physical.buffer, 0, physical.buffer->GetSize());
-        context.commandList.DrawInstanced(3, capacity, 0, 0);
+        context.commandList.DrawInstanced(VirtualShadowPageClearVertexCount, capacity, 0, 0);
         for (const auto& item : context.rendererData.opaqueItems)
         {
             if (item == nullptr || !item->CastShadows())

@@ -14,6 +14,7 @@ namespace ve
     constexpr UInt32 VirtualShadowVirtualResolution = 16384;
     constexpr UInt32 VirtualShadowPageSize = 128;
     constexpr UInt32 VirtualShadowPhysicalPageSize = 128;
+    constexpr UInt32 VirtualShadowPageClearVertexCount = 6;
     constexpr UInt32 VirtualShadowPagesPerAxis = VirtualShadowVirtualResolution / VirtualShadowPageSize;
     constexpr UInt32 VirtualShadowLogicalPageCount = VirtualShadowClipmapLevelCount * VirtualShadowPagesPerAxis * VirtualShadowPagesPerAxis;
     constexpr UInt32 VirtualShadowPageGutter = 1;
