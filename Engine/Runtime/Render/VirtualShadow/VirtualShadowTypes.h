@@ -18,6 +18,8 @@ namespace ve
     constexpr UInt32 VirtualShadowLogicalPageCount = VirtualShadowClipmapLevelCount * VirtualShadowPagesPerAxis * VirtualShadowPagesPerAxis;
     constexpr UInt32 VirtualShadowPageGutter = 1;
     constexpr UInt32 VirtualShadowPhysicalPageContentSize = VirtualShadowPhysicalPageSize - (2u * VirtualShadowPageGutter);
+    constexpr Float32 VirtualShadowNormalizedPageGutter =
+        static_cast<Float32>(VirtualShadowPageGutter) / static_cast<Float32>(VirtualShadowPhysicalPageContentSize);
     constexpr UInt32 VirtualShadowPageTableCapacity = 2048;
     constexpr UInt32 VirtualShadowPageTableMaxProbes = 16;
     constexpr UInt32 InvalidVirtualShadowGpuInvalidationCount = std::numeric_limits<UInt32>::max();

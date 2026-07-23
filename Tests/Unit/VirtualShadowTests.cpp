@@ -649,6 +649,18 @@ namespace
         return passed;
     }
 
+    bool TestVirtualShadowNormalizedPageGutter()
+    {
+        constexpr ve::Float32 ExpectedGutter =
+            static_cast<ve::Float32>(ve::VirtualShadowPageGutter) / static_cast<ve::Float32>(ve::VirtualShadowPhysicalPageContentSize);
+        bool passed = true;
+        passed &= Expect(ve::NearlyEqual(ve::VirtualShadowNormalizedPageGutter, ExpectedGutter),
+                         "Virtual-shadow page clipping should use one physical gutter texel in normalized page coordinates");
+        passed &= Expect(ve::VirtualShadowNormalizedPageGutter > 0.0f && ve::VirtualShadowNormalizedPageGutter < 1.0f,
+                         "Virtual-shadow normalized page gutter should be a finite fraction of one logical page");
+        return passed;
+    }
+
     bool TestWorldDepthBiasConversion()
     {
         constexpr ve::Float32 WorldDepthBias = 0.001f;
@@ -673,7 +685,7 @@ int main()
     if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation() &&
         TestClipmapQuantization() && TestReceiverRequests() && TestCasterInvalidationHistory() && TestLargePageCacheIsolation() &&
         TestCpuViewCachePacketAndOverlap() && TestGpuViewCacheLocalInvalidation() && TestGpuViewCacheDefersUnsubmittedState() &&
-        TestGpuViewCacheDormantPageInvalidation() && TestWorldDepthBiasConversion())
+        TestGpuViewCacheDormantPageInvalidation() && TestVirtualShadowNormalizedPageGutter() && TestWorldDepthBiasConversion())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;
