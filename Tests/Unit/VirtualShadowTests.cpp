@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Render/RenderCameraMath.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h"
@@ -678,6 +679,23 @@ namespace
                          "A non-finite world-space depth bias should be rejected");
         return passed;
     }
+
+    bool TestRenderViewStateVirtualShadowCacheRevision()
+    {
+        ve::RenderViewState viewState(ve::RenderViewStateDesc{"RevisionTest", 520});
+        const std::shared_ptr<ve::RTRenderViewState> rtViewState = viewState.GetRTRenderViewState();
+
+        bool passed = true;
+        passed &= Expect(rtViewState->GetVirtualShadowCacheRevision() == 0,
+                         "A new render view should start at virtual-shadow cache revision zero");
+        passed &= Expect(rtViewState->GetCameraCutRevision() == 0, "A new render view should start at camera-cut revision zero");
+
+        viewState.RequestVirtualShadowCacheReset();
+        passed &= Expect(rtViewState->GetVirtualShadowCacheRevision() == 1,
+                         "A virtual-shadow cache reset request should increment the render-thread revision");
+        passed &= Expect(rtViewState->GetCameraCutRevision() == 0, "A virtual-shadow cache reset request should not imply a camera cut");
+        return passed;
+    }
 } // namespace
 
 int main()
@@ -685,7 +703,8 @@ int main()
     if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation() &&
         TestClipmapQuantization() && TestReceiverRequests() && TestCasterInvalidationHistory() && TestLargePageCacheIsolation() &&
         TestCpuViewCachePacketAndOverlap() && TestGpuViewCacheLocalInvalidation() && TestGpuViewCacheDefersUnsubmittedState() &&
-        TestGpuViewCacheDormantPageInvalidation() && TestVirtualShadowNormalizedPageGutter() && TestWorldDepthBiasConversion())
+        TestGpuViewCacheDormantPageInvalidation() && TestVirtualShadowNormalizedPageGutter() && TestWorldDepthBiasConversion() &&
+        TestRenderViewStateVirtualShadowCacheRevision())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;
