@@ -270,6 +270,27 @@ CMake skeleton
 
 D3D11, D3D12, and Metal should be considered together during RHI design. However, each backend should be implemented through small smoke-tested vertical slices instead of attempting a complete renderer immediately.
 
+### GPU Driven Virtual Shadow Maps
+
+The directional-light VSM path now has a GPU-driven Windows vertical slice:
+
+- D3D11/D3D12 compute pipelines and structured SRV/UAV buffers in the common RHI.
+- FrameGraph compute passes and versioned imported buffers.
+- Current-frame receiver depth prepass and per-pixel logical-page marking.
+- Center-only receiver marking followed by logical-page request expansion and compaction, avoiding redundant per-pixel 3-by-3 atomics.
+- Persistent per-view physical-page metadata with GPU cache lookup and LRU replacement.
+- Per-level parallel resident-page hit resolution interleaved with serial miss allocation in coarse-to-fine order, with early termination when the physical pool is fully pinned.
+- Bounds-local dynamic-caster invalidation: moving, added, removed, or shadow-state-changing casters dirty only resident pages covered by their old/new bounds while preserving compatible page mappings.
+- Page-instanced clear/caster rendering without CPU page-request readback.
+- Dense page-table sampling in opaque and transparent forward passes.
+- CPU VSM fallback retained for Metal and GPU resource/pipeline failure; a valid sampling-table binding is kept even when shadows are disabled.
+
+GPU cache reset requests are consumed independently from resource-recreation resets. Dynamic caster revisions no longer trigger a whole-pool reset: the CPU produces a compact list of absolute XY page identities and clipmap levels from changed caster bounds, and the GPU marks only matching persistent physical pages dirty. These identities are not clipped to the current camera working region and ignore the depth epoch during invalidation matching, so dormant resident pages cannot retain stale shadows after the camera moves away and later returns. Disabled or invalid frames do not consume compatibility or caster history before a GPU clear pass can receive it. Full mapping resets remain reserved for incompatible changes such as a directional-light basis change, shadow-distance change, device/resource recreation, or explicit cache reset. Overflow conservatively dirties all resident content without discarding mappings.
+
+The Editor Scene View uses a 2,560-pixel atlas (400 physical pages) so its maximized viewport can retain complete coarse fallback coverage without the 4,096-pixel Game View footprint. In the maximized 2576-by-1416 dual-view D3D12 Editor profiling scene, the corrected cache lifetime, request compaction, and per-level scheduling restored the static frame rate from about 20–25 FPS to 75.0 FPS. Bounds-local invalidation then removed the Play-mode regression: with all physics objects moving, the same scene remained at 75.0 FPS instead of falling back to about 25 FPS.
+
+Native Metal compute encoding, GPU diagnostics/counters, accelerated large invalidation-set lookup, and a general indirect GPU-scene caster path remain future rendering milestones.
+
 The most important first-stage deliverable is a working engine loop that can open a window, run a multithread-aware frame, render a static mesh, load a simple scene, and be inspected through the Editor.
 
 ## 5. EngineRuntime Integration

@@ -69,7 +69,11 @@ namespace ve
 
         UpdateRenderWorld();
         BuildRenderQueues();
-        PrepareVirtualShadows();
+        const ErrorCode virtualShadowResult = PrepareVirtualShadows();
+        if (virtualShadowResult != ErrorCode::None)
+        {
+            return virtualShadowResult;
+        }
 
         FrameGraph frameGraph(FrameGraphExecuteContext{*frameRenderData_, rendererData_});
         RendererFrameGraphData graphData = {};
@@ -177,13 +181,13 @@ namespace ve
                          });
     }
 
-    void BaseRenderer::PrepareVirtualShadows()
+    ErrorCode BaseRenderer::PrepareVirtualShadows()
     {
         rendererData_.virtualShadowPacket.reset();
         if (rendererData_.scene == nullptr || rendererData_.resolvedCamera == nullptr || rendererData_.viewState == nullptr || frameRenderData_ == nullptr ||
             frameRenderData_->device == nullptr || frameRenderData_->mainSwapchain == nullptr)
         {
-            return;
+            return ErrorCode::None;
         }
 
         rhi::RhiExtent2D targetExtent = frameRenderData_->mainSwapchain->GetExtent();
@@ -194,23 +198,50 @@ namespace ve
         }
         if (targetExtent.width == 0 || targetExtent.height == 0)
         {
-            return;
+            return ErrorCode::None;
         }
 
         VirtualShadowViewCache& cache = rendererData_.viewState->GetVirtualShadowViewCache();
-        auto packet = std::make_shared<VirtualShadowFramePacket>(cache.PrepareFrame(frameRenderData_->frameIndex,
-                                                                                    rendererData_.viewState->GetCameraCutRevision(),
-                                                                                    *rendererData_.resolvedCamera,
-                                                                                    *rendererData_.scene,
-                                                                                    targetExtent.width,
-                                                                                    targetExtent.height));
+        if (!cache.EnsureSamplingPageTable(*frameRenderData_->device, rendererData_.viewState->GetDesc().name))
+        {
+            VE_LOG_ERROR("Failed to create the virtual-shadow sampling page-table fallback.");
+            return ErrorCode::PlatformError;
+        }
+        const bool gpuDrivenSupported = frameRenderData_->device->GetBackend() != rhi::RhiBackend::Metal && cache.CanUseGpuDriven(*frameRenderData_->device);
+        auto packet = std::make_shared<VirtualShadowFramePacket>(gpuDrivenSupported ? cache.PrepareGpuFrame(frameRenderData_->frameIndex,
+                                                                                                            rendererData_.viewState->GetCameraCutRevision(),
+                                                                                                            *rendererData_.resolvedCamera,
+                                                                                                            *rendererData_.scene,
+                                                                                                            targetExtent.width,
+                                                                                                            targetExtent.height)
+                                                                                    : cache.PrepareFrame(frameRenderData_->frameIndex,
+                                                                                                         rendererData_.viewState->GetCameraCutRevision(),
+                                                                                                         *rendererData_.resolvedCamera,
+                                                                                                         *rendererData_.scene,
+                                                                                                         targetExtent.width,
+                                                                                                         targetExtent.height));
         if (packet->enabled && !cache.EnsureGpuResources(*frameRenderData_->device, rendererData_.viewState->GetDesc().name))
         {
-            packet->valid = false;
-            packet->enabled = false;
-            packet->dirtyPages.clear();
+            packet = std::make_shared<VirtualShadowFramePacket>(cache.PrepareFrame(frameRenderData_->frameIndex,
+                                                                                   rendererData_.viewState->GetCameraCutRevision(),
+                                                                                   *rendererData_.resolvedCamera,
+                                                                                   *rendererData_.scene,
+                                                                                   targetExtent.width,
+                                                                                   targetExtent.height));
+            if (cache.GetAtlasTexture() == nullptr || cache.GetComparisonSampler() == nullptr)
+            {
+                packet->valid = false;
+                packet->enabled = false;
+                packet->dirtyPages.clear();
+            }
+        }
+        else if (packet->enabled)
+        {
+            const bool resourcesRequireReset = cache.ConsumeGpuCacheReset();
+            packet->resetGpuCache = packet->resetGpuCache || resourcesRequireReset;
         }
         rendererData_.virtualShadowPacket = std::move(packet);
+        return ErrorCode::None;
     }
 
     ErrorCode BaseRenderer::ImportRenderTargets(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const
@@ -229,7 +260,16 @@ namespace ve
             if (depthTexture != nullptr)
             {
                 graphData.depth = frameGraph.ImportTexture(
-                    "RendererDepth", MakeTextureDesc(*depthTexture, rhi::RhiTextureUsage::DepthStencil), ImportedFrameGraphTexture{depthTexture, false});
+                    "RendererDepth", MakeTextureDesc(*depthTexture, MakeSampledDepthUsage()), ImportedFrameGraphTexture{depthTexture, false});
+            }
+            else
+            {
+                FrameGraphTextureDesc depthDesc = {};
+                depthDesc.width = colorTexture->GetWidth();
+                depthDesc.height = colorTexture->GetHeight();
+                depthDesc.format = rhi::RhiFormat::Depth32Float;
+                depthDesc.usage = MakeSampledDepthUsage();
+                graphData.depth = frameGraph.CreateTexture("RendererDepth", depthDesc);
             }
             return ErrorCode::None;
         }
@@ -241,12 +281,29 @@ namespace ve
         colorDesc.format = frameRenderData_->mainSwapchain->GetColorFormat();
         colorDesc.usage = rhi::RhiTextureUsage::RenderTarget;
         graphData.color = frameGraph.ImportTexture("MainSwapchainColor", colorDesc, ImportedFrameGraphTexture{nullptr, true});
+        FrameGraphTextureDesc depthDesc = {};
+        depthDesc.width = extent.width;
+        depthDesc.height = extent.height;
+        depthDesc.format = rhi::RhiFormat::Depth32Float;
+        depthDesc.usage = MakeSampledDepthUsage();
+        graphData.depth = frameGraph.CreateTexture("RendererDepth", depthDesc);
         return ErrorCode::None;
     }
 
     void BaseRenderer::ImportVirtualShadowResources(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const
     {
-        if (rendererData_.viewState == nullptr || rendererData_.virtualShadowPacket == nullptr || !rendererData_.virtualShadowPacket->enabled)
+        if (rendererData_.viewState == nullptr)
+        {
+            return;
+        }
+
+        VirtualShadowViewCache& cache = rendererData_.viewState->GetVirtualShadowViewCache();
+        if (cache.GetSamplingPageTableBuffer() != nullptr)
+        {
+            graphData.virtualShadowPageTable =
+                frameGraph.ImportBuffer("VirtualShadowSamplingPageTable", ImportedFrameGraphBuffer{cache.GetSamplingPageTableBuffer()});
+        }
+        if (rendererData_.virtualShadowPacket == nullptr || !rendererData_.virtualShadowPacket->enabled)
         {
             return;
         }
@@ -258,5 +315,19 @@ namespace ve
         }
         graphData.virtualShadowAtlas =
             frameGraph.ImportTexture("VirtualShadowAtlas", MakeTextureDesc(*atlas, MakeSampledDepthUsage()), ImportedFrameGraphTexture{atlas, false});
+        if (cache.GetGpuPageTableBuffer() != nullptr)
+        {
+            graphData.virtualShadowPageTable = frameGraph.ImportBuffer("VirtualShadowPageTable", ImportedFrameGraphBuffer{cache.GetGpuPageTableBuffer()});
+        }
+        if (!rendererData_.virtualShadowPacket->gpuDriven)
+        {
+            return;
+        }
+        graphData.virtualShadowPageMarks = frameGraph.ImportBuffer("VirtualShadowPageMarks", ImportedFrameGraphBuffer{cache.GetGpuPageMarksBuffer()});
+        graphData.virtualShadowRequestList = frameGraph.ImportBuffer("VirtualShadowRequestList", ImportedFrameGraphBuffer{cache.GetGpuRequestListBuffer()});
+        graphData.virtualShadowRequestCounts =
+            frameGraph.ImportBuffer("VirtualShadowRequestCounts", ImportedFrameGraphBuffer{cache.GetGpuRequestCountsBuffer()});
+        graphData.virtualShadowPhysicalPages =
+            frameGraph.ImportBuffer("VirtualShadowPhysicalPages", ImportedFrameGraphBuffer{cache.GetGpuPhysicalPagesBuffer()});
     }
 } // namespace ve

@@ -36,6 +36,12 @@ namespace ve
         FrameGraphTextureHandle color;
         FrameGraphTextureHandle depth;
         FrameGraphTextureHandle virtualShadowAtlas;
+        FrameGraphBufferHandle virtualShadowPageMarks;
+        FrameGraphBufferHandle virtualShadowPageTable;
+        FrameGraphBufferHandle virtualShadowRequestList;
+        FrameGraphBufferHandle virtualShadowRequestCounts;
+        FrameGraphBufferHandle virtualShadowPhysicalPages;
+        bool depthPrepassReady = false;
     };
 
     /// Logical raster state exposed to draw code after FrameGraph has resolved the native attachments.

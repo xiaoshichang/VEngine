@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.h"
@@ -21,6 +22,7 @@ namespace ve
         void BuildFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
 
         VirtualShadowDepthRenderPass virtualShadowDepthPass_;
+        GpuVirtualShadowRenderPass gpuVirtualShadowPass_;
         OpaqueSceneRenderPass opaquePass_;
         TransparentSceneRenderPass transparentPass_;
     };

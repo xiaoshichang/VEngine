@@ -91,6 +91,11 @@ namespace ve::rhi
         [[nodiscard]] virtual RhiPrimitiveTopology GetTopology() const noexcept = 0;
     };
 
+    /// Owns immutable compute pipeline state.
+    class RhiComputePipelineState : public RhiObject
+    {
+    };
+
     /// Owns a presentation surface and its back buffers.
     class RhiSwapchain : public RhiObject
     {
@@ -137,6 +142,9 @@ namespace ve::rhi
         /// Sets the active graphics pipeline.
         virtual void SetPipeline(const RhiPipelineState& pipelineState) = 0;
 
+        /// Sets the active compute pipeline.
+        virtual void SetComputePipeline(const RhiComputePipelineState& pipelineState) = 0;
+
         /// Sets the viewport rectangle for following draw calls.
         virtual void SetViewport(const RhiViewport& viewport) = 0;
 
@@ -158,11 +166,27 @@ namespace ve::rhi
         /// Binds a sampler state to one shader stage.
         virtual void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) = 0;
 
+        /// Binds a read-only structured/storage buffer to one shader stage.
+        virtual void SetStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) = 0;
+
+        /// Binds a read-write structured/storage buffer to one shader stage.
+        virtual void SetReadWriteStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) = 0;
+
+        /// Dispatches compute thread groups.
+        virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
+
         /// Issues a non-indexed draw call.
         virtual void Draw(uint32_t vertexCount, uint32_t firstVertex) = 0;
 
+        /// Issues a non-indexed instanced draw call.
+        virtual void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
+
         /// Issues an indexed draw call.
         virtual void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) = 0;
+
+        /// Issues an indexed instanced draw call.
+        virtual void
+        DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
 
         /// Returns the backend-native render encoder/command encoder for the active render pass when available.
         [[nodiscard]] virtual void* GetNativeRenderEncoderHandle() const noexcept
@@ -225,6 +249,9 @@ namespace ve::rhi
 
         /// Creates immutable graphics pipeline state.
         [[nodiscard]] virtual std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
+
+        /// Creates immutable compute pipeline state.
+        [[nodiscard]] virtual std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc& desc) = 0;
 
         /// Creates a command list object compatible with this device.
         [[nodiscard]] virtual std::unique_ptr<RhiCommandList> CreateCommandList() = 0;

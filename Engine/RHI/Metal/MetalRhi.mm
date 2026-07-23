@@ -853,6 +853,11 @@ namespace ve::rhi
                 primitiveType_ = ToMetalPrimitiveType(metalPipelineState.GetTopology());
             }
 
+            void SetComputePipeline(const RhiComputePipelineState&) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal compute pipelines are not enabled by the current renderer path.");
+            }
+
             void SetViewport(const RhiViewport& viewport) override
             {
                 MTLViewport metalViewport = {};
@@ -908,6 +913,8 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     [renderCommandEncoder_ setFragmentBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
                     break;
+                case RhiShaderStage::Compute:
+                    break;
                 }
             }
 
@@ -926,6 +933,8 @@ namespace ve::rhi
                     break;
                 case RhiShaderStage::Fragment:
                     [renderCommandEncoder_ setFragmentTexture:metalTexture.GetNativeTexture() atIndex:slot];
+                    break;
+                case RhiShaderStage::Compute:
                     break;
                 }
             }
@@ -946,12 +955,51 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     [renderCommandEncoder_ setFragmentSamplerState:metalSampler.GetNativeSamplerState() atIndex:slot];
                     break;
+                case RhiShaderStage::Compute:
+                    break;
                 }
+            }
+
+            void SetStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            {
+                if (!ValidateBinding(RhiPipelineResourceKind::StorageBuffer, stage, slot))
+                {
+                    return;
+                }
+                VE_ASSERT(offset + size <= buffer.GetSize());
+                const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
+                if (stage == RhiShaderStage::Vertex)
+                {
+                    [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+                }
+                else if (stage == RhiShaderStage::Fragment)
+                {
+                    [renderCommandEncoder_ setFragmentBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+                }
+            }
+
+            void SetReadWriteStorageBuffer(RhiShaderStage, uint32_t, const RhiBuffer&, uint64_t, uint64_t) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal compute storage writes are not enabled by the current renderer path.");
+            }
+
+            void Dispatch(uint32_t, uint32_t, uint32_t) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal compute dispatch is not enabled by the current renderer path.");
             }
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 [renderCommandEncoder_ drawPrimitives:primitiveType_ vertexStart:firstVertex vertexCount:vertexCount];
+            }
+
+            void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
+            {
+                [renderCommandEncoder_ drawPrimitives:primitiveType_
+                                         vertexStart:firstVertex
+                                         vertexCount:vertexCount
+                                       instanceCount:instanceCount
+                                        baseInstance:firstInstance];
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
@@ -963,6 +1011,20 @@ namespace ve::rhi
                                                    indexType:indexType_
                                                  indexBuffer:indexBuffer_
                                            indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
+            }
+
+            void DrawIndexedInstanced(
+                uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
+            {
+                const NSUInteger indexSize = indexType_ == MTLIndexTypeUInt16 ? sizeof(uint16_t) : sizeof(uint32_t);
+                [renderCommandEncoder_ drawIndexedPrimitives:primitiveType_
+                                                  indexCount:indexCount
+                                                   indexType:indexType_
+                                                 indexBuffer:indexBuffer_
+                                           indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)
+                                               instanceCount:instanceCount
+                                                  baseVertex:vertexOffset
+                                                baseInstance:firstInstance];
             }
 
             [[nodiscard]] void* GetNativeRenderEncoderHandle() const noexcept override
@@ -1349,6 +1411,12 @@ namespace ve::rhi
                 }
                 return std::make_unique<MetalPipelineState>(
                     desc.primitiveType, desc.rasterizerState, pipelineState, depthStencilState, std::move(resourceBindings));
+            }
+
+            [[nodiscard]] std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc&) override
+            {
+                SetLastError("Metal compute pipelines are not enabled by the current renderer path.");
+                return nullptr;
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

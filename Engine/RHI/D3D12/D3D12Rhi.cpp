@@ -104,7 +104,17 @@ namespace ve::rhi
 
         [[nodiscard]] D3D12_SHADER_VISIBILITY ToD3D12ShaderVisibility(RhiShaderStage stage) noexcept
         {
-            return stage == RhiShaderStage::Vertex ? D3D12_SHADER_VISIBILITY_VERTEX : D3D12_SHADER_VISIBILITY_PIXEL;
+            switch (stage)
+            {
+            case RhiShaderStage::Vertex:
+                return D3D12_SHADER_VISIBILITY_VERTEX;
+            case RhiShaderStage::Fragment:
+                return D3D12_SHADER_VISIBILITY_PIXEL;
+            case RhiShaderStage::Compute:
+                return D3D12_SHADER_VISIBILITY_ALL;
+            }
+
+            return D3D12_SHADER_VISIBILITY_ALL;
         }
 
         D3D12_PRIMITIVE_TOPOLOGY_TYPE ToD3D12TopologyType(RhiPrimitiveTopology topology)
@@ -782,11 +792,16 @@ namespace ve::rhi
         class D3D12Buffer final : public RhiBuffer
         {
         public:
-            D3D12Buffer(ComPtr<ID3D12Resource> resource, uint64_t size, RhiBufferMemoryUsage memoryUsage, std::byte* mappedData)
+            D3D12Buffer(ComPtr<ID3D12Resource> resource,
+                        uint64_t size,
+                        RhiBufferMemoryUsage memoryUsage,
+                        std::byte* mappedData,
+                        D3D12_RESOURCE_STATES resourceState)
                 : resource_(std::move(resource))
                 , size_(size)
                 , memoryUsage_(memoryUsage)
                 , mappedData_(mappedData)
+                , resourceState_(resourceState)
             {
             }
 
@@ -818,11 +833,22 @@ namespace ve::rhi
                 return mappedData_;
             }
 
+            [[nodiscard]] D3D12_RESOURCE_STATES GetResourceState() const noexcept
+            {
+                return resourceState_;
+            }
+
+            void SetResourceState(D3D12_RESOURCE_STATES resourceState) noexcept
+            {
+                resourceState_ = resourceState;
+            }
+
         private:
             ComPtr<ID3D12Resource> resource_;
             uint64_t size_ = 0;
             RhiBufferMemoryUsage memoryUsage_ = RhiBufferMemoryUsage::GpuOnly;
             std::byte* mappedData_ = nullptr;
+            D3D12_RESOURCE_STATES resourceState_ = D3D12_RESOURCE_STATE_COMMON;
         };
 
         class D3D12Texture final : public RhiTexture
@@ -1116,6 +1142,47 @@ namespace ve::rhi
             std::vector<D3D12RootBinding> rootBindings_;
         };
 
+        class D3D12ComputePipelineState final : public RhiComputePipelineState
+        {
+        public:
+            D3D12ComputePipelineState(ComPtr<ID3D12RootSignature> rootSignature,
+                                      ComPtr<ID3D12PipelineState> pipelineState,
+                                      std::vector<D3D12RootBinding> rootBindings)
+                : rootSignature_(std::move(rootSignature))
+                , pipelineState_(std::move(pipelineState))
+                , rootBindings_(std::move(rootBindings))
+            {
+            }
+
+            [[nodiscard]] ID3D12RootSignature* GetRootSignature() const noexcept
+            {
+                return rootSignature_.Get();
+            }
+
+            [[nodiscard]] ID3D12PipelineState* GetPipelineState() const noexcept
+            {
+                return pipelineState_.Get();
+            }
+
+            [[nodiscard]] bool FindRootParameter(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot, UINT& rootParameterIndex) const noexcept
+            {
+                for (const D3D12RootBinding& binding : rootBindings_)
+                {
+                    if (binding.kind == kind && binding.stage == stage && binding.slot == slot)
+                    {
+                        rootParameterIndex = binding.rootParameterIndex;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+        private:
+            ComPtr<ID3D12RootSignature> rootSignature_;
+            ComPtr<ID3D12PipelineState> pipelineState_;
+            std::vector<D3D12RootBinding> rootBindings_;
+        };
+
         class D3D12Swapchain final : public RhiSwapchain
         {
         public:
@@ -1291,6 +1358,7 @@ namespace ve::rhi
                 activeDepthTexture_ = nullptr;
                 activeDepthShouldTransitionToShaderRead_ = false;
                 activePipeline_ = nullptr;
+                activeComputePipeline_ = nullptr;
                 activeResourceHeap_ = nullptr;
                 activeSamplerHeap_ = nullptr;
                 boundDescriptorTables_.clear();
@@ -1449,12 +1517,25 @@ namespace ve::rhi
             {
                 const auto& d3dPipeline = static_cast<const D3D12PipelineState&>(pipelineState);
                 activePipeline_ = &d3dPipeline;
+                activeComputePipeline_ = nullptr;
                 activeResourceHeap_ = nullptr;
                 activeSamplerHeap_ = nullptr;
                 boundDescriptorTables_.clear();
                 commandList_->SetGraphicsRootSignature(d3dPipeline.GetRootSignature());
                 commandList_->SetPipelineState(d3dPipeline.GetPipelineState());
                 commandList_->IASetPrimitiveTopology(ToD3DTopology(d3dPipeline.GetTopology()));
+            }
+
+            void SetComputePipeline(const RhiComputePipelineState& pipelineState) override
+            {
+                const auto& d3dPipeline = static_cast<const D3D12ComputePipelineState&>(pipelineState);
+                activePipeline_ = nullptr;
+                activeComputePipeline_ = &d3dPipeline;
+                activeResourceHeap_ = nullptr;
+                activeSamplerHeap_ = nullptr;
+                boundDescriptorTables_.clear();
+                commandList_->SetComputeRootSignature(d3dPipeline.GetRootSignature());
+                commandList_->SetPipelineState(d3dPipeline.GetPipelineState());
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -1515,7 +1596,14 @@ namespace ve::rhi
                 VE_ASSERT(offset % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT == 0);
                 VE_ASSERT(offset + size <= buffer.GetSize());
                 const auto& d3dBuffer = static_cast<const D3D12Buffer&>(buffer);
-                commandList_->SetGraphicsRootConstantBufferView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+                if (stage == RhiShaderStage::Compute)
+                {
+                    commandList_->SetComputeRootConstantBufferView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+                }
+                else
+                {
+                    commandList_->SetGraphicsRootConstantBufferView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+                }
             }
 
             void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
@@ -1555,14 +1643,85 @@ namespace ve::rhi
                 ApplyDescriptorHeapsAndTables();
             }
 
+            void SetStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            {
+                UINT rootParameterIndex = 0;
+                if (!ResolveRootParameter(RhiPipelineResourceKind::StorageBuffer, stage, slot, rootParameterIndex))
+                {
+                    return;
+                }
+
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset + size <= buffer.GetSize());
+                auto& d3dBuffer = const_cast<D3D12Buffer&>(static_cast<const D3D12Buffer&>(buffer));
+                const D3D12_RESOURCE_STATES shaderReadState =
+                    stage == RhiShaderStage::Fragment ? D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+                TransitionResource(d3dBuffer.GetNativeResource(), d3dBuffer.GetResourceState(), shaderReadState);
+                d3dBuffer.SetResourceState(shaderReadState);
+                const D3D12_GPU_VIRTUAL_ADDRESS address = d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset;
+                if (stage == RhiShaderStage::Compute)
+                {
+                    commandList_->SetComputeRootShaderResourceView(rootParameterIndex, address);
+                }
+                else
+                {
+                    commandList_->SetGraphicsRootShaderResourceView(rootParameterIndex, address);
+                }
+            }
+
+            void SetReadWriteStorageBuffer(
+                RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            {
+                UINT rootParameterIndex = 0;
+                if (!ResolveRootParameter(RhiPipelineResourceKind::ReadWriteStorageBuffer, stage, slot, rootParameterIndex))
+                {
+                    return;
+                }
+
+                VE_ASSERT(stage == RhiShaderStage::Compute);
+                VE_ASSERT(size > 0);
+                VE_ASSERT(offset + size <= buffer.GetSize());
+                if (stage != RhiShaderStage::Compute)
+                {
+                    return;
+                }
+
+                auto& d3dBuffer = const_cast<D3D12Buffer&>(static_cast<const D3D12Buffer&>(buffer));
+                TransitionResource(d3dBuffer.GetNativeResource(), d3dBuffer.GetResourceState(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                d3dBuffer.SetResourceState(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                barrier.UAV.pResource = d3dBuffer.GetNativeResource();
+                commandList_->ResourceBarrier(1, &barrier);
+                commandList_->SetComputeRootUnorderedAccessView(
+                    rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+            }
+
+            void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override
+            {
+                VE_ASSERT(activeComputePipeline_ != nullptr);
+                commandList_->Dispatch(groupCountX, groupCountY, groupCountZ);
+            }
+
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 commandList_->DrawInstanced(vertexCount, 1, firstVertex, 0);
             }
 
+            void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
+            {
+                commandList_->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
+            }
+
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
             {
                 commandList_->DrawIndexedInstanced(indexCount, 1, firstIndex, vertexOffset, 0);
+            }
+
+            void DrawIndexedInstanced(
+                uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
+            {
+                commandList_->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
             }
 
             [[nodiscard]] void* GetNativeCommandBufferHandle() const noexcept override
@@ -1596,7 +1755,9 @@ namespace ve::rhi
 
             [[nodiscard]] bool ResolveRootParameter(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot, UINT& rootParameterIndex) const noexcept
             {
-                const bool found = activePipeline_ != nullptr && activePipeline_->FindRootParameter(kind, stage, slot, rootParameterIndex);
+                const bool found = (activePipeline_ != nullptr && activePipeline_->FindRootParameter(kind, stage, slot, rootParameterIndex)) ||
+                                   (activeComputePipeline_ != nullptr &&
+                                    activeComputePipeline_->FindRootParameter(kind, stage, slot, rootParameterIndex));
                 VE_ASSERT_MESSAGE(found, "D3D12 resource binding is absent from the active pipeline layout.");
                 return found;
             }
@@ -1633,7 +1794,14 @@ namespace ve::rhi
                     commandList_->SetDescriptorHeaps(heapCount, heaps);
                     for (const BoundDescriptorTable& table : boundDescriptorTables_)
                     {
-                        commandList_->SetGraphicsRootDescriptorTable(table.rootParameterIndex, table.handle);
+                        if (activeComputePipeline_ != nullptr)
+                        {
+                            commandList_->SetComputeRootDescriptorTable(table.rootParameterIndex, table.handle);
+                        }
+                        else
+                        {
+                            commandList_->SetGraphicsRootDescriptorTable(table.rootParameterIndex, table.handle);
+                        }
                     }
                 }
             }
@@ -1646,6 +1814,7 @@ namespace ve::rhi
             D3D12Texture* activeDepthTexture_ = nullptr;
             bool activeDepthShouldTransitionToShaderRead_ = false;
             const D3D12PipelineState* activePipeline_ = nullptr;
+            const D3D12ComputePipelineState* activeComputePipeline_ = nullptr;
             ID3D12DescriptorHeap* activeResourceHeap_ = nullptr;
             ID3D12DescriptorHeap* activeSamplerHeap_ = nullptr;
             std::vector<BoundDescriptorTable> boundDescriptorTables_;
@@ -1872,8 +2041,23 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) override
             {
+                if (desc.size == 0)
+                {
+                    SetLastError("D3D12 buffer requires a non-zero size.");
+                    return nullptr;
+                }
+
+                const bool isStorage = (static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(RhiBufferUsage::Storage)) != 0;
+                if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 ||
+                                  desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly || desc.initialData != nullptr))
+                {
+                    SetLastError(
+                        "D3D12 storage buffers require a non-zero structure stride, an aligned size, GPU-only memory, and GPU initialization.");
+                    return nullptr;
+                }
+
                 D3D12_HEAP_PROPERTIES heapProperties = {};
-                heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+                heapProperties.Type = isStorage ? D3D12_HEAP_TYPE_DEFAULT : D3D12_HEAP_TYPE_UPLOAD;
                 heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
                 heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
                 heapProperties.CreationNodeMask = 1;
@@ -1889,10 +2073,13 @@ namespace ve::rhi
                 resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
                 resourceDesc.SampleDesc.Count = 1;
                 resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+                resourceDesc.Flags = isStorage ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
+
+                const D3D12_RESOURCE_STATES initialState = isStorage ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_GENERIC_READ;
 
                 ComPtr<ID3D12Resource> resource;
                 HRESULT result = device_->CreateCommittedResource(
-                    &heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&resource));
+                    &heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, initialState, nullptr, IID_PPV_ARGS(&resource));
 
                 if (FAILED(result))
                 {
@@ -1935,7 +2122,7 @@ namespace ve::rhi
                     resource->Unmap(0, nullptr);
                 }
 
-                return std::make_unique<D3D12Buffer>(resource, desc.size, desc.memoryUsage, persistentMappedData);
+                return std::make_unique<D3D12Buffer>(resource, desc.size, desc.memoryUsage, persistentMappedData, initialState);
             }
 
             void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) override
@@ -2249,7 +2436,19 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                const char* target = desc.stage == RhiShaderStage::Vertex ? "vs_5_0" : "ps_5_0";
+                const char* target = nullptr;
+                switch (desc.stage)
+                {
+                case RhiShaderStage::Vertex:
+                    target = "vs_5_0";
+                    break;
+                case RhiShaderStage::Fragment:
+                    target = "ps_5_0";
+                    break;
+                case RhiShaderStage::Compute:
+                    target = "cs_5_0";
+                    break;
+                }
                 UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
 
 #if defined(_DEBUG)
@@ -2319,9 +2518,14 @@ namespace ve::rhi
                     const RhiPipelineResourceBindingDesc& binding = resourceBindings[index];
                     D3D12_ROOT_PARAMETER& rootParameter = rootParameters[index];
                     rootParameter.ShaderVisibility = ToD3D12ShaderVisibility(binding.stage);
-                    if (binding.kind == RhiPipelineResourceKind::UniformBuffer)
+                    if (binding.kind == RhiPipelineResourceKind::UniformBuffer || binding.kind == RhiPipelineResourceKind::StorageBuffer ||
+                        binding.kind == RhiPipelineResourceKind::ReadWriteStorageBuffer)
                     {
-                        rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+                        rootParameter.ParameterType = binding.kind == RhiPipelineResourceKind::UniformBuffer
+                                                          ? D3D12_ROOT_PARAMETER_TYPE_CBV
+                                                      : binding.kind == RhiPipelineResourceKind::StorageBuffer
+                                                          ? D3D12_ROOT_PARAMETER_TYPE_SRV
+                                                          : D3D12_ROOT_PARAMETER_TYPE_UAV;
                         rootParameter.Descriptor.ShaderRegister = binding.slot;
                         rootParameter.Descriptor.RegisterSpace = 0;
                         continue;
@@ -2462,6 +2666,115 @@ namespace ve::rhi
                 }
 
                 return std::make_unique<D3D12PipelineState>(desc.primitiveType, rootSignature, pipelineState, std::move(rootBindings));
+            }
+
+            [[nodiscard]] std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc& desc) override
+            {
+                if (!IsPipelineResourceLayoutValid(desc.resourceLayout))
+                {
+                    SetLastError("D3D12 compute pipeline resource layout is invalid or contains duplicate bindings.");
+                    return nullptr;
+                }
+
+                const auto* computeShaderModule = dynamic_cast<const D3D12ShaderModule*>(desc.computeShader);
+                if (computeShaderModule == nullptr || computeShaderModule->GetStage() != RhiShaderStage::Compute)
+                {
+                    SetLastError("D3D12 compute pipeline requires a D3D12 compute shader.");
+                    return nullptr;
+                }
+
+                std::vector<RhiPipelineResourceBindingDesc> resourceBindings;
+                if (desc.resourceLayout.bindingCount != 0)
+                {
+                    resourceBindings.assign(desc.resourceLayout.bindings, desc.resourceLayout.bindings + desc.resourceLayout.bindingCount);
+                }
+
+                std::vector<D3D12_DESCRIPTOR_RANGE> descriptorRanges(resourceBindings.size());
+                std::vector<D3D12_ROOT_PARAMETER> rootParameters(resourceBindings.size());
+                for (uint32_t index = 0; index < resourceBindings.size(); ++index)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = resourceBindings[index];
+                    if (binding.stage != RhiShaderStage::Compute)
+                    {
+                        SetLastError("D3D12 compute pipeline bindings must target the compute stage.");
+                        return nullptr;
+                    }
+
+                    D3D12_ROOT_PARAMETER& rootParameter = rootParameters[index];
+                    rootParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+                    if (binding.kind == RhiPipelineResourceKind::UniformBuffer || binding.kind == RhiPipelineResourceKind::StorageBuffer ||
+                        binding.kind == RhiPipelineResourceKind::ReadWriteStorageBuffer)
+                    {
+                        rootParameter.ParameterType = binding.kind == RhiPipelineResourceKind::UniformBuffer
+                                                          ? D3D12_ROOT_PARAMETER_TYPE_CBV
+                                                      : binding.kind == RhiPipelineResourceKind::StorageBuffer
+                                                          ? D3D12_ROOT_PARAMETER_TYPE_SRV
+                                                          : D3D12_ROOT_PARAMETER_TYPE_UAV;
+                        rootParameter.Descriptor.ShaderRegister = binding.slot;
+                        rootParameter.Descriptor.RegisterSpace = 0;
+                        continue;
+                    }
+
+                    D3D12_DESCRIPTOR_RANGE& descriptorRange = descriptorRanges[index];
+                    descriptorRange.RangeType =
+                        binding.kind == RhiPipelineResourceKind::SampledTexture ? D3D12_DESCRIPTOR_RANGE_TYPE_SRV : D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                    descriptorRange.NumDescriptors = 1;
+                    descriptorRange.BaseShaderRegister = binding.slot;
+                    descriptorRange.RegisterSpace = 0;
+                    descriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+                    rootParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+                    rootParameter.DescriptorTable.NumDescriptorRanges = 1;
+                    rootParameter.DescriptorTable.pDescriptorRanges = &descriptorRange;
+                }
+
+                D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+                rootSignatureDesc.NumParameters = static_cast<UINT>(rootParameters.size());
+                rootSignatureDesc.pParameters = rootParameters.empty() ? nullptr : rootParameters.data();
+
+                ComPtr<ID3DBlob> signature;
+                ComPtr<ID3DBlob> errors;
+                HRESULT result = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
+                if (FAILED(result))
+                {
+                    if (errors != nullptr)
+                    {
+                        lastError_.assign(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
+                    }
+                    else
+                    {
+                        SetLastError(MakeHResultError("D3D12SerializeRootSignature compute", result));
+                    }
+                    return nullptr;
+                }
+
+                ComPtr<ID3D12RootSignature> rootSignature;
+                result = device_->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
+                if (FAILED(result))
+                {
+                    SetLastError(MakeD3D12Error(device_.Get(), "ID3D12Device::CreateRootSignature compute", result));
+                    return nullptr;
+                }
+
+                D3D12_COMPUTE_PIPELINE_STATE_DESC pipelineDesc = {};
+                pipelineDesc.pRootSignature = rootSignature.Get();
+                pipelineDesc.CS = computeShaderModule->GetBytecode();
+
+                ComPtr<ID3D12PipelineState> pipelineState;
+                result = device_->CreateComputePipelineState(&pipelineDesc, IID_PPV_ARGS(&pipelineState));
+                if (FAILED(result))
+                {
+                    SetLastError(MakeD3D12Error(device_.Get(), "ID3D12Device::CreateComputePipelineState", result));
+                    return nullptr;
+                }
+
+                std::vector<D3D12RootBinding> rootBindings;
+                rootBindings.reserve(resourceBindings.size());
+                for (uint32_t index = 0; index < resourceBindings.size(); ++index)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = resourceBindings[index];
+                    rootBindings.push_back(D3D12RootBinding{binding.kind, binding.stage, binding.slot, index});
+                }
+                return std::make_unique<D3D12ComputePipelineState>(rootSignature, pipelineState, std::move(rootBindings));
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

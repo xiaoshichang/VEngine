@@ -44,6 +44,14 @@ namespace ve
             TextureAccessMode mode = TextureAccessMode::Read;
         };
 
+        struct BufferAccessRecord
+        {
+            FrameGraphBufferHandle input;
+            FrameGraphBufferHandle output;
+            FrameGraphBufferAccess access = FrameGraphBufferAccess::ShaderRead;
+            TextureAccessMode mode = TextureAccessMode::Read;
+        };
+
         struct ColorAttachmentRecord
         {
             FrameGraphTextureHandle handle;
@@ -113,16 +121,25 @@ namespace ve
             }
         };
 
+        struct BufferResourceNode
+        {
+            std::string name;
+            ImportedFrameGraphBuffer backing = {};
+            std::vector<ResourceVersion> versions{ResourceVersion{}};
+        };
+
         struct PassNode
         {
             std::string name;
             std::vector<TextureAccessRecord> textureAccesses;
+            std::vector<BufferAccessRecord> bufferAccesses;
             std::optional<ColorAttachmentRecord> colorAttachment;
             std::optional<DepthAttachmentRecord> depthAttachment;
             rhi::RhiRenderArea renderArea = {};
             rhi::RhiViewport viewport = {};
             rhi::RhiScissorRect scissorRect = {};
             ExecuteFunction executeFunction;
+            bool raster = true;
             bool sideEffect = false;
             bool retained = false;
         };
@@ -158,6 +175,11 @@ namespace ve
             return handle.IsValid() && handle.index < textures.size() && handle.version < textures[handle.index].versions.size();
         }
 
+        [[nodiscard]] bool IsHandleValid(FrameGraphBufferHandle handle) const noexcept
+        {
+            return handle.IsValid() && handle.index < buffers.size() && handle.version < buffers[handle.index].versions.size();
+        }
+
         void AddBuildError(UInt32 passIndex, std::string message)
         {
             std::string prefix = "Frame graph";
@@ -185,8 +207,10 @@ namespace ve
 
         FrameGraphExecuteContext context;
         std::vector<TextureResourceNode> textures;
+        std::vector<BufferResourceNode> buffers;
         std::vector<PassNode> passes;
         std::vector<FrameGraphTextureHandle> exportedTextures;
+        std::vector<FrameGraphBufferHandle> exportedBuffers;
         std::vector<std::string> buildErrors;
         std::vector<std::unordered_set<UInt32>> dependencies;
         std::vector<std::unordered_set<UInt32>> reverseDependencies;
@@ -241,6 +265,11 @@ namespace ve
         return frameGraph_.ResolvePassTexture(passIndex_, handle);
     }
 
+    ResolvedFrameGraphBuffer FrameGraphPassResources::GetBuffer(FrameGraphBufferHandle handle) const noexcept
+    {
+        return frameGraph_.ResolvePassBuffer(passIndex_, handle);
+    }
+
     FrameGraphTextureHandle FrameGraph::CreateTexture(std::string name, FrameGraphTextureDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
@@ -276,6 +305,23 @@ namespace ve
         return FrameGraphTextureHandle{index, 0};
     }
 
+    FrameGraphBufferHandle FrameGraph::ImportBuffer(std::string name, ImportedFrameGraphBuffer importedBuffer)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "FrameGraph::ImportBuffer is only valid during Setup.");
+        if (!impl_->IsSettingUp())
+        {
+            return {};
+        }
+
+        const UInt32 index = static_cast<UInt32>(impl_->buffers.size());
+        Impl::BufferResourceNode resource = {};
+        resource.name = std::move(name);
+        resource.backing = importedBuffer;
+        impl_->buffers.push_back(std::move(resource));
+        return FrameGraphBufferHandle{index, 0};
+    }
+
     void FrameGraph::Export(FrameGraphTextureHandle handle)
     {
         VE_ASSERT_RENDER_THREAD();
@@ -285,6 +331,17 @@ namespace ve
             return;
         }
         impl_->exportedTextures.push_back(handle);
+    }
+
+    void FrameGraph::Export(FrameGraphBufferHandle handle)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "FrameGraph::Export is only valid during Setup.");
+        if (!impl_->IsSettingUp())
+        {
+            return;
+        }
+        impl_->exportedBuffers.push_back(handle);
     }
 
     void FrameGraph::AddRasterPassInternal(std::string name, PassSetupFunction setupFunction, ExecuteFunction executeFunction)
@@ -306,6 +363,28 @@ namespace ve
         pass.viewport = rhi::RhiViewport{0.0f, 0.0f, static_cast<Float32>(extent.width), static_cast<Float32>(extent.height), 0.0f, 1.0f};
         pass.scissorRect = rhi::RhiScissorRect{0, 0, extent.width, extent.height};
         pass.executeFunction = std::move(executeFunction);
+
+        const UInt32 passIndex = static_cast<UInt32>(impl_->passes.size());
+        impl_->passes.push_back(std::move(pass));
+        FrameGraphBuilder builder(*this, passIndex);
+        setupFunction(builder);
+    }
+
+    void FrameGraph::AddComputePassInternal(std::string name, PassSetupFunction setupFunction, ExecuteFunction executeFunction)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(setupFunction != nullptr);
+        VE_ASSERT(executeFunction != nullptr);
+        VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "FrameGraph::AddComputePass is only valid during Setup.");
+        if (!impl_->IsSettingUp())
+        {
+            return;
+        }
+
+        Impl::PassNode pass = {};
+        pass.name = std::move(name);
+        pass.executeFunction = std::move(executeFunction);
+        pass.raster = false;
 
         const UInt32 passIndex = static_cast<UInt32>(impl_->passes.size());
         impl_->passes.push_back(std::move(pass));
@@ -336,6 +415,35 @@ namespace ve
             return {};
         }
         return ResolveTexture(handle);
+    }
+
+    ResolvedFrameGraphBuffer FrameGraph::ResolveBuffer(FrameGraphBufferHandle handle) const noexcept
+    {
+        if (!impl_->IsHandleValid(handle))
+        {
+            return {};
+        }
+        return ResolvedFrameGraphBuffer{impl_->buffers[handle.index].backing.buffer};
+    }
+
+    ResolvedFrameGraphBuffer FrameGraph::ResolvePassBuffer(UInt32 passIndex, FrameGraphBufferHandle handle) const noexcept
+    {
+        if (passIndex >= impl_->passes.size())
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Frame graph resource resolution requires a valid pass index.");
+            return {};
+        }
+
+        const Impl::PassNode& pass = impl_->passes[passIndex];
+        const bool declared = std::any_of(pass.bufferAccesses.begin(),
+                                          pass.bufferAccesses.end(),
+                                          [handle](const BufferAccessRecord& access) { return access.input == handle || access.output == handle; });
+        if (!declared)
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Frame graph pass attempted to resolve an undeclared buffer handle.");
+            return {};
+        }
+        return ResolveBuffer(handle);
     }
 
     FrameGraphTextureHandle FrameGraph::ReadTexture(UInt32 passIndex, FrameGraphTextureHandle handle, FrameGraphTextureAccess access)
@@ -393,6 +501,64 @@ namespace ve
         record.access = access;
         record.mode = TextureAccessMode::Write;
         impl_->passes[passIndex].textureAccesses.push_back(record);
+        return output;
+    }
+
+    FrameGraphBufferHandle FrameGraph::ReadBuffer(UInt32 passIndex, FrameGraphBufferHandle handle, FrameGraphBufferAccess access)
+    {
+        VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "Frame graph resource reads are only valid during Setup.");
+        if (!impl_->IsSettingUp())
+        {
+            return {};
+        }
+        if (passIndex >= impl_->passes.size() || !impl_->IsHandleValid(handle))
+        {
+            impl_->AddBuildError(passIndex, "read uses an invalid buffer handle.");
+            return {};
+        }
+
+        BufferAccessRecord record = {};
+        record.input = handle;
+        record.output = handle;
+        record.access = access;
+        record.mode = TextureAccessMode::Read;
+        impl_->passes[passIndex].bufferAccesses.push_back(record);
+        impl_->buffers[handle.index].versions[handle.version].readers.push_back(passIndex);
+        return handle;
+    }
+
+    FrameGraphBufferHandle FrameGraph::WriteBuffer(UInt32 passIndex, FrameGraphBufferHandle handle, FrameGraphBufferAccess access)
+    {
+        VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "Frame graph resource writes are only valid during Setup.");
+        if (!impl_->IsSettingUp())
+        {
+            return {};
+        }
+        if (passIndex >= impl_->passes.size() || !impl_->IsHandleValid(handle))
+        {
+            impl_->AddBuildError(passIndex, "write uses an invalid buffer handle.");
+            return {};
+        }
+
+        Impl::BufferResourceNode& resource = impl_->buffers[handle.index];
+        if (handle.version + 1u != resource.versions.size())
+        {
+            impl_->AddBuildError(passIndex, "write must consume the latest buffer version.");
+            return {};
+        }
+
+        const UInt32 outputVersion = static_cast<UInt32>(resource.versions.size());
+        Impl::ResourceVersion version = {};
+        version.producer = passIndex;
+        resource.versions.push_back(std::move(version));
+
+        const FrameGraphBufferHandle output{handle.index, outputVersion};
+        BufferAccessRecord record = {};
+        record.input = handle;
+        record.output = output;
+        record.access = access;
+        record.mode = TextureAccessMode::Write;
+        impl_->passes[passIndex].bufferAccesses.push_back(record);
         return output;
     }
 
@@ -596,6 +762,22 @@ namespace ve
             }
         }
 
+        for (const BufferResourceNode& resource : buffers)
+        {
+            if (resource.backing.buffer == nullptr)
+            {
+                return Error(ErrorCode::InvalidArgument, "Imported frame graph buffer '" + resource.name + "' has no native buffer.");
+            }
+        }
+
+        for (FrameGraphBufferHandle exported : exportedBuffers)
+        {
+            if (!IsHandleValid(exported))
+            {
+                return Error(ErrorCode::InvalidArgument, "Frame graph exports an invalid buffer handle.");
+            }
+        }
+
         return Error();
     }
 
@@ -645,6 +827,29 @@ namespace ve
                     }
                 }
             }
+
+            for (const BufferAccessRecord& access : pass.bufferAccesses)
+            {
+                if (!IsHandleValid(access.input) || !IsHandleValid(access.output))
+                {
+                    return Error(ErrorCode::InvalidArgument, "Frame graph pass '" + pass.name + "' has an invalid buffer access.");
+                }
+
+                const BufferResourceNode& resource = buffers[access.input.index];
+                const ResourceVersion& inputVersion = resource.versions[access.input.version];
+                if (access.mode == TextureAccessMode::Read)
+                {
+                    addDependency(inputVersion.producer, passIndex);
+                }
+                else
+                {
+                    addDependency(inputVersion.producer, passIndex);
+                    for (UInt32 reader : inputVersion.readers)
+                    {
+                        addDependency(reader, passIndex);
+                    }
+                }
+            }
         }
 
         return Error();
@@ -654,6 +859,15 @@ namespace ve
     {
         for (const PassNode& pass : passes)
         {
+            if (!pass.raster)
+            {
+                if (pass.colorAttachment.has_value() || pass.depthAttachment.has_value())
+                {
+                    return Error(ErrorCode::InvalidArgument, "Frame graph compute pass '" + pass.name + "' cannot declare raster attachments.");
+                }
+                continue;
+            }
+
             if (!pass.colorAttachment.has_value() && !pass.depthAttachment.has_value())
             {
                 return Error(ErrorCode::InvalidArgument, "Frame graph raster pass '" + pass.name + "' requires at least one attachment.");
@@ -746,6 +960,14 @@ namespace ve
         for (FrameGraphTextureHandle exported : exportedTextures)
         {
             const UInt32 producer = textures[exported.index].versions[exported.version].producer;
+            if (producer != InvalidPassIndex)
+            {
+                roots.push_back(producer);
+            }
+        }
+        for (FrameGraphBufferHandle exported : exportedBuffers)
+        {
+            const UInt32 producer = buffers[exported.index].versions[exported.version].producer;
             if (producer != InvalidPassIndex)
             {
                 roots.push_back(producer);
@@ -1086,20 +1308,26 @@ namespace ve
             const rhi::RhiRenderPassBeginInfo beginInfo = impl_->BuildRenderPassBeginInfo(pass);
             const RenderPassExecutionInfo executionInfo = impl_->BuildRenderPassExecutionInfo(pass);
 
-            // Step 3: open the native render pass and establish its fixed viewport/scissor state.
-            if (!commandList.BeginRenderPass(*impl_->context.frameData.mainSwapchain, beginInfo))
+            // Step 3: raster passes open native attachments; compute passes record directly on the command list.
+            if (pass.raster && !commandList.BeginRenderPass(*impl_->context.frameData.mainSwapchain, beginInfo))
             {
                 impl_->ReleaseAllTextures(transientPool);
                 impl_->stage = FrameGraphStage::Failed;
                 return ErrorCode::PlatformError;
             }
-            commandList.SetViewport(pass.viewport);
-            commandList.SetScissor(pass.scissorRect);
+            if (pass.raster)
+            {
+                commandList.SetViewport(pass.viewport);
+                commandList.SetScissor(pass.scissorRect);
+            }
 
             // Step 4: execute renderer commands with access limited to the resources declared by this pass.
             RenderPassContext passContext(RenderPassContextInitParam{impl_->context.frameData, impl_->context.rendererData, executionInfo});
             const ErrorCode passResult = pass.executeFunction(passResources, passContext);
-            commandList.EndRenderPass();
+            if (pass.raster)
+            {
+                commandList.EndRenderPass();
+            }
             if (passResult != ErrorCode::None)
             {
                 impl_->ReleaseAllTextures(transientPool);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Vector4.h"
 
 #include <cmath>
@@ -14,10 +15,12 @@ namespace ve
     constexpr UInt32 VirtualShadowPageSize = 128;
     constexpr UInt32 VirtualShadowPhysicalPageSize = 128;
     constexpr UInt32 VirtualShadowPagesPerAxis = VirtualShadowVirtualResolution / VirtualShadowPageSize;
+    constexpr UInt32 VirtualShadowLogicalPageCount = VirtualShadowClipmapLevelCount * VirtualShadowPagesPerAxis * VirtualShadowPagesPerAxis;
     constexpr UInt32 VirtualShadowPageGutter = 1;
     constexpr UInt32 VirtualShadowPhysicalPageContentSize = VirtualShadowPhysicalPageSize - (2u * VirtualShadowPageGutter);
     constexpr UInt32 VirtualShadowPageTableCapacity = 2048;
     constexpr UInt32 VirtualShadowPageTableMaxProbes = 16;
+    constexpr UInt32 InvalidVirtualShadowGpuInvalidationCount = std::numeric_limits<UInt32>::max();
     constexpr Int32 VirtualShadowMinimumDepthEpoch = -(1 << 23);
     constexpr Int32 VirtualShadowMaximumDepthEpoch = (1 << 23) - 1;
 
@@ -164,6 +167,18 @@ namespace ve
 
     constexpr UInt32 VirtualShadowGpuPageEntryValid = 1u << 0u;
 
+    struct alignas(16) VirtualShadowGpuPhysicalPage
+    {
+        UInt32 key0 = 0xFFFFFFFFu;
+        UInt32 key1 = 0xFFFFFFFFu;
+        UInt32 lastUsedFrame = 0;
+        UInt32 flags = 0;
+    };
+
+    constexpr UInt32 VirtualShadowGpuPhysicalPageValid = 1u << 0u;
+    constexpr UInt32 VirtualShadowGpuPhysicalPageDirty = 1u << 1u;
+    constexpr UInt32 VirtualShadowGpuPhysicalPageRequested = 1u << 2u;
+
     struct alignas(16) VirtualShadowGpuClipmap
     {
         Vector4 lightOriginAndPageWorldSize = Vector4::Zero();
@@ -185,9 +200,21 @@ namespace ve
         UInt32 atlasExtent = 0;
         UInt32 physicalPageSize = VirtualShadowPhysicalPageSize;
         UInt32 clipmapLevelCount = VirtualShadowClipmapLevelCount;
+        Matrix44 inverseViewProjection = Matrix44::Identity();
+        UInt32 screenWidth = 0;
+        UInt32 screenHeight = 0;
+        UInt32 physicalPageCapacity = 0;
+        UInt32 frameIndex = 0;
+        UInt32 resetCache = 0;
+        UInt32 gpuDriven = 0;
+        UInt32 passLevel = 0;
+        UInt32 invalidationCount = 0;
+        Vector4 cameraWorldPosition = Vector4::Zero();
+        Vector4 cameraWorldForward = Vector4(0.0f, 0.0f, 1.0f, 0.0f);
         VirtualShadowGpuPageEntry entries[VirtualShadowPageTableCapacity] = {};
     };
 
     static_assert(sizeof(VirtualShadowGpuClipmap) == 48);
+    static_assert(sizeof(VirtualShadowGpuPhysicalPage) == 16);
     static_assert(sizeof(VirtualShadowGpuConstants) <= 65536);
 } // namespace ve

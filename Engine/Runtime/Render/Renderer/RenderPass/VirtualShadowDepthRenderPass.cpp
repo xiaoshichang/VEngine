@@ -67,7 +67,7 @@ vertex VSOutput VSMain(uint vertexID [[vertex_id]])
     void VirtualShadowDepthRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
     {
         const std::shared_ptr<VirtualShadowFramePacket>& packet = frameGraph.GetRendererData().virtualShadowPacket;
-        if (!graphData.virtualShadowAtlas.IsValid() || packet == nullptr || !packet->enabled || packet->dirtyPages.empty())
+        if (!graphData.virtualShadowAtlas.IsValid() || packet == nullptr || !packet->enabled || packet->gpuDriven || packet->dirtyPages.empty())
         {
             return;
         }

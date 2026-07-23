@@ -29,6 +29,12 @@ namespace ve
         bool fullInvalidation = false;
     };
 
+    enum class VirtualShadowInvalidationCoverage
+    {
+        CurrentWorkingRegion,
+        AllAbsolutePages
+    };
+
     [[nodiscard]] std::vector<VirtualShadowPageKey> BuildVirtualShadowPageKeysForBounds(const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds);
 
     class VirtualShadowInvalidationTracker
@@ -36,6 +42,12 @@ namespace ve
     public:
         [[nodiscard]] VirtualShadowInvalidationResult
         Update(UInt64 frameIndex, const VirtualShadowClipmapSet& clipmaps, Vector3 lightDirection, std::span<const VirtualShadowCasterSnapshot> casters);
+        [[nodiscard]] VirtualShadowInvalidationResult Update(UInt64 frameIndex,
+                                                             const VirtualShadowClipmapSet& clipmaps,
+                                                             Vector3 lightDirection,
+                                                             std::span<const VirtualShadowCasterSnapshot> casters,
+                                                             VirtualShadowInvalidationCoverage coverage,
+                                                             SizeT maximumInvalidatedKeys);
         void Clear() noexcept;
         [[nodiscard]] UInt32 GetTrackedCasterCount() const noexcept;
 

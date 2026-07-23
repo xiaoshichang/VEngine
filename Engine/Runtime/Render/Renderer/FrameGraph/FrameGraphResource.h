@@ -31,12 +31,25 @@ namespace ve
 
     using FrameGraphTextureHandle = FrameGraphResource<FrameGraphTexture>;
 
+    struct FrameGraphBuffer
+    {
+    };
+
+    using FrameGraphBufferHandle = FrameGraphResource<FrameGraphBuffer>;
+
     /// Describes how one pass accesses a logical texture version.
     enum class FrameGraphTextureAccess
     {
         ColorAttachment,
         DepthAttachment,
         ShaderRead,
+    };
+
+    /// Describes how one pass accesses a logical buffer version.
+    enum class FrameGraphBufferAccess
+    {
+        ShaderRead,
+        ShaderReadWrite,
     };
 
     /// Physical properties used to create and reuse graph-owned textures.
@@ -70,6 +83,18 @@ namespace ve
     {
         rhi::RhiTexture* texture = nullptr;
         bool isSwapchain = false;
+    };
+
+    /// Describes an externally owned persistent buffer.
+    struct ImportedFrameGraphBuffer
+    {
+        rhi::RhiBuffer* buffer = nullptr;
+    };
+
+    /// Resolved physical buffer supplied to a pass execute callback.
+    struct ResolvedFrameGraphBuffer
+    {
+        rhi::RhiBuffer* buffer = nullptr;
     };
 
     /// Converts graph-owned physical properties to the common RHI descriptor.

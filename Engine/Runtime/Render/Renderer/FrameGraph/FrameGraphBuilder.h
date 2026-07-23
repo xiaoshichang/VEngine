@@ -17,6 +17,12 @@ namespace ve
         /// Declares a shader read of an existing logical texture version.
         [[nodiscard]] FrameGraphTextureHandle Read(FrameGraphTextureHandle handle);
 
+        /// Declares a shader read of an existing logical buffer version.
+        [[nodiscard]] FrameGraphBufferHandle Read(FrameGraphBufferHandle handle);
+
+        /// Declares a shader read-write access and returns the newly written logical buffer version.
+        [[nodiscard]] FrameGraphBufferHandle Write(FrameGraphBufferHandle handle);
+
         /// Declares the pass color output and returns the newly written logical version.
         [[nodiscard]] FrameGraphTextureHandle
         WriteColorAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiColor clearColor = {});

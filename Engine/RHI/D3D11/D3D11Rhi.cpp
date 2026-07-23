@@ -19,6 +19,7 @@
 #include <d3d11_1.h>
 #include <d3dcompiler.h>
 #include <dxgi.h>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -287,17 +288,27 @@ namespace ve::rhi
 
         UINT ToD3D11BufferBindFlags(RhiBufferUsage usage)
         {
-            switch (usage)
+            UINT flags = 0;
+            const auto usageValue = static_cast<uint32_t>(usage);
+
+            if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Vertex)) != 0)
             {
-            case RhiBufferUsage::Vertex:
-                return D3D11_BIND_VERTEX_BUFFER;
-            case RhiBufferUsage::Index:
-                return D3D11_BIND_INDEX_BUFFER;
-            case RhiBufferUsage::Uniform:
-                return D3D11_BIND_CONSTANT_BUFFER;
+                flags |= D3D11_BIND_VERTEX_BUFFER;
+            }
+            if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Index)) != 0)
+            {
+                flags |= D3D11_BIND_INDEX_BUFFER;
+            }
+            if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Uniform)) != 0)
+            {
+                flags |= D3D11_BIND_CONSTANT_BUFFER;
+            }
+            if ((usageValue & static_cast<uint32_t>(RhiBufferUsage::Storage)) != 0)
+            {
+                flags |= D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
             }
 
-            return D3D11_BIND_VERTEX_BUFFER;
+            return flags;
         }
 
         DXGI_FORMAT ToDxgiIndexFormat(RhiIndexFormat format)
@@ -323,8 +334,14 @@ namespace ve::rhi
         class D3D11Buffer final : public RhiBuffer
         {
         public:
-            D3D11Buffer(ComPtr<ID3D11Buffer> buffer, uint64_t size, RhiBufferMemoryUsage memoryUsage)
+            D3D11Buffer(ComPtr<ID3D11Buffer> buffer,
+                        ComPtr<ID3D11ShaderResourceView> shaderResourceView,
+                        ComPtr<ID3D11UnorderedAccessView> unorderedAccessView,
+                        uint64_t size,
+                        RhiBufferMemoryUsage memoryUsage)
                 : buffer_(std::move(buffer))
+                , shaderResourceView_(std::move(shaderResourceView))
+                , unorderedAccessView_(std::move(unorderedAccessView))
                 , size_(size)
                 , memoryUsage_(memoryUsage)
             {
@@ -345,8 +362,20 @@ namespace ve::rhi
                 return memoryUsage_;
             }
 
+            [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceView() const noexcept
+            {
+                return shaderResourceView_.Get();
+            }
+
+            [[nodiscard]] ID3D11UnorderedAccessView* GetUnorderedAccessView() const noexcept
+            {
+                return unorderedAccessView_.Get();
+            }
+
         private:
             ComPtr<ID3D11Buffer> buffer_;
+            ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
+            ComPtr<ID3D11UnorderedAccessView> unorderedAccessView_;
             uint64_t size_ = 0;
             RhiBufferMemoryUsage memoryUsage_ = RhiBufferMemoryUsage::GpuOnly;
         };
@@ -602,6 +631,33 @@ namespace ve::rhi
             std::vector<RhiPipelineResourceBindingDesc> resourceBindings_;
         };
 
+        class D3D11ComputePipelineState final : public RhiComputePipelineState
+        {
+        public:
+            D3D11ComputePipelineState(ComPtr<ID3D11ComputeShader> computeShader, std::vector<RhiPipelineResourceBindingDesc> resourceBindings)
+                : computeShader_(std::move(computeShader))
+                , resourceBindings_(std::move(resourceBindings))
+            {
+            }
+
+            void Bind(ID3D11DeviceContext* context) const
+            {
+                context->CSSetShader(computeShader_.Get(), nullptr, 0);
+            }
+
+            [[nodiscard]] bool HasBinding(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot) const noexcept
+            {
+                return std::any_of(resourceBindings_.begin(),
+                                   resourceBindings_.end(),
+                                   [kind, stage, slot](const RhiPipelineResourceBindingDesc& binding)
+                                   { return binding.kind == kind && binding.stage == stage && binding.slot == slot; });
+            }
+
+        private:
+            ComPtr<ID3D11ComputeShader> computeShader_;
+            std::vector<RhiPipelineResourceBindingDesc> resourceBindings_;
+        };
+
         class D3D11Swapchain final : public RhiSwapchain
         {
         public:
@@ -752,6 +808,7 @@ namespace ve::rhi
             [[nodiscard]] bool Begin() override
             {
                 activePipeline_ = nullptr;
+                activeComputePipeline_ = nullptr;
                 activeRenderTargetView_ = nullptr;
                 activeDepthTexture_ = nullptr;
                 return true;
@@ -874,7 +931,20 @@ namespace ve::rhi
             void SetPipeline(const RhiPipelineState& pipelineState) override
             {
                 const auto& d3dPipelineState = static_cast<const D3D11PipelineState&>(pipelineState);
+                ClearShaderResourceBindings();
+                ClearUnorderedAccessBindings();
                 activePipeline_ = &d3dPipelineState;
+                activeComputePipeline_ = nullptr;
+                d3dPipelineState.Bind(context_.Get());
+            }
+
+            void SetComputePipeline(const RhiComputePipelineState& pipelineState) override
+            {
+                const auto& d3dPipelineState = static_cast<const D3D11ComputePipelineState&>(pipelineState);
+                ClearShaderResourceBindings();
+                ClearUnorderedAccessBindings();
+                activePipeline_ = nullptr;
+                activeComputePipeline_ = &d3dPipelineState;
                 d3dPipelineState.Bind(context_.Get());
             }
 
@@ -940,6 +1010,9 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     context1_->PSSetConstantBuffers1(slot, 1, &nativeBuffer, &firstConstant, &constantCount);
                     break;
+                case RhiShaderStage::Compute:
+                    context1_->CSSetConstantBuffers1(slot, 1, &nativeBuffer, &firstConstant, &constantCount);
+                    break;
                 }
             }
 
@@ -971,6 +1044,9 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     context_->PSSetShaderResources(slot, 1, &shaderResourceView);
                     break;
+                case RhiShaderStage::Compute:
+                    context_->CSSetShaderResources(slot, 1, &shaderResourceView);
+                    break;
                 }
             }
 
@@ -991,7 +1067,69 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     context_->PSSetSamplers(slot, 1, &samplerState);
                     break;
+                case RhiShaderStage::Compute:
+                    context_->CSSetSamplers(slot, 1, &samplerState);
+                    break;
                 }
+            }
+
+            void SetStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            {
+                if (!ValidateBinding(RhiPipelineResourceKind::StorageBuffer, stage, slot))
+                {
+                    return;
+                }
+
+                VE_ASSERT(offset == 0);
+                VE_ASSERT(size == buffer.GetSize());
+                const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
+                ID3D11ShaderResourceView* shaderResourceView = d3dBuffer.GetShaderResourceView();
+                VE_ASSERT_MESSAGE(shaderResourceView != nullptr, "D3D11 storage buffer binding requires a shader-resource view.");
+                if (shaderResourceView == nullptr)
+                {
+                    return;
+                }
+
+                switch (stage)
+                {
+                case RhiShaderStage::Vertex:
+                    context_->VSSetShaderResources(slot, 1, &shaderResourceView);
+                    break;
+                case RhiShaderStage::Fragment:
+                    context_->PSSetShaderResources(slot, 1, &shaderResourceView);
+                    break;
+                case RhiShaderStage::Compute:
+                    context_->CSSetShaderResources(slot, 1, &shaderResourceView);
+                    break;
+                }
+            }
+
+            void SetReadWriteStorageBuffer(
+                RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            {
+                if (!ValidateBinding(RhiPipelineResourceKind::ReadWriteStorageBuffer, stage, slot))
+                {
+                    return;
+                }
+
+                VE_ASSERT(stage == RhiShaderStage::Compute);
+                VE_ASSERT(offset == 0);
+                VE_ASSERT(size == buffer.GetSize());
+                const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
+                ID3D11UnorderedAccessView* unorderedAccessView = d3dBuffer.GetUnorderedAccessView();
+                VE_ASSERT_MESSAGE(unorderedAccessView != nullptr, "D3D11 read-write storage buffer binding requires an unordered-access view.");
+                if (stage != RhiShaderStage::Compute || unorderedAccessView == nullptr)
+                {
+                    return;
+                }
+
+                context_->CSSetUnorderedAccessViews(slot, 1, &unorderedAccessView, nullptr);
+            }
+
+            void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override
+            {
+                VE_ASSERT(activeComputePipeline_ != nullptr);
+                context_->Dispatch(groupCountX, groupCountY, groupCountZ);
             }
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
@@ -999,15 +1137,27 @@ namespace ve::rhi
                 context_->Draw(vertexCount, firstVertex);
             }
 
+            void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
+            {
+                context_->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
+            }
+
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
             {
                 context_->DrawIndexed(indexCount, firstIndex, vertexOffset);
             }
 
+            void DrawIndexedInstanced(
+                uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
+            {
+                context_->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+            }
+
         private:
             [[nodiscard]] bool ValidateBinding(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot) const noexcept
             {
-                const bool valid = activePipeline_ != nullptr && activePipeline_->HasBinding(kind, stage, slot);
+                const bool valid = (activePipeline_ != nullptr && activePipeline_->HasBinding(kind, stage, slot)) ||
+                                   (activeComputePipeline_ != nullptr && activeComputePipeline_->HasBinding(kind, stage, slot));
                 VE_ASSERT_MESSAGE(valid, "D3D11 resource binding is absent from the active pipeline layout.");
                 return valid;
             }
@@ -1017,11 +1167,19 @@ namespace ve::rhi
                 ID3D11ShaderResourceView* nullViews[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT] = {};
                 context_->VSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullViews);
                 context_->PSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullViews);
+                context_->CSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullViews);
+            }
+
+            void ClearUnorderedAccessBindings()
+            {
+                ID3D11UnorderedAccessView* nullViews[D3D11_PS_CS_UAV_REGISTER_COUNT] = {};
+                context_->CSSetUnorderedAccessViews(0, D3D11_PS_CS_UAV_REGISTER_COUNT, nullViews, nullptr);
             }
 
             ComPtr<ID3D11DeviceContext> context_;
             ComPtr<ID3D11DeviceContext1> context1_;
             const D3D11PipelineState* activePipeline_ = nullptr;
+            const D3D11ComputePipelineState* activeComputePipeline_ = nullptr;
             ID3D11RenderTargetView* activeRenderTargetView_ = nullptr;
             const D3D11Texture* activeDepthTexture_ = nullptr;
         };
@@ -1192,11 +1350,27 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) override
             {
+                if (desc.size == 0 || desc.size > static_cast<uint64_t>(std::numeric_limits<UINT>::max()))
+                {
+                    SetLastError("D3D11 buffer requires a non-zero size representable by UINT.");
+                    return nullptr;
+                }
+
+                const bool isStorage = (static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(RhiBufferUsage::Storage)) != 0;
+                if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 ||
+                                  desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly))
+                {
+                    SetLastError("D3D11 storage buffers require a non-zero structure stride, an aligned size, and GPU-only memory.");
+                    return nullptr;
+                }
+
                 D3D11_BUFFER_DESC bufferDesc = {};
                 bufferDesc.ByteWidth = static_cast<UINT>(desc.size);
                 bufferDesc.Usage = desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
                 bufferDesc.BindFlags = ToD3D11BufferBindFlags(desc.usage);
                 bufferDesc.CPUAccessFlags = desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_CPU_ACCESS_WRITE : 0;
+                bufferDesc.MiscFlags = isStorage ? D3D11_RESOURCE_MISC_BUFFER_STRUCTURED : 0;
+                bufferDesc.StructureByteStride = isStorage ? desc.structureStride : 0;
 
                 D3D11_SUBRESOURCE_DATA initialData = {};
                 initialData.pSysMem = desc.initialData;
@@ -1210,7 +1384,36 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<D3D11Buffer>(buffer, desc.size, desc.memoryUsage);
+                ComPtr<ID3D11ShaderResourceView> shaderResourceView;
+                ComPtr<ID3D11UnorderedAccessView> unorderedAccessView;
+                if (isStorage)
+                {
+                    D3D11_SHADER_RESOURCE_VIEW_DESC shaderResourceViewDesc = {};
+                    shaderResourceViewDesc.Format = DXGI_FORMAT_UNKNOWN;
+                    shaderResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+                    shaderResourceViewDesc.Buffer.FirstElement = 0;
+                    shaderResourceViewDesc.Buffer.NumElements = static_cast<UINT>(desc.size / desc.structureStride);
+                    result = device_->CreateShaderResourceView(buffer.Get(), &shaderResourceViewDesc, &shaderResourceView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateShaderResourceView buffer", result));
+                        return nullptr;
+                    }
+
+                    D3D11_UNORDERED_ACCESS_VIEW_DESC unorderedAccessViewDesc = {};
+                    unorderedAccessViewDesc.Format = DXGI_FORMAT_UNKNOWN;
+                    unorderedAccessViewDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+                    unorderedAccessViewDesc.Buffer.FirstElement = 0;
+                    unorderedAccessViewDesc.Buffer.NumElements = static_cast<UINT>(desc.size / desc.structureStride);
+                    result = device_->CreateUnorderedAccessView(buffer.Get(), &unorderedAccessViewDesc, &unorderedAccessView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateUnorderedAccessView buffer", result));
+                        return nullptr;
+                    }
+                }
+
+                return std::make_unique<D3D11Buffer>(buffer, shaderResourceView, unorderedAccessView, desc.size, desc.memoryUsage);
             }
 
             void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) override
@@ -1370,7 +1573,19 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                const char* target = desc.stage == RhiShaderStage::Vertex ? "vs_5_0" : "ps_5_0";
+                const char* target = nullptr;
+                switch (desc.stage)
+                {
+                case RhiShaderStage::Vertex:
+                    target = "vs_5_0";
+                    break;
+                case RhiShaderStage::Fragment:
+                    target = "ps_5_0";
+                    break;
+                case RhiShaderStage::Compute:
+                    target = "cs_5_0";
+                    break;
+                }
                 UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
 
 #if defined(_DEBUG)
@@ -1553,6 +1768,38 @@ namespace ve::rhi
                 }
                 return std::make_unique<D3D11PipelineState>(
                     desc.primitiveType, vertexShader, pixelShader, inputLayout, rasterizerState, depthStencilState, blendState, std::move(resourceBindings));
+            }
+
+            [[nodiscard]] std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc& desc) override
+            {
+                if (!IsPipelineResourceLayoutValid(desc.resourceLayout))
+                {
+                    SetLastError("D3D11 compute pipeline resource layout is invalid or contains duplicate bindings.");
+                    return nullptr;
+                }
+
+                const auto* computeShaderModule = dynamic_cast<const D3D11ShaderModule*>(desc.computeShader);
+                if (computeShaderModule == nullptr || computeShaderModule->GetStage() != RhiShaderStage::Compute)
+                {
+                    SetLastError("D3D11 compute pipeline requires a D3D11 compute shader.");
+                    return nullptr;
+                }
+
+                ComPtr<ID3D11ComputeShader> computeShader;
+                const HRESULT result = device_->CreateComputeShader(
+                    computeShaderModule->GetBytecode()->GetBufferPointer(), computeShaderModule->GetBytecode()->GetBufferSize(), nullptr, &computeShader);
+                if (FAILED(result))
+                {
+                    SetLastError(MakeHResultError("ID3D11Device::CreateComputeShader", result));
+                    return nullptr;
+                }
+
+                std::vector<RhiPipelineResourceBindingDesc> resourceBindings;
+                if (desc.resourceLayout.bindingCount != 0)
+                {
+                    resourceBindings.assign(desc.resourceLayout.bindings, desc.resourceLayout.bindings + desc.resourceLayout.bindingCount);
+                }
+                return std::make_unique<D3D11ComputePipelineState>(computeShader, std::move(resourceBindings));
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

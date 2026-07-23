@@ -47,7 +47,7 @@ namespace ve
     private:
         void UpdateRenderWorld();
         void BuildRenderQueues();
-        void PrepareVirtualShadows();
+        [[nodiscard]] ErrorCode PrepareVirtualShadows();
         [[nodiscard]] ErrorCode ImportRenderTargets(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const;
         void ImportVirtualShadowResources(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const;
 

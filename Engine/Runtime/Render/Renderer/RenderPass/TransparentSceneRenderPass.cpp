@@ -28,6 +28,7 @@ namespace ve
             FrameGraphTextureHandle color;
             FrameGraphTextureHandle depth;
             FrameGraphTextureHandle virtualShadowAtlas;
+            FrameGraphBufferHandle virtualShadowPageTable;
         };
 
         [[nodiscard]] std::shared_ptr<RTShaderResource> FindFirstShaderResource(const std::vector<std::shared_ptr<RTRenderItem>>& items) noexcept
@@ -90,12 +91,19 @@ namespace ve
                 {
                     passData.virtualShadowAtlas = builder.Read(graphData.virtualShadowAtlas);
                 }
+                if (graphData.virtualShadowPageTable.IsValid())
+                {
+                    passData.virtualShadowPageTable = builder.Read(graphData.virtualShadowPageTable);
+                }
             },
             [this](const TransparentScenePassData& passData, const FrameGraphPassResources& resources, RenderPassContext& context)
-            { return Draw(resources, passData.virtualShadowAtlas, context); });
+            { return Draw(resources, passData.virtualShadowAtlas, passData.virtualShadowPageTable, context); });
     }
 
-    ErrorCode TransparentSceneRenderPass::Draw(const FrameGraphPassResources& resources, FrameGraphTextureHandle virtualShadowAtlas, RenderPassContext& context)
+    ErrorCode TransparentSceneRenderPass::Draw(const FrameGraphPassResources& resources,
+                                               FrameGraphTextureHandle virtualShadowAtlas,
+                                               FrameGraphBufferHandle virtualShadowPageTable,
+                                               RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
         const std::vector<std::shared_ptr<RTRenderItem>>& items = context.rendererData.transparentItems;
@@ -132,6 +140,14 @@ namespace ve
         }
         const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 4, *virtualShadowUniform.buffer, virtualShadowUniform.offset, virtualShadowUniform.size);
+        if (virtualShadowPageTable.IsValid())
+        {
+            const ResolvedFrameGraphBuffer table = resources.GetBuffer(virtualShadowPageTable);
+            if (table.buffer != nullptr)
+            {
+                commandList.SetStorageBuffer(rhi::RhiShaderStage::Fragment, 5, *table.buffer, 0, table.buffer->GetSize());
+            }
+        }
         if (virtualShadowConstants.enabled != 0u && virtualShadowAtlas.IsValid() && context.rendererData.viewState != nullptr)
         {
             const ResolvedFrameGraphTexture atlas = resources.GetTexture(virtualShadowAtlas);
@@ -233,6 +249,7 @@ namespace ve
             {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 4},
             {rhi::RhiPipelineResourceKind::SampledTexture, rhi::RhiShaderStage::Fragment, 1},
             {rhi::RhiPipelineResourceKind::Sampler, rhi::RhiShaderStage::Fragment, 1},
+            {rhi::RhiPipelineResourceKind::StorageBuffer, rhi::RhiShaderStage::Fragment, 5},
         };
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
         pipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;

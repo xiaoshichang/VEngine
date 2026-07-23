@@ -17,6 +17,7 @@ namespace ve
 
     namespace rhi
     {
+        class RhiBuffer;
         class RhiDevice;
         class RhiSampler;
         class RhiTexture;
@@ -47,6 +48,8 @@ namespace ve
     {
         UInt64 frameIndex = 0;
         UInt64 cameraCutRevision = 0;
+        UInt32 screenWidth = 0;
+        UInt32 screenHeight = 0;
         Matrix44 viewProjection = Matrix44::Identity();
         Matrix44 cameraLocalToWorld = Matrix44::Identity();
         VirtualShadowLightInput light;
@@ -87,6 +90,16 @@ namespace ve
         VirtualShadowPageTable residentPageTable;
         std::vector<VirtualShadowDirtyPageDraw> dirtyPages;
         VirtualShadowStatistics statistics;
+        bool gpuDriven = false;
+        bool resetGpuCache = false;
+        UInt64 frameIndex = 0;
+        UInt32 screenWidth = 0;
+        UInt32 screenHeight = 0;
+        Matrix44 inverseViewProjection = Matrix44::Identity();
+        Vector4 cameraWorldPosition = Vector4::Zero();
+        Vector4 cameraWorldForward = Vector4(0.0f, 0.0f, 1.0f, 0.0f);
+        std::vector<VirtualShadowPageKey> invalidatedPageKeys;
+        bool invalidateAllGpuPages = false;
     };
 
     class VirtualShadowViewCache
@@ -98,7 +111,13 @@ namespace ve
         [[nodiscard]] VirtualShadowFramePacket PrepareFrame(const VirtualShadowPrepareInput& input);
         [[nodiscard]] VirtualShadowFramePacket
         PrepareFrame(UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
+        [[nodiscard]] VirtualShadowFramePacket PrepareGpuFrame(const VirtualShadowPrepareInput& input);
+        [[nodiscard]] VirtualShadowFramePacket
+        PrepareGpuFrame(UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
+        [[nodiscard]] bool EnsureSamplingPageTable(rhi::RhiDevice& device, const std::string& viewName);
         [[nodiscard]] bool EnsureGpuResources(rhi::RhiDevice& device, const std::string& viewName);
+        [[nodiscard]] bool CanUseGpuDriven(const rhi::RhiDevice& device) const noexcept;
+        void DisableGpuDriven() noexcept;
         void MarkRendered(std::span<const VirtualShadowPageKey> keys);
 
         [[nodiscard]] UInt32 GetAtlasExtent() const noexcept;
@@ -106,6 +125,14 @@ namespace ve
         [[nodiscard]] const rhi::RhiTexture* GetAtlasTexture() const noexcept;
         [[nodiscard]] rhi::RhiSampler* GetComparisonSampler() noexcept;
         [[nodiscard]] const rhi::RhiSampler* GetComparisonSampler() const noexcept;
+        [[nodiscard]] rhi::RhiBuffer* GetGpuPageMarksBuffer() noexcept;
+        [[nodiscard]] rhi::RhiBuffer* GetGpuPageTableBuffer() noexcept;
+        [[nodiscard]] rhi::RhiBuffer* GetGpuRequestListBuffer() noexcept;
+        [[nodiscard]] rhi::RhiBuffer* GetGpuRequestCountsBuffer() noexcept;
+        [[nodiscard]] rhi::RhiBuffer* GetSamplingPageTableBuffer() noexcept;
+        [[nodiscard]] rhi::RhiBuffer* GetGpuPhysicalPagesBuffer() noexcept;
+        [[nodiscard]] UInt32 GetGpuPhysicalPageCapacity() const noexcept;
+        [[nodiscard]] bool ConsumeGpuCacheReset() noexcept;
         [[nodiscard]] VirtualShadowPageCache& GetPageCache() noexcept;
         [[nodiscard]] const VirtualShadowPageCache& GetPageCache() const noexcept;
 
@@ -120,6 +147,14 @@ namespace ve
         rhi::RhiDevice* resourceDevice_ = nullptr;
         std::unique_ptr<rhi::RhiTexture> atlasTexture_;
         std::unique_ptr<rhi::RhiSampler> comparisonSampler_;
+        std::unique_ptr<rhi::RhiBuffer> gpuPageMarksBuffer_;
+        std::unique_ptr<rhi::RhiBuffer> gpuPageTableBuffer_;
+        std::unique_ptr<rhi::RhiBuffer> gpuRequestListBuffer_;
+        std::unique_ptr<rhi::RhiBuffer> gpuRequestCountsBuffer_;
+        std::unique_ptr<rhi::RhiBuffer> samplingPageTableBuffer_;
+        std::unique_ptr<rhi::RhiBuffer> gpuPhysicalPagesBuffer_;
+        bool gpuDrivenAvailable_ = true;
+        bool gpuCacheResetPending_ = true;
     };
 
     [[nodiscard]] VirtualShadowGpuConstants BuildVirtualShadowGpuConstants(const VirtualShadowFramePacket& packet) noexcept;

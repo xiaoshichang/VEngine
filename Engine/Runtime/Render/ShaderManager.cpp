@@ -202,9 +202,37 @@ namespace ve
         return pipelinePtr;
     }
 
+    rhi::RhiComputePipelineState* ShaderManager::GetComputePipeline(ComputePipelineID id) noexcept
+    {
+        const auto existing = computePipelines_.find(id);
+        return existing != computePipelines_.end() ? existing->second.get() : nullptr;
+    }
+
+    rhi::RhiComputePipelineState*
+    ShaderManager::GetOrCreateComputePipeline(rhi::RhiDevice& device, ComputePipelineID id, const rhi::RhiComputePipelineDesc& desc)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        if (rhi::RhiComputePipelineState* pipeline = GetComputePipeline(id); pipeline != nullptr)
+        {
+            return pipeline;
+        }
+
+        std::unique_ptr<rhi::RhiComputePipelineState> pipeline = device.CreateComputePipeline(desc);
+        if (pipeline == nullptr)
+        {
+            VE_ASSERT_MESSAGE(pipeline != nullptr, device.GetLastErrorMessage());
+            return nullptr;
+        }
+
+        rhi::RhiComputePipelineState* pipelinePtr = pipeline.get();
+        computePipelines_.emplace(std::move(id), std::move(pipeline));
+        return pipelinePtr;
+    }
+
     void ShaderManager::Clear() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
+        computePipelines_.clear();
         graphicsPipelines_.clear();
         shaders_.clear();
     }

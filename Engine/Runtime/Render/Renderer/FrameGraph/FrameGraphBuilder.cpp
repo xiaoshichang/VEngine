@@ -15,6 +15,16 @@ namespace ve
         return frameGraph_.ReadTexture(passIndex_, handle, FrameGraphTextureAccess::ShaderRead);
     }
 
+    FrameGraphBufferHandle FrameGraphBuilder::Read(FrameGraphBufferHandle handle)
+    {
+        return frameGraph_.ReadBuffer(passIndex_, handle, FrameGraphBufferAccess::ShaderRead);
+    }
+
+    FrameGraphBufferHandle FrameGraphBuilder::Write(FrameGraphBufferHandle handle)
+    {
+        return frameGraph_.WriteBuffer(passIndex_, handle, FrameGraphBufferAccess::ShaderReadWrite);
+    }
+
     FrameGraphTextureHandle FrameGraphBuilder::WriteColorAttachment(FrameGraphTextureHandle handle, rhi::RhiLoadAction loadAction, rhi::RhiColor clearColor)
     {
         return frameGraph_.WriteColorAttachment(passIndex_, handle, loadAction, clearColor);

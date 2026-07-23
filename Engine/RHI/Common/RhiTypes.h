@@ -21,6 +21,7 @@ namespace ve::rhi
     {
         Vertex,
         Fragment,
+        Compute,
     };
 
     /// Identifies one shader-visible resource category declared by a graphics pipeline.
@@ -29,6 +30,8 @@ namespace ve::rhi
         UniformBuffer,
         SampledTexture,
         Sampler,
+        StorageBuffer,
+        ReadWriteStorageBuffer,
     };
 
     /// Describes the primitive topology consumed by a graphics pipeline.
@@ -225,6 +228,9 @@ namespace ve::rhi
         Vertex = 1 << 0,
         Index = 1 << 1,
         Uniform = 1 << 2,
+        Storage = 1 << 3,
+        Indirect = 1 << 4,
+        Readback = 1 << 5,
     };
 
     /// Describes intended usage for a texture.
@@ -397,6 +403,7 @@ namespace ve::rhi
         uint64_t size = 0;
         RhiBufferUsage usage = RhiBufferUsage::Vertex;
         RhiBufferMemoryUsage memoryUsage = RhiBufferMemoryUsage::GpuOnly;
+        uint32_t structureStride = 0;
         const void* initialData = nullptr;
         const char* debugName = nullptr;
     };
@@ -521,6 +528,14 @@ namespace ve::rhi
         uint32_t colorAttachmentCount = 1;
         RhiFormat colorFormat = RhiFormat::Bgra8Unorm;
         RhiFormat depthFormat = RhiFormat::Depth32Float;
+        const char* debugName = nullptr;
+    };
+
+    /// Describes immutable compute pipeline state.
+    struct RhiComputePipelineDesc
+    {
+        const RhiShaderModule* computeShader = nullptr;
+        RhiPipelineResourceLayoutDesc resourceLayout = {};
         const char* debugName = nullptr;
     };
 } // namespace ve::rhi

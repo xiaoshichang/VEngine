@@ -23,7 +23,10 @@ namespace ve
         void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
 
     private:
-        [[nodiscard]] ErrorCode Draw(const FrameGraphPassResources& resources, FrameGraphTextureHandle virtualShadowAtlas, RenderPassContext& context);
+        [[nodiscard]] ErrorCode Draw(const FrameGraphPassResources& resources,
+                                     FrameGraphTextureHandle virtualShadowAtlas,
+                                     FrameGraphBufferHandle virtualShadowPageTable,
+                                     RenderPassContext& context);
         [[nodiscard]] ErrorCode EnsurePipeline(RenderPassContext& context);
         [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
         TransparentSceneRenderPassInitParam initParam_;

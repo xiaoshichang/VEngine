@@ -53,6 +53,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RendererFactory.cpp
             Engine/Runtime/Render/Renderer/RenderQueue.cpp
             Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.cpp
+            Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.cpp
@@ -159,6 +160,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RendererFactory.h
             Engine/Runtime/Render/Renderer/RenderQueue.h
             Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h
+            Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.h

@@ -343,6 +343,12 @@ namespace
         return std::ranges::find(keys, expected) != keys.end();
     }
 
+    bool ContainsGpuInvalidationIdentity(std::span<const ve::VirtualShadowPageKey> keys, ve::VirtualShadowPageKey expected)
+    {
+        return std::ranges::any_of(
+            keys, [expected](ve::VirtualShadowPageKey key) { return key.key0 == expected.key0 && key.GetClipmapLevel() == expected.GetClipmapLevel(); });
+    }
+
     bool HasKeyNotIn(std::span<const ve::VirtualShadowPageKey> left, std::span<const ve::VirtualShadowPageKey> right)
     {
         return std::ranges::any_of(left, [right](ve::VirtualShadowPageKey key) { return !ContainsKey(right, key); });
@@ -499,6 +505,150 @@ namespace
         return passed;
     }
 
+    bool TestGpuViewCacheLocalInvalidation()
+    {
+        ve::VirtualShadowViewCache viewCache(520);
+        const ve::Aabb firstBounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3(0.25f, 0.25f, 0.25f));
+        const ve::Aabb movedBounds = ve::Aabb::FromCenterExtents(ve::Vector3(8.0f, 0.0f, 5.0f), ve::Vector3(0.25f, 0.25f, 0.25f));
+        const ve::VirtualShadowSceneItem firstItem = {77, 1, firstBounds, true, true, true, nullptr};
+
+        ve::VirtualShadowPrepareInput input;
+        input.frameIndex = 1;
+        input.cameraCutRevision = 0;
+        input.cameraLocalToWorld = ve::Matrix44::Identity();
+        input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
+        input.light = {true, ve::Vector3(0.0f, -1.0f, 0.0f), 200.0f, 0.001f, 0.05f, 1};
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&firstItem, 1);
+
+        const ve::VirtualShadowFramePacket firstPacket = viewCache.PrepareGpuFrame(input);
+        (void)viewCache.ConsumeGpuCacheReset();
+
+        const ve::VirtualShadowSceneItem movedItem = {77, 2, movedBounds, true, true, true, nullptr};
+        input.frameIndex = 2;
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&movedItem, 1);
+        const ve::VirtualShadowFramePacket movedPacket = viewCache.PrepareGpuFrame(input);
+        const std::vector<ve::VirtualShadowPageKey> firstKeys = ve::BuildVirtualShadowPageKeysForBounds(movedPacket.clipmaps, firstBounds);
+        const std::vector<ve::VirtualShadowPageKey> movedKeys = ve::BuildVirtualShadowPageKeysForBounds(movedPacket.clipmaps, movedBounds);
+
+        bool passed = true;
+        passed &= Expect(firstPacket.enabled && firstPacket.gpuDriven && firstPacket.resetGpuCache,
+                         "The first GPU frame should initialize an enabled cache and request its pending resource reset");
+        passed &= Expect(movedPacket.enabled && movedPacket.gpuDriven && !movedPacket.resetGpuCache,
+                         "Moving one caster should preserve compatible GPU page mappings");
+        passed &= Expect(
+            std::ranges::all_of(firstKeys, [&movedPacket](ve::VirtualShadowPageKey key) { return ContainsKey(movedPacket.invalidatedPageKeys, key); }) &&
+                std::ranges::all_of(movedKeys, [&movedPacket](ve::VirtualShadowPageKey key) { return ContainsKey(movedPacket.invalidatedPageKeys, key); }),
+            "A moved GPU caster should invalidate pages overlapped by both old and new bounds");
+
+        const ve::VirtualShadowGpuConstants movedConstants = ve::BuildVirtualShadowGpuConstants(movedPacket);
+        passed &= Expect(movedConstants.invalidationCount == movedPacket.invalidatedPageKeys.size(),
+                         "GPU constants should expose the number of compact invalidation keys");
+        for (ve::SizeT keyIndex = 0; keyIndex < movedPacket.invalidatedPageKeys.size(); ++keyIndex)
+        {
+            passed &= Expect(movedConstants.entries[keyIndex].key0 == movedPacket.invalidatedPageKeys[keyIndex].key0 &&
+                                 movedConstants.entries[keyIndex].key1 == movedPacket.invalidatedPageKeys[keyIndex].key1,
+                             "GPU constants should preserve each invalidated absolute page key");
+        }
+
+        ve::VirtualShadowFramePacket fullContentPacket = movedPacket;
+        fullContentPacket.invalidateAllGpuPages = true;
+        const ve::VirtualShadowGpuConstants fullContentConstants = ve::BuildVirtualShadowGpuConstants(fullContentPacket);
+        passed &= Expect(fullContentConstants.invalidationCount == ve::InvalidVirtualShadowGpuInvalidationCount,
+                         "GPU constants should encode full resident-content invalidation with the sentinel count");
+
+        input.frameIndex = 3;
+        input.cameraCutRevision = 1;
+        const ve::VirtualShadowFramePacket cameraCutPacket = viewCache.PrepareGpuFrame(input);
+        passed &= Expect(!cameraCutPacket.resetGpuCache && cameraCutPacket.invalidatedPageKeys.empty(),
+                         "A camera cut with stable casters should preserve compatible mappings and cached page content");
+
+        input.frameIndex = 4;
+        input.light.direction = ve::Vector3::UnitX();
+        const ve::VirtualShadowFramePacket directionPacket = viewCache.PrepareGpuFrame(input);
+        passed &= Expect(directionPacket.resetGpuCache, "Changing the directional-light basis should reset GPU page mappings");
+        return passed;
+    }
+
+    bool TestGpuViewCacheDormantPageInvalidation()
+    {
+        ve::VirtualShadowViewCache viewCache(520);
+        const ve::Aabb firstBounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3(0.25f, 0.25f, 0.25f));
+        const ve::Aabb movedBounds = ve::Aabb::FromCenterExtents(ve::Vector3(8.0f, 0.0f, 5.0f), ve::Vector3(0.25f, 0.25f, 0.25f));
+        const ve::VirtualShadowSceneItem firstItem = {91, 1, firstBounds, true, true, true, nullptr};
+
+        ve::VirtualShadowPrepareInput input;
+        input.frameIndex = 1;
+        input.cameraLocalToWorld = ve::Matrix44::Identity();
+        input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
+        input.light = {true, ve::Vector3(0.0f, -1.0f, 0.0f), 200.0f, 0.001f, 0.05f, 1};
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&firstItem, 1);
+        const ve::VirtualShadowFramePacket firstPacket = viewCache.PrepareGpuFrame(input);
+        const std::vector<ve::VirtualShadowPageKey> originalKeys = ve::BuildVirtualShadowPageKeysForBounds(firstPacket.clipmaps, firstBounds);
+        (void)viewCache.ConsumeGpuCacheReset();
+
+        const ve::VirtualShadowSceneItem movedItem = {91, 2, movedBounds, true, true, true, nullptr};
+        input.frameIndex = 2;
+        input.cameraLocalToWorld = ve::Matrix44::Translation(ve::Vector3(10000.0f, 10000.0f, 10000.0f));
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&movedItem, 1);
+        const ve::VirtualShadowFramePacket movedWhileDormant = viewCache.PrepareGpuFrame(input);
+
+        bool passed = true;
+        passed &= Expect(!originalKeys.empty(), "The initial caster should cover resident-capable pages");
+        passed &= Expect(!movedWhileDormant.resetGpuCache, "Camera movement should preserve compatible absolute page mappings");
+        passed &= Expect(std::ranges::all_of(originalKeys,
+                                             [&movedWhileDormant](ve::VirtualShadowPageKey key)
+                                             { return ContainsGpuInvalidationIdentity(movedWhileDormant.invalidatedPageKeys, key); }),
+                         "Moving a caster outside the current working region should still invalidate dormant pages by absolute XY and clipmap level");
+        return passed;
+    }
+
+    bool TestGpuViewCacheDefersUnsubmittedState()
+    {
+        const ve::Aabb firstBounds = ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3(0.25f, 0.25f, 0.25f));
+        const ve::Aabb movedBounds = ve::Aabb::FromCenterExtents(ve::Vector3(8.0f, 0.0f, 5.0f), ve::Vector3(0.25f, 0.25f, 0.25f));
+        const ve::VirtualShadowSceneItem firstItem = {103, 1, firstBounds, true, true, true, nullptr};
+        const ve::VirtualShadowSceneItem movedItem = {103, 2, movedBounds, true, true, true, nullptr};
+
+        ve::VirtualShadowPrepareInput input;
+        input.frameIndex = 1;
+        input.cameraLocalToWorld = ve::Matrix44::Identity();
+        input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
+        input.light = {true, ve::Vector3(0.0f, -1.0f, 0.0f), 200.0f, 0.001f, 0.05f, 1};
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&firstItem, 1);
+
+        ve::VirtualShadowViewCache disabledCache(520);
+        (void)disabledCache.PrepareGpuFrame(input);
+        (void)disabledCache.ConsumeGpuCacheReset();
+        input.frameIndex = 2;
+        input.light.enabled = false;
+        input.light.shadowDistance = 400.0f;
+        const ve::VirtualShadowFramePacket disabledPacket = disabledCache.PrepareGpuFrame(input);
+        input.frameIndex = 3;
+        input.light.enabled = true;
+        const ve::VirtualShadowFramePacket reenabledPacket = disabledCache.PrepareGpuFrame(input);
+
+        ve::VirtualShadowViewCache invalidProjectionCache(520);
+        input.frameIndex = 1;
+        input.light.shadowDistance = 200.0f;
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&firstItem, 1);
+        (void)invalidProjectionCache.PrepareGpuFrame(input);
+        (void)invalidProjectionCache.ConsumeGpuCacheReset();
+        input.frameIndex = 2;
+        input.viewProjection = ve::Matrix44::Zero();
+        input.items = std::span<const ve::VirtualShadowSceneItem>(&movedItem, 1);
+        const ve::VirtualShadowFramePacket invalidProjectionPacket = invalidProjectionCache.PrepareGpuFrame(input);
+        input.frameIndex = 3;
+        input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
+        const ve::VirtualShadowFramePacket recoveredPacket = invalidProjectionCache.PrepareGpuFrame(input);
+
+        bool passed = true;
+        passed &= Expect(!disabledPacket.enabled && reenabledPacket.resetGpuCache,
+                         "A shadow-distance change while disabled should reset mappings on the next enabled GPU frame");
+        passed &= Expect(!invalidProjectionPacket.enabled && !recoveredPacket.invalidatedPageKeys.empty(),
+                         "An invalid projection frame should not consume caster changes before a GPU clear pass can receive them");
+        return passed;
+    }
+
     bool TestWorldDepthBiasConversion()
     {
         constexpr ve::Float32 WorldDepthBias = 0.001f;
@@ -510,8 +660,8 @@ namespace
                          "World-space depth bias should be normalized by the shadow depth range");
         passed &= Expect(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(-WorldDepthBias, DepthRange) == 0.0f,
                          "Negative world-space depth bias should be rejected");
-        passed &= Expect(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(WorldDepthBias, 0.0f) == 0.0f,
-                         "A non-positive shadow depth range should be rejected");
+        passed &=
+            Expect(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(WorldDepthBias, 0.0f) == 0.0f, "A non-positive shadow depth range should be rejected");
         passed &= Expect(ve::ConvertVirtualShadowWorldDepthBiasToNormalized(std::numeric_limits<ve::Float32>::infinity(), DepthRange) == 0.0f,
                          "A non-finite world-space depth bias should be rejected");
         return passed;
@@ -522,7 +672,8 @@ int main()
 {
     if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation() &&
         TestClipmapQuantization() && TestReceiverRequests() && TestCasterInvalidationHistory() && TestLargePageCacheIsolation() &&
-        TestCpuViewCachePacketAndOverlap() && TestWorldDepthBiasConversion())
+        TestCpuViewCachePacketAndOverlap() && TestGpuViewCacheLocalInvalidation() && TestGpuViewCacheDefersUnsubmittedState() &&
+        TestGpuViewCacheDormantPageInvalidation() && TestWorldDepthBiasConversion())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;
