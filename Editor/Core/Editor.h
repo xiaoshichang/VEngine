@@ -123,7 +123,7 @@ namespace ve::editor
                                  const EditorFrameRenderViews& views,
                                  const std::shared_ptr<RTScene>& renderScene) const;
         [[nodiscard]] std::shared_ptr<RTScene> GetActiveRenderScene() const;
-        void RequestRenderViewCameraCuts() noexcept;
+        void RequestRenderViewSceneChanges() noexcept;
         void ShutdownOpenProjectState() noexcept;
         [[nodiscard]] Result<EditorProjectDescriptor> PrepareOpenProjectDescriptor(const Path& projectRoot, const std::string& projectPath);
         [[nodiscard]] ErrorCode InitializeOpenProjectAssetServices(const Path& projectRoot, const std::string& projectPath);

@@ -159,6 +159,13 @@ namespace ve::editor
         gameViewPanel_.RequestCameraCut();
     }
 
+    void ProjectEditingView::RequestRenderViewSceneChanges() noexcept
+    {
+        RequestRenderViewCameraCuts();
+        sceneViewPanel_.GetRenderViewState()->RequestVirtualShadowCacheReset();
+        gameViewPanel_.GetRenderViewState()->RequestVirtualShadowCacheReset();
+    }
+
     void ProjectEditingView::RenderMainMenu(Editor& editor)
     {
         if (!ImGui::BeginMainMenuBar())

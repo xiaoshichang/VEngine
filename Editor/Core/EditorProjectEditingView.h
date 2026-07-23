@@ -41,6 +41,7 @@ namespace ve::editor
         [[nodiscard]] std::shared_ptr<RenderViewState> GetGameRenderViewState() const noexcept;
         void TrackGameViewCamera(std::shared_ptr<RTCamera> camera);
         void RequestRenderViewCameraCuts() noexcept;
+        void RequestRenderViewSceneChanges() noexcept;
 
     private:
         void RenderMainMenu(Editor& editor);

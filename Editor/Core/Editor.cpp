@@ -481,11 +481,11 @@ namespace ve::editor
         return sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
     }
 
-    void Editor::RequestRenderViewCameraCuts() noexcept
+    void Editor::RequestRenderViewSceneChanges() noexcept
     {
         if (projectEditingView_ != nullptr)
         {
-            projectEditingView_->RequestRenderViewCameraCuts();
+            projectEditingView_->RequestRenderViewSceneChanges();
         }
     }
 
@@ -794,7 +794,7 @@ namespace ve::editor
         runtime_->GetTimeSystem().SetPaused(false);
         playState_ = EditorPlayState::Playing;
         ++playSessionID_;
-        RequestRenderViewCameraCuts();
+        RequestRenderViewSceneChanges();
         CollectUnusedResources();
         VE_LOG_INFO_CATEGORY("Editor", "Entered Play mode.");
     }
@@ -829,7 +829,7 @@ namespace ve::editor
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
         ++playSessionID_;
-        RequestRenderViewCameraCuts();
+        RequestRenderViewSceneChanges();
         CollectUnusedResources();
         VE_LOG_INFO_CATEGORY("Editor", "Exited Play mode.");
     }
@@ -1051,7 +1051,7 @@ namespace ve::editor
                 VE_LOG_WARN_CATEGORY("Editor", "Failed to reload scene after script compile: " + loadResult.GetMessage());
                 return;
             }
-            RequestRenderViewCameraCuts();
+            RequestRenderViewSceneChanges();
         }
 
         const ErrorCode refreshResult = scriptDatabase_.RefreshFromScriptingSystem(runtime_->GetScriptingSystem());
@@ -1108,7 +1108,7 @@ namespace ve::editor
             return loadResult;
         }
 
-        RequestRenderViewCameraCuts();
+        RequestRenderViewSceneChanges();
         currentScenePath_ = sceneAsset->path;
         return Error();
     }
@@ -1240,7 +1240,7 @@ namespace ve::editor
             return;
         }
 
-        RequestRenderViewCameraCuts();
+        RequestRenderViewSceneChanges();
         currentScenePath_ = sceneAsset->path;
         ClearSelection();
         CollectUnusedResources();
