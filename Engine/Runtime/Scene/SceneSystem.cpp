@@ -640,7 +640,6 @@ namespace ve
         if (impl_->playerViewState != nullptr)
         {
             impl_->playerViewState->RequestCameraCut();
-            impl_->playerViewState->RequestVirtualShadowCacheReset();
         }
         return Error();
     }

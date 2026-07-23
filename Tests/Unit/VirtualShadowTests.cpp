@@ -1,5 +1,4 @@
 #include "Engine/Runtime/Render/RenderCameraMath.h"
-#include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h"
@@ -564,12 +563,6 @@ namespace
                          "A camera cut with stable casters should preserve compatible mappings and cached page content");
 
         input.frameIndex = 4;
-        input.virtualShadowCacheRevision = 1;
-        const ve::VirtualShadowFramePacket sceneChangePacket = viewCache.PrepareGpuFrame(input);
-        passed &= Expect(sceneChangePacket.resetGpuCache, "A scene-content revision change should reset GPU page mappings");
-        (void)viewCache.ConsumeGpuCacheReset();
-
-        input.frameIndex = 5;
         input.light.direction = ve::Vector3::UnitX();
         const ve::VirtualShadowFramePacket directionPacket = viewCache.PrepareGpuFrame(input);
         passed &= Expect(directionPacket.resetGpuCache, "Changing the directional-light basis should reset GPU page mappings");
@@ -656,45 +649,6 @@ namespace
         return passed;
     }
 
-    bool TestGpuViewCacheDefersSceneRevisionReset()
-    {
-        ve::VirtualShadowViewCache viewCache(520);
-        const ve::VirtualShadowSceneItem item = {
-            131,
-            1,
-            ve::Aabb::FromCenterExtents(ve::Vector3(0.0f, 0.0f, 5.0f), ve::Vector3(0.25f, 0.25f, 0.25f)),
-            true,
-            true,
-            true,
-            nullptr,
-        };
-
-        ve::VirtualShadowPrepareInput input;
-        input.frameIndex = 1;
-        input.virtualShadowCacheRevision = 0;
-        input.cameraLocalToWorld = ve::Matrix44::Identity();
-        input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
-        input.light = {true, ve::Vector3(0.0f, -1.0f, 0.0f), 200.0f, 0.001f, 0.05f, 1};
-        input.items = std::span<const ve::VirtualShadowSceneItem>(&item, 1);
-        (void)viewCache.PrepareGpuFrame(input);
-        (void)viewCache.ConsumeGpuCacheReset();
-
-        input.frameIndex = 2;
-        input.virtualShadowCacheRevision = 1;
-        input.viewProjection = ve::Matrix44::Zero();
-        const ve::VirtualShadowFramePacket invalidPacket = viewCache.PrepareGpuFrame(input);
-
-        input.frameIndex = 3;
-        input.viewProjection = ve::BuildPerspectiveProjection(ve::ToRadians(60.0f), 1.0f, 0.1f, 100.0f);
-        const ve::VirtualShadowFramePacket recoveredPacket = viewCache.PrepareGpuFrame(input);
-
-        bool passed = true;
-        passed &= Expect(!invalidPacket.enabled, "An invalid projection should not submit a GPU VSM frame");
-        passed &= Expect(recoveredPacket.resetGpuCache,
-                         "A scene revision observed during an invalid frame should reset the next valid GPU VSM frame");
-        return passed;
-    }
-
     bool TestVirtualShadowNormalizedPageGutter()
     {
         constexpr ve::Float32 ExpectedGutter =
@@ -730,22 +684,6 @@ namespace
         return passed;
     }
 
-    bool TestRenderViewStateVirtualShadowCacheRevision()
-    {
-        ve::RenderViewState viewState(ve::RenderViewStateDesc{"RevisionTest", 520});
-        const std::shared_ptr<ve::RTRenderViewState> rtViewState = viewState.GetRTRenderViewState();
-
-        bool passed = true;
-        passed &= Expect(rtViewState->GetVirtualShadowCacheRevision() == 0,
-                         "A new render view should start at virtual-shadow cache revision zero");
-        passed &= Expect(rtViewState->GetCameraCutRevision() == 0, "A new render view should start at camera-cut revision zero");
-
-        viewState.RequestVirtualShadowCacheReset();
-        passed &= Expect(rtViewState->GetVirtualShadowCacheRevision() == 1,
-                         "A virtual-shadow cache reset request should increment the render-thread revision");
-        passed &= Expect(rtViewState->GetCameraCutRevision() == 0, "A virtual-shadow cache reset request should not imply a camera cut");
-        return passed;
-    }
 } // namespace
 
 int main()
@@ -753,8 +691,8 @@ int main()
     if (TestPageKeysAndResidentTable() && TestResidentTableBoundsProbes() && TestPhysicalPageCacheLifecycle() && TestPageCachePressurePriorityAndIsolation() &&
         TestClipmapQuantization() && TestReceiverRequests() && TestCasterInvalidationHistory() && TestLargePageCacheIsolation() &&
         TestCpuViewCachePacketAndOverlap() && TestGpuViewCacheLocalInvalidation() && TestGpuViewCacheDefersUnsubmittedState() &&
-        TestGpuViewCacheDormantPageInvalidation() && TestGpuViewCacheDefersSceneRevisionReset() && TestVirtualShadowNormalizedPageGutter() &&
-        TestVirtualShadowPageClearGeometry() && TestWorldDepthBiasConversion() && TestRenderViewStateVirtualShadowCacheRevision())
+        TestGpuViewCacheDormantPageInvalidation() && TestVirtualShadowNormalizedPageGutter() && TestVirtualShadowPageClearGeometry() &&
+        TestWorldDepthBiasConversion())
     {
         std::cout << "VEngineVirtualShadowTests passed" << '\n';
         return 0;

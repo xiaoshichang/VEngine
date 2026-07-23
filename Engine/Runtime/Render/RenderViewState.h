@@ -27,7 +27,6 @@ namespace ve
 
         [[nodiscard]] const RenderViewStateDesc& GetDesc() const noexcept;
         [[nodiscard]] UInt64 GetCameraCutRevision() const noexcept;
-        [[nodiscard]] UInt64 GetVirtualShadowCacheRevision() const noexcept;
         [[nodiscard]] VirtualShadowViewCache& GetVirtualShadowViewCache() noexcept;
         [[nodiscard]] const VirtualShadowViewCache& GetVirtualShadowViewCache() const noexcept;
 
@@ -35,11 +34,9 @@ namespace ve
         friend class RenderViewState;
 
         void RequestCameraCut() noexcept;
-        void RequestVirtualShadowCacheReset() noexcept;
 
         RenderViewStateDesc desc_;
         Atomic<UInt64> cameraCutRevision_{0};
-        Atomic<UInt64> virtualShadowCacheRevision_{0};
         std::unique_ptr<VirtualShadowViewCache> virtualShadowViewCache_;
     };
 
@@ -51,7 +48,6 @@ namespace ve
 
         [[nodiscard]] std::shared_ptr<RTRenderViewState> GetRTRenderViewState() const noexcept;
         void RequestCameraCut() noexcept;
-        void RequestVirtualShadowCacheReset() noexcept;
 
     private:
         std::shared_ptr<RTRenderViewState> rtViewState_;
