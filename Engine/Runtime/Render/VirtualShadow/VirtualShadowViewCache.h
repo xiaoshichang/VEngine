@@ -48,6 +48,7 @@ namespace ve
     {
         UInt64 frameIndex = 0;
         UInt64 cameraCutRevision = 0;
+        UInt64 virtualShadowCacheRevision = 0;
         UInt32 screenWidth = 0;
         UInt32 screenHeight = 0;
         Matrix44 viewProjection = Matrix44::Identity();
@@ -110,10 +111,22 @@ namespace ve
 
         [[nodiscard]] VirtualShadowFramePacket PrepareFrame(const VirtualShadowPrepareInput& input);
         [[nodiscard]] VirtualShadowFramePacket
-        PrepareFrame(UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
+        PrepareFrame(UInt64 frameIndex,
+                     UInt64 cameraCutRevision,
+                     UInt64 virtualShadowCacheRevision,
+                     const RTCamera& camera,
+                     const RTScene& scene,
+                     UInt32 targetWidth,
+                     UInt32 targetHeight);
         [[nodiscard]] VirtualShadowFramePacket PrepareGpuFrame(const VirtualShadowPrepareInput& input);
         [[nodiscard]] VirtualShadowFramePacket
-        PrepareGpuFrame(UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
+        PrepareGpuFrame(UInt64 frameIndex,
+                        UInt64 cameraCutRevision,
+                        UInt64 virtualShadowCacheRevision,
+                        const RTCamera& camera,
+                        const RTScene& scene,
+                        UInt32 targetWidth,
+                        UInt32 targetHeight);
         [[nodiscard]] bool EnsureSamplingPageTable(rhi::RhiDevice& device, const std::string& viewName);
         [[nodiscard]] bool EnsureGpuResources(rhi::RhiDevice& device, const std::string& viewName);
         [[nodiscard]] bool CanUseGpuDriven(const rhi::RhiDevice& device) const noexcept;
@@ -137,11 +150,15 @@ namespace ve
         [[nodiscard]] const VirtualShadowPageCache& GetPageCache() const noexcept;
 
     private:
+        void ApplyVirtualShadowCacheRevision(UInt64 revision) noexcept;
+
         UInt32 atlasExtent_ = 0;
         VirtualShadowPageCache pageCache_;
         VirtualShadowInvalidationTracker invalidationTracker_;
         UInt64 lastCameraCutRevision_ = 0;
         bool hasCameraCutRevision_ = false;
+        UInt64 lastVirtualShadowCacheRevision_ = 0;
+        bool hasVirtualShadowCacheRevision_ = false;
         Float32 lastShadowDistance_ = 0.0f;
         bool hasShadowDistance_ = false;
         rhi::RhiDevice* resourceDevice_ = nullptr;

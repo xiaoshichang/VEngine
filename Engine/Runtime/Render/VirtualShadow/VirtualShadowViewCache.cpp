@@ -136,6 +136,26 @@ namespace ve
     {
     }
 
+    void VirtualShadowViewCache::ApplyVirtualShadowCacheRevision(UInt64 revision) noexcept
+    {
+        if (!hasVirtualShadowCacheRevision_)
+        {
+            lastVirtualShadowCacheRevision_ = revision;
+            hasVirtualShadowCacheRevision_ = true;
+            return;
+        }
+        if (lastVirtualShadowCacheRevision_ == revision)
+        {
+            return;
+        }
+
+        lastVirtualShadowCacheRevision_ = revision;
+        pageCache_.InvalidateAll();
+        pageCache_.ClearRequestHistory();
+        invalidationTracker_.Clear();
+        gpuCacheResetPending_ = true;
+    }
+
     VirtualShadowFramePacket VirtualShadowViewCache::PrepareFrame(const VirtualShadowPrepareInput& input)
     {
         VirtualShadowFramePacket packet;
@@ -170,6 +190,8 @@ namespace ve
             packet.valid = false;
             return packet;
         }
+
+        ApplyVirtualShadowCacheRevision(input.virtualShadowCacheRevision);
 
         if (!hasShadowDistance_)
         {
@@ -265,7 +287,13 @@ namespace ve
     }
 
     VirtualShadowFramePacket VirtualShadowViewCache::PrepareFrame(
-        UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight)
+        UInt64 frameIndex,
+        UInt64 cameraCutRevision,
+        UInt64 virtualShadowCacheRevision,
+        const RTCamera& camera,
+        const RTScene& scene,
+        UInt32 targetWidth,
+        UInt32 targetHeight)
     {
         VirtualShadowLightInput light;
         for (SizeT lightIndex = 0; lightIndex < scene.GetLightCount(); ++lightIndex)
@@ -307,6 +335,7 @@ namespace ve
         VirtualShadowPrepareInput input;
         input.frameIndex = frameIndex;
         input.cameraCutRevision = cameraCutRevision;
+        input.virtualShadowCacheRevision = virtualShadowCacheRevision;
         input.cameraLocalToWorld = camera.GetLocalToWorld();
         input.viewProjection = BuildCameraViewProjection(camera, rhi::RhiExtent2D{targetWidth, targetHeight});
         input.light = light;
@@ -348,6 +377,8 @@ namespace ve
             return packet;
         }
 
+        ApplyVirtualShadowCacheRevision(input.virtualShadowCacheRevision);
+
         const bool resetForShadowDistance = !hasShadowDistance_ || !NearlyEqual(lastShadowDistance_, input.light.shadowDistance);
         lastCameraCutRevision_ = input.cameraCutRevision;
         hasCameraCutRevision_ = true;
@@ -388,7 +419,13 @@ namespace ve
     }
 
     VirtualShadowFramePacket VirtualShadowViewCache::PrepareGpuFrame(
-        UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight)
+        UInt64 frameIndex,
+        UInt64 cameraCutRevision,
+        UInt64 virtualShadowCacheRevision,
+        const RTCamera& camera,
+        const RTScene& scene,
+        UInt32 targetWidth,
+        UInt32 targetHeight)
     {
         VirtualShadowLightInput light;
         for (SizeT lightIndex = 0; lightIndex < scene.GetLightCount(); ++lightIndex)
@@ -430,6 +467,7 @@ namespace ve
         VirtualShadowPrepareInput input;
         input.frameIndex = frameIndex;
         input.cameraCutRevision = cameraCutRevision;
+        input.virtualShadowCacheRevision = virtualShadowCacheRevision;
         input.screenWidth = targetWidth;
         input.screenHeight = targetHeight;
         input.cameraLocalToWorld = camera.GetLocalToWorld();

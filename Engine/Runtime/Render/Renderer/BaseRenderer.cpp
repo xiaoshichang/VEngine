@@ -209,21 +209,24 @@ namespace ve
         }
         const bool gpuDrivenSupported = frameRenderData_->device->GetBackend() != rhi::RhiBackend::Metal && cache.CanUseGpuDriven(*frameRenderData_->device);
         auto packet = std::make_shared<VirtualShadowFramePacket>(gpuDrivenSupported ? cache.PrepareGpuFrame(frameRenderData_->frameIndex,
-                                                                                                            rendererData_.viewState->GetCameraCutRevision(),
-                                                                                                            *rendererData_.resolvedCamera,
-                                                                                                            *rendererData_.scene,
-                                                                                                            targetExtent.width,
-                                                                                                            targetExtent.height)
-                                                                                    : cache.PrepareFrame(frameRenderData_->frameIndex,
-                                                                                                         rendererData_.viewState->GetCameraCutRevision(),
-                                                                                                         *rendererData_.resolvedCamera,
-                                                                                                         *rendererData_.scene,
-                                                                                                         targetExtent.width,
+                                                                                                             rendererData_.viewState->GetCameraCutRevision(),
+                                                                                                             rendererData_.viewState->GetVirtualShadowCacheRevision(),
+                                                                                                             *rendererData_.resolvedCamera,
+                                                                                                             *rendererData_.scene,
+                                                                                                             targetExtent.width,
+                                                                                                             targetExtent.height)
+                                                                                     : cache.PrepareFrame(frameRenderData_->frameIndex,
+                                                                                                          rendererData_.viewState->GetCameraCutRevision(),
+                                                                                                          rendererData_.viewState->GetVirtualShadowCacheRevision(),
+                                                                                                          *rendererData_.resolvedCamera,
+                                                                                                          *rendererData_.scene,
+                                                                                                          targetExtent.width,
                                                                                                          targetExtent.height));
         if (packet->enabled && !cache.EnsureGpuResources(*frameRenderData_->device, rendererData_.viewState->GetDesc().name))
         {
             packet = std::make_shared<VirtualShadowFramePacket>(cache.PrepareFrame(frameRenderData_->frameIndex,
                                                                                    rendererData_.viewState->GetCameraCutRevision(),
+                                                                                   rendererData_.viewState->GetVirtualShadowCacheRevision(),
                                                                                    *rendererData_.resolvedCamera,
                                                                                    *rendererData_.scene,
                                                                                    targetExtent.width,
