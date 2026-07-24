@@ -37,4 +37,3 @@ The color represents the logical virtual page actually used for sampling, not th
 - Compile `BasicMesh.hlsl` through the Windows DXBC and DXIL paths and the Metal MSL path.
 - Build the Windows Debug Editor target.
 - Launch the Editor with `--project D:\github-desktop\VEngine\DemoProject` and confirm the enabled view shows stable colored regions with larger regions where coarse fallback is selected.
-
