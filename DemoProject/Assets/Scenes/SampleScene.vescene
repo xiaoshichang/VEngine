@@ -1296,7 +1296,7 @@
                     "castShadows": true,
                     "shadowDistance": 512,
                     "depthBias": 0.001,
-                    "normalBias": 0.05
+                    "normalBias": 0.01
                 }
             ],
             "children": []
