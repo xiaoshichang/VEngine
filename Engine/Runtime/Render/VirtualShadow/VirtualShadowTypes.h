@@ -208,7 +208,7 @@ namespace ve
         UInt32 resetCache = 0;
         UInt32 passLevel = 0;
         UInt32 invalidationCount = 0;
-        UInt32 padding = 0;
+        UInt32 debugMode = 0;
         Vector4 cameraWorldPosition = Vector4::Zero();
         Vector4 cameraWorldForward = Vector4(0.0f, 0.0f, 1.0f, 0.0f);
         VirtualShadowGpuInvalidationEntry invalidationEntries[VirtualShadowMaxInvalidationPageCount] = {};

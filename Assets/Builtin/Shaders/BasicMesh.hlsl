@@ -57,7 +57,7 @@ cbuffer VirtualShadowConstants : register(b4, space0)
     uint virtualShadowResetCache;
     uint virtualShadowPassLevel;
     uint virtualShadowInvalidationCount;
-    uint virtualShadowPadding;
+    uint virtualShadowDebugMode;
     float4 virtualShadowCameraWorldPosition;
     float4 virtualShadowCameraWorldForward;
     VirtualShadowInvalidationEntry virtualShadowInvalidationEntries[2048];
@@ -130,13 +130,14 @@ float SampleVirtualShadowPage(uint physicalPageIndex, float2 pagePosition, float
     return visibility / 9.0f;
 }
 
-float ComputeVirtualShadowVisibility(float3 worldPosition, float3 worldNormal, uint objectReceivesShadows)
+bool TryResolveVirtualShadowPage(float3 worldPosition,
+                                 float3 worldNormal,
+                                 out uint resolvedLevel,
+                                 out int2 resolvedPageCoordinate,
+                                 out uint physicalPageIndex,
+                                 out float2 pagePosition,
+                                 out float depthReference)
 {
-    if (virtualShadowEnabled == 0u || objectReceivesShadows == 0u || virtualShadowAtlasExtent == 0u)
-    {
-        return 1.0f;
-    }
-
     float cameraDepth = max(dot(worldPosition - cameraWorldPosition.xyz, cameraWorldForward.xyz), 0.0f);
     uint firstLevel = virtualShadowClipmapLevelCount - 1u;
     [unroll]
@@ -159,29 +160,101 @@ float ComputeVirtualShadowVisibility(float3 worldPosition, float3 worldNormal, u
         VirtualShadowClipmapConstants clipmap = virtualShadowClipmaps[sampleLevel];
         float pageWorldSize = clipmap.lightOriginAndPageWorldSize.w;
         int2 pageCoordinate = int2(floor(lightPosition.xy / pageWorldSize));
-        uint physicalPageIndex = FindVirtualShadowPhysicalPage(sampleLevel, pageCoordinate);
-        if (physicalPageIndex == 0xFFFFFFFFu)
+        uint pageIndex = FindVirtualShadowPhysicalPage(sampleLevel, pageCoordinate);
+        if (pageIndex == 0xFFFFFFFFu)
         {
             continue;
         }
 
         float depthRange = clipmap.radiusAndDepthRange.z - clipmap.radiusAndDepthRange.y;
-        float depthReference = (lightPosition.z - clipmap.radiusAndDepthRange.y) / depthRange - virtualShadowAtlasAndBias.y;
-        if (depthReference < 0.0f || depthReference > 1.0f)
+        float resolvedDepthReference =
+            (lightPosition.z - clipmap.radiusAndDepthRange.y) / depthRange - virtualShadowAtlasAndBias.y;
+        if (resolvedDepthReference < 0.0f || resolvedDepthReference > 1.0f)
         {
             continue;
         }
 
-        float2 pagePosition = lightPosition.xy / pageWorldSize - float2(pageCoordinate);
-        return SampleVirtualShadowPage(physicalPageIndex, pagePosition, depthReference);
+        resolvedLevel = sampleLevel;
+        resolvedPageCoordinate = pageCoordinate;
+        physicalPageIndex = pageIndex;
+        pagePosition = lightPosition.xy / pageWorldSize - float2(pageCoordinate);
+        depthReference = resolvedDepthReference;
+        return true;
     }
 
-    return 1.0f;
+    resolvedLevel = 0u;
+    resolvedPageCoordinate = int2(0, 0);
+    physicalPageIndex = 0xFFFFFFFFu;
+    pagePosition = float2(0.0f, 0.0f);
+    depthReference = 0.0f;
+    return false;
+}
+
+float ComputeVirtualShadowVisibility(float3 worldPosition, float3 worldNormal, uint objectReceivesShadows)
+{
+    if (virtualShadowEnabled == 0u || objectReceivesShadows == 0u || virtualShadowAtlasExtent == 0u)
+    {
+        return 1.0f;
+    }
+
+    uint resolvedLevel;
+    int2 resolvedPageCoordinate;
+    uint physicalPageIndex;
+    float2 pagePosition;
+    float depthReference;
+    if (!TryResolveVirtualShadowPage(
+            worldPosition, worldNormal, resolvedLevel, resolvedPageCoordinate, physicalPageIndex, pagePosition, depthReference))
+    {
+        return 1.0f;
+    }
+
+    return SampleVirtualShadowPage(physicalPageIndex, pagePosition, depthReference);
+}
+
+uint HashVirtualShadowPage(uint level, int2 pageCoordinate)
+{
+    uint value = uint(pageCoordinate.x) * 0x8DA6B343u;
+    value ^= uint(pageCoordinate.y) * 0xD8163841u;
+    value ^= level * 0xCB1AB31Fu;
+    value ^= value >> 16u;
+    value *= 0x7FEB352Du;
+    value ^= value >> 15u;
+    value *= 0x846CA68Bu;
+    value ^= value >> 16u;
+    return value;
+}
+
+float3 ComputeVirtualShadowPageDebugColor(float3 worldPosition, float3 worldNormal)
+{
+    if (virtualShadowEnabled == 0u || virtualShadowAtlasExtent == 0u)
+    {
+        return float3(1.0f, 0.0f, 1.0f);
+    }
+
+    uint level;
+    int2 pageCoordinate;
+    uint physicalPageIndex;
+    float2 pagePosition;
+    float depthReference;
+    if (!TryResolveVirtualShadowPage(
+            worldPosition, worldNormal, level, pageCoordinate, physicalPageIndex, pagePosition, depthReference))
+    {
+        return float3(1.0f, 0.0f, 1.0f);
+    }
+
+    uint hash = HashVirtualShadowPage(level, pageCoordinate);
+    float3 color = float3(hash & 0xFFu, (hash >> 8u) & 0xFFu, (hash >> 16u) & 0xFFu) / 255.0f;
+    return 0.25f + color * 0.75f;
 }
 
 float4 PSMain(VSOutput input) : SV_TARGET
 {
     float3 normal = normalize(input.worldNormal);
+    if (virtualShadowDebugMode != 0u)
+    {
+        return float4(ComputeVirtualShadowPageDebugColor(input.worldPosition, normal), 1.0f);
+    }
+
     float3 lightDirection = normalize(directionalLightDirection.xyz);
     float3 lightToSurface = -lightDirection;
     float diffuse = saturate(dot(normal, lightToSurface));
