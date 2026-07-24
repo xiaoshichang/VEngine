@@ -283,7 +283,7 @@ The directional-light VSM path now has a GPU-driven Windows vertical slice:
 - Bounds-local dynamic-caster invalidation: moving, added, removed, or shadow-state-changing casters dirty only resident pages covered by their old/new bounds while preserving compatible page mappings.
 - Page-instanced clear/caster rendering without CPU page-request readback.
 - Dense page-table sampling in opaque and transparent forward passes.
-- CPU VSM fallback retained for Metal and GPU resource/pipeline failure; a valid sampling-table binding is kept even when shadows are disabled.
+- GPU-driven VSM is the only implementation. D3D11 and D3D12 run the GPU path; Metal currently has no VSM. GPU resource or pipeline failure disables VSM for the affected view while preserving scene rendering and a valid disabled-shadow sampling binding.
 
 GPU cache reset requests are consumed independently from resource-recreation resets. Dynamic caster revisions no longer trigger a whole-pool reset: the CPU produces a compact list of absolute XY page identities and clipmap levels from changed caster bounds, and the GPU marks only matching persistent physical pages dirty. These identities are not clipped to the current camera working region and ignore the depth epoch during invalidation matching, so dormant resident pages cannot retain stale shadows after the camera moves away and later returns. Disabled or invalid frames do not consume compatibility or caster history before a GPU clear pass can receive it. Full mapping resets remain reserved for incompatible changes such as a directional-light basis change, shadow-distance change, device/resource recreation, or explicit cache reset. Overflow conservatively dirties all resident content without discarding mappings.
 

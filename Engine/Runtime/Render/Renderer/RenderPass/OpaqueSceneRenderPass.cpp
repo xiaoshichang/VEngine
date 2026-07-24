@@ -156,7 +156,7 @@ namespace ve
                 commandList.SetStorageBuffer(rhi::RhiShaderStage::Fragment, 5, *table.buffer, 0, table.buffer->GetSize());
             }
         }
-        if (virtualShadowConstants.enabled != 0u && virtualShadowAtlas.IsValid() && context.rendererData.viewState != nullptr)
+        if (virtualShadowAtlas.IsValid() && context.rendererData.viewState != nullptr)
         {
             const ResolvedFrameGraphTexture atlas = resources.GetTexture(virtualShadowAtlas);
             rhi::RhiSampler* comparisonSampler = context.rendererData.viewState->GetVirtualShadowViewCache().GetComparisonSampler();

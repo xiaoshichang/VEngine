@@ -2,7 +2,6 @@
 
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Threading/Atomic.h"
 
 #include <memory>
 #include <string>
@@ -26,17 +25,11 @@ namespace ve
         ~RTRenderViewState();
 
         [[nodiscard]] const RenderViewStateDesc& GetDesc() const noexcept;
-        [[nodiscard]] UInt64 GetCameraCutRevision() const noexcept;
         [[nodiscard]] VirtualShadowViewCache& GetVirtualShadowViewCache() noexcept;
         [[nodiscard]] const VirtualShadowViewCache& GetVirtualShadowViewCache() const noexcept;
 
     private:
-        friend class RenderViewState;
-
-        void RequestCameraCut() noexcept;
-
         RenderViewStateDesc desc_;
-        Atomic<UInt64> cameraCutRevision_{0};
         std::unique_ptr<VirtualShadowViewCache> virtualShadowViewCache_;
     };
 
@@ -47,7 +40,6 @@ namespace ve
         explicit RenderViewState(RenderViewStateDesc desc);
 
         [[nodiscard]] std::shared_ptr<RTRenderViewState> GetRTRenderViewState() const noexcept;
-        void RequestCameraCut() noexcept;
 
     private:
         std::shared_ptr<RTRenderViewState> rtViewState_;

@@ -32,7 +32,6 @@ namespace ve::editor
         [[nodiscard]] const Gizmos& GetGizmos() const noexcept;
         [[nodiscard]] Matrix44 GetSceneViewCameraLocalToWorld() const noexcept;
         [[nodiscard]] std::shared_ptr<RenderViewState> GetRenderViewState() const noexcept;
-        void RequestCameraCut() noexcept;
 
     private:
         struct SceneViewCameraState

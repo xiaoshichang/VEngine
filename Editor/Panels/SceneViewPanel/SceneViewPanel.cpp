@@ -172,11 +172,6 @@ namespace ve::editor
         return sceneViewState_;
     }
 
-    void SceneViewPanel::RequestCameraCut() noexcept
-    {
-        sceneViewState_->RequestCameraCut();
-    }
-
     const char* SceneViewPanel::GetName() const noexcept
     {
         return "Scene View";
@@ -305,7 +300,6 @@ namespace ve::editor
         if (ImGui::Button("Reset Camera"))
         {
             camera_ = SceneViewCameraState{};
-            sceneViewState_->RequestCameraCut();
         }
 
         std::array<float, 4> clearColor = ToFloat4(camera_.clearColor);

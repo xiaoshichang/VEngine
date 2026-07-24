@@ -25,7 +25,7 @@ namespace ve
 
         inline constexpr const char* CommonConstants = R"(
 struct Clipmap { float4 originAndPageSize; float4 radiusAndDepth; int4 pageData; };
-struct PageEntry { uint4 data; };
+struct InvalidationEntry { uint4 data; };
 cbuffer ShadowConstants : register(b4)
 {
     float4 lightRight; float4 lightUp; float4 lightForward; float4 atlasAndBias;
@@ -33,9 +33,9 @@ cbuffer ShadowConstants : register(b4)
     uint enabled; uint atlasExtent; uint physicalPageSize; uint clipmapCount;
     float4x4 inverseViewProjection;
     uint screenWidth; uint screenHeight; uint physicalCapacity; uint frameIndex;
-    uint resetCache; uint gpuDriven; uint passLevel; uint invalidationCount;
+    uint resetCache; uint passLevel; uint invalidationCount; uint padding;
     float4 cameraWorldPosition; float4 cameraWorldForward;
-    PageEntry invalidatedPages[2048];
+    InvalidationEntry invalidatedPages[2048];
 };
 struct PhysicalPage { uint key0; uint key1; uint lastUsedFrame; uint flags; };
 )";
@@ -363,21 +363,19 @@ Output VSMain(Input input, uint instanceID : SV_InstanceID)
 
         [[nodiscard]] bool IsGpuVirtualShadowEnabled(const RenderPassContext& context) noexcept
         {
-            return context.rendererData.virtualShadowPacket != nullptr && context.rendererData.virtualShadowPacket->enabled &&
-                   context.rendererData.virtualShadowPacket->gpuDriven;
+            return context.rendererData.virtualShadowPacket != nullptr && context.rendererData.virtualShadowPacket->enabled;
         }
 
         ErrorCode DisableGpuVirtualShadows(RenderPassContext& context, const char* stage)
         {
-            VE_LOG_ERROR("GPU-driven virtual shadows failed during %s; disabling the GPU path and using the CPU fallback on subsequent frames.", stage);
+            VE_LOG_ERROR("GPU-driven virtual shadows failed during %s; virtual shadows are disabled for this view.", stage);
             if (context.rendererData.viewState != nullptr)
             {
-                context.rendererData.viewState->GetVirtualShadowViewCache().DisableGpuDriven();
+                context.rendererData.viewState->GetVirtualShadowViewCache().DisableGpuShadows();
             }
             if (context.rendererData.virtualShadowPacket != nullptr)
             {
                 context.rendererData.virtualShadowPacket->enabled = false;
-                context.rendererData.virtualShadowPacket->gpuDriven = false;
             }
             return ErrorCode::None;
         }
@@ -386,7 +384,7 @@ Output VSMain(Input input, uint instanceID : SV_InstanceID)
     void GpuVirtualShadowRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
     {
         const auto& packet = frameGraph.GetRendererData().virtualShadowPacket;
-        if (packet == nullptr || !packet->enabled || !packet->gpuDriven || !graphData.depth.IsValid() || !graphData.virtualShadowAtlas.IsValid())
+        if (packet == nullptr || !packet->enabled || !graphData.depth.IsValid() || !graphData.virtualShadowAtlas.IsValid())
         {
             return;
         }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Engine/Runtime/Math/Bounds.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
 
 #include <array>
@@ -40,6 +39,4 @@ namespace ve
 
     [[nodiscard]] VirtualShadowClipmapSet
     BuildVirtualShadowClipmaps(const Matrix44& cameraLocalToWorld, Vector3 lightDirection, Float32 shadowDistance) noexcept;
-    [[nodiscard]] Aabb
-    GetVirtualShadowPageLightSpaceBounds(const VirtualShadowClipmapSet& clipmaps, VirtualShadowPageKey key, Float32 gutterWorldSize = 0.0f) noexcept;
 } // namespace ve

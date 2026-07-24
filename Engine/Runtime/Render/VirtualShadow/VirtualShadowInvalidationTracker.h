@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine/Runtime/Math/Bounds.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h"
 
 #include <span>

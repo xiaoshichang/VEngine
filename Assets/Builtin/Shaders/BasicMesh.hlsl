@@ -33,7 +33,7 @@ struct VirtualShadowClipmapConstants
     int4 pageData;
 };
 
-struct VirtualShadowPageEntry
+struct VirtualShadowInvalidationEntry
 {
     uint4 data;
 };
@@ -55,12 +55,12 @@ cbuffer VirtualShadowConstants : register(b4, space0)
     uint virtualShadowPhysicalPageCapacity;
     uint virtualShadowFrameIndex;
     uint virtualShadowResetCache;
-    uint virtualShadowGpuDriven;
     uint virtualShadowPassLevel;
     uint virtualShadowInvalidationCount;
+    uint virtualShadowPadding;
     float4 virtualShadowCameraWorldPosition;
     float4 virtualShadowCameraWorldForward;
-    VirtualShadowPageEntry virtualShadowPageTable[2048];
+    VirtualShadowInvalidationEntry virtualShadowInvalidationEntries[2048];
 };
 
 Texture2D<float> VirtualShadowAtlas : register(t1, space0);
@@ -92,44 +92,16 @@ VSOutput VSMain(VSInput input)
     return output;
 }
 
-uint HashVirtualShadowPageKey(uint2 key)
+uint FindVirtualShadowPhysicalPage(uint level, int2 pageCoordinate)
 {
-    uint hash = (key.x * 0x9E3779B1u) ^ (key.y * 0x85EBCA77u);
-    hash ^= hash >> 16u;
-    return hash;
-}
-
-uint FindVirtualShadowPhysicalPage(uint2 key, uint level, int2 pageCoordinate)
-{
-    if (virtualShadowGpuDriven != 0u)
+    int2 localPage = pageCoordinate - (virtualShadowClipmaps[level].pageData.xy - int2(64, 64));
+    if (any(localPage < 0) || any(localPage >= 128))
     {
-        int2 localPage = pageCoordinate - (virtualShadowClipmaps[level].pageData.xy - int2(64, 64));
-        if (any(localPage < 0) || any(localPage >= 128))
-        {
-            return 0xFFFFFFFFu;
-        }
-        uint logicalIndex = level * 16384u + uint(localPage.y) * 128u + uint(localPage.x);
-        uint denseEntry = VirtualShadowDensePageTable[logicalIndex];
-        return denseEntry == 0u ? 0xFFFFFFFFu : denseEntry - 1u;
+        return 0xFFFFFFFFu;
     }
-
-    uint tableIndex = HashVirtualShadowPageKey(key) & 2047u;
-    [unroll]
-    for (uint probeIndex = 0u; probeIndex < 16u; ++probeIndex)
-    {
-        VirtualShadowPageEntry entry = virtualShadowPageTable[tableIndex];
-        if ((entry.data.w & 1u) == 0u)
-        {
-            break;
-        }
-        if (entry.data.x == key.x && entry.data.y == key.y)
-        {
-            return entry.data.z;
-        }
-        tableIndex = (tableIndex + 1u) & 2047u;
-    }
-
-    return 0xFFFFFFFFu;
+    uint logicalIndex = level * 16384u + uint(localPage.y) * 128u + uint(localPage.x);
+    uint denseEntry = VirtualShadowDensePageTable[logicalIndex];
+    return denseEntry == 0u ? 0xFFFFFFFFu : denseEntry - 1u;
 }
 
 float SampleVirtualShadowPage(uint physicalPageIndex, float2 pagePosition, float depthReference)
@@ -187,9 +159,7 @@ float ComputeVirtualShadowVisibility(float3 worldPosition, float3 worldNormal, u
         VirtualShadowClipmapConstants clipmap = virtualShadowClipmaps[sampleLevel];
         float pageWorldSize = clipmap.lightOriginAndPageWorldSize.w;
         int2 pageCoordinate = int2(floor(lightPosition.xy / pageWorldSize));
-        uint key0 = (uint(pageCoordinate.x) & 0xFFFFu) | ((uint(pageCoordinate.y) & 0xFFFFu) << 16u);
-        uint key1 = sampleLevel | ((uint(clipmap.pageData.z) & 0x00FFFFFFu) << 8u);
-        uint physicalPageIndex = FindVirtualShadowPhysicalPage(uint2(key0, key1), sampleLevel, pageCoordinate);
+        uint physicalPageIndex = FindVirtualShadowPhysicalPage(sampleLevel, pageCoordinate);
         if (physicalPageIndex == 0xFFFFFFFFu)
         {
             continue;

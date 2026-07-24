@@ -4,7 +4,6 @@
 #include "Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h"
-#include "Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.h"
 
 #include <memory>
 #include <vector>
@@ -25,7 +24,6 @@ namespace ve
     private:
         void BuildFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
 
-        VirtualShadowDepthRenderPass virtualShadowDepthPass_;
         GpuVirtualShadowRenderPass gpuVirtualShadowPass_;
         OpaqueSceneRenderPass opaquePass_;
         TransparentSceneRenderPass transparentPass_;

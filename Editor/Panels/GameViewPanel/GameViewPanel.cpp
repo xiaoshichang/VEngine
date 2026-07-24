@@ -58,20 +58,6 @@ namespace ve::editor
         return gameViewState_;
     }
 
-    void GameViewPanel::TrackActiveCamera(std::shared_ptr<RTCamera> camera)
-    {
-        if (activeCamera_.get() != camera.get())
-        {
-            gameViewState_->RequestCameraCut();
-            activeCamera_ = std::move(camera);
-        }
-    }
-
-    void GameViewPanel::RequestCameraCut() noexcept
-    {
-        gameViewState_->RequestCameraCut();
-    }
-
     const char* GameViewPanel::GetName() const noexcept
     {
         return "Game View";

@@ -202,38 +202,30 @@ namespace ve
         }
 
         VirtualShadowViewCache& cache = rendererData_.viewState->GetVirtualShadowViewCache();
-        if (!cache.EnsureSamplingPageTable(*frameRenderData_->device, rendererData_.viewState->GetDesc().name))
+        auto packet = std::make_shared<VirtualShadowFramePacket>();
+        if (!cache.EnsureSamplingResources(*frameRenderData_->device, rendererData_.viewState->GetDesc().name))
         {
-            VE_LOG_ERROR("Failed to create the virtual-shadow sampling page-table fallback.");
-            return ErrorCode::PlatformError;
+            VE_LOG_ERROR("Failed to create virtual-shadow fallback bindings; virtual shadows are disabled for this view.");
+            cache.DisableGpuShadows();
+            rendererData_.virtualShadowPacket = std::move(packet);
+            return ErrorCode::None;
         }
-        const bool gpuDrivenSupported = frameRenderData_->device->GetBackend() != rhi::RhiBackend::Metal && cache.CanUseGpuDriven(*frameRenderData_->device);
-        auto packet = std::make_shared<VirtualShadowFramePacket>(gpuDrivenSupported ? cache.PrepareGpuFrame(frameRenderData_->frameIndex,
-                                                                                                             rendererData_.viewState->GetCameraCutRevision(),
-                                                                                                             *rendererData_.resolvedCamera,
-                                                                                                             *rendererData_.scene,
-                                                                                                             targetExtent.width,
-                                                                                                             targetExtent.height)
-                                                                                     : cache.PrepareFrame(frameRenderData_->frameIndex,
-                                                                                                          rendererData_.viewState->GetCameraCutRevision(),
-                                                                                                          *rendererData_.resolvedCamera,
-                                                                                                          *rendererData_.scene,
-                                                                                                          targetExtent.width,
-                                                                                                         targetExtent.height));
+
+        if (frameRenderData_->device->GetBackend() == rhi::RhiBackend::Metal || !cache.CanUseGpuShadows(*frameRenderData_->device))
+        {
+            cache.DisableGpuShadows();
+            rendererData_.virtualShadowPacket = std::move(packet);
+            return ErrorCode::None;
+        }
+
+        *packet =
+            cache.PrepareFrame(frameRenderData_->frameIndex, *rendererData_.resolvedCamera, *rendererData_.scene, targetExtent.width, targetExtent.height);
         if (packet->enabled && !cache.EnsureGpuResources(*frameRenderData_->device, rendererData_.viewState->GetDesc().name))
         {
-            packet = std::make_shared<VirtualShadowFramePacket>(cache.PrepareFrame(frameRenderData_->frameIndex,
-                                                                                   rendererData_.viewState->GetCameraCutRevision(),
-                                                                                   *rendererData_.resolvedCamera,
-                                                                                   *rendererData_.scene,
-                                                                                   targetExtent.width,
-                                                                                   targetExtent.height));
-            if (cache.GetAtlasTexture() == nullptr || cache.GetComparisonSampler() == nullptr)
-            {
-                packet->valid = false;
-                packet->enabled = false;
-                packet->dirtyPages.clear();
-            }
+            VE_LOG_ERROR("Failed to create GPU-driven virtual-shadow resources; virtual shadows are disabled for this view.");
+            cache.DisableGpuShadows();
+            packet->valid = false;
+            packet->enabled = false;
         }
         else if (packet->enabled)
         {
@@ -305,6 +297,12 @@ namespace ve
         }
         if (rendererData_.virtualShadowPacket == nullptr || !rendererData_.virtualShadowPacket->enabled)
         {
+            if (cache.GetFallbackAtlasTexture() != nullptr)
+            {
+                rhi::RhiTexture* fallbackAtlas = cache.GetFallbackAtlasTexture();
+                graphData.virtualShadowAtlas = frameGraph.ImportTexture(
+                    "VirtualShadowFallbackAtlas", MakeTextureDesc(*fallbackAtlas, MakeSampledDepthUsage()), ImportedFrameGraphTexture{fallbackAtlas, false});
+            }
             return;
         }
 
@@ -318,10 +316,6 @@ namespace ve
         if (cache.GetGpuPageTableBuffer() != nullptr)
         {
             graphData.virtualShadowPageTable = frameGraph.ImportBuffer("VirtualShadowPageTable", ImportedFrameGraphBuffer{cache.GetGpuPageTableBuffer()});
-        }
-        if (!rendererData_.virtualShadowPacket->gpuDriven)
-        {
-            return;
         }
         graphData.virtualShadowPageMarks = frameGraph.ImportBuffer("VirtualShadowPageMarks", ImportedFrameGraphBuffer{cache.GetGpuPageMarksBuffer()});
         graphData.virtualShadowRequestList = frameGraph.ImportBuffer("VirtualShadowRequestList", ImportedFrameGraphBuffer{cache.GetGpuRequestListBuffer()});

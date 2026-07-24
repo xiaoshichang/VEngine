@@ -16,7 +16,7 @@
 - Modify: `Tests/Unit/VirtualShadowTests.cpp`
 - Modify: `Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h`
 
-- [x] Add a test-only-usable public overload `PrepareGpuFrame(const VirtualShadowPrepareInput& input)` matching the existing CPU overload shape.
+- [x] Add a test-only-usable public overload `PrepareFrame(const VirtualShadowPrepareInput& input)`.
 - [x] Add `TestGpuViewCacheLocalInvalidation` that prepares one caster, consumes the initial resource reset, moves the caster by changing its revision and bounds, and requires:
   - the second packet remains GPU driven;
   - the second packet does not request a full mapping reset;
@@ -33,11 +33,11 @@
 - Modify: `Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.cpp`
 
 - [x] Add `invalidatedPageKeys` and `invalidateAllGpuPages` to `VirtualShadowFramePacket`.
-- [x] Implement `PrepareGpuFrame(const VirtualShadowPrepareInput&)`.
+- [x] Implement `PrepareFrame(const VirtualShadowPrepareInput&)`.
 - [x] Build opaque shadow-caster snapshots and call the existing per-view `VirtualShadowInvalidationTracker`.
 - [x] Set `resetGpuCache` only for light-direction full invalidation, shadow-distance changes, or pending GPU-resource reset.
 - [x] Preserve compatible mappings across camera cuts and ordinary caster revisions.
-- [x] Set `invalidateAllGpuPages` when the compact key list exceeds `VirtualShadowPageTableCapacity`.
+- [x] Set `invalidateAllGpuPages` when the compact key list exceeds `VirtualShadowMaxInvalidationPageCount`.
 - [x] Refactor the RTScene overload to assemble `VirtualShadowPrepareInput` and call the new overload.
 - [x] Run `VEngineVirtualShadowTests`; confirm packet behavior passes.
 
@@ -76,7 +76,7 @@
 - [x] Build and run all Windows CTest targets.
 - [x] Build Editor and Player.
 - [x] Compile `BasicMesh.hlsl` to DXBC, DXIL, and MSL.
-- [x] Smoke-test DemoProject on D3D11 and D3D12 and inspect logs for shader or fallback errors.
+- [x] Smoke-test DemoProject on D3D11 and D3D12 and inspect logs for shader errors or unexpected VSM disablement.
 - [x] Measure the maximized 2576-by-1416 dual-view D3D12 Editor both while static and during Play.
 - [x] Verify moving objects update shadows without whole-pool reset artifacts.
 - [x] Run `git diff --check`.

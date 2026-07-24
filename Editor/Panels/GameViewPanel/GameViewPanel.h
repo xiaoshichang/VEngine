@@ -9,11 +9,6 @@
 
 struct ImVec2;
 
-namespace ve
-{
-    class RTCamera;
-}
-
 namespace ve::editor
 {
     class Editor;
@@ -28,8 +23,6 @@ namespace ve::editor
         [[nodiscard]] const RenderTexture& GetGameViewTexture() const noexcept;
         [[nodiscard]] RenderTexture& GetGameViewTexture() noexcept;
         [[nodiscard]] std::shared_ptr<RenderViewState> GetRenderViewState() const noexcept;
-        void TrackActiveCamera(std::shared_ptr<RTCamera> camera);
-        void RequestCameraCut() noexcept;
 
     private:
         [[nodiscard]] const char* GetName() const noexcept override;
@@ -41,7 +34,6 @@ namespace ve::editor
 
         std::shared_ptr<RenderTexture> gameViewTexture_;
         std::shared_ptr<RenderViewState> gameViewState_;
-        std::shared_ptr<RTCamera> activeCamera_;
         WindowExtent renderTargetExtent_ = {};
         Editor* editor_ = nullptr;
     };

@@ -9,7 +9,6 @@
 
 namespace ve
 {
-    constexpr UInt32 InvalidVirtualShadowPhysicalPage = std::numeric_limits<UInt32>::max();
     constexpr UInt32 VirtualShadowClipmapLevelCount = 4;
     constexpr UInt32 VirtualShadowVirtualResolution = 16384;
     constexpr UInt32 VirtualShadowPageSize = 128;
@@ -21,8 +20,8 @@ namespace ve
     constexpr UInt32 VirtualShadowPhysicalPageContentSize = VirtualShadowPhysicalPageSize - (2u * VirtualShadowPageGutter);
     constexpr Float32 VirtualShadowNormalizedPageGutter =
         static_cast<Float32>(VirtualShadowPageGutter) / static_cast<Float32>(VirtualShadowPhysicalPageContentSize);
-    constexpr UInt32 VirtualShadowPageTableCapacity = 2048;
-    constexpr UInt32 VirtualShadowPageTableMaxProbes = 16;
+    constexpr UInt32 VirtualShadowMaxPhysicalPageCount = 2048;
+    constexpr UInt32 VirtualShadowMaxInvalidationPageCount = 2048;
     constexpr UInt32 InvalidVirtualShadowGpuInvalidationCount = std::numeric_limits<UInt32>::max();
     constexpr Int32 VirtualShadowMinimumDepthEpoch = -(1 << 23);
     constexpr Int32 VirtualShadowMaximumDepthEpoch = (1 << 23) - 1;
@@ -79,6 +78,12 @@ namespace ve
         }
 
         return worldDepthBias / depthRange;
+    }
+
+    [[nodiscard]] inline UInt32 GetVirtualShadowPhysicalPageCapacity(UInt32 atlasExtent) noexcept
+    {
+        const UInt32 pagesPerAxis = atlasExtent / VirtualShadowPhysicalPageSize;
+        return pagesPerAxis * pagesPerAxis;
     }
 
     struct VirtualShadowPageKey
@@ -152,23 +157,15 @@ namespace ve
         return HashVirtualShadowPageKey(key);
     }
 
-    struct VirtualShadowPageRequest
-    {
-        VirtualShadowPageKey key;
-        UInt32 priority = 0;
-    };
-
-    struct alignas(16) VirtualShadowGpuPageEntry
+    struct alignas(16) VirtualShadowGpuInvalidationEntry
     {
         UInt32 key0 = 0xFFFFFFFFu;
         UInt32 key1 = 0xFFFFFFFFu;
-        UInt32 physicalPageIndex = InvalidVirtualShadowPhysicalPage;
-        UInt32 flags = 0;
+        UInt32 padding0 = 0;
+        UInt32 padding1 = 0;
     };
 
-    static_assert(sizeof(VirtualShadowGpuPageEntry) == 16);
-
-    constexpr UInt32 VirtualShadowGpuPageEntryValid = 1u << 0u;
+    static_assert(sizeof(VirtualShadowGpuInvalidationEntry) == 16);
 
     struct alignas(16) VirtualShadowGpuPhysicalPage
     {
@@ -209,12 +206,12 @@ namespace ve
         UInt32 physicalPageCapacity = 0;
         UInt32 frameIndex = 0;
         UInt32 resetCache = 0;
-        UInt32 gpuDriven = 0;
         UInt32 passLevel = 0;
         UInt32 invalidationCount = 0;
+        UInt32 padding = 0;
         Vector4 cameraWorldPosition = Vector4::Zero();
         Vector4 cameraWorldForward = Vector4(0.0f, 0.0f, 1.0f, 0.0f);
-        VirtualShadowGpuPageEntry entries[VirtualShadowPageTableCapacity] = {};
+        VirtualShadowGpuInvalidationEntry invalidationEntries[VirtualShadowMaxInvalidationPageCount] = {};
     };
 
     static_assert(sizeof(VirtualShadowGpuClipmap) == 48);

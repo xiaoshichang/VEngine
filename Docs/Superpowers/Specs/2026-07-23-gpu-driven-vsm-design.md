@@ -2,7 +2,7 @@
 
 ## Goal
 
-Upgrade VEngine's existing directional-light Virtual Shadow Maps implementation from CPU receiver-bound requests and CPU page draw construction to a same-frame GPU-driven path:
+Implement VEngine's directional-light Virtual Shadow Maps as a same-frame GPU-driven path:
 
 ```text
 camera depth
@@ -13,7 +13,7 @@ camera depth
   -> forward shadow sampling
 ```
 
-The existing CPU path remains available as a compatibility fallback. The GPU path is enabled on D3D11 and D3D12; Metal continues to use the CPU path until native compute encoding is completed and verified on macOS.
+The GPU-driven path is the only VSM implementation. It is enabled on D3D11 and D3D12; Metal has no VSM until native compute encoding is completed and verified on macOS.
 
 ## Implemented Slice
 
@@ -24,7 +24,7 @@ The July 2026 implementation delivers the same-frame Windows path:
 - Dense logical request and page-table buffers owned per render view.
 - A persistent physical-page metadata buffer with cache hits and bounded LRU eviction.
 - GPU page clear and caster rendering instanced across physical-page capacity, without page-request readback.
-- Forward dense-page-table sampling with the original CPU hash-table fallback.
+- Forward dense-page-table sampling.
 - D3D11 and D3D12 runtime acceptance through the DemoProject Editor path.
 
 The correctness-first allocator processes compact requests one clipmap level at a time after parallel cache-hit resolution. Dynamic caster revisions upload bounded local invalidation keys, while incompatible light/resource changes reset the GPU cache. Profiling counters, page debug views, transient FrameGraph buffers, and native Metal compute remain follow-up work.
@@ -38,7 +38,7 @@ VEngine already provides:
 - 128-by-128 virtual and physical pages.
 - Per-view physical depth atlases.
 - Stable absolute virtual page keys.
-- CPU LRU residency and invalidation.
+- Per-view GPU LRU residency and CPU-produced invalidation keys.
 - Page-local depth rendering.
 - Forward shader page-table lookup, coarse-level fallback, and PCF.
 - Per-view cache isolation.
@@ -65,8 +65,8 @@ The first GPU-driven implementation supports:
 - GPU allocation into the existing per-view physical atlas.
 - GPU-visible dense page tables for forward shadow sampling.
 - GPU page metadata used by page clear and caster rendering.
-- D3D11, D3D12, and Metal through common RHI contracts.
-- CPU fallback when GPU-driven resources or pipelines cannot be created.
+- D3D11 and D3D12 through common RHI contracts.
+- VSM disablement without scene-rendering failure when GPU resources or pipelines cannot be created.
 
 The first implementation does not add:
 
@@ -251,9 +251,7 @@ local logical page coordinate
 page-local texel offset
 ```
 
-It indexes the dense GPU page table instead of the existing constant-buffer hash table. The physical atlas addressing and gutter-safe PCF remain unchanged.
-
-The CPU hash table remains compiled for fallback mode.
+It indexes the dense GPU page table. The physical atlas addressing and gutter-safe PCF remain unchanged.
 
 ## Cache And Invalidation
 
@@ -271,9 +269,9 @@ The initial allocator may scan the bounded physical metadata array to select the
 
 ### Dynamic Caster Local Invalidation
 
-The GPU path reuses `VirtualShadowInvalidationTracker`, which already provides the CPU VSM path with old/new caster-bounds invalidation:
+The GPU path uses `VirtualShadowInvalidationTracker` to produce old/new caster-bounds invalidation keys:
 
-1. `PrepareGpuFrame` builds `VirtualShadowCasterSnapshot` values for opaque shadow casters.
+1. `PrepareFrame` builds `VirtualShadowCasterSnapshot` values for opaque shadow casters.
 2. The tracker compares each render-item ID and revision with the previous frame.
 3. A moved caster contributes page keys for both its previous bounds and current bounds, so the old shadow is erased and the new shadow is rendered.
 4. A new caster contributes its current bounds. A removed or disabled caster contributes its last tracked bounds.
@@ -281,7 +279,7 @@ The GPU path reuses `VirtualShadowInvalidationTracker`, which already provides t
 
 The frame packet carries the compact invalidated-key list without GPU-to-CPU readback. GPU invalidation keys cover the caster bounds' absolute XY pages at every clipmap level without clipping them to the current camera working region. Matching uses absolute XY plus clipmap level and deliberately ignores the current depth epoch. This ensures that a clean resident page remains invalidated when its caster changes while the camera is elsewhere, including when the camera later returns to an older origin or depth epoch.
 
-GPU mode reuses the otherwise-unused constant-buffer page-entry array for up to `VirtualShadowPageTableCapacity` invalidation keys. The fourth scalar after `resetCache`, `gpuDriven`, and `passLevel` contains the invalidation count. If the key count exceeds the fixed capacity, a sentinel requests full resident-content invalidation while preserving compatible mappings.
+GPU mode uploads up to `VirtualShadowMaxInvalidationPageCount` keys through the constant buffer's `invalidationEntries` array. The scalar group after `frameIndex` contains `resetCache`, `passLevel`, `invalidationCount`, and padding. If the key count exceeds the fixed capacity, a sentinel requests full resident-content invalidation while preserving compatible mappings.
 
 During `VirtualShadowClearRequests`, each valid physical page:
 
@@ -298,11 +296,11 @@ Compatibility and caster history are committed only after the frame has an enabl
 
 ## Failure Handling
 
-- Compute, storage-buffer, or pipeline creation failure disables GPU shadows without aborting scene rendering and selects the CPU VSM path for subsequent frames on that view.
+- Compute, storage-buffer, or pipeline creation failure disables VSM for subsequent frames on that view without aborting scene rendering.
 - Invalid depth or inverse view-projection disables GPU page marking for the frame.
 - Page-pool exhaustion produces missing entries and coarse fallback.
 - GPU resource-shape changes rebuild only the affected view cache.
-- D3D11/Metal backend compilation failures do not silently select a partially initialized GPU path.
+- D3D11/D3D12 backend compilation failures do not silently select a partially initialized GPU path.
 
 ## Diagnostics
 
@@ -348,6 +346,6 @@ Verify D3D11 and D3D12 separately:
 - Camera cuts do not show persistent missing shadows.
 - Moving a caster invalidates its old and new coverage.
 - Scene View and Game View retain isolated page pools.
-- CPU fallback remains functional.
+- GPU failures disable VSM while the rest of the view continues rendering.
 
-Metal changes must compile and run on macOS before the feature is considered cross-platform complete.
+Metal currently has no VSM. Native Metal GPU-driven VSM must compile and run on macOS before the feature is considered cross-platform complete.

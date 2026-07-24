@@ -148,17 +148,6 @@ namespace ve::editor
         return gameViewPanel_.GetRenderViewState();
     }
 
-    void ProjectEditingView::TrackGameViewCamera(std::shared_ptr<RTCamera> camera)
-    {
-        gameViewPanel_.TrackActiveCamera(std::move(camera));
-    }
-
-    void ProjectEditingView::RequestRenderViewCameraCuts() noexcept
-    {
-        sceneViewPanel_.RequestCameraCut();
-        gameViewPanel_.RequestCameraCut();
-    }
-
     void ProjectEditingView::RenderMainMenu(Editor& editor)
     {
         if (!ImGui::BeginMainMenuBar())

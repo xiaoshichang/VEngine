@@ -12,7 +12,6 @@ namespace ve
     void MobileRenderer::BuildFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
     {
         gpuVirtualShadowPass_.AddToFrameGraph(frameGraph, graphData);
-        virtualShadowDepthPass_.AddToFrameGraph(frameGraph, graphData);
         opaquePass_.AddToFrameGraph(frameGraph, graphData);
         transparentPass_.AddToFrameGraph(frameGraph, graphData);
     }

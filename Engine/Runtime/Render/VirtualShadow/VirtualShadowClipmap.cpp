@@ -61,20 +61,4 @@ namespace ve
         return result;
     }
 
-    Aabb GetVirtualShadowPageLightSpaceBounds(const VirtualShadowClipmapSet& clipmaps, VirtualShadowPageKey key, Float32 gutterWorldSize) noexcept
-    {
-        if (!clipmaps.valid || !key.IsValid() || key.GetClipmapLevel() >= VirtualShadowClipmapLevelCount)
-        {
-            return Aabb(Vector3::Zero(), Vector3(-1.0f, -1.0f, -1.0f));
-        }
-
-        const VirtualShadowClipmapLevel& level = clipmaps.levels[key.GetClipmapLevel()];
-        const Float32 minimumX = static_cast<Float32>(key.GetPageX()) * level.pageWorldSize - gutterWorldSize;
-        const Float32 minimumY = static_cast<Float32>(key.GetPageY()) * level.pageWorldSize - gutterWorldSize;
-        const Float32 depthCenter = static_cast<Float32>(key.GetDepthEpoch()) * clipmaps.depthStep;
-        return Aabb(Vector3(minimumX, minimumY, depthCenter - clipmaps.shadowDistance),
-                    Vector3(minimumX + level.pageWorldSize + (2.0f * gutterWorldSize),
-                            minimumY + level.pageWorldSize + (2.0f * gutterWorldSize),
-                            depthCenter + clipmaps.shadowDistance));
-    }
 } // namespace ve

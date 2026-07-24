@@ -56,14 +56,10 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.cpp
-            Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.cpp
             Engine/Runtime/Render/Renderer/StandaloneRenderer.cpp
             Engine/Runtime/Render/ShaderManager.cpp
             Engine/Runtime/Render/ViewportClient.cpp
-            Engine/Runtime/Render/VirtualShadow/VirtualShadowPageTable.cpp
-            Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.cpp
-            Engine/Runtime/Render/VirtualShadow/VirtualShadowRequestBuilder.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.cpp
             Engine/Runtime/Resource/AssetID.cpp
@@ -163,14 +159,10 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h
-            Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.h
             Engine/Runtime/Render/Renderer/StandaloneRenderer.h
             Engine/Runtime/Render/ShaderManager.h
             Engine/Runtime/Render/ViewportClient.h
-            Engine/Runtime/Render/VirtualShadow/VirtualShadowPageTable.h
-            Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h
-            Engine/Runtime/Render/VirtualShadow/VirtualShadowRequestBuilder.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h

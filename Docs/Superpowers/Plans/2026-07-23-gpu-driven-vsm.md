@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace CPU receiver-page requests and CPU per-page draw construction with a same-frame GPU-driven directional-light VSM path while preserving the existing CPU implementation as a fallback.
+**Goal:** Replace CPU receiver-page requests and CPU per-page draw construction with a same-frame GPU-driven directional-light VSM path.
 
-**Architecture:** Add compute and storage-buffer contracts to the common RHI and FrameGraph, generate current-frame VSM requests from a camera depth prepass, maintain per-view GPU page tables and physical metadata, and render dirty pages through page-instanced caster draws without CPU readback. Roll out through D3D11 and D3D12 on Windows, keep Metal API mappings in the common design, and retain CPU VSM fallback until backend acceptance succeeds.
+**Architecture:** Add compute and storage-buffer contracts to the common RHI and FrameGraph, generate current-frame VSM requests from a camera depth prepass, maintain per-view GPU page tables and physical metadata, and render dirty pages through page-instanced caster draws. Run the VSM path on D3D11 and D3D12; disable VSM on unsupported backends or GPU failure.
 
 **Tech Stack:** C++20, CMake, HLSL Shader Model 5/6, D3D11, D3D12, Metal, VEngine FrameGraph and RHI.
 
-**Implementation result (2026-07-23):** Tasks 1, 2, 4–10, and Windows portions of Task 12 are implemented. Task 3 is intentionally limited to common-interface and instanced-draw parity; Metal stays on CPU VSM until native compute encoding is implemented on macOS. Task 11 diagnostics and fine-grained GPU invalidation are deferred and recorded in `Docs/DevelopmentPlan.md`.
+**Implementation result (2026-07-23):** Tasks 1, 2, 4–10, and Windows portions of Task 12 are implemented. Task 3 is intentionally limited to common-interface and instanced-draw parity; Metal has no VSM until native compute encoding is implemented on macOS. Task 11 diagnostics and fine-grained GPU invalidation are deferred and recorded in `Docs/DevelopmentPlan.md`.
 
 ---
 
@@ -34,19 +34,19 @@
 
 - Create `Engine/Runtime/Render/Renderer/RenderPass/CameraDepthPrepass.h/.cpp`: current-view opaque depth.
 - Create `Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowGpuPagePass.h/.cpp`: reset, mark, and allocate compute passes.
-- Modify `Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowDepthRenderPass.h/.cpp`: page-instanced clear and caster draws.
+- Modify `Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.h/.cpp`: page-instanced clear and caster draws.
 - Modify `Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.cpp`: load prepass depth and bind dense GPU page table.
 - Modify `Engine/Runtime/Render/Renderer/StandaloneRenderer.h/.cpp`: register the new pass order.
 - Modify `Engine/Runtime/Render/Renderer/BaseRenderer.h/.cpp`: prepare common clipmap/invalidation input while deferring page requests to GPU mode.
 - Modify `Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h`: GPU constants, dense table entries, page metadata, counters.
 - Create `Engine/Runtime/Render/VirtualShadow/VirtualShadowGpuResources.h/.cpp`: per-view persistent GPU buffers and pipeline mode.
-- Modify `Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h/.cpp`: GPU resource ownership and CPU fallback.
+- Modify `Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h/.cpp`: GPU resource ownership and availability state.
 - Modify `Engine/Runtime/Render/RenderShaderIDs.h`: depth-prepass and GPU VSM shader IDs.
 - Modify `CMake/Targets/Engine.cmake`: register new engine files.
 
 ### Verification
 
-- Modify `Tests/Unit/VirtualShadowTests.cpp`: focused CPU-layout and clipmap-address invariants shared with shaders.
+- Modify `Tests/Unit/VirtualShadowTests.cpp`: focused GPU-layout and clipmap-address invariants shared with shaders.
 - Modify `Docs/DevelopmentPlan.md`: record GPU-driven VSM rollout and current backend acceptance.
 
 ## Task 1: Add Common Compute And Storage-Buffer RHI Contracts
@@ -140,7 +140,7 @@ Expected: Editor and Player compile for D3D11 and D3D12.
 - [ ] Add static assertions for size and alignment.
 - [ ] Create per-view persistent GPU buffers.
 - [ ] Rebuild resources when atlas or clipmap shape changes.
-- [ ] Select CPU fallback when any required resource is unavailable.
+- [ ] Disable VSM for the affected view when any required resource is unavailable.
 - [ ] Preserve independent Scene/Game/Player resource ownership.
 
 Run:
@@ -179,13 +179,12 @@ Verification: stationary camera converges to cache hits; moving camera allocates
 
 ## Task 9: Render Dirty Pages Without CPU Readback
 
-- [ ] Replace CPU page-local clear loops in GPU mode with instanced page clears.
+- [ ] Use instanced page clears across the physical page capacity.
 - [ ] Add storage-buffer access to the VSM caster vertex pipeline.
 - [ ] Issue one instanced draw per caster across physical capacity.
 - [ ] Clip inactive/non-intersecting page instances.
 - [ ] Remap active clip coordinates to the physical atlas tile.
 - [ ] Mark rendered page metadata clean after the depth pass.
-- [ ] Retain the existing CPU dirty-page draw path for fallback mode.
 
 Verification: requested physical pages contain stable shadow depth without CPU request-list readback.
 
@@ -196,7 +195,6 @@ Verification: requested physical pages contain stable shadow depth without CPU r
 - [ ] Resolve the physical page from the dense entry.
 - [ ] Preserve gutter-safe PCF.
 - [ ] Preserve coarser clipmap fallback.
-- [ ] Keep the CPU hash-table shader path as a pipeline variant.
 
 Verification: D3D11 and D3D12 produce equivalent shadows in the DemoProject.
 
@@ -204,7 +202,7 @@ Verification: D3D11 and D3D12 produce equivalent shadows in the DemoProject.
 
 - [ ] Expose page-marking/allocation counters per view.
 - [ ] Add selected-level, requested-page, page-table, and physical-page debug modes.
-- [ ] Rate-limit fallback and pool-pressure warnings.
+- [ ] Rate-limit VSM disablement and pool-pressure warnings.
 - [ ] Update `Docs/DevelopmentPlan.md` and VSM design documentation.
 
 ## Task 12: Final Verification

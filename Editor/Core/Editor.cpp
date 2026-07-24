@@ -396,7 +396,6 @@ namespace ve::editor
         views.gameViewTexture = projectEditingView_->GetGameViewTexture();
         CameraComponent* camera = scene != nullptr ? scene->GetCamera() : nullptr;
         views.gameViewCameraSnapshot = camera != nullptr ? camera->GetRTCamera() : nullptr;
-        projectEditingView_->TrackGameViewCamera(views.gameViewCameraSnapshot);
         views.gameViewState = projectEditingView_->GetGameRenderViewState()->GetRTRenderViewState();
         VE_ASSERT_MESSAGE(views.sceneViewState != views.gameViewState, "Editor Scene and Game views require isolated persistent state.");
         return views;
@@ -479,14 +478,6 @@ namespace ve::editor
     std::shared_ptr<RTScene> Editor::GetActiveRenderScene() const
     {
         return sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
-    }
-
-    void Editor::RequestRenderViewCameraCuts() noexcept
-    {
-        if (projectEditingView_ != nullptr)
-        {
-            projectEditingView_->RequestRenderViewCameraCuts();
-        }
     }
 
     void Editor::UnInit() noexcept
@@ -794,7 +785,6 @@ namespace ve::editor
         runtime_->GetTimeSystem().SetPaused(false);
         playState_ = EditorPlayState::Playing;
         ++playSessionID_;
-        RequestRenderViewCameraCuts();
         CollectUnusedResources();
         VE_LOG_INFO_CATEGORY("Editor", "Entered Play mode.");
     }
@@ -829,7 +819,6 @@ namespace ve::editor
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
         ++playSessionID_;
-        RequestRenderViewCameraCuts();
         CollectUnusedResources();
         VE_LOG_INFO_CATEGORY("Editor", "Exited Play mode.");
     }
@@ -1051,7 +1040,6 @@ namespace ve::editor
                 VE_LOG_WARN_CATEGORY("Editor", "Failed to reload scene after script compile: " + loadResult.GetMessage());
                 return;
             }
-            RequestRenderViewCameraCuts();
         }
 
         const ErrorCode refreshResult = scriptDatabase_.RefreshFromScriptingSystem(runtime_->GetScriptingSystem());
@@ -1108,7 +1096,6 @@ namespace ve::editor
             return loadResult;
         }
 
-        RequestRenderViewCameraCuts();
         currentScenePath_ = sceneAsset->path;
         return Error();
     }
@@ -1240,7 +1227,6 @@ namespace ve::editor
             return;
         }
 
-        RequestRenderViewCameraCuts();
         currentScenePath_ = sceneAsset->path;
         ClearSelection();
         CollectUnusedResources();

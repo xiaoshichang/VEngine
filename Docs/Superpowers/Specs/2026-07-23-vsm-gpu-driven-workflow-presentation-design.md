@@ -2,7 +2,7 @@
 
 ## Communication Goal
 
-By the end of the presentation, VEngine technical leads and developers should understand how the current Windows GPU-driven directional-light Virtual Shadow Maps path turns camera depth into same-frame shadow pages, why the path removes CPU page-request readback, and which parts are implemented, fallback-only, or planned.
+By the end of the presentation, VEngine technical leads and developers should understand how the current Windows GPU-driven directional-light Virtual Shadow Maps path turns camera depth into same-frame shadow pages, why the path removes CPU page-request readback, and which parts are implemented or planned.
 
 ## Audience And Tone
 
@@ -13,7 +13,7 @@ By the end of the presentation, VEngine technical leads and developers should un
 
 ## Narrative
 
-Use an end-to-end workflow as the primary narrative. Introduce the CPU-to-GPU motivation briefly, establish the virtual-page and clipmap model, then follow the current RenderGraph pass order from receiver depth through page marking, compaction, coarse-to-fine cache resolution and allocation, physical-page rendering, finalization, and forward sampling. Close with cache invalidation, platform fallback, runtime evidence, and current follow-up work.
+Use an end-to-end workflow as the primary narrative. Introduce the CPU-to-GPU motivation briefly, establish the virtual-page and clipmap model, then follow the current RenderGraph pass order from receiver depth through page marking, compaction, coarse-to-fine cache resolution and allocation, physical-page rendering, finalization, and forward sampling. Close with cache invalidation, GPU-only platform behavior, runtime evidence, and current follow-up work.
 
 ## Slide Structure
 
@@ -34,7 +34,7 @@ Use an end-to-end workflow as the primary narrative. Introduce the CPU-to-GPU mo
 15. Render pages without CPU readback: instanced page clear and caster draws across physical capacity.
 16. Finalize and forward sample: dense lookup, atlas addressing, gutter-safe PCF, and coarse fallback.
 17. Cross-frame cache and dynamic invalidation for moved, added, removed, or disabled casters.
-18. Engineering safeguards: D3D11 and D3D12 GPU path, CPU fallback, Metal CPU path, and per-view isolation.
+18. Engineering safeguards: D3D11 and D3D12 GPU path, failure-triggered VSM disablement, Metal unsupported status, and per-view isolation.
 19. Runtime verification: DemoProject screenshots and acceptance scenarios.
 20. Summary and follow-up work: GPU Scene, indirect draw compaction, diagnostics, and native Metal compute.
 
@@ -65,9 +65,9 @@ Use an end-to-end workflow as the primary narrative. Introduce the CPU-to-GPU mo
 
 - The current GPU RenderGraph includes receiver depth, clear, mark, compact, four coarse-to-fine resolve/allocate pairs, physical-page rendering, and finalization.
 - Page rendering uses instancing across physical-page capacity rather than GPU-to-CPU request readback.
-- The dense page table is sampled by the forward shader; the CPU hash-table path remains for fallback mode.
+- The dense page table is the only page-table path sampled by the forward shader.
 - D3D11 and D3D12 use the GPU path when resources and pipelines are available.
-- Metal remains on the CPU VSM path because `BaseRenderer` excludes Metal from the GPU-driven selection.
+- Metal currently has no VSM because native GPU-driven compute encoding has not been completed.
 - Diagnostics counters, dedicated page-debug views, native Metal compute, GPU Scene, and indirect caster submission are follow-up work.
 
 ## Acceptance Criteria

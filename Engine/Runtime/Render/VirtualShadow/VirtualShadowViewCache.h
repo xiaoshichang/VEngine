@@ -1,8 +1,7 @@
 #pragma once
 
+#include "Engine/Runtime/Math/Bounds.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h"
-#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowPageCache.h"
-#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowRequestBuilder.h"
 
 #include <memory>
 #include <span>
@@ -12,7 +11,6 @@
 namespace ve
 {
     class RTCamera;
-    class RTRenderItem;
     class RTScene;
 
     namespace rhi
@@ -30,7 +28,6 @@ namespace ve
         Float32 shadowDistance = 200.0f;
         Float32 depthBias = 0.001f;
         Float32 normalBias = 0.05f;
-        UInt64 revision = 0;
     };
 
     struct VirtualShadowSceneItem
@@ -40,43 +37,17 @@ namespace ve
         Aabb worldBounds = Aabb(Vector3::Zero(), Vector3::Zero());
         bool opaque = true;
         bool castShadows = true;
-        bool receiveShadows = true;
-        const RTRenderItem* renderItem = nullptr;
     };
 
     struct VirtualShadowPrepareInput
     {
         UInt64 frameIndex = 0;
-        UInt64 cameraCutRevision = 0;
         UInt32 screenWidth = 0;
         UInt32 screenHeight = 0;
         Matrix44 viewProjection = Matrix44::Identity();
         Matrix44 cameraLocalToWorld = Matrix44::Identity();
         VirtualShadowLightInput light;
         std::span<const VirtualShadowSceneItem> items;
-    };
-
-    struct VirtualShadowDirtyPageDraw
-    {
-        VirtualShadowPageKey key;
-        UInt32 physicalPageIndex = InvalidVirtualShadowPhysicalPage;
-        VirtualShadowPhysicalPageOrigin physicalOrigin;
-        Matrix44 pageViewProjection = Matrix44::Identity();
-        std::vector<UInt64> casterRenderItemIDs;
-        std::vector<const RTRenderItem*> casters;
-    };
-
-    struct VirtualShadowStatistics
-    {
-        UInt32 requested = 0;
-        UInt32 resident = 0;
-        UInt32 allocated = 0;
-        UInt32 cached = 0;
-        UInt32 dirty = 0;
-        UInt32 rendered = 0;
-        UInt32 evicted = 0;
-        UInt32 missing = 0;
-        UInt32 casterDraws = 0;
     };
 
     struct VirtualShadowFramePacket
@@ -87,10 +58,6 @@ namespace ve
         Float32 depthBias = 0.0f;
         Float32 normalBias = 0.0f;
         VirtualShadowClipmapSet clipmaps;
-        VirtualShadowPageTable residentPageTable;
-        std::vector<VirtualShadowDirtyPageDraw> dirtyPages;
-        VirtualShadowStatistics statistics;
-        bool gpuDriven = false;
         bool resetGpuCache = false;
         UInt64 frameIndex = 0;
         UInt32 screenWidth = 0;
@@ -110,19 +77,17 @@ namespace ve
 
         [[nodiscard]] VirtualShadowFramePacket PrepareFrame(const VirtualShadowPrepareInput& input);
         [[nodiscard]] VirtualShadowFramePacket
-        PrepareFrame(UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
-        [[nodiscard]] VirtualShadowFramePacket PrepareGpuFrame(const VirtualShadowPrepareInput& input);
-        [[nodiscard]] VirtualShadowFramePacket
-        PrepareGpuFrame(UInt64 frameIndex, UInt64 cameraCutRevision, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
-        [[nodiscard]] bool EnsureSamplingPageTable(rhi::RhiDevice& device, const std::string& viewName);
+        PrepareFrame(UInt64 frameIndex, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight);
+        [[nodiscard]] bool EnsureSamplingResources(rhi::RhiDevice& device, const std::string& viewName);
         [[nodiscard]] bool EnsureGpuResources(rhi::RhiDevice& device, const std::string& viewName);
-        [[nodiscard]] bool CanUseGpuDriven(const rhi::RhiDevice& device) const noexcept;
-        void DisableGpuDriven() noexcept;
-        void MarkRendered(std::span<const VirtualShadowPageKey> keys);
+        [[nodiscard]] bool CanUseGpuShadows(const rhi::RhiDevice& device) const noexcept;
+        void DisableGpuShadows() noexcept;
 
         [[nodiscard]] UInt32 GetAtlasExtent() const noexcept;
         [[nodiscard]] rhi::RhiTexture* GetAtlasTexture() noexcept;
         [[nodiscard]] const rhi::RhiTexture* GetAtlasTexture() const noexcept;
+        [[nodiscard]] rhi::RhiTexture* GetFallbackAtlasTexture() noexcept;
+        [[nodiscard]] const rhi::RhiTexture* GetFallbackAtlasTexture() const noexcept;
         [[nodiscard]] rhi::RhiSampler* GetComparisonSampler() noexcept;
         [[nodiscard]] const rhi::RhiSampler* GetComparisonSampler() const noexcept;
         [[nodiscard]] rhi::RhiBuffer* GetGpuPageMarksBuffer() noexcept;
@@ -133,19 +98,15 @@ namespace ve
         [[nodiscard]] rhi::RhiBuffer* GetGpuPhysicalPagesBuffer() noexcept;
         [[nodiscard]] UInt32 GetGpuPhysicalPageCapacity() const noexcept;
         [[nodiscard]] bool ConsumeGpuCacheReset() noexcept;
-        [[nodiscard]] VirtualShadowPageCache& GetPageCache() noexcept;
-        [[nodiscard]] const VirtualShadowPageCache& GetPageCache() const noexcept;
 
     private:
         UInt32 atlasExtent_ = 0;
-        VirtualShadowPageCache pageCache_;
         VirtualShadowInvalidationTracker invalidationTracker_;
-        UInt64 lastCameraCutRevision_ = 0;
-        bool hasCameraCutRevision_ = false;
         Float32 lastShadowDistance_ = 0.0f;
         bool hasShadowDistance_ = false;
         rhi::RhiDevice* resourceDevice_ = nullptr;
         std::unique_ptr<rhi::RhiTexture> atlasTexture_;
+        std::unique_ptr<rhi::RhiTexture> fallbackAtlasTexture_;
         std::unique_ptr<rhi::RhiSampler> comparisonSampler_;
         std::unique_ptr<rhi::RhiBuffer> gpuPageMarksBuffer_;
         std::unique_ptr<rhi::RhiBuffer> gpuPageTableBuffer_;
@@ -153,7 +114,7 @@ namespace ve
         std::unique_ptr<rhi::RhiBuffer> gpuRequestCountsBuffer_;
         std::unique_ptr<rhi::RhiBuffer> samplingPageTableBuffer_;
         std::unique_ptr<rhi::RhiBuffer> gpuPhysicalPagesBuffer_;
-        bool gpuDrivenAvailable_ = true;
+        bool gpuShadowsAvailable_ = true;
         bool gpuCacheResetPending_ = true;
     };
 

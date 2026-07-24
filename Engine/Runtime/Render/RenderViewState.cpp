@@ -19,11 +19,6 @@ namespace ve
         return desc_;
     }
 
-    UInt64 RTRenderViewState::GetCameraCutRevision() const noexcept
-    {
-        return cameraCutRevision_.load(std::memory_order_acquire);
-    }
-
     VirtualShadowViewCache& RTRenderViewState::GetVirtualShadowViewCache() noexcept
     {
         return *virtualShadowViewCache_;
@@ -32,11 +27,6 @@ namespace ve
     const VirtualShadowViewCache& RTRenderViewState::GetVirtualShadowViewCache() const noexcept
     {
         return *virtualShadowViewCache_;
-    }
-
-    void RTRenderViewState::RequestCameraCut() noexcept
-    {
-        cameraCutRevision_.fetch_add(1, std::memory_order_acq_rel);
     }
 
     RenderViewState::RenderViewState(RenderViewStateDesc desc)
@@ -49,8 +39,4 @@ namespace ve
         return rtViewState_;
     }
 
-    void RenderViewState::RequestCameraCut() noexcept
-    {
-        rtViewState_->RequestCameraCut();
-    }
 } // namespace ve
