@@ -25,6 +25,7 @@ namespace ve::editor
         [[nodiscard]] RenderTexture& GetSceneViewTexture() noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetFillMode() const noexcept;
+        [[nodiscard]] bool IsVirtualShadowPageVisualizationEnabled() const noexcept;
         [[nodiscard]] bool IsGridEnabled() const noexcept;
         [[nodiscard]] Float32 GetGridOpacity() const noexcept;
         [[nodiscard]] Float32 GetGridUnitSize() const noexcept;
@@ -97,6 +98,7 @@ namespace ve::editor
         SceneViewGridState grid_;
         Gizmos gizmos_;
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
+        bool visualizeVirtualShadowPages_ = false;
         bool sceneViewFocused_ = false;
         bool cameraLookActive_ = false;
         bool skipNextMouseLookDelta_ = false;

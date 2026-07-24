@@ -14,6 +14,7 @@ namespace ve
     {
         rhi::RhiFillMode fillMode = rhi::RhiFillMode::Solid;
         rhi::RhiLoadAction colorLoadAction = rhi::RhiLoadAction::Clear;
+        bool visualizeVirtualShadowPages = false;
     };
 
     class OpaqueSceneRenderPass final : public RenderPass

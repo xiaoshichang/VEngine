@@ -108,6 +108,11 @@ namespace ve::editor
         return sceneViewPanel_.GetFillMode();
     }
 
+    bool ProjectEditingView::IsSceneViewVirtualShadowPageVisualizationEnabled() const noexcept
+    {
+        return sceneViewPanel_.IsVirtualShadowPageVisualizationEnabled();
+    }
+
     bool ProjectEditingView::IsSceneViewGridEnabled() const noexcept
     {
         return sceneViewPanel_.IsGridEnabled();

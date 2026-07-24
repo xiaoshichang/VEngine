@@ -12,6 +12,7 @@ namespace ve
 {
     struct StandaloneRendererInitParam : public BaseRendererInitParam
     {
+        bool visualizeVirtualShadowPages = false;
         std::vector<std::unique_ptr<RenderPass>> additionalPasses;
     };
 

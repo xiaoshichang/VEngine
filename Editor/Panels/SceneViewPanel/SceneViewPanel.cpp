@@ -137,6 +137,11 @@ namespace ve::editor
         return fillMode_;
     }
 
+    bool SceneViewPanel::IsVirtualShadowPageVisualizationEnabled() const noexcept
+    {
+        return visualizeVirtualShadowPages_;
+    }
+
     bool SceneViewPanel::IsGridEnabled() const noexcept
     {
         return grid_.enabled;
@@ -339,6 +344,8 @@ namespace ve::editor
         {
             fillMode_ = wireframe ? rhi::RhiFillMode::Wireframe : rhi::RhiFillMode::Solid;
         }
+
+        ImGui::Checkbox("VSM Virtual Pages", &visualizeVirtualShadowPages_);
 
         ImGui::EndPopup();
     }
