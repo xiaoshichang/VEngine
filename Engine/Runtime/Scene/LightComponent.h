@@ -44,6 +44,17 @@ namespace ve
         [[nodiscard]] bool CastShadows() const noexcept;
         void SetCastShadows(bool castShadows) noexcept;
 
+        [[nodiscard]] Float32 GetShadowDistance() const noexcept;
+        void SetShadowDistance(Float32 shadowDistance) noexcept;
+
+        [[nodiscard]] Float32 GetDepthBias() const noexcept;
+        void SetDepthBias(Float32 depthBias) noexcept;
+
+        [[nodiscard]] Float32 GetNormalBias() const noexcept;
+        void SetNormalBias(Float32 normalBias) noexcept;
+
+        [[nodiscard]] UInt64 GetShadowRevision() const noexcept;
+
         [[nodiscard]] std::shared_ptr<RTLight> GetRTLight() noexcept;
         [[nodiscard]] std::shared_ptr<const RTLight> GetRTLight() const noexcept;
 
@@ -57,6 +68,7 @@ namespace ve
         [[nodiscard]] RTLightUpdateParam BuildLightUpdateParam() const;
         [[nodiscard]] bool IsLightDirty() const noexcept;
         void MarkLightDirty() noexcept;
+        void MarkLightShadowDirty() noexcept;
         void ClearLightDirty() noexcept;
         void UnregisterTransformChangedCallback() noexcept;
         void RegisterLightToRenderThread();
@@ -71,6 +83,10 @@ namespace ve
         Float32 innerConeAngleRadians_ = 0.0f;
         Float32 outerConeAngleRadians_ = 0.0f;
         bool castShadows_ = false;
+        Float32 shadowDistance_ = 200.0f;
+        Float32 depthBias_ = 0.001f;
+        Float32 normalBias_ = 0.05f;
+        UInt64 shadowRevision_ = 1;
         bool lightDirty_ = true;
         bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Editor/Core/Editor.h"
+#include "Editor/Core/EditorStartup.h"
 #include "Engine/Runtime/Application/Application.h"
 
 namespace ve::editor
@@ -8,7 +9,7 @@ namespace ve::editor
     class MacEditorApplication : public ve::Application
     {
     public:
-        explicit MacEditorApplication(ve::ApplicationInitParam initParam);
+        MacEditorApplication(ve::ApplicationInitParam initParam, EditorStartupOptions startupOptions);
         ~MacEditorApplication() override;
 
         [[nodiscard]] int Init() override;
@@ -17,5 +18,6 @@ namespace ve::editor
 
     private:
         Editor editor_;
+        EditorStartupOptions startupOptions_;
     };
 } // namespace ve::editor

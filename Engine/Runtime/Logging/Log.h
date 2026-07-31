@@ -59,6 +59,9 @@ namespace ve
     /// Removes logging sinks and clears logging-owned global state.
     void ShutdownLogging() noexcept;
 
+    /// Flushes every initialized logging sink before returning.
+    void FlushLogging() noexcept;
+
     [[nodiscard]] bool IsLoggingInitialized() noexcept;
 
     /// Returns true when a message of the supplied severity would pass the current severity filter.

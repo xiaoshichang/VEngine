@@ -1,8 +1,12 @@
 #include "Engine/Runtime/Scene/LightComponent.h"
 
+#include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
+
+#include <exception>
+#include <limits>
 
 namespace ve
 {
@@ -23,7 +27,17 @@ namespace ve
 
         [[nodiscard]] Vector3 GetDirectionFromTransform(const TransformComponent* transform) noexcept
         {
-            return transform != nullptr ? transform->GetWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized() : Vector3::UnitZ();
+            return transform != nullptr ? transform->GetRenderWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized() : Vector3::UnitZ();
+        }
+
+        void IncrementShadowRevision(UInt64& shadowRevision) noexcept
+        {
+            if (shadowRevision == std::numeric_limits<UInt64>::max())
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Light shadow revision exhausted.");
+                std::terminate();
+            }
+            ++shadowRevision;
         }
     } // namespace
 
@@ -33,7 +47,7 @@ namespace ve
     {
         TransformComponent* transform = owner.GetComponent<TransformComponent>();
         VE_ASSERT(transform != nullptr);
-        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkLightDirty(); });
+        transformChangedCallbackId_ = transform->AddTransformChangedCallback([this]() { MarkLightShadowDirty(); });
     }
 
     LightComponent::~LightComponent()
@@ -115,8 +129,62 @@ namespace ve
 
     void LightComponent::SetCastShadows(bool castShadows) noexcept
     {
+        if (castShadows_ == castShadows)
+        {
+            return;
+        }
         castShadows_ = castShadows;
-        MarkLightDirty();
+        MarkLightShadowDirty();
+    }
+
+    Float32 LightComponent::GetShadowDistance() const noexcept
+    {
+        return shadowDistance_;
+    }
+
+    void LightComponent::SetShadowDistance(Float32 shadowDistance) noexcept
+    {
+        if (shadowDistance_ == shadowDistance)
+        {
+            return;
+        }
+        shadowDistance_ = shadowDistance;
+        MarkLightShadowDirty();
+    }
+
+    Float32 LightComponent::GetDepthBias() const noexcept
+    {
+        return depthBias_;
+    }
+
+    void LightComponent::SetDepthBias(Float32 depthBias) noexcept
+    {
+        if (depthBias_ == depthBias)
+        {
+            return;
+        }
+        depthBias_ = depthBias;
+        MarkLightShadowDirty();
+    }
+
+    Float32 LightComponent::GetNormalBias() const noexcept
+    {
+        return normalBias_;
+    }
+
+    void LightComponent::SetNormalBias(Float32 normalBias) noexcept
+    {
+        if (normalBias_ == normalBias)
+        {
+            return;
+        }
+        normalBias_ = normalBias;
+        MarkLightShadowDirty();
+    }
+
+    UInt64 LightComponent::GetShadowRevision() const noexcept
+    {
+        return shadowRevision_;
     }
 
     std::shared_ptr<RTLight> LightComponent::GetRTLight() noexcept
@@ -143,7 +211,11 @@ namespace ve
             innerConeAngleRadians_,
             outerConeAngleRadians_,
             castShadows_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            shadowDistance_,
+            depthBias_,
+            normalBias_,
+            shadowRevision_,
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
         };
     }
 
@@ -162,7 +234,11 @@ namespace ve
             innerConeAngleRadians_,
             outerConeAngleRadians_,
             castShadows_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            shadowDistance_,
+            depthBias_,
+            normalBias_,
+            shadowRevision_,
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
         };
     }
 
@@ -174,6 +250,12 @@ namespace ve
     void LightComponent::MarkLightDirty() noexcept
     {
         lightDirty_ = true;
+    }
+
+    void LightComponent::MarkLightShadowDirty() noexcept
+    {
+        IncrementShadowRevision(shadowRevision_);
+        MarkLightDirty();
     }
 
     void LightComponent::ClearLightDirty() noexcept

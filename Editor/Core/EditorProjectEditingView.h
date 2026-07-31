@@ -11,6 +11,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 
 #include <memory>
 
@@ -30,12 +31,15 @@ namespace ve::editor
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewTexture() const noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetSceneViewFillMode() const noexcept;
+        [[nodiscard]] bool IsSceneViewVirtualShadowPageVisualizationEnabled() const noexcept;
         [[nodiscard]] bool IsSceneViewGridEnabled() const noexcept;
         [[nodiscard]] Float32 GetSceneViewGridOpacity() const noexcept;
         [[nodiscard]] Float32 GetSceneViewGridUnitSize() const noexcept;
         [[nodiscard]] const Gizmos& GetSceneViewGizmos() const noexcept;
         [[nodiscard]] Matrix44 GetSceneViewCameraLocalToWorld() const noexcept;
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<RenderViewState> GetSceneRenderViewState() const noexcept;
+        [[nodiscard]] std::shared_ptr<RenderViewState> GetGameRenderViewState() const noexcept;
 
     private:
         void RenderMainMenu(Editor& editor);

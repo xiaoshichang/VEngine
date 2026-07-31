@@ -1,5 +1,6 @@
 #include "Engine/RHI/Metal/MetalRhi.h"
 
+#include "Engine/RHI/Common/RhiUtils.h"
 #include "Engine/Runtime/Core/Assert.h"
 
 #import <Foundation/Foundation.h>
@@ -8,10 +9,12 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ve::rhi
 {
@@ -506,11 +509,13 @@ namespace ve::rhi
             MetalPipelineState(RhiPrimitiveTopology topology,
                                RhiRasterizerStateDesc rasterizerState,
                                id<MTLRenderPipelineState> pipelineState,
-                               id<MTLDepthStencilState> depthStencilState)
+                               id<MTLDepthStencilState> depthStencilState,
+                               std::vector<RhiPipelineResourceBindingDesc> resourceBindings)
                 : topology_(topology)
                 , rasterizerState_(rasterizerState)
                 , pipelineState_(pipelineState)
                 , depthStencilState_(depthStencilState)
+                , resourceBindings_(std::move(resourceBindings))
             {
             }
 
@@ -540,11 +545,24 @@ namespace ve::rhi
                 return depthStencilState_;
             }
 
+            [[nodiscard]] bool HasBinding(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot) const noexcept
+            {
+                for (const RhiPipelineResourceBindingDesc& binding : resourceBindings_)
+                {
+                    if (binding.kind == kind && binding.stage == stage && binding.slot == slot)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
         private:
             RhiPrimitiveTopology topology_ = RhiPrimitiveTopology::TriangleList;
             RhiRasterizerStateDesc rasterizerState_ = {};
             id<MTLRenderPipelineState> pipelineState_ = nil;
             id<MTLDepthStencilState> depthStencilState_ = nil;
+            std::vector<RhiPipelineResourceBindingDesc> resourceBindings_;
         };
 
         class MetalSwapchain final : public RhiSwapchain
@@ -632,6 +650,7 @@ namespace ve::rhi
             [[nodiscard]] bool Begin() override
             {
                 ResetTransientState();
+                activePipeline_ = nullptr;
                 @autoreleasepool
                 {
                     commandBuffer_ = [[commandQueue_ commandBuffer] retain];
@@ -650,15 +669,31 @@ namespace ve::rhi
                 {
                     auto* metalSwapchain = dynamic_cast<MetalSwapchain*>(&swapchain);
 
-                    if (metalSwapchain == nullptr || commandBuffer_ == nil)
+                    if (metalSwapchain == nullptr || commandBuffer_ == nil || (!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
+                        (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) ||
+                        (!beginInfo.hasColorAttachment && !beginInfo.hasDepthAttachment))
                     {
                         return false;
                     }
 
                     const RhiRenderPassColorAttachmentInfo& colorAttachment = beginInfo.colorAttachment;
-                    const bool targetsSwapchain = colorAttachment.texture == nullptr;
+                    const bool targetsSwapchain = beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain;
                     id<MTLTexture> colorTexture = nil;
-                    if (colorAttachment.texture != nullptr)
+                    if (beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain)
+                    {
+                        if (colorAttachment.texture != nullptr || drawable_ != nil)
+                        {
+                            return false;
+                        }
+
+                        drawable_ = [metalSwapchain->AcquireDrawable() retain];
+                        if (drawable_ == nil)
+                        {
+                            return false;
+                        }
+                        colorTexture = drawable_.texture;
+                    }
+                    else if (beginInfo.hasColorAttachment)
                     {
                         auto* metalTexture = dynamic_cast<MetalTexture*>(colorAttachment.texture);
                         if (metalTexture == nullptr)
@@ -668,24 +703,8 @@ namespace ve::rhi
 
                         colorTexture = metalTexture->GetNativeTexture();
                     }
-                    else
-                    {
-                        if (drawable_ != nil)
-                        {
-                            return false;
-                        }
 
-                        drawable_ = [metalSwapchain->AcquireDrawable() retain];
-
-                        if (drawable_ == nil)
-                        {
-                            return false;
-                        }
-
-                        colorTexture = drawable_.texture;
-                    }
-
-                    if (colorTexture == nil)
+                    if (beginInfo.hasColorAttachment && colorTexture == nil)
                     {
                         if (targetsSwapchain)
                         {
@@ -722,10 +741,13 @@ namespace ve::rhi
                     }
 
                     MTLRenderPassDescriptor* renderPassDescriptor = [[MTLRenderPassDescriptor alloc] init];
-                    renderPassDescriptor.colorAttachments[0].texture = colorTexture;
-                    renderPassDescriptor.colorAttachments[0].loadAction = ToMetalLoadAction(colorAttachment.loadAction);
-                    renderPassDescriptor.colorAttachments[0].storeAction = ToMetalStoreAction(colorAttachment.storeAction);
-                    renderPassDescriptor.colorAttachments[0].clearColor = ToMetalClearColor(colorAttachment.clearColor);
+                    if (beginInfo.hasColorAttachment)
+                    {
+                        renderPassDescriptor.colorAttachments[0].texture = colorTexture;
+                        renderPassDescriptor.colorAttachments[0].loadAction = ToMetalLoadAction(colorAttachment.loadAction);
+                        renderPassDescriptor.colorAttachments[0].storeAction = ToMetalStoreAction(colorAttachment.storeAction);
+                        renderPassDescriptor.colorAttachments[0].clearColor = ToMetalClearColor(colorAttachment.clearColor);
+                    }
 
                     if (depthTexture != nil)
                     {
@@ -813,9 +835,38 @@ namespace ve::rhi
                 return true;
             }
 
+            [[nodiscard]] bool
+            CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
+            {
+                auto* sourceBuffer = dynamic_cast<MetalBuffer*>(&source);
+                auto* destinationBuffer = dynamic_cast<MetalBuffer*>(&destination);
+                if (sourceBuffer == nullptr || destinationBuffer == nullptr || sourceBuffer == destinationBuffer || commandBuffer_ == nil || size == 0 ||
+                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu ||
+                    sourceOffset > sourceBuffer->GetSize() || size > sourceBuffer->GetSize() - sourceOffset ||
+                    destinationOffset > destinationBuffer->GetSize() || size > destinationBuffer->GetSize() - destinationOffset ||
+                    destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
+                {
+                    return false;
+                }
+
+                id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer_ blitCommandEncoder];
+                if (blitEncoder == nil)
+                {
+                    return false;
+                }
+                [blitEncoder copyFromBuffer:sourceBuffer->GetNativeBuffer()
+                               sourceOffset:sourceOffset
+                                   toBuffer:destinationBuffer->GetNativeBuffer()
+                          destinationOffset:destinationOffset
+                                       size:size];
+                [blitEncoder endEncoding];
+                return true;
+            }
+
             void SetPipeline(const RhiPipelineState& pipelineState) override
             {
                 const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);
+                activePipeline_ = &metalPipelineState;
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
                 [renderCommandEncoder_ setDepthStencilState:metalPipelineState.GetNativeDepthStencilState()];
 
@@ -824,7 +875,16 @@ namespace ve::rhi
                 [renderCommandEncoder_ setCullMode:ToMetalCullMode(rasterizerState.cullMode)];
                 [renderCommandEncoder_
                     setTriangleFillMode:rasterizerState.fillMode == RhiFillMode::Wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
+                constexpr Float32 D3DDepthBiasUnit = 1.0f / 8388608.0f;
+                [renderCommandEncoder_ setDepthBias:static_cast<Float32>(rasterizerState.depthBias) * D3DDepthBiasUnit
+                                         slopeScale:rasterizerState.slopeScaledDepthBias
+                                              clamp:rasterizerState.depthBiasClamp];
                 primitiveType_ = ToMetalPrimitiveType(metalPipelineState.GetTopology());
+            }
+
+            void SetComputePipeline(const RhiComputePipelineState&) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal compute pipelines are not enabled by the current renderer path.");
             }
 
             void SetViewport(const RhiViewport& viewport) override
@@ -866,6 +926,11 @@ namespace ve::rhi
 
             void SetUniformBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
             {
+                if (!ValidateBinding(RhiPipelineResourceKind::UniformBuffer, stage, slot))
+                {
+                    return;
+                }
+
                 VE_ASSERT(size > 0);
                 VE_ASSERT(offset + size <= buffer.GetSize());
                 const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
@@ -877,11 +942,18 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     [renderCommandEncoder_ setFragmentBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
                     break;
+                case RhiShaderStage::Compute:
+                    break;
                 }
             }
 
             void SetTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
             {
+                if (!ValidateBinding(RhiPipelineResourceKind::SampledTexture, stage, slot))
+                {
+                    return;
+                }
+
                 const auto& metalTexture = static_cast<const MetalTexture&>(texture);
                 switch (stage)
                 {
@@ -891,11 +963,18 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     [renderCommandEncoder_ setFragmentTexture:metalTexture.GetNativeTexture() atIndex:slot];
                     break;
+                case RhiShaderStage::Compute:
+                    break;
                 }
             }
 
             void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) override
             {
+                if (!ValidateBinding(RhiPipelineResourceKind::Sampler, stage, slot))
+                {
+                    return;
+                }
+
                 const auto& metalSampler = static_cast<const MetalSampler&>(sampler);
                 switch (stage)
                 {
@@ -905,12 +984,72 @@ namespace ve::rhi
                 case RhiShaderStage::Fragment:
                     [renderCommandEncoder_ setFragmentSamplerState:metalSampler.GetNativeSamplerState() atIndex:slot];
                     break;
+                case RhiShaderStage::Compute:
+                    break;
                 }
+            }
+
+            void SetStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            {
+                if (!ValidateBinding(RhiPipelineResourceKind::StorageBuffer, stage, slot))
+                {
+                    return;
+                }
+                VE_ASSERT(offset + size <= buffer.GetSize());
+                const auto& metalBuffer = static_cast<const MetalBuffer&>(buffer);
+                if (stage == RhiShaderStage::Vertex)
+                {
+                    [renderCommandEncoder_ setVertexBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+                }
+                else if (stage == RhiShaderStage::Fragment)
+                {
+                    [renderCommandEncoder_ setFragmentBuffer:metalBuffer.GetNativeBuffer() offset:offset atIndex:slot];
+                }
+            }
+
+            void SetReadWriteStorageBuffer(RhiShaderStage, uint32_t, const RhiBuffer&, uint64_t, uint64_t) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal compute storage writes are not enabled by the current renderer path.");
+            }
+
+            void SetReadWriteStorageTexture(RhiShaderStage, uint32_t, const RhiTexture&) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal read-write storage textures are unsupported in this milestone.");
+                std::terminate();
+            }
+
+            void InsertUavBarriers(std::span<RhiBuffer* const> buffers) override
+            {
+                static_cast<void>(buffers);
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal UAV barriers are not enabled by the current renderer path.");
+            }
+
+            void InsertTextureUavBarriers(std::span<RhiTexture* const> textures) override
+            {
+                if (!textures.empty())
+                {
+                    VE_ASSERT_ALWAYS_MESSAGE(false, "Metal texture UAV barriers are unsupported in this milestone.");
+                    std::terminate();
+                }
+            }
+
+            void Dispatch(uint32_t, uint32_t, uint32_t) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal compute dispatch is not enabled by the current renderer path.");
             }
 
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 [renderCommandEncoder_ drawPrimitives:primitiveType_ vertexStart:firstVertex vertexCount:vertexCount];
+            }
+
+            void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
+            {
+                [renderCommandEncoder_ drawPrimitives:primitiveType_
+                                         vertexStart:firstVertex
+                                         vertexCount:vertexCount
+                                       instanceCount:instanceCount
+                                        baseInstance:firstInstance];
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
@@ -922,6 +1061,20 @@ namespace ve::rhi
                                                    indexType:indexType_
                                                  indexBuffer:indexBuffer_
                                            indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
+            }
+
+            void DrawIndexedInstanced(
+                uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
+            {
+                const NSUInteger indexSize = indexType_ == MTLIndexTypeUInt16 ? sizeof(uint16_t) : sizeof(uint32_t);
+                [renderCommandEncoder_ drawIndexedPrimitives:primitiveType_
+                                                  indexCount:indexCount
+                                                   indexType:indexType_
+                                                 indexBuffer:indexBuffer_
+                                           indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)
+                                               instanceCount:instanceCount
+                                                  baseVertex:vertexOffset
+                                                baseInstance:firstInstance];
             }
 
             [[nodiscard]] void* GetNativeRenderEncoderHandle() const noexcept override
@@ -963,6 +1116,13 @@ namespace ve::rhi
             }
 
         private:
+            [[nodiscard]] bool ValidateBinding(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot) const noexcept
+            {
+                const bool valid = activePipeline_ != nullptr && activePipeline_->HasBinding(kind, stage, slot);
+                VE_ASSERT_MESSAGE(valid, "Metal resource binding is absent from the active pipeline layout.");
+                return valid;
+            }
+
             void ResetTransientState() noexcept
             {
                 if (renderCommandEncoder_ != nil)
@@ -986,6 +1146,7 @@ namespace ve::rhi
             uint64_t indexBufferOffset_ = 0;
             MTLIndexType indexType_ = MTLIndexTypeUInt32;
             MTLPrimitiveType primitiveType_ = MTLPrimitiveTypeTriangle;
+            const MetalPipelineState* activePipeline_ = nullptr;
         };
 
         class MetalDevice final : public RhiDevice
@@ -1058,6 +1219,13 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) override
             {
+                const bool isReadback = desc.usage == RhiBufferUsage::Readback;
+                if (desc.size == 0 || isReadback != (desc.memoryUsage == RhiBufferMemoryUsage::GpuToCpu) || (isReadback && desc.initialData != nullptr))
+                {
+                    SetLastError("Metal readback buffers require a non-zero size, GPU-to-CPU memory, and no initial data.");
+                    return nullptr;
+                }
+
                 id<MTLBuffer> buffer = nil;
 
                 if (desc.initialData != nullptr)
@@ -1089,11 +1257,29 @@ namespace ve::rhi
                 std::memcpy(static_cast<std::byte*>([metalBuffer.GetNativeBuffer() contents]) + offset, data, static_cast<size_t>(size));
             }
 
+            [[nodiscard]] bool ReadBuffer(const RhiBuffer& buffer, uint64_t offset, void* destination, uint64_t size) override
+            {
+                const auto* metalBuffer = dynamic_cast<const MetalBuffer*>(&buffer);
+                if (metalBuffer == nullptr || metalBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu || destination == nullptr || size == 0 ||
+                    offset > metalBuffer->GetSize() || size > metalBuffer->GetSize() - offset)
+                {
+                    return false;
+                }
+
+                std::memcpy(destination, static_cast<const std::byte*>([metalBuffer->GetNativeBuffer() contents]) + offset, static_cast<size_t>(size));
+                return true;
+            }
+
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
             {
                 if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
                 {
                     SetLastError("Metal texture requires a non-empty 2D descriptor.");
+                    return nullptr;
+                }
+                if ((static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(RhiTextureUsage::Storage)) != 0)
+                {
+                    SetLastError("Metal storage textures are unsupported in this milestone.");
                     return nullptr;
                 }
 
@@ -1144,6 +1330,10 @@ namespace ve::rhi
                 samplerDescriptor.lodMinClamp = desc.minLod;
                 samplerDescriptor.lodMaxClamp = desc.maxLod;
                 samplerDescriptor.maxAnisotropy = desc.maxAnisotropy;
+                if (desc.reductionMode == RhiSamplerReductionMode::Comparison)
+                {
+                    samplerDescriptor.compareFunction = ToMetalCompareFunction(desc.comparisonFunction);
+                }
 
                 id<MTLSamplerState> samplerState = [device_ newSamplerStateWithDescriptor:samplerDescriptor];
                 [samplerDescriptor release];
@@ -1192,13 +1382,29 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
+                if (!IsPipelineResourceLayoutValid(desc.resourceLayout))
+                {
+                    SetLastError("Metal graphics pipeline resource layout is invalid or contains duplicate bindings.");
+                    return nullptr;
+                }
+                if (desc.colorAttachmentCount > 1 || (desc.colorAttachmentCount == 0 && desc.colorFormat != RhiFormat::Unknown) ||
+                    (desc.colorAttachmentCount == 1 && (desc.colorFormat == RhiFormat::Unknown || desc.colorFormat == RhiFormat::Depth32Float)))
+                {
+                    SetLastError("Metal graphics pipeline requires zero or one valid color attachment format.");
+                    return nullptr;
+                }
+
                 const RhiBoundShaderStateDesc& boundShaderState = desc.boundShaderState;
                 const auto* vertexShaderModule = dynamic_cast<const MetalShaderModule*>(boundShaderState.vertexShader);
-                const auto* fragmentShaderModule = dynamic_cast<const MetalShaderModule*>(boundShaderState.fragmentShader);
+                const auto* fragmentShaderModule =
+                    boundShaderState.fragmentShader != nullptr ? dynamic_cast<const MetalShaderModule*>(boundShaderState.fragmentShader) : nullptr;
 
-                if (vertexShaderModule == nullptr || fragmentShaderModule == nullptr)
+                if (vertexShaderModule == nullptr || vertexShaderModule->GetStage() != RhiShaderStage::Vertex ||
+                    (boundShaderState.fragmentShader != nullptr &&
+                     (fragmentShaderModule == nullptr || fragmentShaderModule->GetStage() != RhiShaderStage::Fragment)) ||
+                    (desc.colorAttachmentCount == 1 && fragmentShaderModule == nullptr))
                 {
-                    SetLastError("Metal graphics pipeline requires Metal shader modules.");
+                    SetLastError("Metal graphics pipeline requires a Metal vertex shader and a fragment shader for color output.");
                     return nullptr;
                 }
 
@@ -1218,18 +1424,22 @@ namespace ve::rhi
 
                 MTLRenderPipelineDescriptor* pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
                 pipelineDescriptor.vertexFunction = vertexShaderModule->GetFunction();
-                pipelineDescriptor.fragmentFunction = fragmentShaderModule->GetFunction();
+                pipelineDescriptor.fragmentFunction = fragmentShaderModule != nullptr ? fragmentShaderModule->GetFunction() : nil;
                 pipelineDescriptor.vertexDescriptor = vertexDescriptor;
-                pipelineDescriptor.colorAttachments[0].pixelFormat = ToMetalPixelFormat(desc.colorFormat);
-                const RhiBlendRenderTargetDesc& colorBlendDesc = desc.blendState.renderTargets[0];
-                pipelineDescriptor.colorAttachments[0].blendingEnabled = colorBlendDesc.blendEnabled ? YES : NO;
-                pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = ToMetalBlendFactor(colorBlendDesc.sourceColorBlendFactor);
-                pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = ToMetalBlendFactor(colorBlendDesc.destinationColorBlendFactor);
-                pipelineDescriptor.colorAttachments[0].rgbBlendOperation = ToMetalBlendOperation(colorBlendDesc.colorBlendOperation);
-                pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = ToMetalBlendFactor(colorBlendDesc.sourceAlphaBlendFactor);
-                pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = ToMetalBlendFactor(colorBlendDesc.destinationAlphaBlendFactor);
-                pipelineDescriptor.colorAttachments[0].alphaBlendOperation = ToMetalBlendOperation(colorBlendDesc.alphaBlendOperation);
-                pipelineDescriptor.colorAttachments[0].writeMask = ToMetalColorWriteMask(colorBlendDesc.colorWriteMask);
+                pipelineDescriptor.colorAttachments[0].pixelFormat =
+                    desc.colorAttachmentCount == 0 ? MTLPixelFormatInvalid : ToMetalPixelFormat(desc.colorFormat);
+                if (desc.colorAttachmentCount == 1)
+                {
+                    const RhiBlendRenderTargetDesc& colorBlendDesc = desc.blendState.renderTargets[0];
+                    pipelineDescriptor.colorAttachments[0].blendingEnabled = colorBlendDesc.blendEnabled ? YES : NO;
+                    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = ToMetalBlendFactor(colorBlendDesc.sourceColorBlendFactor);
+                    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = ToMetalBlendFactor(colorBlendDesc.destinationColorBlendFactor);
+                    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = ToMetalBlendOperation(colorBlendDesc.colorBlendOperation);
+                    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = ToMetalBlendFactor(colorBlendDesc.sourceAlphaBlendFactor);
+                    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = ToMetalBlendFactor(colorBlendDesc.destinationAlphaBlendFactor);
+                    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = ToMetalBlendOperation(colorBlendDesc.alphaBlendOperation);
+                    pipelineDescriptor.colorAttachments[0].writeMask = ToMetalColorWriteMask(colorBlendDesc.colorWriteMask);
+                }
                 pipelineDescriptor.depthAttachmentPixelFormat =
                     desc.depthStencilState.depthTestEnabled ? ToMetalPixelFormat(desc.depthFormat) : MTLPixelFormatInvalid;
 
@@ -1269,7 +1479,19 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                return std::make_unique<MetalPipelineState>(desc.primitiveType, desc.rasterizerState, pipelineState, depthStencilState);
+                std::vector<RhiPipelineResourceBindingDesc> resourceBindings;
+                if (desc.resourceLayout.bindingCount != 0)
+                {
+                    resourceBindings.assign(desc.resourceLayout.bindings, desc.resourceLayout.bindings + desc.resourceLayout.bindingCount);
+                }
+                return std::make_unique<MetalPipelineState>(
+                    desc.primitiveType, desc.rasterizerState, pipelineState, depthStencilState, std::move(resourceBindings));
+            }
+
+            [[nodiscard]] std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc&) override
+            {
+                SetLastError("Metal compute pipelines are not enabled by the current renderer path.");
+                return nullptr;
             }
 
             [[nodiscard]] std::unique_ptr<RhiCommandList> CreateCommandList() override

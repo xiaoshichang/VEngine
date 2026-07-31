@@ -1,9 +1,9 @@
 include_guard(GLOBAL)
 
 include(CMake/Targets/Tests/MemoryTests.cmake)
+include(CMake/Targets/Tests/AssertionLoggingTests.cmake)
+include(CMake/Targets/Tests/JsonUtilsTests.cmake)
 include(CMake/Targets/Tests/MathTests.cmake)
-include(CMake/Targets/Tests/ViewportTests.cmake)
-include(CMake/Targets/Tests/ResourceRenderTests.cmake)
 include(CMake/Targets/Tests/JoltIntegrationTests.cmake)
 
 function(ve_add_tests)
@@ -17,8 +17,8 @@ function(ve_add_tests)
     endif()
 
     ve_add_memory_tests()
+    ve_add_assertion_logging_tests()
+    ve_add_json_utils_tests()
     ve_add_math_tests()
-    ve_add_viewport_tests()
-    ve_add_resource_render_tests()
     ve_add_jolt_integration_tests()
 endfunction()

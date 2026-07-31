@@ -77,6 +77,8 @@ namespace ve
         snapshot_.fixedDeltaSeconds = initParam.fixedDeltaSeconds;
         frameRateIntervalElapsedSeconds_ = 0.0;
         frameRateIntervalFrameCount_ = 0;
+        pendingStepSeconds_.store(0.0f, std::memory_order_relaxed);
+        paused_.store(false, std::memory_order_relaxed);
         lastTickTime_ = Clock::now();
         initialized_ = true;
         return ErrorCode::None;
@@ -86,6 +88,8 @@ namespace ve
     {
         frameRateIntervalElapsedSeconds_ = 0.0;
         frameRateIntervalFrameCount_ = 0;
+        pendingStepSeconds_.store(0.0f, std::memory_order_relaxed);
+        paused_.store(false, std::memory_order_relaxed);
         initialized_ = false;
     }
 
@@ -103,6 +107,8 @@ namespace ve
         snapshot_.fixedDeltaSeconds = fixedDeltaSeconds;
         frameRateIntervalElapsedSeconds_ = 0.0;
         frameRateIntervalFrameCount_ = 0;
+        pendingStepSeconds_.store(0.0f, std::memory_order_relaxed);
+        paused_.store(false, std::memory_order_relaxed);
         lastTickTime_ = Clock::now();
     }
 
@@ -111,12 +117,46 @@ namespace ve
         const Clock::time_point now = Clock::now();
         const std::chrono::duration<Float32> delta = now - lastTickTime_;
         lastTickTime_ = now;
-        AdvanceUnlocked(delta.count());
+        AdvanceControlled(delta.count());
     }
 
     void TimeSystem::Advance(Float32 rawDeltaSeconds) noexcept
     {
-        AdvanceUnlocked(rawDeltaSeconds);
+        AdvanceControlled(rawDeltaSeconds);
+    }
+
+    void TimeSystem::SetPaused(bool paused) noexcept
+    {
+        pendingStepSeconds_.store(0.0f, std::memory_order_release);
+        paused_.store(paused, std::memory_order_release);
+    }
+
+    bool TimeSystem::IsPaused() const noexcept
+    {
+        return paused_.load(std::memory_order_acquire);
+    }
+
+    bool TimeSystem::RequestStep(Float32 deltaSeconds) noexcept
+    {
+        if (!initialized_ || !IsPaused() || !IsPositiveFinite(deltaSeconds))
+        {
+            return false;
+        }
+
+        pendingStepSeconds_.store(deltaSeconds, std::memory_order_release);
+        return true;
+    }
+
+    void TimeSystem::AdvanceControlled(Float32 rawDeltaSeconds) noexcept
+    {
+        if (!paused_.load(std::memory_order_acquire))
+        {
+            AdvanceUnlocked(rawDeltaSeconds);
+            return;
+        }
+
+        const Float32 stepSeconds = pendingStepSeconds_.exchange(0.0f, std::memory_order_acq_rel);
+        AdvanceUnlocked(stepSeconds);
     }
 
     void TimeSystem::AdvanceUnlocked(Float32 rawDeltaSeconds) noexcept

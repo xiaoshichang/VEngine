@@ -1,4 +1,5 @@
 #include "Editor/macOS/MacEditorApplication.h"
+#include "Editor/Core/EditorStartup.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
@@ -8,14 +9,13 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 int main(int argc, char* argv[])
 {
     @autoreleasepool
     {
-        (void)argc;
-        (void)argv;
-
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp finishLaunching];
@@ -49,7 +49,14 @@ int main(int argc, char* argv[])
             initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
         initParam.runtime.scriptingSystem.dotNetRuntimeRoot = bundleContentsDirectory / "Resources" / "DotNet" / "osx-arm64" / "10.0.9";
 
-        ve::editor::MacEditorApplication application(std::move(initParam));
+        std::vector<std::string> arguments;
+        arguments.reserve(static_cast<size_t>(argc));
+        for (int argumentIndex = 0; argumentIndex < argc; ++argumentIndex)
+        {
+            arguments.emplace_back(argv[argumentIndex] == nullptr ? "" : argv[argumentIndex]);
+        }
+        ve::editor::EditorStartupOptions startupOptions = ve::editor::ParseEditorStartupOptions(arguments);
+        ve::editor::MacEditorApplication application(std::move(initParam), std::move(startupOptions));
         int exitCode = application.Init();
         if (exitCode == 0)
         {

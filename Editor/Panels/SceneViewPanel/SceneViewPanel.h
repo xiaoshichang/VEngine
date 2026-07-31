@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 
 #include <memory>
 
@@ -24,12 +25,14 @@ namespace ve::editor
         [[nodiscard]] RenderTexture& GetSceneViewTexture() noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetFillMode() const noexcept;
+        [[nodiscard]] bool IsVirtualShadowPageVisualizationEnabled() const noexcept;
         [[nodiscard]] bool IsGridEnabled() const noexcept;
         [[nodiscard]] Float32 GetGridOpacity() const noexcept;
         [[nodiscard]] Float32 GetGridUnitSize() const noexcept;
         [[nodiscard]] Gizmos& GetGizmos() noexcept;
         [[nodiscard]] const Gizmos& GetGizmos() const noexcept;
         [[nodiscard]] Matrix44 GetSceneViewCameraLocalToWorld() const noexcept;
+        [[nodiscard]] std::shared_ptr<RenderViewState> GetRenderViewState() const noexcept;
 
     private:
         struct SceneViewCameraState
@@ -87,6 +90,7 @@ namespace ve::editor
 
         std::shared_ptr<RenderTexture> sceneViewTexture_;
         std::shared_ptr<RTCamera> sceneViewCamera_;
+        std::shared_ptr<RenderViewState> sceneViewState_;
         WindowExtent renderTargetExtent_ = {};
         Editor* editor_ = nullptr;
         SceneViewCameraState camera_;
@@ -94,6 +98,7 @@ namespace ve::editor
         SceneViewGridState grid_;
         Gizmos gizmos_;
         rhi::RhiFillMode fillMode_ = rhi::RhiFillMode::Solid;
+        bool visualizeVirtualShadowPages_ = false;
         bool sceneViewFocused_ = false;
         bool cameraLookActive_ = false;
         bool skipNextMouseLookDelta_ = false;

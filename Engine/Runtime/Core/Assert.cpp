@@ -18,6 +18,7 @@ namespace
                      info.file != nullptr ? info.file : "<unknown>",
                      info.line,
                      info.function != nullptr ? info.function : "<unknown>");
+        std::fflush(stderr);
     }
 
     std::atomic<ve::AssertionHandler> gAssertionHandler{DefaultAssertionHandler};

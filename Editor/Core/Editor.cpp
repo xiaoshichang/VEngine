@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -146,8 +147,11 @@ namespace ve::editor
     {
         std::shared_ptr<RTRenderTexture> sceneViewTexture;
         std::shared_ptr<RTCamera> sceneViewCameraSnapshot;
+        std::shared_ptr<RTRenderViewState> sceneViewState;
         std::shared_ptr<RTCamera> gameViewCameraSnapshot;
+        std::shared_ptr<RTRenderViewState> gameViewState;
         rhi::RhiFillMode sceneViewFillMode = rhi::RhiFillMode::Solid;
+        bool visualizeSceneViewVirtualShadowPages = false;
         bool sceneViewGridEnabled = false;
         Float32 sceneViewGridOpacity = 0.45f;
         Float32 sceneViewGridUnitSize = 1.0f;
@@ -249,6 +253,7 @@ namespace ve::editor
         runtime_ = &runtime;
         renderSystem_ = &runtime.GetRenderSystem();
         mainThreadCommandQueue_ = &mainThreadCommandQueue;
+        gizmoRenderResources_ = std::make_shared<EditorGizmoRenderResources>();
         projectSelectionView_ = new ProjectSelectionView();
         projectEditingView_ = new ProjectEditingView();
 
@@ -285,6 +290,13 @@ namespace ve::editor
             return nullptr;
         }
 
+        if (!pendingProjectPath_.empty())
+        {
+            std::string projectPath = std::move(pendingProjectPath_);
+            pendingProjectPath_.clear();
+            OpenProject(std::move(projectPath));
+        }
+
         if (waitForImGuiTextureUpdates_)
         {
             renderSystem_->Flush();
@@ -304,6 +316,7 @@ namespace ve::editor
         std::shared_ptr<RTScene> renderScene = GetActiveRenderScene();
 
         EditorRenderFramePipelineInitParam pipelineInitParam = {};
+        pipelineInitParam.renderer.viewFamily.scene = renderScene;
         if (views.sceneViewTexture != nullptr)
         {
             pipelineInitParam.retainedRenderTextures.push_back(views.sceneViewTexture);
@@ -314,8 +327,18 @@ namespace ve::editor
         }
         AddSceneViewRenderer(pipelineInitParam, views, renderScene);
         AddGameViewRenderer(pipelineInitParam, views, renderScene);
-        pipelineInitParam.overlayColorLoadAction = rhi::RhiLoadAction::Clear;
-        pipelineInitParam.overlayRenderCallback = BuildOverlayRenderCallback(std::move(frameDrawData));
+        VE_ASSERT_MESSAGE(pipelineInitParam.renderer.viewFamily.views.size() <= static_cast<SizeT>(std::numeric_limits<UInt32>::max()),
+                          "Editor render-view count exceeds its output-pass index range.");
+        SwapchainOverlayRenderPassInitParam overlayPassInitParam = {};
+        overlayPassInitParam.sampledViewIndices.reserve(pipelineInitParam.renderer.viewFamily.views.size());
+        for (SizeT viewIndex = 0; viewIndex < pipelineInitParam.renderer.viewFamily.views.size(); ++viewIndex)
+        {
+            overlayPassInitParam.sampledViewIndices.push_back(static_cast<UInt32>(viewIndex));
+        }
+        overlayPassInitParam.colorLoadAction = rhi::RhiLoadAction::Clear;
+        overlayPassInitParam.clearColor = rhi::RhiColor{0.05f, 0.07f, 0.10f, 1.0f};
+        overlayPassInitParam.callback = BuildOverlayRenderCallback(std::move(frameDrawData));
+        pipelineInitParam.renderer.outputPasses.push_back(std::make_unique<SwapchainOverlayRenderPass>(std::move(overlayPassInitParam)));
         return std::make_shared<EditorRenderFramePipeline>(std::move(pipelineInitParam));
     }
 
@@ -362,7 +385,7 @@ namespace ve::editor
         return frameDrawData;
     }
 
-    EditorFrameRenderViews Editor::CollectFrameRenderViews() const
+    EditorFrameRenderViews Editor::CollectFrameRenderViews()
     {
         EditorFrameRenderViews views = {};
         if (mainView_ != MainView::ProjectEditing)
@@ -372,7 +395,9 @@ namespace ve::editor
 
         views.sceneViewTexture = projectEditingView_->GetSceneViewTexture();
         views.sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraInitParam());
+        views.sceneViewState = projectEditingView_->GetSceneRenderViewState()->GetRTRenderViewState();
         views.sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
+        views.visualizeSceneViewVirtualShadowPages = projectEditingView_->IsSceneViewVirtualShadowPageVisualizationEnabled();
         views.sceneViewGridEnabled = projectEditingView_->IsSceneViewGridEnabled();
         views.sceneViewGridOpacity = projectEditingView_->GetSceneViewGridOpacity();
         views.sceneViewGridUnitSize = projectEditingView_->GetSceneViewGridUnitSize();
@@ -386,6 +411,8 @@ namespace ve::editor
         views.gameViewTexture = projectEditingView_->GetGameViewTexture();
         CameraComponent* camera = scene != nullptr ? scene->GetCamera() : nullptr;
         views.gameViewCameraSnapshot = camera != nullptr ? camera->GetRTCamera() : nullptr;
+        views.gameViewState = projectEditingView_->GetGameRenderViewState()->GetRTRenderViewState();
+        VE_ASSERT_MESSAGE(views.sceneViewState != views.gameViewState, "Editor Scene and Game views require isolated persistent state.");
         return views;
     }
 
@@ -417,31 +444,41 @@ namespace ve::editor
             return;
         }
 
-        // Scene View is one renderer with a normal scene pass followed by editor-only visual aid passes.
-        // Keeping the pass list together avoids repeating BaseRenderer setup for grid and gizmo overlays.
-        StandaloneRendererInitParam rendererInitParam = {};
-        rendererInitParam.scene = renderScene;
-        rendererInitParam.camera = views.sceneViewCameraSnapshot;
-        rendererInitParam.target.colorTexture = views.sceneViewTexture;
-        rendererInitParam.fillMode = views.sceneViewFillMode;
-        rendererInitParam.target.colorLoadAction = rhi::RhiLoadAction::Clear;
+        StandaloneRendererInitParam& rendererInitParam = pipelineInitParam.renderer;
+        VE_ASSERT(rendererInitParam.viewFamily.scene == renderScene);
+        VE_ASSERT(rendererInitParam.viewFamily.views.size() < static_cast<SizeT>(std::numeric_limits<UInt32>::max()));
+        const UInt32 sceneViewIndex = static_cast<UInt32>(rendererInitParam.viewFamily.views.size());
+        RenderView sceneView = {};
+        sceneView.camera = views.sceneViewCameraSnapshot;
+        sceneView.viewState = views.sceneViewState;
+        sceneView.target.colorTexture = views.sceneViewTexture;
+        sceneView.fillMode = views.sceneViewFillMode;
+        sceneView.target.colorLoadAction = rhi::RhiLoadAction::Clear;
+        rendererInitParam.viewFamily.views.push_back(std::move(sceneView));
+        rendererInitParam.viewVisualizeVirtualShadowPages.push_back(views.visualizeSceneViewVirtualShadowPages);
 
+        RendererViewPassExtension viewExtension = {};
+        viewExtension.viewIndex = sceneViewIndex;
         if (views.sceneViewGridEnabled)
         {
             SceneGridRenderPassInitParam gridPassInitParam = {};
             gridPassInitParam.opacity = views.sceneViewGridOpacity;
             gridPassInitParam.unitSize = views.sceneViewGridUnitSize;
-            rendererInitParam.additionalPasses.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassInitParam)));
+            viewExtension.passes.push_back(std::make_unique<SceneGridRenderPass>(std::move(gridPassInitParam)));
         }
 
         if (views.sceneViewGizmoDrawList != nullptr)
         {
+            VE_ASSERT(gizmoRenderResources_ != nullptr);
             EditorGizmoRenderPassInitParam gizmoPassInitParam = {};
             gizmoPassInitParam.drawList = views.sceneViewGizmoDrawList;
-            rendererInitParam.additionalPasses.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassInitParam)));
+            gizmoPassInitParam.resources = gizmoRenderResources_;
+            viewExtension.passes.push_back(std::make_unique<EditorGizmoRenderPass>(std::move(gizmoPassInitParam)));
         }
-
-        pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
+        if (!viewExtension.passes.empty())
+        {
+            rendererInitParam.viewExtensions.push_back(std::move(viewExtension));
+        }
     }
 
     void Editor::AddGameViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
@@ -453,12 +490,15 @@ namespace ve::editor
             return;
         }
 
-        // Game View intentionally stays free of editor gizmo/grid passes for now.
-        StandaloneRendererInitParam rendererInitParam = {};
-        rendererInitParam.scene = renderScene;
-        rendererInitParam.camera = views.gameViewCameraSnapshot;
-        rendererInitParam.target.colorTexture = views.gameViewTexture;
-        pipelineInitParam.sceneRenderers.push_back(std::move(rendererInitParam));
+        // Game View intentionally stays free of editor gizmo/grid passes.
+        StandaloneRendererInitParam& rendererInitParam = pipelineInitParam.renderer;
+        VE_ASSERT(rendererInitParam.viewFamily.scene == renderScene);
+        RenderView gameView = {};
+        gameView.camera = views.gameViewCameraSnapshot;
+        gameView.viewState = views.gameViewState;
+        gameView.target.colorTexture = views.gameViewTexture;
+        rendererInitParam.viewFamily.views.push_back(std::move(gameView));
+        rendererInitParam.viewVisualizeVirtualShadowPages.push_back(false);
     }
 
     std::shared_ptr<RTScene> Editor::GetActiveRenderScene() const
@@ -473,6 +513,11 @@ namespace ve::editor
             return;
         }
 
+        if (runtime_ != nullptr)
+        {
+            runtime_->GetTimeSystem().SetPaused(false);
+        }
+
         initialized_.store(false, std::memory_order_release);
         if (sceneSystem_ != nullptr)
         {
@@ -485,6 +530,7 @@ namespace ve::editor
         {
             renderSystem_->WaitIdle();
         }
+        gizmoRenderResources_.reset();
 
         for (std::shared_ptr<EditorFrameDrawData>& snapshot : imguiDrawDataSnapshots_)
         {
@@ -495,6 +541,7 @@ namespace ve::editor
         ShutdownRenderBackend();
         resourceLoader_.Shutdown();
         assetDatabase_.Shutdown();
+        pendingProjectPath_.clear();
 
         delete projectSelectionView_;
         delete projectEditingView_;
@@ -688,7 +735,22 @@ namespace ve::editor
 
     bool Editor::IsPlaying() const noexcept
     {
-        return playState_ == EditorPlayState::Playing;
+        return playState_ != EditorPlayState::Editing;
+    }
+
+    bool Editor::IsPaused() const noexcept
+    {
+        return playState_ == EditorPlayState::Paused;
+    }
+
+    bool Editor::CanTogglePause() const noexcept
+    {
+        return IsPlaying() && runtime_ != nullptr;
+    }
+
+    bool Editor::CanStepPlay() const noexcept
+    {
+        return IsPaused() && runtime_ != nullptr;
     }
 
     bool Editor::CanStartPlay() const noexcept
@@ -699,7 +761,7 @@ namespace ve::editor
 
     bool Editor::CanStopPlay() const noexcept
     {
-        return playState_ == EditorPlayState::Playing && sceneSystem_ != nullptr && runtime_ != nullptr && !editingSceneSnapshot_.empty();
+        return IsPlaying() && sceneSystem_ != nullptr && runtime_ != nullptr && !editingSceneSnapshot_.empty();
     }
 
     void Editor::StartPlay()
@@ -747,6 +809,7 @@ namespace ve::editor
         }
 
         editingSceneSnapshot_ = snapshot.MoveValue();
+        runtime_->GetTimeSystem().SetPaused(false);
         playState_ = EditorPlayState::Playing;
         ++playSessionID_;
         CollectUnusedResources();
@@ -779,6 +842,7 @@ namespace ve::editor
             return;
         }
 
+        runtime_->GetTimeSystem().SetPaused(false);
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
         ++playSessionID_;
@@ -786,8 +850,43 @@ namespace ve::editor
         VE_LOG_INFO_CATEGORY("Editor", "Exited Play mode.");
     }
 
+    void Editor::TogglePause()
+    {
+        if (!CanTogglePause())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped Pause because Play mode is not active.");
+            return;
+        }
+
+        VE_ASSERT(runtime_ != nullptr);
+        const bool shouldPause = playState_ == EditorPlayState::Playing;
+        runtime_->GetTimeSystem().SetPaused(shouldPause);
+        playState_ = shouldPause ? EditorPlayState::Paused : EditorPlayState::Playing;
+        VE_LOG_INFO_CATEGORY("Editor", shouldPause ? "Paused Play mode." : "Resumed Play mode.");
+    }
+
+    void Editor::StepPlay()
+    {
+        if (!CanStepPlay())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Skipped Step because Play mode is not paused.");
+            return;
+        }
+
+        VE_ASSERT(runtime_ != nullptr);
+        if (!runtime_->GetTimeSystem().RequestStep())
+        {
+            VE_LOG_WARN_CATEGORY("Editor", "Failed to queue a paused Play step.");
+        }
+    }
+
     void Editor::ShutdownOpenProjectState() noexcept
     {
+        if (runtime_ != nullptr)
+        {
+            runtime_->GetTimeSystem().SetPaused(false);
+        }
+
         editingSceneSnapshot_.clear();
         playState_ = EditorPlayState::Editing;
 
@@ -1037,6 +1136,16 @@ namespace ve::editor
         CollectUnusedResources();
         EnqueueMainWindowTitleUpdate();
         VE_LOG_INFO_CATEGORY("Editor", "Opened editor project: {}", currentProjectPath_);
+    }
+
+    void Editor::RequestOpenProject(std::string projectPath)
+    {
+        if (!initialized_.load(std::memory_order_acquire) || projectPath.empty())
+        {
+            return;
+        }
+
+        pendingProjectPath_ = std::move(projectPath);
     }
 
     void Editor::OpenProject(std::string projectPath)

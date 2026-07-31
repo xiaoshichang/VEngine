@@ -1,5 +1,6 @@
 #include "Engine/Runtime/Logging/Log.h"
 
+#include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Platform/DebugConsole.h"
 
 #include <boost/log/core.hpp>
@@ -138,6 +139,100 @@ namespace
         WriteConsoleOutput(severity, line);
     }
 
+    void WriteEmergencyAssertionOutput(const ve::AssertionInfo& info) noexcept
+    {
+        const char* expression = info.expression != nullptr ? info.expression : "<unknown>";
+        const char* message = info.message != nullptr ? info.message : "<none>";
+        const char* file = info.file != nullptr ? info.file : "<unknown>";
+        const char* function = info.function != nullptr ? info.function : "<unknown>";
+        std::fprintf(stderr,
+                     "VEngine assertion failed\n"
+                     "Expression: %s\n"
+                     "Message: %s\n"
+                     "File: %s:%d\n"
+                     "Function: %s\n",
+                     expression,
+                     message,
+                     file,
+                     info.line,
+                     function);
+        std::fflush(stderr);
+
+#if VE_PLATFORM_WINDOWS
+        char debuggerMessage[2048]{};
+        std::snprintf(debuggerMessage,
+                      sizeof(debuggerMessage),
+                      "VEngine assertion failed\nExpression: %s\nMessage: %s\nFile: %s:%d\nFunction: %s\n",
+                      expression,
+                      message,
+                      file,
+                      info.line,
+                      function);
+        OutputDebugStringA(debuggerMessage);
+#endif
+    }
+
+    [[nodiscard]] std::string FormatAssertionMessage(const ve::AssertionInfo& info)
+    {
+        std::ostringstream stream;
+        stream << "VEngine assertion failed\n"
+               << "Expression: " << (info.expression != nullptr ? info.expression : "<unknown>") << '\n'
+               << "Message: " << (info.message != nullptr ? info.message : "<none>") << '\n'
+               << "File: " << (info.file != nullptr ? info.file : "<unknown>") << ':' << info.line << '\n'
+               << "Function: " << (info.function != nullptr ? info.function : "<unknown>");
+        return stream.str();
+    }
+
+    [[nodiscard]] bool TryFlushLogging() noexcept
+    {
+        bool initialized = false;
+        {
+            std::lock_guard lock(gLoggingMutex);
+            initialized = gLoggingState.initialized;
+        }
+
+        if (!initialized)
+        {
+            return false;
+        }
+
+        try
+        {
+            boost::log::core::get()->flush();
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    void LoggingAssertionHandler(const ve::AssertionInfo& info) noexcept
+    {
+        thread_local bool handlingAssertion = false;
+        if (handlingAssertion)
+        {
+            WriteEmergencyAssertionOutput(info);
+            return;
+        }
+
+        handlingAssertion = true;
+        try
+        {
+            const std::string message = FormatAssertionMessage(info);
+            ve::LogMessage(ve::LogSeverity::Fatal, "Assert", message);
+            if (!TryFlushLogging())
+            {
+                WriteEmergencyAssertionOutput(info);
+            }
+        }
+        catch (...)
+        {
+            WriteEmergencyAssertionOutput(info);
+        }
+        handlingAssertion = false;
+    }
+
     std::filesystem::path MakeMacApplicationSupportLogPath()
     {
 #if VE_PLATFORM_MACOS
@@ -205,6 +300,7 @@ namespace ve
 
             gLoggingState.config = config;
             gLoggingState.initialized = true;
+            SetAssertionHandler(LoggingAssertionHandler);
         }
         catch (const std::filesystem::filesystem_error& error)
         {
@@ -229,6 +325,7 @@ namespace ve
 
     void ShutdownLogging() noexcept
     {
+        SetAssertionHandler(nullptr);
         std::lock_guard lock(gLoggingMutex);
 
         gLoggingState.initialized = false;
@@ -242,6 +339,11 @@ namespace ve
         catch (...)
         {
         }
+    }
+
+    void FlushLogging() noexcept
+    {
+        (void)TryFlushLogging();
     }
 
     bool IsLoggingInitialized() noexcept

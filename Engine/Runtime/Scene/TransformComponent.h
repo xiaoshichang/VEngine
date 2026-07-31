@@ -15,6 +15,7 @@
 namespace ve
 {
     class GameObject;
+    class PhysicsSystem;
     class Scene;
     class SceneSerialization;
 
@@ -37,6 +38,15 @@ namespace ve
         [[nodiscard]] Matrix44 GetLocalMatrix() const noexcept;
         [[nodiscard]] Matrix44 GetWorldMatrix() const noexcept;
 
+        /// Returns the local/world transform consumed by rendering. Physics interpolation can override position and rotation without changing
+        /// the authoritative scene transform used by simulation and gameplay.
+        [[nodiscard]] Matrix44 GetRenderLocalMatrix() const noexcept;
+        [[nodiscard]] Matrix44 GetRenderWorldMatrix() const noexcept;
+
+        /// Sets or clears the rendering-only local pose. Scale continues to come from the authoritative scene transform.
+        void SetRenderLocalPoseOverride(const Vector3& position, const Quaternion& rotation) noexcept;
+        void ClearRenderLocalPoseOverride() noexcept;
+
         [[nodiscard]] TransformComponent* GetParent() noexcept;
         [[nodiscard]] const TransformComponent* GetParent() const noexcept;
 
@@ -57,6 +67,7 @@ namespace ve
 
     private:
         friend class GameObject;
+        friend class PhysicsSystem;
         friend class Scene;
         friend class SceneSerialization;
 
@@ -64,6 +75,7 @@ namespace ve
         void SetParent(TransformComponent* parent) noexcept;
         void MarkHierarchyDirty() noexcept;
         void NotifyTransformChanged() noexcept;
+        void NotifyRenderTransformChangedHierarchy() noexcept;
         void UpdateWorldCache() const noexcept;
 
         struct TransformChangedCallbackEntry
@@ -81,6 +93,9 @@ namespace ve
         mutable Matrix44 localMatrixCache_ = Matrix44::Identity();
         mutable Matrix44 worldMatrixCache_ = Matrix44::Identity();
         mutable bool transformDirty_ = true;
+        Vector3 renderLocalPosition_ = Vector3::Zero();
+        Quaternion renderLocalRotation_ = Quaternion::Identity();
+        bool hasRenderLocalPoseOverride_ = false;
         UInt64 nextTransformChangedCallbackId_ = 1;
     };
 } // namespace ve

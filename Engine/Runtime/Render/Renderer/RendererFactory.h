@@ -7,5 +7,5 @@
 namespace ve
 {
     /// Selects the player renderer from the compile-time product platform.
-    [[nodiscard]] std::unique_ptr<BaseRenderer> CreatePlayerRenderer(BaseRendererInitParam initParam);
+    [[nodiscard]] std::unique_ptr<BaseRenderer> CreatePlayerRenderer(BaseRendererInitParam&& initParam);
 } // namespace ve

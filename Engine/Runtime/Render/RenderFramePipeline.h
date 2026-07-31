@@ -2,14 +2,13 @@
 
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
-#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/SwapchainOutputRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/StandaloneRenderer.h"
 
-#include <functional>
 #include <memory>
 #include <vector>
 
@@ -21,15 +20,13 @@ namespace ve
         class RhiCommandList;
     }
 
-    using EditorOverlayRenderCallback = std::function<void(rhi::RhiCommandList& commandList)>;
+    using EditorOverlayRenderCallback = SwapchainOverlayRenderCallback;
 
     /// Describes the editor frame flow after editor UI has produced draw data on the Scene Thread.
     struct EditorRenderFramePipelineInitParam
     {
-        std::vector<StandaloneRendererInitParam> sceneRenderers;
+        StandaloneRendererInitParam renderer;
         std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures;
-        rhi::RhiLoadAction overlayColorLoadAction = rhi::RhiLoadAction::Clear;
-        EditorOverlayRenderCallback overlayRenderCallback;
     };
 
     /// Describes the player frame flow: render the scene to an intermediate color texture, then present it.
@@ -50,7 +47,7 @@ namespace ve
         FrameRenderPipeline() = default;
         virtual ~FrameRenderPipeline() = default;
 
-        [[nodiscard]] virtual ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) = 0;
+        virtual void RenderFrame(const FrameRenderPipelineData& frameData) = 0;
     };
 
     class EditorRenderFramePipeline final : public FrameRenderPipeline
@@ -58,15 +55,11 @@ namespace ve
     public:
         explicit EditorRenderFramePipeline(EditorRenderFramePipelineInitParam initParam);
 
-        [[nodiscard]] ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) override;
+        void RenderFrame(const FrameRenderPipelineData& frameData) override;
 
     private:
-        [[nodiscard]] ErrorCode RecordOverlayPass(const FrameRenderPipelineData& frameData);
-
-        std::vector<StandaloneRendererInitParam> sceneRenderers_;
+        StandaloneRendererInitParam rendererInitParam_;
         std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures_;
-        rhi::RhiLoadAction overlayColorLoadAction_ = rhi::RhiLoadAction::Clear;
-        EditorOverlayRenderCallback overlayRenderCallback_;
     };
 
     class PlayerRenderFramePipeline final : public FrameRenderPipeline
@@ -74,11 +67,10 @@ namespace ve
     public:
         explicit PlayerRenderFramePipeline(PlayerRenderFramePipelineInitParam initParam);
 
-        [[nodiscard]] ErrorCode RenderFrame(const FrameRenderPipelineData& frameData) override;
+        void RenderFrame(const FrameRenderPipelineData& frameData) override;
 
     private:
         void EnsureSceneColorTexture(const FrameRenderPipelineData& frameData);
-        [[nodiscard]] ErrorCode CopySceneColorToSwapchain(rhi::RhiCommandList& commandList, rhi::RhiSwapchain& mainSwapchain);
 
         BaseRendererInitParam sceneRenderer_;
         std::shared_ptr<RTRenderTexture> sceneColorTexture_;

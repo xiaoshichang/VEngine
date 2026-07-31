@@ -26,6 +26,7 @@ struct ImDrawData;
 
 namespace ve
 {
+    class EditorGizmoRenderResources;
     class GameObject;
 }
 
@@ -74,11 +75,17 @@ namespace ve::editor
         [[nodiscard]] std::vector<AssetID> CollectActiveResourceRoots() const;
         void CollectUnusedResources();
         [[nodiscard]] bool IsPlaying() const noexcept;
+        [[nodiscard]] bool IsPaused() const noexcept;
+        [[nodiscard]] bool CanTogglePause() const noexcept;
+        [[nodiscard]] bool CanStepPlay() const noexcept;
         [[nodiscard]] bool CanStartPlay() const noexcept;
         [[nodiscard]] bool CanStopPlay() const noexcept;
         void StartPlay();
         void StopPlay();
+        void TogglePause();
+        void StepPlay();
 
+        void RequestOpenProject(std::string projectPath);
         void OpenProject(std::string projectPath);
         void ShowProjectSelection();
         void OpenScene(Path scenePath);
@@ -102,12 +109,13 @@ namespace ve::editor
         {
             Editing,
             Playing,
+            Paused,
         };
 
         void RenderActiveMainView();
         [[nodiscard]] bool HandleOSEvent(const OSEvent& event);
         [[nodiscard]] std::shared_ptr<EditorFrameDrawData> CaptureImGuiFrameDrawData();
-        [[nodiscard]] EditorFrameRenderViews CollectFrameRenderViews() const;
+        [[nodiscard]] EditorFrameRenderViews CollectFrameRenderViews();
         [[nodiscard]] EditorOverlayRenderCallback BuildOverlayRenderCallback(std::shared_ptr<EditorFrameDrawData> frameDrawData) const;
         void AddSceneViewRenderer(EditorRenderFramePipelineInitParam& pipelineInitParam,
                                   const EditorFrameRenderViews& views,
@@ -154,6 +162,7 @@ namespace ve::editor
         Path selectedAssetPath_;
         std::unique_ptr<EditorRenderBackend> editorRenderBackend_;
         std::array<std::shared_ptr<EditorFrameDrawData>, 2> imguiDrawDataSnapshots_;
+        std::shared_ptr<ve::EditorGizmoRenderResources> gizmoRenderResources_;
         mutable std::mutex imguiContextMutex_;
         UInt32 nextImGuiDrawDataSnapshotIndex_ = 0;
         bool waitForImGuiTextureUpdates_ = false;
@@ -163,6 +172,7 @@ namespace ve::editor
         UInt64 playSessionID_ = 0;
 
         std::vector<std::string> recentProjects_;
+        std::string pendingProjectPath_;
         std::string currentProjectPath_;
         std::string currentProjectName_;
         std::string imguiIniFilename_;

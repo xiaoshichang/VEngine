@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Threading/Atomic.h"
 
 #include <chrono>
 
@@ -98,6 +99,15 @@ namespace ve
         /// simulation paths.
         void Advance(Float32 rawDeltaSeconds) noexcept;
 
+        /// Pauses or resumes simulation time. Rendering frames continue while paused with a zero delta.
+        void SetPaused(bool paused) noexcept;
+
+        [[nodiscard]] bool IsPaused() const noexcept;
+
+        /// Requests one paused simulation frame using the supplied delta. The request is consumed by the next Tick()
+        /// or Advance(). Requests are rejected while running or when deltaSeconds is invalid.
+        [[nodiscard]] bool RequestStep(Float32 deltaSeconds = DefaultFixedDeltaSeconds) noexcept;
+
         [[nodiscard]] TimeSnapshot GetSnapshot() const noexcept;
         [[nodiscard]] UInt64 GetFrameIndex() const noexcept;
         [[nodiscard]] Float64 GetTotalSeconds() const noexcept;
@@ -118,12 +128,15 @@ namespace ve
     private:
         using Clock = std::chrono::steady_clock;
 
+        void AdvanceControlled(Float32 rawDeltaSeconds) noexcept;
         void AdvanceUnlocked(Float32 rawDeltaSeconds) noexcept;
 
         Clock::time_point lastTickTime_ = Clock::now();
         Float64 frameRateIntervalElapsedSeconds_ = 0.0;
         UInt32 frameRateIntervalFrameCount_ = 0;
         TimeSnapshot snapshot_;
+        Atomic<Float32> pendingStepSeconds_{0.0f};
+        AtomicBool paused_{false};
         bool initialized_ = false;
     };
 } // namespace ve

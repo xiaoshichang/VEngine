@@ -34,6 +34,13 @@ namespace ve
         [[nodiscard]] const Vector3& GetBoundsExtents() const noexcept;
         void SetBoundsExtents(const Vector3& boundsExtents) noexcept;
 
+        [[nodiscard]] UInt64 GetRenderItemID() const noexcept;
+        [[nodiscard]] bool CastShadows() const noexcept;
+        void SetCastShadows(bool castShadows) noexcept;
+        [[nodiscard]] bool ReceiveShadows() const noexcept;
+        void SetReceiveShadows(bool receiveShadows) noexcept;
+        [[nodiscard]] UInt64 GetShadowRevision() const noexcept;
+
         [[nodiscard]] std::shared_ptr<RTRenderItem> GetRTRenderItem() noexcept;
         [[nodiscard]] std::shared_ptr<const RTRenderItem> GetRTRenderItem() const noexcept;
 
@@ -48,6 +55,7 @@ namespace ve
         void BuildRenderItem();
         [[nodiscard]] bool IsRenderItemDirty() const noexcept;
         void MarkRenderItemDirty() noexcept;
+        void MarkRenderItemShadowDirty() noexcept;
         void ClearRenderItemDirty() noexcept;
         void RegisterTransformChangedCallback() noexcept;
         void UnregisterTransformChangedCallback() noexcept;
@@ -60,6 +68,10 @@ namespace ve
         AssetRef<MaterialResource> material_;
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
+        UInt64 renderItemID_ = 0;
+        bool castShadows_ = true;
+        bool receiveShadows_ = true;
+        UInt64 shadowRevision_ = 1;
         bool renderItemDirty_ = true;
         bool renderThreadRegistered_ = false;
         UInt64 transformChangedCallbackId_ = 0;

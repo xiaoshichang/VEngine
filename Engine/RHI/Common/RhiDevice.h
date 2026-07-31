@@ -3,6 +3,7 @@
 #include "Engine/RHI/Common/RhiTypes.h"
 
 #include <memory>
+#include <span>
 
 namespace ve::rhi
 {
@@ -91,6 +92,11 @@ namespace ve::rhi
         [[nodiscard]] virtual RhiPrimitiveTopology GetTopology() const noexcept = 0;
     };
 
+    /// Owns immutable compute pipeline state.
+    class RhiComputePipelineState : public RhiObject
+    {
+    };
+
     /// Owns a presentation surface and its back buffers.
     class RhiSwapchain : public RhiObject
     {
@@ -107,6 +113,13 @@ namespace ve::rhi
         /// Recreates the presentation buffers for a new non-zero drawable size.
         [[nodiscard]] virtual bool Resize(RhiExtent2D extent) = 0;
 
+        /// Waits until both the presentation queue can accept another frame and the selected reusable frame
+        /// resources have completed. Backends without explicit presentation pacing wait only for the fence.
+        [[nodiscard]] virtual bool WaitForFrameStart(RhiFence& completionFence, uint64_t completionValue)
+        {
+            return completionValue == 0 || completionFence.Wait(completionValue);
+        }
+
         /// Presents the current back buffer to the screen.
         [[nodiscard]] virtual bool Present() = 0;
     };
@@ -122,7 +135,7 @@ namespace ve::rhi
         [[nodiscard]] virtual bool End() = 0;
 
         /// Begins rendering with physical attachments resolved by the caller. A null color texture selects the
-        /// swapchain's current back buffer.
+        /// swapchain's current back buffer only when both color attachment flags are set.
         [[nodiscard]] virtual bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) = 0;
 
         /// Ends the active render pass.
@@ -134,8 +147,15 @@ namespace ve::rhi
         /// may later replace this with a scaling/color-conversion blit path while keeping the frame-pipeline contract.
         [[nodiscard]] virtual bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) = 0;
 
+        /// Copies one bounded buffer range while recording.
+        [[nodiscard]] virtual bool
+        CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) = 0;
+
         /// Sets the active graphics pipeline.
         virtual void SetPipeline(const RhiPipelineState& pipelineState) = 0;
+
+        /// Sets the active compute pipeline.
+        virtual void SetComputePipeline(const RhiComputePipelineState& pipelineState) = 0;
 
         /// Sets the viewport rectangle for following draw calls.
         virtual void SetViewport(const RhiViewport& viewport) = 0;
@@ -158,11 +178,38 @@ namespace ve::rhi
         /// Binds a sampler state to one shader stage.
         virtual void SetSampler(RhiShaderStage stage, uint32_t slot, const RhiSampler& sampler) = 0;
 
+        /// Binds a read-only structured/storage buffer to one shader stage.
+        virtual void SetStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) = 0;
+
+        /// Binds a read-write structured/storage buffer to one shader stage.
+        virtual void SetReadWriteStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) = 0;
+
+        /// Binds a texture with Storage usage for unordered read-write access from one shader stage.
+        virtual void SetReadWriteStorageTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) = 0;
+
+        /// Makes prior unordered-access writes to the listed buffers visible to following GPU commands.
+        /// Binding an unordered-access resource does not imply this synchronization.
+        virtual void InsertUavBarriers(std::span<RhiBuffer* const> buffers) = 0;
+
+        /// Makes prior unordered-access writes to the listed textures visible to following GPU commands.
+        /// Binding an unordered-access resource does not imply this synchronization.
+        virtual void InsertTextureUavBarriers(std::span<RhiTexture* const> textures) = 0;
+
+        /// Dispatches compute thread groups.
+        virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
+
         /// Issues a non-indexed draw call.
         virtual void Draw(uint32_t vertexCount, uint32_t firstVertex) = 0;
 
+        /// Issues a non-indexed instanced draw call.
+        virtual void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
+
         /// Issues an indexed draw call.
         virtual void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) = 0;
+
+        /// Issues an indexed instanced draw call.
+        virtual void
+        DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
 
         /// Returns the backend-native render encoder/command encoder for the active render pass when available.
         [[nodiscard]] virtual void* GetNativeRenderEncoderHandle() const noexcept
@@ -214,6 +261,9 @@ namespace ve::rhi
         /// Updates a CPU-visible buffer range.
         virtual void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) = 0;
 
+        /// Reads a GPU-to-CPU buffer after the caller has waited for the producing submission.
+        [[nodiscard]] virtual bool ReadBuffer(const RhiBuffer& buffer, uint64_t offset, void* destination, uint64_t size) = 0;
+
         /// Creates a texture resource and optionally uploads initial data.
         [[nodiscard]] virtual std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) = 0;
 
@@ -225,6 +275,9 @@ namespace ve::rhi
 
         /// Creates immutable graphics pipeline state.
         [[nodiscard]] virtual std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
+
+        /// Creates immutable compute pipeline state.
+        [[nodiscard]] virtual std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc& desc) = 0;
 
         /// Creates a command list object compatible with this device.
         [[nodiscard]] virtual std::unique_ptr<RhiCommandList> CreateCommandList() = 0;

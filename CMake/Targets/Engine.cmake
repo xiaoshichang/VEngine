@@ -23,6 +23,7 @@ function(ve_add_engine)
             Engine/Runtime/IO/IOSystem.cpp
             Engine/Runtime/Jobs/JobSystem.cpp
             Engine/Runtime/Logging/Log.cpp
+            Engine/Runtime/Math/Frustum.cpp
             Engine/Runtime/Memory/PoolAllocator.cpp
             Engine/Runtime/Platform/DebugConsole.cpp
             Engine/Runtime/Platform/Window.cpp
@@ -35,9 +36,12 @@ function(ve_add_engine)
             Engine/Runtime/Render/MaterialUniformPool.cpp
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
+            Engine/Runtime/Render/RenderViewState.cpp
             Engine/Runtime/Render/RenderCommandQueue.cpp
+            Engine/Runtime/Render/RenderCameraMath.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
             Engine/Runtime/Render/RenderFrameUniformCache.cpp
+            Engine/Runtime/Render/RenderPerformanceStatistics.cpp
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
             Engine/Runtime/Render/RenderSystem.cpp
@@ -49,12 +53,33 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/MobileRenderer.cpp
             Engine/Runtime/Render/Renderer/RendererFactory.cpp
             Engine/Runtime/Render/Renderer/RenderQueue.cpp
+            Engine/Runtime/Render/Renderer/RenderPass/DepthPrePass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.cpp
+            Engine/Runtime/Render/Renderer/RenderPass/SwapchainOutputRenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.cpp
             Engine/Runtime/Render/Renderer/StandaloneRenderer.cpp
             Engine/Runtime/Render/ShaderManager.cpp
             Engine/Runtime/Render/ViewportClient.cpp
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowFrameGraph.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep1_ClearScene.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep2_ClearViewRequests.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep3_MarkRequests.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep4_ResolvePageHits.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep5_AllocatePages.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep6_ClearPhysicalPages.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep7_RenderCasters.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep8_MarkRendered.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep9_FinalizeScene.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep10_ReuseStatistics.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowStep11_StatisticsReadback.cpp
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.cpp
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowManager.cpp
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.cpp
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowSceneCache.cpp
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.cpp
             Engine/Runtime/Resource/AssetID.cpp
             Engine/Runtime/Resource/AssetRef.cpp
             Engine/Runtime/Resource/AssetManifest.cpp
@@ -108,8 +133,11 @@ function(ve_add_engine)
             Engine/Runtime/IO/IOSystem.h
             Engine/Runtime/Jobs/JobSystem.h
             Engine/Runtime/Logging/Log.h
+            Engine/Runtime/Math/Bounds.h
+            Engine/Runtime/Math/Frustum.h
             Engine/Runtime/Math/Math.h
             Engine/Runtime/Math/Matrix44.h
+            Engine/Runtime/Math/Plane.h
             Engine/Runtime/Math/Quaternion.h
             Engine/Runtime/Math/Vector2.h
             Engine/Runtime/Math/Vector3.h
@@ -128,9 +156,13 @@ function(ve_add_engine)
             Engine/Runtime/Render/MaterialUniformPool.h
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
+            Engine/Runtime/Render/RenderViewFamily.h
+            Engine/Runtime/Render/RenderViewState.h
             Engine/Runtime/Render/RenderCommandQueue.h
+            Engine/Runtime/Render/RenderCameraMath.h
             Engine/Runtime/Render/RenderFramePipeline.h
             Engine/Runtime/Render/RenderFrameUniformCache.h
+            Engine/Runtime/Render/RenderPerformanceStatistics.h
             Engine/Runtime/Render/RenderResource.h
             Engine/Runtime/Render/RenderScene.h
             Engine/Runtime/Render/RenderShaderIDs.h
@@ -143,12 +175,25 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/MobileRenderer.h
             Engine/Runtime/Render/Renderer/RendererFactory.h
             Engine/Runtime/Render/Renderer/RenderQueue.h
+            Engine/Runtime/Render/Renderer/RenderPass/DepthPrePass.h
             Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h
+            Engine/Runtime/Render/Renderer/RenderPass/SwapchainOutputRenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h
             Engine/Runtime/Render/Renderer/StandaloneRenderer.h
             Engine/Runtime/Render/ShaderManager.h
             Engine/Runtime/Render/ViewportClient.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowFrameGraph.h
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPasses.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowManager.h
+            Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowSceneCache.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h
+            Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h
             Engine/Runtime/Resource/AssetID.h
             Engine/Runtime/Resource/AssetRecord.h
             Engine/Runtime/Resource/AssetRef.h

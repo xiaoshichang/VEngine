@@ -32,6 +32,14 @@ CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-debug
 CMake/Scripts/WithMsvc.bat ctest --preset windows-msvc-tests
 ```
 
+For Editor smoke tests and rendering diagnostics that require a project, launch the Editor with the project path instead of interacting with the project-selection UI:
+
+```text
+Build/windows-msvc-debug/Debug/VEngineWinEditor.exe --project "D:\github-desktop\VEngine\DemoProject"
+```
+
+Do not automate project opening with mouse coordinates, simulated clicks, or other project-selection UI input. Use `--project <path>` so tests are deterministic and reproducible.
+
 ## Coding Style
 
 Follow `Docs/CodingStyle.md` and `.clang-format`.

@@ -8,7 +8,7 @@
 
 namespace ve
 {
-    std::unique_ptr<BaseRenderer> CreatePlayerRenderer(BaseRendererInitParam initParam)
+    std::unique_ptr<BaseRenderer> CreatePlayerRenderer(BaseRendererInitParam&& initParam)
     {
 #if VE_PLATFORM_IOS
         MobileRendererInitParam mobileInitParam = {};

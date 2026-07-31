@@ -7,25 +7,31 @@
 
 namespace ve
 {
+    class FrameGraphPassResources;
     class RTShaderResource;
 
     struct OpaqueSceneRenderPassInitParam
     {
-        rhi::RhiFillMode fillMode = rhi::RhiFillMode::Solid;
-        rhi::RhiLoadAction colorLoadAction = rhi::RhiLoadAction::Clear;
+        bool visualizeVirtualShadowPages = false;
+        bool loadDepthFromPrePass = false;
     };
 
-    class OpaqueSceneRenderPass final : public RenderPass
+    class OpaqueSceneRenderPass final : public ViewRenderPass
     {
     public:
         explicit OpaqueSceneRenderPass(OpaqueSceneRenderPassInitParam initParam);
 
-        void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
+        void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData, UInt32 viewIndex) override;
 
     private:
-        [[nodiscard]] ErrorCode Draw(RenderPassContext& context);
-        [[nodiscard]] ErrorCode EnsurePipeline(RenderPassContext& context);
-        [[nodiscard]] bool BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
+        void Draw(const FrameGraphPassResources& resources,
+                  FrameGraphTextureHandle virtualShadowAtlas,
+                  FrameGraphBufferHandle virtualShadowPageTable,
+                  const VirtualShadowSamplingSnapshot& virtualShadowSampling,
+                  UInt32 viewIndex,
+                  RenderPassContext& context);
+        void EnsurePipeline(RenderPassContext& context, UInt32 viewIndex);
+        void BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
         OpaqueSceneRenderPassInitParam initParam_;
         rhi::RhiPipelineState* pipelineState_ = nullptr;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;

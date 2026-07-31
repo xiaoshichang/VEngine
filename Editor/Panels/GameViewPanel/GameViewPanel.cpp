@@ -25,6 +25,7 @@ namespace ve::editor
 
     GameViewPanel::GameViewPanel()
         : gameViewTexture_(nullptr)
+        , gameViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorGameView"}))
     {
     }
 
@@ -50,6 +51,11 @@ namespace ve::editor
     RenderTexture& GameViewPanel::GetGameViewTexture() noexcept
     {
         return *gameViewTexture_;
+    }
+
+    std::shared_ptr<RenderViewState> GameViewPanel::GetRenderViewState() const noexcept
+    {
+        return gameViewState_;
     }
 
     const char* GameViewPanel::GetName() const noexcept

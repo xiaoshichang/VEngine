@@ -108,7 +108,8 @@ namespace ve::editor
 
         [[nodiscard]] boost::json::object WriteScriptVector3(const std::array<float, 3>& value)
         {
-            return boost::json::object{{"X", value[0]}, {"Y", value[1]}, {"Z", value[2]}};
+            return boost::json::object{
+                {"X", JsonUtils::MakeFloat(value[0])}, {"Y", JsonUtils::MakeFloat(value[1])}, {"Z", JsonUtils::MakeFloat(value[2])}};
         }
 
         [[nodiscard]] std::array<float, 4> ReadScriptColor(const boost::json::value& value)
@@ -137,7 +138,10 @@ namespace ve::editor
 
         [[nodiscard]] boost::json::object WriteScriptColor(const std::array<float, 4>& value)
         {
-            return boost::json::object{{"R", value[0]}, {"G", value[1]}, {"B", value[2]}, {"A", value[3]}};
+            return boost::json::object{{"R", JsonUtils::MakeFloat(value[0])},
+                                       {"G", JsonUtils::MakeFloat(value[1])},
+                                       {"B", JsonUtils::MakeFloat(value[2])},
+                                       {"A", JsonUtils::MakeFloat(value[3])}};
         }
 
         void SetScriptField(DotnetScriptableComponent& script, const ScriptFieldInfo& field, const boost::json::value& value)
@@ -180,7 +184,7 @@ namespace ve::editor
                 float floatValue = ReadJsonFloat(value);
                 if (RenderFieldDragFloat(label.c_str(), &floatValue, FineDragSpeed))
                 {
-                    SetScriptField(script, field, floatValue);
+                    SetScriptField(script, field, JsonUtils::MakeFloat(floatValue));
                 }
                 break;
             }
@@ -297,6 +301,18 @@ namespace ve::editor
 
             const std::string materialAssetPath = assetDatabase != nullptr ? ResolveAssetPathFromID(*assetDatabase, mesh.GetMaterialAssetID()) : "";
             RenderAssetReferenceField("Material", "##MaterialReferencePath", "##MaterialReference", materialAssetPath);
+
+            bool castShadows = mesh.CastShadows();
+            if (RenderFieldCheckbox("Cast Shadows", &castShadows))
+            {
+                mesh.SetCastShadows(castShadows);
+            }
+
+            bool receiveShadows = mesh.ReceiveShadows();
+            if (RenderFieldCheckbox("Receive Shadows", &receiveShadows))
+            {
+                mesh.SetReceiveShadows(receiveShadows);
+            }
 
             std::array<float, 3> boundsCenter = ToFloat3(mesh.GetBoundsCenter());
             if (RenderFieldDragFloat3("Bounds Center", boundsCenter.data(), BoundsDragSpeed))

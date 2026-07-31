@@ -39,7 +39,8 @@ namespace ve
             textureDesc.depth = 1;
             textureDesc.mipLevelCount = 1;
             textureDesc.format = rhi::RhiFormat::Depth32Float;
-            textureDesc.usage = rhi::RhiTextureUsage::DepthStencil;
+            textureDesc.usage = static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) |
+                                                                  static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
             textureDesc.debugName = desc.name.c_str();
             return textureDesc;
         }

@@ -2,6 +2,8 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 
+#include <exception>
+
 namespace ve
 {
     namespace
@@ -21,4 +23,15 @@ namespace ve
         , commandList(initParam.frameData.GetCommandList())
     {
     }
+
+    const RendererViewData& RenderPassContext::GetView(UInt32 viewIndex) const noexcept
+    {
+        if (viewIndex >= rendererData.views.size())
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Render pass requested a renderer view index outside the active view family.");
+            std::terminate();
+        }
+        return rendererData.views[viewIndex];
+    }
+
 } // namespace ve

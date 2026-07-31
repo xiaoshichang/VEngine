@@ -20,6 +20,7 @@
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowManager.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -28,6 +29,7 @@
 #include <exception>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ve
@@ -49,8 +51,11 @@ namespace ve
         std::unique_ptr<rhi::RhiDevice> device;
         std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
         std::array<FrameContext, RenderFrameContextCount> frameContexts;
+        std::array<UInt64, RenderFrameContextCount> submittedFrameIndices{};
+        RenderPerformanceStatisticsExchange performanceStatistics;
         MaterialUniformPool materialUniformPool;
         ShaderManager shaderManager;
+        std::unique_ptr<VirtualShadowManager> virtualShadowManager;
         std::vector<std::unique_ptr<rhi::RhiObject>> pendingRetiredResources;
         Atomic<UInt64> pendingMainSwapchainExtent{0};
         AtomicBool mainSwapchainResizeCommandQueued{false};
@@ -59,6 +64,36 @@ namespace ve
 
     namespace
     {
+        [[noreturn]] void FailRenderSystemFrame(std::string_view context, ErrorCode error, const rhi::RhiDevice* device)
+        {
+            std::string message(context);
+            message += ": ";
+            message += ToString(error);
+            if (device != nullptr)
+            {
+                const char* backendError = device->GetLastErrorMessage();
+                if (backendError != nullptr && backendError[0] != '\0')
+                {
+                    message += ". Backend error: ";
+                    message += backendError;
+                }
+            }
+
+            VE_LOG_ERROR_CATEGORY("Render", "{}", message);
+            VE_ASSERT_ALWAYS_MESSAGE(false, message.c_str());
+            std::terminate();
+        }
+
+        void RequireRenderSystemFrameSuccess(ErrorCode result,
+                                             std::string_view context,
+                                             const rhi::RhiDevice* device)
+        {
+            if (result != ErrorCode::None)
+            {
+                FailRenderSystemFrame(context, result, device);
+            }
+        }
+
         [[nodiscard]] const char* ToString(RenderBackend backend) noexcept
         {
             switch (backend)
@@ -186,19 +221,39 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode PrepareMainSwapchainFrame(RenderSystemImpl& impl, FrameRenderPipelineData& frameData)
+        [[nodiscard]] ErrorCode PrepareMainSwapchainFrame(RenderSystemImpl& impl,
+                                                          FrameRenderPipelineData& frameData,
+                                                          std::optional<RenderPerformanceStatistics>& completedStatistics)
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
             VE_ASSERT(impl.mainSwapchain != nullptr);
+            completedStatistics.reset();
 
             // A FrameContext is a reusable in-flight GPU slot. Waiting here both makes its command resources reusable
             // and releases the pipeline and render proxies retained by its previous submission.
             const UInt64 frameIndex = impl.nextFrameIndex++;
-            FrameContext& frameContext = impl.frameContexts[frameIndex % RenderFrameContextCount];
-            if (!frameContext.WaitAndReset())
+            const UInt32 frameSlotIndex = static_cast<UInt32>(frameIndex % RenderFrameContextCount);
+            FrameContext& frameContext = impl.frameContexts[frameSlotIndex];
+            if (!frameContext.WaitForFrameStartAndReset(*impl.mainSwapchain))
             {
                 return ErrorCode::PlatformError;
+            }
+            const UInt64 completedFrameIndex = impl.submittedFrameIndices[frameSlotIndex];
+            impl.submittedFrameIndices[frameSlotIndex] = 0;
+            if (completedFrameIndex != 0)
+            {
+                // Map and release the completed readback before RenderFrame prepares this modulo slot again.
+                // Publication remains deferred until the current frame reveals which scene is active.
+                if (impl.virtualShadowManager == nullptr)
+                {
+                    FailRenderSystemFrame("RenderSystem completed a VSM frame without a VSM manager", ErrorCode::InvalidState, impl.device.get());
+                }
+                completedStatistics = impl.virtualShadowManager->ConsumeCompletedFrameStatistics(*impl.device, completedFrameIndex);
+                if (!completedStatistics.has_value())
+                {
+                    FailRenderSystemFrame("RenderSystem completed a frame without its submitted VSM statistics", ErrorCode::InvalidState, impl.device.get());
+                }
             }
 
             frameData.frameIndex = frameIndex;
@@ -206,12 +261,39 @@ namespace ve
             frameData.mainSwapchain = impl.mainSwapchain.get();
             frameData.shaderManager = &impl.shaderManager;
             frameData.frameContext = &frameContext;
+            frameData.virtualShadowManager = impl.virtualShadowManager.get();
             return ErrorCode::None;
+        }
+
+        struct MainSwapchainSubmitContext
+        {
+            rhi::RhiDevice* device = nullptr;
+            FrameContext* frameContext = nullptr;
+        };
+
+        [[nodiscard]] bool SubmitMainSwapchainFrameCallback(void* context, UInt64 submissionFenceValue) noexcept
+        {
+            auto& submitContext = *static_cast<MainSwapchainSubmitContext*>(context);
+            try
+            {
+                const bool submitted = submitContext.device->Submit(submitContext.frameContext->GetCommandList(),
+                                                                     &submitContext.frameContext->GetCompletionFence(),
+                                                                     submissionFenceValue);
+                if (!submitted)
+                {
+                    FailRenderSystemFrame("RenderSystem failed to submit the frame", ErrorCode::PlatformError, submitContext.device);
+                }
+                return true;
+            }
+            catch (...)
+            {
+                FailRenderSystemFrame("Unhandled exception while submitting the frame", ErrorCode::Unknown, submitContext.device);
+            }
         }
 
         [[nodiscard]] ErrorCode SubmitMainSwapchainFrame(RenderSystemImpl& impl,
                                                          const FrameRenderPipelineData& frameData,
-                                                         const std::shared_ptr<FrameRenderPipeline>& framePipeline)
+                                                         const std::shared_ptr<FrameRenderPipeline>& framePipeline) noexcept
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
@@ -219,27 +301,9 @@ namespace ve
             VE_ASSERT(framePipeline != nullptr);
 
             FrameContext& frameContext = *frameData.frameContext;
-            const UInt64 submissionFenceValue = frameContext.GetNextSubmissionFenceValue();
-            const bool submitted = impl.device->Submit(frameContext.GetCommandList(), &frameContext.GetCompletionFence(), submissionFenceValue);
-            if (!submitted)
-            {
-                // No completion fence can protect pending resources after a failed submission. Wait for the device
-                // before releasing them and let the command's pipeline reference expire after this function returns.
-                impl.device->WaitIdle();
-                impl.pendingRetiredResources.clear();
-                return ErrorCode::PlatformError;
-            }
-
-            // The command list stores raw references to pipeline-owned render proxies and RHI objects. Transfer their
-            // CPU ownership to this FrameContext so they are released only after its completion fence has signaled.
-            frameContext.RetainSubmittedFrameObject(framePipeline);
-            for (std::unique_ptr<rhi::RhiObject>& resource : impl.pendingRetiredResources)
-            {
-                frameContext.RetainTransientResource(std::move(resource));
-            }
-            impl.pendingRetiredResources.clear();
-            frameContext.MarkSubmitted(submissionFenceValue);
-            return ErrorCode::None;
+            MainSwapchainSubmitContext submitContext{impl.device.get(), &frameContext};
+            return frameContext.SubmitWithRetainedResources(
+                framePipeline, impl.pendingRetiredResources, &SubmitMainSwapchainFrameCallback, &submitContext);
         }
 
         [[nodiscard]] ErrorCode PresentMainSwapchainFrame(RenderSystemImpl& impl)
@@ -249,36 +313,40 @@ namespace ve
             return impl.mainSwapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
         }
 
-        [[nodiscard]] ErrorCode RenderMainSwapchainFrame(RenderSystemImpl& impl, const std::shared_ptr<FrameRenderPipeline>& framePipeline)
+        void RenderMainSwapchainFrame(RenderSystemImpl& impl, const std::shared_ptr<FrameRenderPipeline>& framePipeline)
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(framePipeline != nullptr);
 
             // Phase 1: acquire a reusable GPU frame slot and assemble the Render Thread execution context.
             FrameRenderPipelineData frameData = {};
-            const ErrorCode prepareResult = PrepareMainSwapchainFrame(impl, frameData);
-            if (prepareResult != ErrorCode::None)
-            {
-                return prepareResult;
-            }
-
+            std::optional<RenderPerformanceStatistics> completedStatistics;
+            const ErrorCode prepareResult = PrepareMainSwapchainFrame(impl, frameData, completedStatistics);
+            RequireRenderSystemFrameSuccess(prepareResult, "RenderSystem failed to prepare the frame", impl.device.get());
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
-            const ErrorCode renderResult = framePipeline->RenderFrame(frameData);
-            if (renderResult != ErrorCode::None)
+            framePipeline->RenderFrame(frameData);
+            const UInt64 statisticsSceneIdentity =
+                frameData.virtualShadowManager != nullptr ? frameData.virtualShadowManager->GetRecordingSceneIdentity(frameData.frameIndex) : 0;
+            impl.performanceStatistics.ActivateScene(statisticsSceneIdentity, frameData.frameIndex);
+            if (completedStatistics.has_value())
             {
-                return renderResult;
+                impl.performanceStatistics.Publish(*completedStatistics);
             }
-
             // Phase 3: submit the recorded work and bind its object lifetime to the selected FrameContext fence.
             const ErrorCode submitResult = SubmitMainSwapchainFrame(impl, frameData, framePipeline);
-            if (submitResult != ErrorCode::None)
+            RequireRenderSystemFrameSuccess(submitResult, "RenderSystem failed to submit the frame", impl.device.get());
+            if (frameData.virtualShadowManager != nullptr && statisticsSceneIdentity != 0)
             {
-                return submitResult;
+                const UInt32 frameSlotIndex = static_cast<UInt32>(frameData.frameIndex % RenderFrameContextCount);
+                impl.submittedFrameIndices[frameSlotIndex] = frameData.frameIndex;
+                frameData.virtualShadowManager->NotifyFrameSubmitted(
+                    frameData.frameIndex, frameData.frameContext->GetCompletionFence(), frameData.frameContext->GetSubmittedFenceValue());
             }
 
             // Phase 4: presentation happens after a successful queue submission; the FrameContext now owns all data
             // that must remain alive even if Present reports a surface or device error.
-            return PresentMainSwapchainFrame(impl);
+            const ErrorCode presentResult = PresentMainSwapchainFrame(impl);
+            RequireRenderSystemFrameSuccess(presentResult, "RenderSystem failed to present the frame", impl.device.get());
         }
 
         void ExecuteCommand(RenderCommand& command) noexcept
@@ -291,7 +359,7 @@ namespace ve
             }
             catch (...)
             {
-                VE_ASSERT_ALWAYS_MESSAGE(false, "Unhandled exception escaped a RenderSystem command.");
+                FailRenderSystemFrame("Unhandled exception escaped a RenderSystem command", ErrorCode::Unknown, nullptr);
             }
         }
 
@@ -339,8 +407,11 @@ namespace ve
             }
 
             impl.pendingRetiredResources.clear();
+            impl.submittedFrameIndices.fill(0);
+            impl.performanceStatistics.Reset();
             impl.pendingMainSwapchainExtent.store(0, std::memory_order_release);
             impl.mainSwapchainResizeCommandQueued.store(false, std::memory_order_release);
+            impl.virtualShadowManager.reset();
             impl.shaderManager.Clear();
             DestroyFrameResources(impl);
             impl.mainSwapchain.reset();
@@ -552,6 +623,7 @@ namespace ve
                                       }
 
                                       impl_->device = std::move(device);
+                                      impl_->virtualShadowManager = std::make_unique<VirtualShadowManager>();
                                       impl_->materialUniformPool.Initialize(*impl_->device);
                                       impl_->backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
                                       VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
@@ -606,6 +678,11 @@ namespace ve
         const int backendValue = impl_->backendValue.load(std::memory_order_acquire);
         VE_ASSERT_MESSAGE(backendValue >= 0, "RenderSystem::GetDeviceBackend requires an initialized RHI device.");
         return static_cast<RenderBackend>(backendValue);
+    }
+
+    RenderPerformanceStatistics RenderSystem::GetPerformanceStatistics() const
+    {
+        return impl_->performanceStatistics.GetLatest();
     }
 
     ErrorCode RenderSystem::CreateMainSwapchain(const RenderSurfaceDesc& desc)
@@ -708,7 +785,7 @@ namespace ve
                        [this, meshResource = std::move(meshResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           meshResource->InitRenderResource(*impl_->device, std::move(desc));
+                           meshResource->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
                        });
     }
 
@@ -721,7 +798,7 @@ namespace ve
                        [this, shaderResource = std::move(shaderResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           shaderResource->InitRenderResource(*impl_->device, std::move(desc));
+                           shaderResource->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
                        });
     }
 
@@ -768,6 +845,30 @@ namespace ve
                        });
     }
 
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTMeshResource> meshResource)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(meshResource != nullptr, "RenderSystem::ReleaseRenderResource requires a mesh resource.");
+
+        EnqueueCommand("RenderSystemReleaseMeshResource",
+                       [this, meshResource = std::move(meshResource)]()
+                       {
+                           meshResource->ResetRenderResource(impl_->pendingRetiredResources);
+                       });
+    }
+
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(shaderResource != nullptr, "RenderSystem::ReleaseRenderResource requires a shader resource.");
+
+        EnqueueCommand("RenderSystemReleaseShaderResource",
+                       [this, shaderResource = std::move(shaderResource)]()
+                       {
+                           shaderResource->ResetRenderResource(impl_->pendingRetiredResources);
+                       });
+    }
+
     void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline)
     {
         VE_ASSERT_SCENE_THREAD();
@@ -776,23 +877,7 @@ namespace ve
         EnqueueCommand("RenderSystemRenderFrame",
                        [this, framePipeline = std::move(framePipeline)]()
                        {
-                           const ErrorCode result = RenderMainSwapchainFrame(*impl_, framePipeline);
-                           if (result != ErrorCode::None)
-                           {
-                               std::string message = "RenderSystem::RenderFrame failed: ";
-                               message += ToString(result);
-                               if (impl_->device != nullptr)
-                               {
-                                   const char* backendError = impl_->device->GetLastErrorMessage();
-                                   if (backendError != nullptr && backendError[0] != '\0')
-                                   {
-                                       message += ". Backend error: ";
-                                       message += backendError;
-                                   }
-                               }
-                               VE_LOG_ERROR_CATEGORY("Render", message);
-                               VE_ASSERT_MESSAGE(false, message.c_str());
-                           }
+                           RenderMainSwapchainFrame(*impl_, framePipeline);
                        });
     }
 

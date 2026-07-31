@@ -1,9 +1,61 @@
 #include "Engine/Runtime/Core/JsonUtils.h"
 
+#include "Engine/Runtime/Core/Types.h"
+
+#include <charconv>
+#include <cmath>
+
 namespace ve::JsonUtils
 {
     namespace
     {
+        template<typename Number>
+        [[nodiscard]] bool AppendReadableFiniteNumber(std::string& output, Number value)
+        {
+            constexpr double MinimumFixedMagnitude = 1.0e-6;
+            constexpr double MaximumFixedMagnitude = 1.0e16;
+            const double magnitude = std::abs(static_cast<double>(value));
+            const std::chars_format format = magnitude >= MinimumFixedMagnitude && magnitude < MaximumFixedMagnitude ? std::chars_format::fixed
+                                                                                                                      : std::chars_format::general;
+            char buffer[128] = {};
+            const std::to_chars_result result = std::to_chars(buffer, buffer + sizeof(buffer), value, format);
+            if (result.ec != std::errc())
+            {
+                return false;
+            }
+
+            output.append(buffer, result.ptr);
+            return true;
+        }
+
+        void SerializeScalar(std::string& output, const boost::json::value& value)
+        {
+            if (!value.is_double())
+            {
+                output += boost::json::serialize(value);
+                return;
+            }
+
+            const double number = value.as_double();
+            if (!std::isfinite(number))
+            {
+                output += boost::json::serialize(value);
+                return;
+            }
+            if (number == 0.0)
+            {
+                output += "0";
+                return;
+            }
+
+            if (AppendReadableFiniteNumber(output, number))
+            {
+                return;
+            }
+
+            output += boost::json::serialize(value);
+        }
+
         void WriteIndent(std::string& output, int depth, int indentSpaces)
         {
             output.append(static_cast<size_t>(depth * indentSpaces), ' ');
@@ -32,7 +84,7 @@ namespace ve::JsonUtils
                     output += ", ";
                 }
 
-                output += boost::json::serialize(array[index]);
+                SerializeScalar(output, array[index]);
             }
             output += "]";
         }
@@ -99,11 +151,38 @@ namespace ve::JsonUtils
                 break;
             }
             default:
-                output += boost::json::serialize(value);
+                SerializeScalar(output, value);
                 break;
             }
         }
     } // namespace
+
+    boost::json::value MakeFloat(Float32 value)
+    {
+        if (!std::isfinite(value))
+        {
+            return static_cast<double>(value);
+        }
+        if (value == 0.0f)
+        {
+            return 0.0;
+        }
+
+        char buffer[64] = {};
+        const std::to_chars_result formatResult = std::to_chars(buffer, buffer + sizeof(buffer), value);
+        if (formatResult.ec != std::errc())
+        {
+            return static_cast<double>(value);
+        }
+
+        double canonicalValue = 0.0;
+        const std::from_chars_result parseResult = std::from_chars(buffer, formatResult.ptr, canonicalValue);
+        if (parseResult.ec != std::errc() || parseResult.ptr != formatResult.ptr)
+        {
+            return static_cast<double>(value);
+        }
+        return canonicalValue;
+    }
 
     std::string SerializePretty(const boost::json::value& value, int indentSpaces)
     {
