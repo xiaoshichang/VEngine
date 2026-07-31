@@ -161,6 +161,7 @@ namespace ve
 
         /// Returns the latest fence-completed render statistics without synchronously invoking the Render Thread.
         [[nodiscard]] RenderPerformanceStatistics GetPerformanceStatistics() const;
+        [[nodiscard]] UInt64 GetRecordedDrawCallCount() const noexcept;
 
         /// Creates the main swapchain on the Render Thread.
         ///

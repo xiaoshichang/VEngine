@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Input/InputSystem.h"
 #include "Engine/Runtime/Jobs/JobSystem.h"
 #include "Engine/Runtime/Physics/PhysicsSystem.h"
+#include "Engine/Runtime/Profiling/ProfileSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/ResourceSystem.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
@@ -51,6 +52,9 @@ namespace ve
 
         /// Configuration for the runtime Physics System.
         PhysicsSystemInitParam physicsSystem;
+
+        /// Enables the runtime profiling service. Player release builds disable this to avoid profiling overhead.
+        bool enableProfileSystem = true;
     };
 
     /// Owns the shared runtime service lifecycle for Player, Editor, and tools.
@@ -144,6 +148,8 @@ namespace ve
 
         [[nodiscard]] PhysicsSystem& GetPhysicsSystem() noexcept;
         [[nodiscard]] const PhysicsSystem& GetPhysicsSystem() const noexcept;
+        [[nodiscard]] ProfileSystem& GetProfileSystem() noexcept;
+        [[nodiscard]] const ProfileSystem& GetProfileSystem() const noexcept;
 
         /// Returns the runtime-owned Scene System.
         ///
@@ -165,6 +171,7 @@ namespace ve
         ResourceSystem resourceSystem_;
         ScriptingSystem scriptingSystem_;
         PhysicsSystem physicsSystem_;
+        ProfileSystem profileSystem_;
         MainThreadSceneThreadFrameEndSync mainThreadSceneThreadFrameEndSync_;
         SceneThreadRenderThreadFrameEndSync sceneThreadRenderThreadFrameEndSync_;
         EngineRuntimeState state_ = EngineRuntimeState::NotInitialized;

@@ -106,6 +106,17 @@ namespace ve
         }
         VE_LOG_INFO("ScriptingSystem initialized.");
 
+        if (desc.enableProfileSystem)
+        {
+            ErrorCode profileSystemResult = profileSystem_.Initialize(timeSystem_, renderSystem_);
+            if (profileSystemResult != ErrorCode::None)
+            {
+                TerminateRuntimeInitialization("ProfileSystem", profileSystemResult);
+            }
+            sceneSystem_.SetRuntimeFrameEndCallback([this]() { profileSystem_.RecordFrameEnd(); });
+            VE_LOG_INFO("ProfileSystem initialized.");
+        }
+
         state_ = EngineRuntimeState::Initialized;
         VE_LOG_INFO("all systems initialized.");
         return ErrorCode::None;
@@ -119,6 +130,7 @@ namespace ve
         }
 
         sceneSystem_.Shutdown();
+        profileSystem_.Shutdown();
         jobSystem_.Shutdown();
         physicsSystem_.Shutdown();
         scriptingSystem_.Shutdown();
@@ -246,5 +258,17 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetPhysicsSystem requires an initialized runtime.");
         return physicsSystem_;
+    }
+
+    ProfileSystem& EngineRuntime::GetProfileSystem() noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetProfileSystem requires an initialized runtime.");
+        return profileSystem_;
+    }
+
+    const ProfileSystem& EngineRuntime::GetProfileSystem() const noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "EngineRuntime::GetProfileSystem requires an initialized runtime.");
+        return profileSystem_;
     }
 } // namespace ve

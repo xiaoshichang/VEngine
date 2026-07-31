@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Core/Version.h"
+#include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/iOS/IOSWindow.h"
 #include "Player/Windows/VEnginePlayer.h"
@@ -167,6 +168,7 @@ namespace
     initParam.runtime.ioSystem.threadName = "VEngineIOSPlayerIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineIOSPlayerRenderThread";
     initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
+    initParam.runtime.enableProfileSystem = VE_BUILD_DEBUG != 0;
 
     engineApplication_ = std::make_unique<ve::VEnginePlayer>(std::move(initParam));
     const int initResult = engineApplication_->Init();

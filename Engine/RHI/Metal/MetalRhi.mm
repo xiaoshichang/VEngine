@@ -650,6 +650,7 @@ namespace ve::rhi
             [[nodiscard]] bool Begin() override
             {
                 ResetTransientState();
+                recordedDrawCallCount_ = 0;
                 activePipeline_ = nullptr;
                 @autoreleasepool
                 {
@@ -1041,6 +1042,7 @@ namespace ve::rhi
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 [renderCommandEncoder_ drawPrimitives:primitiveType_ vertexStart:firstVertex vertexCount:vertexCount];
+                ++recordedDrawCallCount_;
             }
 
             void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
@@ -1048,8 +1050,9 @@ namespace ve::rhi
                 [renderCommandEncoder_ drawPrimitives:primitiveType_
                                          vertexStart:firstVertex
                                          vertexCount:vertexCount
-                                       instanceCount:instanceCount
+                                        instanceCount:instanceCount
                                         baseInstance:firstInstance];
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
@@ -1059,8 +1062,9 @@ namespace ve::rhi
                 [renderCommandEncoder_ drawIndexedPrimitives:primitiveType_
                                                   indexCount:indexCount
                                                    indexType:indexType_
-                                                 indexBuffer:indexBuffer_
+                                                   indexBuffer:indexBuffer_
                                            indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexedInstanced(
@@ -1073,8 +1077,14 @@ namespace ve::rhi
                                                  indexBuffer:indexBuffer_
                                            indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)
                                                instanceCount:instanceCount
-                                                  baseVertex:vertexOffset
+                                                baseVertex:vertexOffset
                                                 baseInstance:firstInstance];
+                ++recordedDrawCallCount_;
+            }
+
+            [[nodiscard]] uint64_t GetRecordedDrawCallCount() const noexcept override
+            {
+                return recordedDrawCallCount_;
             }
 
             [[nodiscard]] void* GetNativeRenderEncoderHandle() const noexcept override
@@ -1140,6 +1150,7 @@ namespace ve::rhi
 
             id<MTLCommandQueue> commandQueue_ = nil;
             id<MTLCommandBuffer> commandBuffer_ = nil;
+            uint64_t recordedDrawCallCount_ = 0;
             id<MTLRenderCommandEncoder> renderCommandEncoder_ = nil;
             id<CAMetalDrawable> drawable_ = nil;
             id<MTLBuffer> indexBuffer_ = nil;

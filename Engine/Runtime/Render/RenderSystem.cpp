@@ -1,5 +1,6 @@
 #include "Engine/Runtime/Render/RenderSystem.h"
 
+
 #if VE_PLATFORM_WINDOWS && VE_ENABLE_D3D11
 #include "Engine/RHI/D3D11/D3D11Rhi.h"
 #endif
@@ -53,6 +54,7 @@ namespace ve
         std::array<FrameContext, RenderFrameContextCount> frameContexts;
         std::array<UInt64, RenderFrameContextCount> submittedFrameIndices{};
         RenderPerformanceStatisticsExchange performanceStatistics;
+        Atomic<UInt64> recordedDrawCallCount{0};
         MaterialUniformPool materialUniformPool;
         ShaderManager shaderManager;
         std::unique_ptr<VirtualShadowManager> virtualShadowManager;
@@ -325,6 +327,7 @@ namespace ve
             RequireRenderSystemFrameSuccess(prepareResult, "RenderSystem failed to prepare the frame", impl.device.get());
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
             framePipeline->RenderFrame(frameData);
+            impl.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);
             const UInt64 statisticsSceneIdentity =
                 frameData.virtualShadowManager != nullptr ? frameData.virtualShadowManager->GetRecordingSceneIdentity(frameData.frameIndex) : 0;
             impl.performanceStatistics.ActivateScene(statisticsSceneIdentity, frameData.frameIndex);
@@ -683,6 +686,16 @@ namespace ve
     RenderPerformanceStatistics RenderSystem::GetPerformanceStatistics() const
     {
         return impl_->performanceStatistics.GetLatest();
+    }
+
+    UInt64 RenderSystem::GetRecordedDrawCallCount() const noexcept
+    {
+        if (impl_ == nullptr || !impl_->initialized.load(std::memory_order_acquire))
+        {
+            return 0;
+        }
+
+        return impl_->recordedDrawCallCount.load(std::memory_order_acquire);
     }
 
     ErrorCode RenderSystem::CreateMainSwapchain(const RenderSurfaceDesc& desc)

@@ -39,6 +39,7 @@ namespace ve
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
         SceneSystemEditorCallback editorCallback;
         std::function<void()> runtimeStartFrameCallback;
+        std::function<void()> runtimeFrameEndCallback;
         std::function<void(const OSEvent& event)> runtimeOSEventCallback;
         std::shared_ptr<RTRenderTexture> playerSceneColorTexture;
         std::shared_ptr<RenderViewState> playerViewState;
@@ -236,6 +237,10 @@ namespace ve
         {
             impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
                 impl.stopRequested, [&impl](UInt32 fenceIndex) { impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex); });
+            if (impl.runtimeFrameEndCallback != nullptr)
+            {
+                impl.runtimeFrameEndCallback();
+            }
         }
 
         void SceneThreadLoop(SceneSystemImpl& impl)
@@ -576,6 +581,7 @@ namespace ve
         impl_->renderSystem = nullptr;
         impl_->physicsSystem = nullptr;
         impl_->runtimeStartFrameCallback = nullptr;
+        impl_->runtimeFrameEndCallback = nullptr;
         impl_->runtimeOSEventCallback = nullptr;
         impl_->playerSceneColorTexture.reset();
         impl_->playerViewState.reset();
@@ -705,6 +711,11 @@ namespace ve
     void SceneSystem::SetRuntimeStartFrameCallback(std::function<void()> callback) noexcept
     {
         impl_->runtimeStartFrameCallback = std::move(callback);
+    }
+
+    void SceneSystem::SetRuntimeFrameEndCallback(std::function<void()> callback) noexcept
+    {
+        impl_->runtimeFrameEndCallback = std::move(callback);
     }
 
     void SceneSystem::SetRuntimeOSEventCallback(std::function<void(const OSEvent& event)> callback) noexcept

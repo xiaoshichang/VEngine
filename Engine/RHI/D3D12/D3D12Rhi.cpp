@@ -1487,6 +1487,7 @@ namespace ve::rhi
             [[nodiscard]] bool Begin() override
             {
                 recordedDrawIndexedInstancedCount_ = 0;
+                recordedDrawCallCount_ = 0;
                 activeSwapchain_ = nullptr;
                 activeTexture_ = nullptr;
                 activeDepthTexture_ = nullptr;
@@ -1957,23 +1958,32 @@ namespace ve::rhi
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 commandList_->DrawInstanced(vertexCount, 1, firstVertex, 0);
+                ++recordedDrawCallCount_;
             }
 
             void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
             {
                 commandList_->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
             {
                 commandList_->DrawIndexedInstanced(indexCount, 1, firstIndex, vertexOffset, 0);
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexedInstanced(
                 uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
             {
                 commandList_->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+                ++recordedDrawCallCount_;
                 ++recordedDrawIndexedInstancedCount_;
+            }
+
+            [[nodiscard]] uint64_t GetRecordedDrawCallCount() const noexcept override
+            {
+                return recordedDrawCallCount_;
             }
 
             [[nodiscard]] uint64_t GetRecordedDrawIndexedInstancedCount() const noexcept
@@ -2077,6 +2087,7 @@ namespace ve::rhi
             ID3D12DescriptorHeap* activeSamplerHeap_ = nullptr;
             std::vector<BoundDescriptorTable> boundDescriptorTables_;
             uint64_t recordedDrawIndexedInstancedCount_ = 0;
+            uint64_t recordedDrawCallCount_ = 0;
         };
 
         class D3D12Device final : public RhiDevice

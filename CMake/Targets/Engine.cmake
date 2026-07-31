@@ -31,6 +31,7 @@ function(ve_add_engine)
             Engine/Runtime/Physics/JoltJobSystemVEngine.h
             Engine/Runtime/Physics/PhysicsSystem.cpp
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.cpp
+            Engine/Runtime/Profiling/ProfileSystem.cpp
             Engine/Runtime/Render/FrameContext.cpp
             Engine/Runtime/Render/FrameUniformAllocator.cpp
             Engine/Runtime/Render/MaterialUniformPool.cpp
@@ -151,6 +152,7 @@ function(ve_add_engine)
             Engine/Runtime/Physics/PhysicsSystemBackend.h
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.h
             Engine/Runtime/Physics/PhysicsTypes.h
+            Engine/Runtime/Profiling/ProfileSystem.h
             Engine/Runtime/Render/FrameContext.h
             Engine/Runtime/Render/FrameUniformAllocator.h
             Engine/Runtime/Render/MaterialUniformPool.h

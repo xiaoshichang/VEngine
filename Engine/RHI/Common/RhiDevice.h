@@ -211,6 +211,11 @@ namespace ve::rhi
         virtual void
         DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
 
+        [[nodiscard]] virtual uint64_t GetRecordedDrawCallCount() const noexcept
+        {
+            return 0;
+        }
+
         /// Returns the backend-native render encoder/command encoder for the active render pass when available.
         [[nodiscard]] virtual void* GetNativeRenderEncoderHandle() const noexcept
         {

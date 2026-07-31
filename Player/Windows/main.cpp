@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Platform/DebugConsole.h"
 #include "Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h"
@@ -40,6 +41,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.ioSystem.threadName = "VEngineWinPlayerIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineWinPlayerRenderThread";
     initParam.runtime.renderSystem.device.backend = ve::SelectWin32RenderBackendFromCommandLine();
+    initParam.runtime.enableProfileSystem = VE_BUILD_DEBUG != 0;
     initParam.runtime.scriptingSystem.scriptHostRoot = ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
     initParam.runtime.scriptingSystem.runtimeConfigPath = initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
     const ve::Path playerLocalDotNetRoot = ve::FileSystem::GetExecutableDirectory() / "DotNet" / "win-x64" / "10.0.9";
