@@ -11,16 +11,16 @@
 
 namespace
 {
-    void VEngineIOSLogCallback(const ve::LogRecord& record)
+    void VEngineIOSLogCallback(const ve::LogRecord& record, std::string_view formattedLine)
     {
-        NSString* category = [NSString stringWithUTF8String:record.category != nullptr ? record.category : "General"];
-        NSString* message = [[NSString alloc] initWithBytes:record.message.data() length:record.message.size() encoding:NSUTF8StringEncoding];
+        (void)record;
+        NSString* message = [[NSString alloc] initWithBytes:formattedLine.data() length:formattedLine.size() encoding:NSUTF8StringEncoding];
         if (message == nil)
         {
             message = @"";
         }
 
-        NSLog(@"[VEngine][%s][%@] %@", ve::ToString(record.severity), category, message);
+        NSLog(@"[VEngine] %@", message);
     }
 
     UIInterfaceOrientationMask GetConfiguredInterfaceOrientationMask()

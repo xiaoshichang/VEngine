@@ -1,7 +1,5 @@
 #include "Editor/Windows/WinEditorWindowPlacement.h"
 
-#include "Engine/Runtime/Platform/DebugConsole.h"
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -42,6 +40,5 @@ namespace ve::editor
         }
 
         PlaceWindowAtPrimaryWorkAreaTopLeft(editorWindow);
-        PlaceDebugConsoleNearWindow(nativeWindowHandle);
     }
 } // namespace ve::editor

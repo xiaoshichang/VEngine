@@ -1,9 +1,9 @@
 #include "Editor/macOS/MacEditorApplication.h"
 #include "Editor/Core/EditorStartup.h"
+#include "Editor/Panels/ConsolePanel/ConsolePanel.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Platform/DebugConsole.h"
 
 #import <AppKit/AppKit.h>
 
@@ -20,9 +20,8 @@ int main(int argc, char* argv[])
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         [NSApp finishLaunching];
 
-        ve::InitializeDebugConsole();
-
         ve::LoggingConfig loggingConfig = ve::MakeDefaultLoggingConfig();
+        loggingConfig.enableConsole = false;
         const char* homePath = std::getenv("HOME");
         if (homePath != nullptr && homePath[0] != '\0')
         {
@@ -33,12 +32,13 @@ int main(int argc, char* argv[])
         {
             return 1;
         }
+        ve::SetLogCallback(ve::editor::CaptureEditorLog);
 
         ve::ApplicationInitParam initParam;
         initParam.name = "VEngineEditor";
         initParam.mainWindow.title = "VEngine Editor";
         initParam.mainWindow.width = 1600;
-        initParam.mainWindow.height = 1000;
+        initParam.mainWindow.height = 1200;
         initParam.mainWindow.visible = true;
         initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
 
@@ -65,6 +65,7 @@ int main(int argc, char* argv[])
             exitCode = application.GetExitCode();
         }
         application.UnInit();
+        ve::SetLogCallback(nullptr);
         ve::ShutdownLogging();
         return exitCode;
     }

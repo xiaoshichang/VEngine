@@ -1,8 +1,8 @@
 #include "Editor/Windows/WindowsEditorApplication.h"
 #include "Editor/Core/EditorStartup.h"
+#include "Editor/Panels/ConsolePanel/ConsolePanel.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Platform/DebugConsole.h"
 #include "Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -70,19 +70,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     (void)commandLine;
     (void)showCommand;
 
-    ve::InitializeDebugConsole();
-
-    ve::ErrorCode loggingResult = ve::InitializeLogging();
+    ve::LoggingConfig loggingConfig = ve::MakeDefaultLoggingConfig();
+    loggingConfig.enableConsole = false;
+    ve::ErrorCode loggingResult = ve::InitializeLogging(loggingConfig);
     if (loggingResult != ve::ErrorCode::None)
     {
         return 1;
     }
+    ve::SetLogCallback(ve::editor::CaptureEditorLog);
 
     ve::ApplicationInitParam initParam;
     initParam.name = "VEngineWinEditor";
     initParam.mainWindow.title = "VEngine Win Editor";
     initParam.mainWindow.width = 2400;
-    initParam.mainWindow.height = 850;
+    initParam.mainWindow.height = 1200;
     initParam.mainWindow.visible = true;
     initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineWinEditorJobWorker";
     initParam.runtime.ioSystem.threadName = "VEngineWinEditorIOThread";
@@ -106,6 +107,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         exitCode = application.GetExitCode();
     }
     application.UnInit();
+    ve::SetLogCallback(nullptr);
     ve::ShutdownLogging();
     return exitCode;
 }

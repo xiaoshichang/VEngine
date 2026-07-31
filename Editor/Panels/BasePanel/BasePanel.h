@@ -16,6 +16,7 @@ namespace ve::editor
 
         virtual void Init(Editor& editor);
         void Render(const ImVec2& position, const ImVec2& size);
+        void RenderContentInCurrentWindow();
 
     protected:
         [[nodiscard]] virtual const char* GetName() const noexcept = 0;

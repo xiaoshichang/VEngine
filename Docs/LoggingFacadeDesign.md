@@ -132,7 +132,7 @@ struct LogRecord
     SourceLocation location;
 };
 
-using LogCallback = void (*)(const LogRecord& record);
+using LogCallback = void (*)(const LogRecord& record, std::string_view formattedLine);
 }
 ```
 

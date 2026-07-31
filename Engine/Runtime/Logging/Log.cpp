@@ -396,12 +396,12 @@ namespace ve
 
         const LogRecord record{severity, category != nullptr ? category : "General", message, location};
 
+        const std::string line = FormatLogLine(record);
+
         if (callback != nullptr)
         {
-            callback(record);
+            callback(record, line);
         }
-
-        const std::string line = FormatLogLine(record);
 
         if (initialized)
         {
