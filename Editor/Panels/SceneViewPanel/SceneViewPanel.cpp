@@ -93,7 +93,7 @@ namespace ve::editor
     SceneViewPanel::SceneViewPanel()
         : sceneViewTexture_(nullptr)
         , sceneViewCamera_(nullptr)
-        , sceneViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorSceneView", 2560}))
+        , sceneViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorSceneView"}))
     {
         sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
     }

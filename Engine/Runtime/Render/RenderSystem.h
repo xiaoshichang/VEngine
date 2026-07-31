@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
+#include "Engine/Runtime/Render/RenderPerformanceStatistics.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderTarget.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
@@ -158,6 +159,9 @@ namespace ve
         /// Calling this before InitializeDevice() succeeds is API misuse.
         [[nodiscard]] RenderBackend GetDeviceBackend() const noexcept;
 
+        /// Returns the latest fence-completed render statistics without synchronously invoking the Render Thread.
+        [[nodiscard]] RenderPerformanceStatistics GetPerformanceStatistics() const;
+
         /// Creates the main swapchain on the Render Thread.
         ///
         /// The RHI device must already be initialized. The surface descriptor must carry the native handle required by
@@ -181,6 +185,8 @@ namespace ve
         void InitRenderResource(std::shared_ptr<RTMeshResource> meshResource, RTMeshResourceDesc desc);
         void InitRenderResource(std::shared_ptr<RTShaderResource> shaderResource, RTShaderResourceDesc desc);
         void InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource, RTMaterialResourceDesc desc);
+        void ReleaseRenderResource(std::shared_ptr<RTMeshResource> meshResource);
+        void ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource);
         void ReleaseRenderResource(std::shared_ptr<RTMaterialResource> materialResource);
 
         /// Enqueues one complete main-swapchain frame on the Render Thread.

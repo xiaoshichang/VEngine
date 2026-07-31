@@ -4,6 +4,18 @@
 
 namespace ve
 {
+    namespace
+    {
+        // Depth epochs retain a signed 24-bit CPU projection-compatibility envelope; physical page identity uses stable view IDs.
+        constexpr Int32 MinimumProjectionDepthEpoch = -(1 << 23);
+        constexpr Int32 MaximumProjectionDepthEpoch = (1 << 23) - 1;
+
+        [[nodiscard]] bool IsProjectionDepthEpochRepresentable(Int32 depthEpoch) noexcept
+        {
+            return depthEpoch >= MinimumProjectionDepthEpoch && depthEpoch <= MaximumProjectionDepthEpoch;
+        }
+    } // namespace
+
     VirtualShadowClipmapSet BuildVirtualShadowClipmaps(const Matrix44& cameraLocalToWorld, Vector3 lightDirection, Float32 shadowDistance) noexcept
     {
         VirtualShadowClipmapSet result;
@@ -33,7 +45,7 @@ namespace ve
         const Vector3 cameraPosition(cameraLocalToWorld.Get(0, 3), cameraLocalToWorld.Get(1, 3), cameraLocalToWorld.Get(2, 3));
         const Vector3 lightPosition = result.lightBasis.TransformPoint(cameraPosition);
         Int32 depthEpoch = 0;
-        if (!TryQuantizeVirtualShadowCoordinate(lightPosition.GetZ(), result.depthStep, depthEpoch) || !IsVirtualShadowDepthEpochRepresentable(depthEpoch))
+        if (!TryQuantizeVirtualShadowCoordinate(lightPosition.GetZ(), result.depthStep, depthEpoch) || !IsProjectionDepthEpochRepresentable(depthEpoch))
         {
             return {};
         }
@@ -41,8 +53,9 @@ namespace ve
         for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
         {
             VirtualShadowClipmapLevel& level = result.levels[levelIndex];
-            level.level = levelIndex;
-            level.worldRadius = shadowDistance / static_cast<Float32>(1u << (VirtualShadowClipmapLevelCount - 1u - levelIndex));
+            const UInt32 absoluteLevel = VirtualShadowClipmapFirstLevel + levelIndex;
+            level.level = absoluteLevel;
+            level.worldRadius = std::ldexp(1.0f, static_cast<int>(absoluteLevel));
             level.pageWorldSize = (2.0f * level.worldRadius) / static_cast<Float32>(VirtualShadowPagesPerAxis);
             Int32 minimumPage = 0;
             Int32 maximumPage = 0;

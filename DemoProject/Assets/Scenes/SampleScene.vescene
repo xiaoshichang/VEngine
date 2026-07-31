@@ -102,7 +102,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -162,7 +162,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -222,7 +222,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -282,7 +282,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -342,7 +342,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -402,7 +402,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -462,7 +462,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -522,7 +522,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -582,7 +582,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -642,7 +642,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -702,7 +702,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -762,7 +762,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -822,7 +822,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -882,7 +882,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -942,7 +942,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -1002,7 +1002,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -1062,7 +1062,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -1122,7 +1122,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -1182,7 +1182,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }
@@ -1242,7 +1242,7 @@
                     "useGravity": true,
                     "isKinematic": false,
                     "detectCollisions": true,
-                    "interpolation": "None",
+                    "interpolation": "Extrapolate",
                     "collisionDetection": "Discrete",
                     "constraints": []
                 }

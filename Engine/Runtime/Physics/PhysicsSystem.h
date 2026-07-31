@@ -43,6 +43,9 @@ namespace ve
 
         [[nodiscard]] ErrorCode SyncSceneBeforeStep(Scene& scene);
         [[nodiscard]] ErrorCode WriteBackSceneAfterStep(Scene& scene);
+
+        /// Applies each Rigidbody's rendering-only interpolation mode. Render poses are never written back to Jolt.
+        void UpdateSceneRenderPoses(Scene& scene, Float32 alpha) noexcept;
         void ClearSceneSyncState(Scene& scene) noexcept;
 
     private:

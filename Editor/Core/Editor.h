@@ -26,6 +26,7 @@ struct ImDrawData;
 
 namespace ve
 {
+    class EditorGizmoRenderResources;
     class GameObject;
 }
 
@@ -161,6 +162,7 @@ namespace ve::editor
         Path selectedAssetPath_;
         std::unique_ptr<EditorRenderBackend> editorRenderBackend_;
         std::array<std::shared_ptr<EditorFrameDrawData>, 2> imguiDrawDataSnapshots_;
+        std::shared_ptr<ve::EditorGizmoRenderResources> gizmoRenderResources_;
         mutable std::mutex imguiContextMutex_;
         UInt32 nextImGuiDrawDataSnapshotIndex_ = 0;
         bool waitForImGuiTextureUpdates_ = false;

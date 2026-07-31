@@ -371,7 +371,6 @@ namespace ve
         {
         case WM_CLOSE:
             shouldClose_ = true;
-            DestroyWindow(windowHandle);
             return 0;
         case WM_DESTROY:
             shouldClose_ = true;

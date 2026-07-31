@@ -13,6 +13,7 @@ namespace ve
     class RTCamera;
     class RTRenderItem;
     class RTScene;
+    class VirtualShadowManager;
     struct UniformBufferAllocation;
 
     namespace rhi
@@ -34,10 +35,12 @@ namespace ve
         rhi::RhiSwapchain* mainSwapchain = nullptr;
         ShaderManager* shaderManager = nullptr;
         FrameContext* frameContext = nullptr;
+        VirtualShadowManager* virtualShadowManager = nullptr;
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
         [[nodiscard]] FrameGraphTransientResourcePool& GetFrameGraphTransientResourcePool() const;
         void RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource) const;
+        void RetainSubmittedFrameObject(std::shared_ptr<const void> object) const;
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size) const;
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene) const;
         [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const;

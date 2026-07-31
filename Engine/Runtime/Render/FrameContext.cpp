@@ -4,10 +4,17 @@
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <limits>
 #include <utility>
 
 namespace ve
 {
+    FrameContext::FrameContext(std::pmr::memory_resource* retentionMemoryResource)
+        : transientResources_(retentionMemoryResource != nullptr ? retentionMemoryResource : std::pmr::get_default_resource())
+        , submittedFrameObjects_(retentionMemoryResource != nullptr ? retentionMemoryResource : std::pmr::get_default_resource())
+    {
+    }
+
     bool FrameContext::Initialize(rhi::RhiDevice& device, UInt32 contextIndex)
     {
         VE_ASSERT_RENDER_THREAD();
@@ -46,7 +53,26 @@ namespace ve
             return false;
         }
 
-        submittedFrameObject_.reset();
+        submittedFrameObjects_.clear();
+        transientResources_.clear();
+        uniformCache_.Reset();
+        uniformAllocator_.Reset();
+        submittedFenceValue_ = 0;
+        return true;
+    }
+
+    bool FrameContext::WaitForFrameStartAndReset(rhi::RhiSwapchain& swapchain)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(commandList_ != nullptr);
+        VE_ASSERT(completionFence_ != nullptr);
+
+        if (!swapchain.WaitForFrameStart(*completionFence_, submittedFenceValue_))
+        {
+            return false;
+        }
+
+        submittedFrameObjects_.clear();
         transientResources_.clear();
         uniformCache_.Reset();
         uniformAllocator_.Reset();
@@ -88,12 +114,53 @@ namespace ve
         transientResources_.push_back(std::move(resource));
     }
 
-    void FrameContext::RetainSubmittedFrameObject(std::shared_ptr<void> object)
+    void FrameContext::RetainSubmittedFrameObject(std::shared_ptr<const void> object)
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(object != nullptr);
-        VE_ASSERT(submittedFrameObject_ == nullptr);
-        submittedFrameObject_ = std::move(object);
+        submittedFrameObjects_.push_back(std::move(object));
+    }
+
+    ErrorCode FrameContext::SubmitWithRetainedResources(std::shared_ptr<const void> frameOwner,
+                                                        std::vector<std::unique_ptr<rhi::RhiObject>>& pendingRetiredResources,
+                                                        SubmitCallback submit,
+                                                        void* submitContext) noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        if (frameOwner == nullptr || submit == nullptr)
+        {
+            return ErrorCode::InvalidArgument;
+        }
+        if (submittedFrameObjects_.size() == submittedFrameObjects_.max_size() ||
+            pendingRetiredResources.size() > transientResources_.max_size() - transientResources_.size())
+        {
+            return ErrorCode::OutOfMemory;
+        }
+
+        try
+        {
+            submittedFrameObjects_.reserve(submittedFrameObjects_.size() + 1);
+            transientResources_.reserve(transientResources_.size() + pendingRetiredResources.size());
+        }
+        catch (...)
+        {
+            return ErrorCode::OutOfMemory;
+        }
+
+        submittedFrameObjects_.push_back(std::move(frameOwner));
+        for (std::unique_ptr<rhi::RhiObject>& resource : pendingRetiredResources)
+        {
+            transientResources_.push_back(std::move(resource));
+        }
+        pendingRetiredResources.clear();
+
+        const UInt64 submissionFenceValue = GetNextSubmissionFenceValue();
+        if (!submit(submitContext, submissionFenceValue))
+        {
+            return ErrorCode::PlatformError;
+        }
+        MarkSubmitted(submissionFenceValue);
+        return ErrorCode::None;
     }
 
     UniformBufferAllocation FrameContext::UploadUniform(const void* data, UInt64 size)
@@ -139,6 +206,11 @@ namespace ve
         return nextFenceValue_;
     }
 
+    UInt64 FrameContext::GetSubmittedFenceValue() const noexcept
+    {
+        return submittedFenceValue_;
+    }
+
     void FrameContext::MarkSubmitted(UInt64 fenceValue) noexcept
     {
         VE_ASSERT_RENDER_THREAD();
@@ -152,6 +224,12 @@ namespace ve
     {
         VE_ASSERT(frameContext != nullptr);
         frameContext->RetainTransientResource(std::move(resource));
+    }
+
+    void FrameRenderPipelineData::RetainSubmittedFrameObject(std::shared_ptr<const void> object) const
+    {
+        VE_ASSERT(frameContext != nullptr);
+        frameContext->RetainSubmittedFrameObject(std::move(object));
     }
 
     rhi::RhiCommandList& FrameRenderPipelineData::GetCommandList() const

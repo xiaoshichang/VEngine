@@ -132,7 +132,6 @@ namespace ve
     void RigidbodyComponent::SetInterpolationMode(RigidbodyInterpolationMode interpolationMode) noexcept
     {
         desc_.interpolationMode = interpolationMode;
-        MarkBackendDirty();
     }
 
     RigidbodyCollisionDetectionMode RigidbodyComponent::GetCollisionDetectionMode() const noexcept

@@ -29,11 +29,56 @@ namespace ve
             bool seenInCurrentSync = false;
             bool hasLastSceneBodyTransform = false;
             PhysicsBodyTransform lastSceneBodyTransform;
+            bool hasPhysicsPoseHistory = false;
+            PhysicsBodyTransform previousPhysicsPose;
+            PhysicsBodyTransform currentPhysicsPose;
         };
 
         [[nodiscard]] bool AreSameTransform(const PhysicsBodyTransform& left, const PhysicsBodyTransform& right) noexcept
         {
             return left.position.IsNearlyEqual(right.position) && left.rotation.IsNearlyEqual(right.rotation);
+        }
+
+        void ResetPhysicsPoseHistory(PhysicsSystemSceneSyncEntry& entry, const PhysicsBodyTransform& pose) noexcept
+        {
+            entry.previousPhysicsPose = pose;
+            entry.currentPhysicsPose = pose;
+            entry.hasPhysicsPoseHistory = true;
+        }
+
+        [[nodiscard]] Quaternion InterpolateRotation(const Quaternion& previous, const Quaternion& current, Float32 alpha) noexcept
+        {
+            const Float32 dot = (previous.GetX() * current.GetX()) + (previous.GetY() * current.GetY()) + (previous.GetZ() * current.GetZ()) +
+                                (previous.GetW() * current.GetW());
+            const Float32 sign = dot < 0.0f ? -1.0f : 1.0f;
+            return Quaternion(Lerp(previous.GetX(), current.GetX() * sign, alpha),
+                              Lerp(previous.GetY(), current.GetY() * sign, alpha),
+                              Lerp(previous.GetZ(), current.GetZ() * sign, alpha),
+                              Lerp(previous.GetW(), current.GetW() * sign, alpha))
+                .Normalized();
+        }
+
+        [[nodiscard]] PhysicsBodyTransform InterpolatePhysicsPose(
+            const PhysicsBodyTransform& previous, const PhysicsBodyTransform& current, Float32 alpha) noexcept
+        {
+            PhysicsBodyTransform result;
+            result.position = previous.position + (current.position - previous.position) * alpha;
+            result.rotation = InterpolateRotation(previous.rotation, current.rotation, alpha);
+            return result;
+        }
+
+        void ClearRenderInterpolation(PhysicsSystemSceneSyncEntry& entry) noexcept
+        {
+            if (entry.gameObject == nullptr)
+            {
+                return;
+            }
+
+            TransformComponent* transform = entry.gameObject->GetComponent<TransformComponent>();
+            if (transform != nullptr)
+            {
+                transform->ClearRenderLocalPoseOverride();
+            }
         }
 
         [[nodiscard]] PhysicsShapeDesc BuildPhysicsShapeDesc(const ColliderDesc& colliderDesc)
@@ -176,6 +221,7 @@ namespace ve
         {
             for (PhysicsSystemSceneSyncEntry& entry : syncState.entries)
             {
+                ClearRenderInterpolation(entry);
                 if (entry.gameObject != nullptr)
                 {
                     ClearRigidbodyHandleRecursive(*entry.gameObject);
@@ -229,6 +275,7 @@ namespace ve
                                                 (rigidbody != nullptr && rigidbody->GetBackend().IsRuntimeBodyDirty());
                 if (shouldRecreateBody)
                 {
+                    ClearRenderInterpolation(*entry);
                     if (entry->body.IsValid())
                     {
                         Result<Vector3> linearVelocity = physicsSystem.GetBodyLinearVelocity(entry->body);
@@ -270,6 +317,7 @@ namespace ve
                     entry->hasRigidbody = hasRigidbody;
                     entry->lastSceneBodyTransform = bodyDesc.transform;
                     entry->hasLastSceneBodyTransform = true;
+                    ResetPhysicsPoseHistory(*entry, bodyDesc.transform);
                     collider->GetBackend().ClearRuntimeShapeDirty();
                     if (rigidbody != nullptr)
                     {
@@ -289,6 +337,7 @@ namespace ve
 
                         entry->lastSceneBodyTransform = bodyDesc.transform;
                         entry->hasLastSceneBodyTransform = true;
+                        ResetPhysicsPoseHistory(*entry, bodyDesc.transform);
                     }
 
                     if (rigidbody != nullptr)
@@ -345,6 +394,7 @@ namespace ve
                     }
                 }
 
+                ClearRenderInterpolation(entry);
                 entryIt = syncState.entries.erase(entryIt);
             }
 
@@ -567,6 +617,15 @@ namespace ve
                 ApplyBodyTransform(*transform, collider->GetDesc(), bodyTransform.GetValue());
                 entry->lastSceneBodyTransform = BuildBodyTransform(*transform, collider->GetDesc());
                 entry->hasLastSceneBodyTransform = true;
+                if (!entry->hasPhysicsPoseHistory)
+                {
+                    ResetPhysicsPoseHistory(*entry, bodyTransform.GetValue());
+                }
+                else
+                {
+                    entry->previousPhysicsPose = entry->currentPhysicsPose;
+                    entry->currentPhysicsPose = bodyTransform.GetValue();
+                }
             }
 
             TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
@@ -612,6 +671,41 @@ namespace ve
         return ErrorCode::None;
     }
 
+    void PhysicsSystem::UpdateSceneRenderPoses(Scene& scene, Float32 alpha) noexcept
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "PhysicsSystem::UpdateSceneRenderPoses requires an initialized physics system.");
+        VE_ASSERT_MESSAGE(sceneSyncState_ != nullptr, "PhysicsSystem scene sync state should be available.");
+
+        alpha = std::clamp(alpha, 0.0f, 1.0f);
+        for (PhysicsSystemSceneSyncEntry& entry : sceneSyncState_->entries)
+        {
+            if (entry.scene != &scene || entry.gameObject == nullptr)
+            {
+                continue;
+            }
+
+            TransformComponent* transform = entry.gameObject->GetComponent<TransformComponent>();
+            ColliderComponent* collider = GetEnabledCollider(*entry.gameObject);
+            RigidbodyComponent* rigidbody = GetEnabledRigidbody(*entry.gameObject);
+            if (transform == nullptr || collider == nullptr || rigidbody == nullptr || entry.motionType != PhysicsBodyMotionType::Dynamic ||
+                !entry.hasPhysicsPoseHistory || rigidbody->GetInterpolationMode() == RigidbodyInterpolationMode::None)
+            {
+                ClearRenderInterpolation(entry);
+                continue;
+            }
+
+            const RigidbodyInterpolationMode interpolationMode = rigidbody->GetInterpolationMode();
+            VE_ASSERT_MESSAGE(interpolationMode == RigidbodyInterpolationMode::Interpolate ||
+                                  interpolationMode == RigidbodyInterpolationMode::Extrapolate,
+                              "PhysicsSystem encountered an invalid Rigidbody interpolation mode.");
+            const Float32 poseAlpha = interpolationMode == RigidbodyInterpolationMode::Extrapolate ? 1.0f + alpha : alpha;
+            const PhysicsBodyTransform renderPose =
+                InterpolatePhysicsPose(entry.previousPhysicsPose, entry.currentPhysicsPose, poseAlpha);
+            transform->SetRenderLocalPoseOverride(
+                renderPose.position - renderPose.rotation.RotateVector(collider->GetDesc().center), renderPose.rotation);
+        }
+    }
+
     void PhysicsSystem::ClearSceneSyncState(Scene& scene) noexcept
     {
         if (!IsInitialized() || sceneSyncState_ == nullptr)
@@ -645,6 +739,7 @@ namespace ve
                                   "PhysicsSystem::ClearSceneSyncState failed to destroy a tracked physics body.");
             }
 
+            ClearRenderInterpolation(entry);
             entryIt = sceneSyncState_->entries.erase(entryIt);
         }
     }

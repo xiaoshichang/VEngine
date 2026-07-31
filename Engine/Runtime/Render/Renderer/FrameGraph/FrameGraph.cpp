@@ -140,6 +140,8 @@ namespace ve
             rhi::RhiScissorRect scissorRect = {};
             ExecuteFunction executeFunction;
             bool raster = true;
+            std::vector<FrameGraphBufferHandle> bufferUavBarriersBeforeExecute;
+            std::vector<FrameGraphTextureHandle> textureUavBarriersBeforeExecute;
             bool sideEffect = false;
             bool retained = false;
         };
@@ -215,6 +217,7 @@ namespace ve
         std::vector<std::unordered_set<UInt32>> dependencies;
         std::vector<std::unordered_set<UInt32>> reverseDependencies;
         std::vector<UInt32> compiledPassOrder;
+        std::vector<std::string> lastExecutionPassNames;
         FrameGraphStage stage = FrameGraphStage::Initial;
     };
 
@@ -226,32 +229,28 @@ namespace ve
 
     FrameGraph::~FrameGraph() = default;
 
-    ErrorCode FrameGraph::Setup(GraphSetupFunction setupFunction)
+    void FrameGraph::SetupInternal(GraphSetupFunction setupFunction)
     {
         VE_ASSERT_RENDER_THREAD();
 
         // Step 1: verify that graph declaration starts exactly once and has a valid renderer callback.
         if (impl_->stage != FrameGraphStage::Initial)
         {
-            return ErrorCode::InvalidState;
+            VE_ASSERT_ALWAYS_MESSAGE(false, "FrameGraph::Setup requires the initial lifecycle state.");
+            return;
         }
         if (setupFunction == nullptr)
         {
-            return ErrorCode::InvalidArgument;
+            VE_ASSERT_ALWAYS_MESSAGE(false, "FrameGraph::Setup requires a valid setup callback.");
+            return;
         }
 
         // Step 2: open the declaration window. Resource and pass declarations are only legal inside this callback.
         impl_->stage = FrameGraphStage::SettingUp;
-        const ErrorCode setupResult = setupFunction(*this);
-        if (setupResult != ErrorCode::None)
-        {
-            impl_->stage = FrameGraphStage::Failed;
-            return setupResult;
-        }
+        setupFunction(*this);
 
         // Step 3: freeze the declared graph so Compile can validate and transform an immutable setup result.
         impl_->stage = FrameGraphStage::SetupComplete;
-        return ErrorCode::None;
     }
 
     FrameGraphPassResources::FrameGraphPassResources(const FrameGraph& frameGraph, UInt32 passIndex) noexcept
@@ -700,6 +699,44 @@ namespace ve
         }
     }
 
+    void FrameGraph::AddUavBarrierBeforeExecute(UInt32 passIndex, FrameGraphBufferHandle handle) noexcept
+    {
+        VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "Frame graph pass state is only configurable during Setup.");
+        if (!impl_->IsSettingUp() || passIndex >= impl_->passes.size() || !impl_->IsHandleValid(handle))
+        {
+            if (impl_->IsSettingUp())
+            {
+                impl_->AddBuildError(passIndex, "UAV barrier uses an invalid buffer handle.");
+            }
+            return;
+        }
+
+        std::vector<FrameGraphBufferHandle>& barriers = impl_->passes[passIndex].bufferUavBarriersBeforeExecute;
+        if (std::none_of(barriers.begin(), barriers.end(), [handle](FrameGraphBufferHandle existing) { return existing.index == handle.index; }))
+        {
+            barriers.push_back(handle);
+        }
+    }
+
+    void FrameGraph::AddUavBarrierBeforeExecute(UInt32 passIndex, FrameGraphTextureHandle handle) noexcept
+    {
+        VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "Frame graph pass state is only configurable during Setup.");
+        if (!impl_->IsSettingUp() || passIndex >= impl_->passes.size() || !impl_->IsHandleValid(handle))
+        {
+            if (impl_->IsSettingUp())
+            {
+                impl_->AddBuildError(passIndex, "UAV barrier uses an invalid texture handle.");
+            }
+            return;
+        }
+
+        std::vector<FrameGraphTextureHandle>& barriers = impl_->passes[passIndex].textureUavBarriersBeforeExecute;
+        if (std::none_of(barriers.begin(), barriers.end(), [handle](FrameGraphTextureHandle existing) { return existing.index == handle.index; }))
+        {
+            barriers.push_back(handle);
+        }
+    }
+
     void FrameGraph::SetSideEffect(UInt32 passIndex) noexcept
     {
         VE_ASSERT_MESSAGE(impl_->IsSettingUp(), "Frame graph pass state is only configurable during Setup.");
@@ -712,6 +749,43 @@ namespace ve
     const RendererData& FrameGraph::GetRendererData() const noexcept
     {
         return impl_->context.rendererData;
+    }
+
+    std::vector<FrameGraphPassDiagnostics> FrameGraph::GetPassDiagnostics() const
+    {
+        std::vector<FrameGraphPassDiagnostics> diagnostics;
+        diagnostics.reserve(impl_->passes.size());
+        for (const Impl::PassNode& pass : impl_->passes)
+        {
+            FrameGraphPassDiagnostics diagnostic = {};
+            diagnostic.name = pass.name;
+            diagnostic.type = pass.raster ? FrameGraphPassType::Raster : FrameGraphPassType::Compute;
+            diagnostic.bufferUavBarriersBeforeExecute = pass.bufferUavBarriersBeforeExecute;
+            diagnostic.textureUavBarriersBeforeExecute = pass.textureUavBarriersBeforeExecute;
+            if (pass.depthAttachment.has_value())
+            {
+                diagnostic.depthAttachmentLoadAction = pass.depthAttachment->loadAction;
+            }
+            diagnostic.textureAccesses.reserve(pass.textureAccesses.size());
+            for (const TextureAccessRecord& access : pass.textureAccesses)
+            {
+                diagnostic.textureAccesses.push_back(
+                    FrameGraphTextureAccessDiagnostics{access.input, access.output, access.access, access.mode == TextureAccessMode::Write});
+            }
+            diagnostic.bufferAccesses.reserve(pass.bufferAccesses.size());
+            for (const BufferAccessRecord& access : pass.bufferAccesses)
+            {
+                diagnostic.bufferAccesses.push_back(
+                    FrameGraphBufferAccessDiagnostics{access.input, access.output, access.access, access.mode == TextureAccessMode::Write});
+            }
+            diagnostics.push_back(std::move(diagnostic));
+        }
+        return diagnostics;
+    }
+
+    std::vector<std::string> FrameGraph::GetLastExecutionPassNames() const
+    {
+        return impl_->lastExecutionPassNames;
     }
 
     Error FrameGraph::Impl::ValidateResourceDeclarations() const
@@ -820,6 +894,23 @@ namespace ve
                 }
                 else
                 {
+                    if (access.access == FrameGraphTextureAccess::ShaderReadWrite)
+                    {
+                        const ImportedFrameGraphTexture* importedBacking = resource.GetImportedBacking();
+                        if (importedBacking != nullptr && importedBacking->isSwapchain)
+                        {
+                            return Error(ErrorCode::InvalidArgument,
+                                         "Frame graph pass '" + pass.name + "' declares shader read-write access to swapchain texture '" + resource.name +
+                                             "'.");
+                        }
+                        if (!resource.IsImported() && inputVersion.producer == InvalidPassIndex)
+                        {
+                            return Error(ErrorCode::InvalidState,
+                                         "Frame graph pass '" + pass.name + "' uses uninitialized transient shader read-write texture '" + resource.name +
+                                             "'.");
+                        }
+                    }
+
                     addDependency(inputVersion.producer, passIndex);
                     for (UInt32 reader : inputVersion.readers)
                     {
@@ -859,6 +950,51 @@ namespace ve
     {
         for (const PassNode& pass : passes)
         {
+            for (FrameGraphBufferHandle barrier : pass.bufferUavBarriersBeforeExecute)
+            {
+                const bool declaredReadWrite =
+                    std::any_of(pass.bufferAccesses.begin(),
+                                pass.bufferAccesses.end(),
+                                [barrier](const BufferAccessRecord& access)
+                                { return access.access == FrameGraphBufferAccess::ShaderReadWrite && access.output.index == barrier.index; });
+                if (!IsHandleValid(barrier) || !declaredReadWrite)
+                {
+                    return Error(ErrorCode::InvalidArgument,
+                                 "Frame graph pass '" + pass.name + "' requests a UAV barrier for an undeclared read-write buffer.");
+                }
+            }
+
+            for (FrameGraphTextureHandle barrier : pass.textureUavBarriersBeforeExecute)
+            {
+                const bool declaredReadWrite = std::any_of(pass.textureAccesses.begin(),
+                                                           pass.textureAccesses.end(),
+                                                           [barrier](const TextureAccessRecord& access)
+                                                           {
+                                                               return access.mode == TextureAccessMode::Write &&
+                                                                      access.access == FrameGraphTextureAccess::ShaderReadWrite && access.output == barrier;
+                                                           });
+                if (!IsHandleValid(barrier) || !declaredReadWrite)
+                {
+                    return Error(ErrorCode::InvalidArgument,
+                                 "Frame graph pass '" + pass.name + "' requests a UAV barrier for an undeclared read-write texture.");
+                }
+            }
+
+            for (const TextureAccessRecord& access : pass.textureAccesses)
+            {
+                if (access.access != FrameGraphTextureAccess::ShaderReadWrite)
+                {
+                    continue;
+                }
+
+                const UInt32 usage = static_cast<UInt32>(textures[access.input.index].desc.usage);
+                if ((usage & static_cast<UInt32>(rhi::RhiTextureUsage::Storage)) == 0)
+                {
+                    return Error(ErrorCode::InvalidArgument,
+                                 "Frame graph pass '" + pass.name + "' declares shader read-write access to a texture without storage usage.");
+                }
+            }
+
             if (!pass.raster)
             {
                 if (pass.colorAttachment.has_value() || pass.depthAttachment.has_value())
@@ -868,9 +1004,25 @@ namespace ve
                 continue;
             }
 
-            if (!pass.colorAttachment.has_value() && !pass.depthAttachment.has_value())
+            if (!pass.bufferUavBarriersBeforeExecute.empty())
             {
-                return Error(ErrorCode::InvalidArgument, "Frame graph raster pass '" + pass.name + "' requires at least one attachment.");
+                return Error(ErrorCode::InvalidArgument, "Frame graph raster pass '" + pass.name + "' cannot request a buffer UAV barrier.");
+            }
+
+            const bool hasFragmentStorageWrite =
+                std::any_of(pass.textureAccesses.begin(),
+                            pass.textureAccesses.end(),
+                            [](const TextureAccessRecord& access)
+                            { return access.mode == TextureAccessMode::Write && access.access == FrameGraphTextureAccess::ShaderReadWrite; });
+            const bool hasAttachment = pass.colorAttachment.has_value() || pass.depthAttachment.has_value();
+            if (!hasAttachment && !hasFragmentStorageWrite)
+            {
+                return Error(ErrorCode::InvalidArgument, "Frame graph raster pass '" + pass.name + "' requires an attachment or a fragment storage write.");
+            }
+            if (hasAttachment && hasFragmentStorageWrite)
+            {
+                return Error(ErrorCode::InvalidArgument,
+                             "Frame graph raster pass '" + pass.name + "' cannot combine attachments with fragment storage writes.");
             }
 
             const TextureResourceNode* colorResource = nullptr;
@@ -1160,6 +1312,11 @@ namespace ve
     {
         rhi::RhiRenderPassBeginInfo beginInfo = {};
         beginInfo.debugName = pass.name.c_str();
+        beginInfo.hasFragmentUavWrites =
+            pass.raster && std::any_of(pass.textureAccesses.begin(),
+                                       pass.textureAccesses.end(),
+                                       [](const TextureAccessRecord& access)
+                                       { return access.mode == TextureAccessMode::Write && access.access == FrameGraphTextureAccess::ShaderReadWrite; });
         beginInfo.hasColorAttachment = pass.colorAttachment.has_value();
         beginInfo.colorAttachmentIsSwapchain = false;
         if (pass.colorAttachment.has_value())
@@ -1289,6 +1446,7 @@ namespace ve
 
         FrameGraphTransientResourcePool& transientPool = impl_->context.frameData.GetFrameGraphTransientResourcePool();
         rhi::RhiCommandList& commandList = impl_->context.frameData.GetCommandList();
+        impl_->lastExecutionPassNames.clear();
 
         for (UInt32 orderIndex = 0; orderIndex < impl_->compiledPassOrder.size(); ++orderIndex)
         {
@@ -1308,7 +1466,30 @@ namespace ve
             const rhi::RhiRenderPassBeginInfo beginInfo = impl_->BuildRenderPassBeginInfo(pass);
             const RenderPassExecutionInfo executionInfo = impl_->BuildRenderPassExecutionInfo(pass);
 
-            // Step 3: raster passes open native attachments; compute passes record directly on the command list.
+            // Step 3: materialize explicit unordered-access visibility boundaries before recording the pass body.
+            if (!pass.bufferUavBarriersBeforeExecute.empty())
+            {
+                std::vector<rhi::RhiBuffer*> barrierBuffers;
+                barrierBuffers.reserve(pass.bufferUavBarriersBeforeExecute.size());
+                for (FrameGraphBufferHandle barrier : pass.bufferUavBarriersBeforeExecute)
+                {
+                    barrierBuffers.push_back(impl_->buffers[barrier.index].backing.buffer);
+                }
+                commandList.InsertUavBarriers(barrierBuffers);
+            }
+
+            if (!pass.textureUavBarriersBeforeExecute.empty())
+            {
+                std::vector<rhi::RhiTexture*> barrierTextures;
+                barrierTextures.reserve(pass.textureUavBarriersBeforeExecute.size());
+                for (FrameGraphTextureHandle barrier : pass.textureUavBarriersBeforeExecute)
+                {
+                    barrierTextures.push_back(impl_->ResolveTexture(barrier).texture);
+                }
+                commandList.InsertTextureUavBarriers(barrierTextures);
+            }
+
+            // Step 4: raster passes open native attachments; compute passes record directly on the command list.
             if (pass.raster && !commandList.BeginRenderPass(*impl_->context.frameData.mainSwapchain, beginInfo))
             {
                 impl_->ReleaseAllTextures(transientPool);
@@ -1321,21 +1502,16 @@ namespace ve
                 commandList.SetScissor(pass.scissorRect);
             }
 
-            // Step 4: execute renderer commands with access limited to the resources declared by this pass.
+            // Step 5: execute renderer commands with access limited to the resources declared by this pass.
             RenderPassContext passContext(RenderPassContextInitParam{impl_->context.frameData, impl_->context.rendererData, executionInfo});
-            const ErrorCode passResult = pass.executeFunction(passResources, passContext);
+            pass.executeFunction(passResources, passContext);
             if (pass.raster)
             {
                 commandList.EndRenderPass();
             }
-            if (passResult != ErrorCode::None)
-            {
-                impl_->ReleaseAllTextures(transientPool);
-                impl_->stage = FrameGraphStage::Failed;
-                return passResult;
-            }
+            impl_->lastExecutionPassNames.push_back(pass.name);
 
-            // Step 5: return graph-owned textures immediately after their last compiled use.
+            // Step 6: return graph-owned textures immediately after their last compiled use.
             impl_->ReleasePassTextures(orderIndex, transientPool);
         }
 

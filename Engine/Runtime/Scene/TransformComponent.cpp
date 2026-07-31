@@ -65,6 +65,22 @@ namespace ve
         return worldMatrixCache_;
     }
 
+    Matrix44 TransformComponent::GetRenderLocalMatrix() const noexcept
+    {
+        if (!hasRenderLocalPoseOverride_)
+        {
+            return GetLocalMatrix();
+        }
+
+        return Matrix44::Translation(renderLocalPosition_) * renderLocalRotation_.ToMatrix44() * Matrix44::Scale(localScale_);
+    }
+
+    Matrix44 TransformComponent::GetRenderWorldMatrix() const noexcept
+    {
+        const Matrix44 renderLocalMatrix = GetRenderLocalMatrix();
+        return parent_ != nullptr ? parent_->GetRenderWorldMatrix() * renderLocalMatrix : renderLocalMatrix;
+    }
+
     TransformComponent* TransformComponent::GetParent() noexcept
     {
         return parent_;
@@ -202,6 +218,31 @@ namespace ve
         MarkHierarchyDirty();
     }
 
+    void TransformComponent::SetRenderLocalPoseOverride(const Vector3& position, const Quaternion& rotation) noexcept
+    {
+        const Quaternion normalizedRotation = rotation.Normalized();
+        if (hasRenderLocalPoseOverride_ && renderLocalPosition_.IsNearlyEqual(position) && renderLocalRotation_.IsNearlyEqual(normalizedRotation))
+        {
+            return;
+        }
+
+        renderLocalPosition_ = position;
+        renderLocalRotation_ = normalizedRotation;
+        hasRenderLocalPoseOverride_ = true;
+        NotifyRenderTransformChangedHierarchy();
+    }
+
+    void TransformComponent::ClearRenderLocalPoseOverride() noexcept
+    {
+        if (!hasRenderLocalPoseOverride_)
+        {
+            return;
+        }
+
+        hasRenderLocalPoseOverride_ = false;
+        NotifyRenderTransformChangedHierarchy();
+    }
+
     void TransformComponent::MarkHierarchyDirty() noexcept
     {
         transformDirty_ = true;
@@ -224,6 +265,17 @@ namespace ve
             {
                 entry.callback();
             }
+        }
+    }
+
+    void TransformComponent::NotifyRenderTransformChangedHierarchy() noexcept
+    {
+        NotifyTransformChanged();
+        for (std::unique_ptr<GameObject>& child : children_)
+        {
+            TransformComponent* childTransform = child->GetComponent<TransformComponent>();
+            VE_ASSERT(childTransform != nullptr);
+            childTransform->NotifyRenderTransformChangedHierarchy();
         }
     }
 

@@ -88,9 +88,11 @@ namespace ve
         };
     };
 
-    /// Limits Scene Thread lead over Render Thread to at most one frame.
+    /// Completes each Scene Thread frame after the Render Thread has consumed its render commands.
     ///
-    /// Uses two alternating frame-end fences (ping-pong), similar to Unreal-style frame-end synchronization.
+    /// GPU execution remains asynchronous, but the CPU producer does not run one queued frame ahead of the
+    /// presentation-paced Render Thread. This keeps the multi-threaded frame loop equivalent to a single-threaded
+    /// acquire-record-submit-present loop for frame pacing.
     class SceneThreadRenderThreadFrameEndSync : public NonCopyable
     {
     public:
@@ -111,7 +113,7 @@ namespace ve
             std::forward<EnqueueFenceSignalFunction>(enqueueFenceSignal)(signalFenceIndex);
 
             // Shutdown path should call UnblockAllWaiters() to release this wait.
-            renderThreadFrameEndFences_[sceneThreadFenceIndex_].Wait();
+            fence.Wait();
         }
 
         void NotifyRenderThreadFrameEnd(UInt32 fenceIndex)

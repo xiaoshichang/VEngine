@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -834,6 +835,34 @@ namespace ve::rhi
                 return true;
             }
 
+            [[nodiscard]] bool
+            CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
+            {
+                auto* sourceBuffer = dynamic_cast<MetalBuffer*>(&source);
+                auto* destinationBuffer = dynamic_cast<MetalBuffer*>(&destination);
+                if (sourceBuffer == nullptr || destinationBuffer == nullptr || sourceBuffer == destinationBuffer || commandBuffer_ == nil || size == 0 ||
+                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu ||
+                    sourceOffset > sourceBuffer->GetSize() || size > sourceBuffer->GetSize() - sourceOffset ||
+                    destinationOffset > destinationBuffer->GetSize() || size > destinationBuffer->GetSize() - destinationOffset ||
+                    destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
+                {
+                    return false;
+                }
+
+                id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer_ blitCommandEncoder];
+                if (blitEncoder == nil)
+                {
+                    return false;
+                }
+                [blitEncoder copyFromBuffer:sourceBuffer->GetNativeBuffer()
+                               sourceOffset:sourceOffset
+                                   toBuffer:destinationBuffer->GetNativeBuffer()
+                          destinationOffset:destinationOffset
+                                       size:size];
+                [blitEncoder endEncoding];
+                return true;
+            }
+
             void SetPipeline(const RhiPipelineState& pipelineState) override
             {
                 const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);
@@ -981,6 +1010,27 @@ namespace ve::rhi
             void SetReadWriteStorageBuffer(RhiShaderStage, uint32_t, const RhiBuffer&, uint64_t, uint64_t) override
             {
                 VE_ASSERT_ALWAYS_MESSAGE(false, "Metal compute storage writes are not enabled by the current renderer path.");
+            }
+
+            void SetReadWriteStorageTexture(RhiShaderStage, uint32_t, const RhiTexture&) override
+            {
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal read-write storage textures are unsupported in this milestone.");
+                std::terminate();
+            }
+
+            void InsertUavBarriers(std::span<RhiBuffer* const> buffers) override
+            {
+                static_cast<void>(buffers);
+                VE_ASSERT_ALWAYS_MESSAGE(false, "Metal UAV barriers are not enabled by the current renderer path.");
+            }
+
+            void InsertTextureUavBarriers(std::span<RhiTexture* const> textures) override
+            {
+                if (!textures.empty())
+                {
+                    VE_ASSERT_ALWAYS_MESSAGE(false, "Metal texture UAV barriers are unsupported in this milestone.");
+                    std::terminate();
+                }
             }
 
             void Dispatch(uint32_t, uint32_t, uint32_t) override
@@ -1169,6 +1219,13 @@ namespace ve::rhi
 
             [[nodiscard]] std::unique_ptr<RhiBuffer> CreateBuffer(const RhiBufferDesc& desc) override
             {
+                const bool isReadback = desc.usage == RhiBufferUsage::Readback;
+                if (desc.size == 0 || isReadback != (desc.memoryUsage == RhiBufferMemoryUsage::GpuToCpu) || (isReadback && desc.initialData != nullptr))
+                {
+                    SetLastError("Metal readback buffers require a non-zero size, GPU-to-CPU memory, and no initial data.");
+                    return nullptr;
+                }
+
                 id<MTLBuffer> buffer = nil;
 
                 if (desc.initialData != nullptr)
@@ -1200,11 +1257,29 @@ namespace ve::rhi
                 std::memcpy(static_cast<std::byte*>([metalBuffer.GetNativeBuffer() contents]) + offset, data, static_cast<size_t>(size));
             }
 
+            [[nodiscard]] bool ReadBuffer(const RhiBuffer& buffer, uint64_t offset, void* destination, uint64_t size) override
+            {
+                const auto* metalBuffer = dynamic_cast<const MetalBuffer*>(&buffer);
+                if (metalBuffer == nullptr || metalBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu || destination == nullptr || size == 0 ||
+                    offset > metalBuffer->GetSize() || size > metalBuffer->GetSize() - offset)
+                {
+                    return false;
+                }
+
+                std::memcpy(destination, static_cast<const std::byte*>([metalBuffer->GetNativeBuffer() contents]) + offset, static_cast<size_t>(size));
+                return true;
+            }
+
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
             {
                 if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
                 {
                     SetLastError("Metal texture requires a non-empty 2D descriptor.");
+                    return nullptr;
+                }
+                if ((static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(RhiTextureUsage::Storage)) != 0)
+                {
+                    SetLastError("Metal storage textures are unsupported in this milestone.");
                     return nullptr;
                 }
 

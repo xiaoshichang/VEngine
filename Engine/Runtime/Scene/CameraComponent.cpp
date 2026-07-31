@@ -150,7 +150,7 @@ namespace ve
             nearClipPlane_,
             farClipPlane_,
             clearColor_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
         };
     }
 
@@ -169,7 +169,7 @@ namespace ve
             nearClipPlane_,
             farClipPlane_,
             clearColor_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
         };
     }
 

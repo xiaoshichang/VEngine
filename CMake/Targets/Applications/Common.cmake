@@ -24,6 +24,7 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Core/EditorProjectDirectoryDialog.h
     Editor/Core/EditorProjectEditingView.cpp
     Editor/Core/EditorProjectEditingView.h
+    Editor/Core/EditorPerformanceFooterModel.h
     Editor/Core/EditorProjectPacker.cpp
     Editor/Core/EditorProjectPacker.h
     Editor/Core/EditorProjectRegistry.cpp

@@ -25,7 +25,7 @@ namespace ve::editor
 
     GameViewPanel::GameViewPanel()
         : gameViewTexture_(nullptr)
-        , gameViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorGameView", 4096}))
+        , gameViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorGameView"}))
     {
     }
 

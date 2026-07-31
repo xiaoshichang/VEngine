@@ -1,9 +1,12 @@
 #pragma once
 
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
-#include "Engine/Runtime/Render/Renderer/RenderPass/GpuVirtualShadowRenderPass.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/DepthPrePass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h"
+
+#include <memory>
+#include <vector>
 
 namespace ve
 {
@@ -11,7 +14,7 @@ namespace ve
     {
     };
 
-    /// Mobile renderer owns an independent topology without editor pass injection.
+    /// Mobile renderer owns an independent family topology without editor pass injection.
     class MobileRenderer final : public BaseRenderer
     {
     public:
@@ -20,8 +23,9 @@ namespace ve
     private:
         void BuildFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
 
-        GpuVirtualShadowRenderPass gpuVirtualShadowPass_;
-        OpaqueSceneRenderPass opaquePass_;
+        bool hasDepthPrePass_ = false;
+        DepthPrePass depthPrePass_;
+        std::vector<std::unique_ptr<OpaqueSceneRenderPass>> opaquePasses_;
         TransparentSceneRenderPass transparentPass_;
     };
 } // namespace ve

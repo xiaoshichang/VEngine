@@ -1,8 +1,10 @@
 #include "Editor/Core/EditorProjectEditingView.h"
 
 #include "Editor/Core/Editor.h"
+#include "Editor/Core/EditorPerformanceFooterModel.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Platform.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 
 #include <algorithm>
 #include <imgui.h>
@@ -18,7 +20,6 @@ namespace ve::editor
         constexpr float HierarchyWidth = 260.0F;
         constexpr float InspectorWidth = 310.0F;
         constexpr float AssetsHeight = 230.0F;
-        constexpr float StatusBarHeight = 24.0F;
         constexpr float ToolbarHeight = 32.0F;
         constexpr float OpenSceneDialogWidth = 560.0F;
         constexpr float OpenSceneDialogHeight = 420.0F;
@@ -73,7 +74,7 @@ namespace ve::editor
         buildPackageDialog_.Render(editor);
 
         const float contentTop = viewport->WorkPos.y + menuBarHeight + ToolbarHeight + PanelGap;
-        const float statusBarY = viewport->WorkPos.y + viewport->WorkSize.y - StatusBarHeight;
+        const float statusBarY = viewport->WorkPos.y + viewport->WorkSize.y - EditorPerformanceFooterHeight;
         const float contentHeight = (std::max)(0.0F, statusBarY - contentTop - PanelGap);
         const ImVec2 origin(viewport->WorkPos.x, contentTop);
         const ImVec2 available(viewport->WorkSize.x, contentHeight);
@@ -90,7 +91,7 @@ namespace ve::editor
 
         inspectorPanel_.Render(ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
 
-        RenderStatusBar(editor, ImVec2(viewport->WorkPos.x, statusBarY), ImVec2(viewport->WorkSize.x, StatusBarHeight));
+        RenderStatusBar(editor, ImVec2(viewport->WorkPos.x, statusBarY), ImVec2(viewport->WorkSize.x, EditorPerformanceFooterHeight));
     }
 
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewTexture() const noexcept
@@ -389,7 +390,53 @@ namespace ve::editor
         }
 
         const Float32 framesPerSecond = editor.GetRuntime().GetTimeSystem().GetAverageFrameRate();
-        ImGui::Text("FPS: %.1f", framesPerSecond);
+        const RenderPerformanceStatistics statistics = editor.GetRenderSystem().GetPerformanceStatistics();
+        const EditorPerformanceFooterModel model = BuildEditorPerformanceFooterModel(framesPerSecond, statistics);
+
+        constexpr ImGuiTableFlags TableFlags =
+            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoPadOuterX;
+        if (ImGui::BeginTable("EditorPerformanceFooter", 4, TableFlags))
+        {
+            ImGui::TableSetupColumn("Common", ImGuiTableColumnFlags_WidthStretch, CommonFooterColumnWeight);
+            ImGui::TableSetupColumn("Render", ImGuiTableColumnFlags_WidthStretch, RenderFooterColumnWeight);
+            ImGui::TableSetupColumn("VSM", ImGuiTableColumnFlags_WidthStretch, VirtualShadowFooterColumnWeight);
+            ImGui::TableSetupColumn("Physics", ImGuiTableColumnFlags_WidthStretch, PhysicsFooterColumnWeight);
+            ImGui::TableNextRow();
+
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextDisabled("Common");
+            ImGui::Text("FPS: %.1f", model.framesPerSecond);
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextDisabled("Render");
+            ImGui::TextUnformatted("\xE2\x80\x94");
+
+            ImGui::TableSetColumnIndex(2);
+            ImGui::TextDisabled("VSM");
+            if (model.virtualShadow.available)
+            {
+                ImGui::Text("Physical: %u total | %u allocated",
+                            model.virtualShadow.totalPhysicalPages,
+                            model.virtualShadow.allocatedPhysicalPages);
+                ImGui::Text("Frame: %u requested | %u cached | %u redraw",
+                            model.virtualShadow.requestedPages,
+                            model.virtualShadow.cachedPages,
+                            model.virtualShadow.redrawnPages);
+                ImGui::Text("Alloc: %u new | %u unmapped",
+                            model.virtualShadow.newlyAllocatedPages,
+                            model.virtualShadow.unmappedPages);
+            }
+            else
+            {
+                ImGui::TextUnformatted("\xE2\x80\x94");
+            }
+
+            ImGui::TableSetColumnIndex(3);
+            ImGui::TextDisabled("Physics");
+            ImGui::TextUnformatted("\xE2\x80\x94");
+
+            ImGui::EndTable();
+        }
         ImGui::End();
         ImGui::PopStyleVar();
     }
