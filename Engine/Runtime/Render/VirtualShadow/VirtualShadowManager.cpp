@@ -143,6 +143,8 @@ namespace ve
             VirtualShadowInvalidationTracker invalidationTracker;
             virtual_shadow_detail::SceneState state;
             UInt64 statisticsIdentity = 0;
+            UInt64 dirtyCasterFrameIndex = std::numeric_limits<UInt64>::max();
+            std::unordered_set<UInt64> dirtyCasterIDs;
         };
 
         struct ViewRegistration
@@ -448,6 +450,14 @@ namespace ve
             const std::vector<VirtualShadowCasterSnapshot> casterSnapshots = BuildVirtualShadowCasterSnapshots(rendererData);
             const VirtualShadowSceneInvalidationResult sceneInvalidation =
                 sceneEntry.invalidationTracker.UpdateScene(frameData.frameIndex, light.direction, casterSnapshots);
+            if (sceneEntry.dirtyCasterFrameIndex != frameData.frameIndex)
+            {
+                sceneEntry.dirtyCasterFrameIndex = frameData.frameIndex;
+                sceneEntry.dirtyCasterIDs.clear();
+            }
+            sceneEntry.dirtyCasterIDs.insert(sceneInvalidation.changedCasterIDs.begin(), sceneInvalidation.changedCasterIDs.end());
+            rendererData.virtualShadowDirtyCasterIDs.clear();
+            rendererData.virtualShadowDirtyCasterIDs.insert(sceneEntry.dirtyCasterIDs.begin(), sceneEntry.dirtyCasterIDs.end());
             if (sceneInvalidation.lightBasisChanged)
             {
                 sceneEntry.state.RequestReset();

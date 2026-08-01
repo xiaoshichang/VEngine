@@ -346,7 +346,7 @@ namespace ve::editor
         }
 
         int debugModeIndex = static_cast<int>(renderDebugMode_);
-        const char* debugModeLabels[] = {"None", "VSM Redraw"};
+        const char* debugModeLabels[] = {"None", "VSM Redraw", "Shadow Caster Dirty"};
         if (ImGui::Combo("Debug", &debugModeIndex, debugModeLabels, IM_ARRAYSIZE(debugModeLabels)))
         {
             if (debugModeIndex >= 0 && debugModeIndex < static_cast<int>(RenderDebugMode::Count))

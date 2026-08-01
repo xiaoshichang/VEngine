@@ -8,6 +8,7 @@ namespace ve
     {
         None = 0,
         VsmRedraw,
+        ShadowCasterDirty,
         Count,
     };
 } // namespace ve

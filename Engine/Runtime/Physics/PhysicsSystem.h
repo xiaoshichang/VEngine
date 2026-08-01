@@ -35,6 +35,7 @@ namespace ve
 
         [[nodiscard]] Result<PhysicsBodyTransform> GetBodyTransform(PhysicsBodyHandle body) const;
         [[nodiscard]] ErrorCode SetBodyTransform(PhysicsBodyHandle body, const PhysicsBodyTransform& transform);
+        [[nodiscard]] Result<bool> IsBodyActive(PhysicsBodyHandle body) const;
 
         [[nodiscard]] Result<Vector3> GetBodyLinearVelocity(PhysicsBodyHandle body) const;
         [[nodiscard]] ErrorCode SetBodyLinearVelocity(PhysicsBodyHandle body, Vector3 velocity);

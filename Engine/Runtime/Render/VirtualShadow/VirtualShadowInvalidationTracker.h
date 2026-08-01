@@ -34,6 +34,7 @@ namespace ve
     {
         bool lightBasisChanged = false;
         std::vector<Aabb> changedBounds;
+        std::vector<UInt64> changedCasterIDs;
     };
 
     [[nodiscard]] std::vector<VirtualShadowPageKey>

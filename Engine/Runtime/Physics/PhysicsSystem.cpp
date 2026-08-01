@@ -29,6 +29,8 @@ namespace ve
             bool seenInCurrentSync = false;
             bool hasLastSceneBodyTransform = false;
             PhysicsBodyTransform lastSceneBodyTransform;
+            bool hasBodyActiveState = false;
+            bool bodyWasActive = true;
             bool hasPhysicsPoseHistory = false;
             PhysicsBodyTransform previousPhysicsPose;
             PhysicsBodyTransform currentPhysicsPose;
@@ -317,6 +319,8 @@ namespace ve
                     entry->hasRigidbody = hasRigidbody;
                     entry->lastSceneBodyTransform = bodyDesc.transform;
                     entry->hasLastSceneBodyTransform = true;
+                    entry->hasBodyActiveState = false;
+                    entry->bodyWasActive = true;
                     ResetPhysicsPoseHistory(*entry, bodyDesc.transform);
                     collider->GetBackend().ClearRuntimeShapeDirty();
                     if (rigidbody != nullptr)
@@ -337,6 +341,8 @@ namespace ve
 
                         entry->lastSceneBodyTransform = bodyDesc.transform;
                         entry->hasLastSceneBodyTransform = true;
+                        entry->hasBodyActiveState = false;
+                        entry->bodyWasActive = true;
                         ResetPhysicsPoseHistory(*entry, bodyDesc.transform);
                     }
 
@@ -540,6 +546,12 @@ namespace ve
         return backend_->SetBodyTransform(body, transform);
     }
 
+    Result<bool> PhysicsSystem::IsBodyActive(PhysicsBodyHandle body) const
+    {
+        VE_ASSERT_MESSAGE(IsInitialized(), "PhysicsSystem::IsBodyActive requires an initialized physics system.");
+        return backend_->IsBodyActive(body);
+    }
+
     Result<Vector3> PhysicsSystem::GetBodyLinearVelocity(PhysicsBodyHandle body) const
     {
         VE_ASSERT_MESSAGE(IsInitialized(), "PhysicsSystem::GetBodyLinearVelocity requires an initialized physics system.");
@@ -602,29 +614,48 @@ namespace ve
             RigidbodyComponent* rigidbody = GetEnabledRigidbody(gameObject);
             if (entry != nullptr && entry->body.IsValid() && collider != nullptr && rigidbody != nullptr && !rigidbody->IsKinematic())
             {
-                Result<PhysicsBodyTransform> bodyTransform = GetBodyTransform(entry->body);
-                if (!bodyTransform)
+                Result<bool> bodyActive = IsBodyActive(entry->body);
+                if (!bodyActive)
                 {
-                    return bodyTransform.GetError().GetCode();
+                    return bodyActive.GetError().GetCode();
                 }
 
-                TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
-                if (transform == nullptr)
+                const bool isActive = bodyActive.GetValue();
+                const bool shouldReadPose = isActive || !entry->hasBodyActiveState || entry->bodyWasActive;
+                entry->hasBodyActiveState = true;
+                entry->bodyWasActive = isActive;
+                if (shouldReadPose)
                 {
-                    return ErrorCode::InvalidState;
-                }
+                    Result<PhysicsBodyTransform> bodyTransform = GetBodyTransform(entry->body);
+                    if (!bodyTransform)
+                    {
+                        return bodyTransform.GetError().GetCode();
+                    }
 
-                ApplyBodyTransform(*transform, collider->GetDesc(), bodyTransform.GetValue());
-                entry->lastSceneBodyTransform = BuildBodyTransform(*transform, collider->GetDesc());
-                entry->hasLastSceneBodyTransform = true;
-                if (!entry->hasPhysicsPoseHistory)
-                {
-                    ResetPhysicsPoseHistory(*entry, bodyTransform.GetValue());
-                }
-                else
-                {
-                    entry->previousPhysicsPose = entry->currentPhysicsPose;
-                    entry->currentPhysicsPose = bodyTransform.GetValue();
+                    TransformComponent* transform = gameObject.GetComponent<TransformComponent>();
+                    if (transform == nullptr)
+                    {
+                        return ErrorCode::InvalidState;
+                    }
+
+                    const PhysicsBodyTransform& physicsPose = bodyTransform.GetValue();
+                    const bool poseChanged = !entry->hasLastSceneBodyTransform || !AreSameTransform(entry->lastSceneBodyTransform, physicsPose);
+                    if (poseChanged)
+                    {
+                        ApplyBodyTransform(*transform, collider->GetDesc(), physicsPose);
+                        entry->lastSceneBodyTransform = BuildBodyTransform(*transform, collider->GetDesc());
+                        entry->hasLastSceneBodyTransform = true;
+                    }
+
+                    if (!entry->hasPhysicsPoseHistory || !isActive)
+                    {
+                        ResetPhysicsPoseHistory(*entry, entry->hasLastSceneBodyTransform ? entry->lastSceneBodyTransform : physicsPose);
+                    }
+                    else if (poseChanged)
+                    {
+                        entry->previousPhysicsPose = entry->currentPhysicsPose;
+                        entry->currentPhysicsPose = entry->lastSceneBodyTransform;
+                    }
                 }
             }
 

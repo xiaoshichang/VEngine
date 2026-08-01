@@ -97,7 +97,7 @@ namespace ve
         opaquePasses_.reserve(debugModes_.size());
         for (const RenderDebugMode debugMode : debugModes_)
         {
-            opaquePasses_.push_back(debugMode == RenderDebugMode::VsmRedraw
+            opaquePasses_.push_back(debugMode == RenderDebugMode::VsmRedraw || debugMode == RenderDebugMode::ShadowCasterDirty
                                         ? nullptr
                                         : std::make_unique<OpaqueSceneRenderPass>(OpaqueSceneRenderPassInitParam{true}));
         }
@@ -160,6 +160,11 @@ namespace ve
             if (debugModes_[viewIndex] == RenderDebugMode::VsmRedraw)
             {
                 vsmRedrawPagePass_.AddToFrameGraph(frameGraph, graphData, passViewIndex);
+                continue;
+            }
+            if (debugModes_[viewIndex] == RenderDebugMode::ShadowCasterDirty)
+            {
+                shadowCasterDirtyPass_.AddToFrameGraph(frameGraph, graphData, passViewIndex);
                 continue;
             }
             if (opaquePasses_[viewIndex] == nullptr)

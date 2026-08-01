@@ -10,6 +10,7 @@
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 namespace ve
@@ -32,6 +33,7 @@ namespace ve
     {
         std::shared_ptr<RTScene> scene;
         std::vector<std::shared_ptr<RTRenderItem>> opaqueItems;
+        std::unordered_set<UInt64> virtualShadowDirtyCasterIDs;
         std::vector<RendererViewData> views;
     };
 

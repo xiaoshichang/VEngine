@@ -192,6 +192,7 @@ namespace ve
             if (inserted)
             {
                 result.changedBounds.push_back(caster.worldBounds);
+                result.changedCasterIDs.push_back(caster.renderItemID);
                 continue;
             }
 
@@ -200,6 +201,7 @@ namespace ve
             {
                 result.changedBounds.push_back(tracked.worldBounds);
                 result.changedBounds.push_back(caster.worldBounds);
+                result.changedCasterIDs.push_back(caster.renderItemID);
                 tracked.revision = caster.revision;
                 tracked.worldBounds = caster.worldBounds;
             }
@@ -211,6 +213,7 @@ namespace ve
             if (iterator->second.lastSeenFrame != frameIndex)
             {
                 result.changedBounds.push_back(iterator->second.worldBounds);
+                result.changedCasterIDs.push_back(iterator->first);
                 iterator = trackedCasters_.erase(iterator);
             }
             else

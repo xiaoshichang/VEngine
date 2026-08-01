@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/DepthPrePass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/ShadowCasterDirtyDebugPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.h"
 
@@ -41,6 +42,7 @@ namespace ve
         std::vector<std::unique_ptr<OpaqueSceneRenderPass>> opaquePasses_;
         TransparentSceneRenderPass transparentPass_;
         VirtualShadowRedrawPageDebugPass vsmRedrawPagePass_;
+        ShadowCasterDirtyDebugPass shadowCasterDirtyPass_;
         std::vector<RenderDebugMode> debugModes_;
         std::vector<RendererViewPassExtension> viewExtensions_;
     };

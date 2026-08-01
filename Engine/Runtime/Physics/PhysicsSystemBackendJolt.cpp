@@ -492,6 +492,28 @@ namespace ve
         return ErrorCode::None;
     }
 
+    Result<bool> PhysicsSystemBackendJolt::IsBodyActive(PhysicsBodyHandle body) const
+    {
+        if (!impl_->initialized)
+        {
+            return Result<bool>::Failure(Error(ErrorCode::InvalidState, "Physics backend is not initialized."));
+        }
+
+        if (!body.IsValid())
+        {
+            return Result<bool>::Failure(Error(ErrorCode::InvalidArgument, "Physics body handle is invalid."));
+        }
+
+        const JPH::BodyID bodyId = ToJoltBodyId(body);
+        const JPH::BodyInterface& bodyInterface = impl_->physicsSystem->GetBodyInterface();
+        if (!bodyInterface.IsAdded(bodyId))
+        {
+            return Result<bool>::Failure(Error(ErrorCode::NotFound, "Physics body was not found."));
+        }
+
+        return Result<bool>::Success(bodyInterface.IsActive(bodyId));
+    }
+
     Result<Vector3> PhysicsSystemBackendJolt::GetBodyLinearVelocity(PhysicsBodyHandle body) const
     {
         if (!impl_->initialized)
