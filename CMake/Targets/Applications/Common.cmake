@@ -15,6 +15,8 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Core/EditorBuiltinResources.h
     Editor/Core/EditorEventDispatcher.h
     Editor/Core/EditorEvents.h
+    Editor/Core/EditorFooter.cpp
+    Editor/Core/EditorFooter.h
     Editor/Core/EditorInput.cpp
     Editor/Core/EditorInput.h
     Editor/Core/EditorInputBackend.h

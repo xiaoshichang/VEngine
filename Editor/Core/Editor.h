@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorAssetDatabase.h"
 #include "Editor/Core/EditorEventDispatcher.h"
 #include "Editor/Core/EditorEvents.h"
+#include "Editor/Core/EditorFooter.h"
 #include "Editor/Core/EditorInput.h"
 #include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectRegistry.h"
@@ -149,6 +150,7 @@ namespace ve::editor
         ApplicationCommandQueue* mainThreadCommandQueue_ = nullptr;
         void* nativeWindowHandle_ = nullptr;
         EditorInput input_;
+        EditorFooter footer_;
         ProjectSelectionView* projectSelectionView_ = nullptr;
         ProjectEditingView* projectEditingView_ = nullptr;
         RenderBackend renderBackend_ = RenderBackend::D3D12;

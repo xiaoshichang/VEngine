@@ -344,15 +344,17 @@ namespace ve::editor
 
     void Editor::RenderActiveMainView()
     {
+        const Float32 contentBottom = footer_.GetContentBottom();
         switch (mainView_)
         {
         case MainView::ProjectSelection:
-            projectSelectionView_->Render(*this);
+            projectSelectionView_->Render(*this, contentBottom);
             break;
         case MainView::ProjectEditing:
-            projectEditingView_->Render(*this);
+            projectEditingView_->Render(*this, contentBottom);
             break;
         }
+        footer_.Render(*this);
 
         ImGui::Render();
     }

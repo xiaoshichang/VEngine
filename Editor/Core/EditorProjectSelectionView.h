@@ -2,6 +2,7 @@
 
 #include "Editor/Core/EditorProjectDirectoryDialog.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
+#include "Engine/Runtime/Core/Types.h"
 
 #include <array>
 #include <string>
@@ -15,7 +16,7 @@ namespace ve::editor
     public:
         ProjectSelectionView() = default;
 
-        void Render(Editor& editor);
+        void Render(Editor& editor, Float32 contentBottom);
 
     private:
         std::array<char, 512> newProjectPathBuffer_{};

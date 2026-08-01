@@ -64,7 +64,7 @@ namespace ve::editor
         initialized_ = true;
     }
 
-    void ProjectEditingView::Render(Editor& editor)
+    void ProjectEditingView::Render(Editor& editor, Float32 contentBottom)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         RenderMainMenu(editor);
@@ -75,10 +75,7 @@ namespace ve::editor
         buildPackageDialog_.Render(editor);
 
         const float contentTop = viewport->WorkPos.y + menuBarHeight + ToolbarHeight + PanelGap;
-        constexpr float FooterBottomMargin = 4.0F;
-        const float footerHeight = ImGui::GetFrameHeight() + FooterBottomMargin;
-        const float footerY = viewport->WorkPos.y + viewport->WorkSize.y - footerHeight - FooterBottomMargin;
-        const float bottomPanelY = footerY - BottomPanelHeight;
+        const float bottomPanelY = contentBottom - BottomPanelHeight;
         const float contentHeight = (std::max)(0.0F, bottomPanelY - contentTop - PanelGap);
         const ImVec2 origin(viewport->WorkPos.x, contentTop);
         const ImVec2 available(viewport->WorkSize.x, contentHeight);
@@ -118,32 +115,6 @@ namespace ve::editor
         }
         ImGui::End();
 
-        const Float64 currentUiTime = ImGui::GetTime();
-        if (footerLastRefreshTime_ < 0.0 || currentUiTime - footerLastRefreshTime_ >= 1.0)
-        {
-            footerFrameRate_ = editor.GetRuntime().GetTimeSystem().GetAverageFrameRate();
-            footerLastRefreshTime_ = currentUiTime;
-        }
-        footerLastLogLine_ = GetLastEditorLogLine();
-
-        constexpr ImGuiWindowFlags FooterWindowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                                        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
-        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, footerY), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, footerHeight), ImGuiCond_Always);
-        if (ImGui::Begin("EditorFooter", nullptr, FooterWindowFlags))
-        {
-            if (ImGui::BeginTable("EditorFooterContent", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoPadOuterX))
-            {
-                ImGui::TableSetupColumn("FrameRate", ImGuiTableColumnFlags_WidthStretch, 0.1F);
-                ImGui::TableSetupColumn("LastLog", ImGuiTableColumnFlags_WidthStretch, 0.9F);
-                ImGui::TableNextColumn();
-                ImGui::Text("FPS: %.1f", footerFrameRate_);
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(footerLastLogLine_.c_str());
-                ImGui::EndTable();
-            }
-        }
-        ImGui::End();
     }
 
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewTexture() const noexcept

@@ -16,7 +16,6 @@
 #include "Engine/Runtime/Render/RenderViewState.h"
 
 #include <memory>
-#include <string>
 
 struct ImVec2;
 
@@ -30,7 +29,7 @@ namespace ve::editor
         ProjectEditingView() = default;
 
         void Init(Editor& editor);
-        void Render(Editor& editor);
+        void Render(Editor& editor, Float32 contentBottom);
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewTexture() const noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetSceneViewFillMode() const noexcept;
@@ -61,8 +60,5 @@ namespace ve::editor
         Path openSceneSelectedPath_;
         bool openSceneDialogRequested_ = false;
         bool initialized_ = false;
-        Float32 footerFrameRate_ = 0.0F;
-        Float64 footerLastRefreshTime_ = -1.0;
-        std::string footerLastLogLine_;
     };
 } // namespace ve::editor

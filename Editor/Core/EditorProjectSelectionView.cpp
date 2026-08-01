@@ -24,14 +24,14 @@ namespace ve::editor
         }
     } // namespace
 
-    void ProjectSelectionView::Render(Editor& editor)
+    void ProjectSelectionView::Render(Editor& editor, Float32 contentBottom)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         const ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
         ImGui::SetNextWindowPos(viewport->WorkPos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(viewport->WorkSize, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, (std::max)(0.0F, contentBottom - viewport->WorkPos.y)), ImGuiCond_Always);
         ImGui::Begin("Project Selection", nullptr, windowFlags);
 
         const float contentWidth = ImGui::GetContentRegionAvail().x;

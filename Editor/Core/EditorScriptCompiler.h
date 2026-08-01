@@ -28,7 +28,5 @@ namespace ve::editor
 
     private:
         [[nodiscard]] static Path ResolveProjectFile(const EditorScriptCompileDesc& desc);
-        [[nodiscard]] static std::string Quote(const Path& path);
-        [[nodiscard]] static std::string Quote(const std::string& text);
     };
 } // namespace ve::editor
