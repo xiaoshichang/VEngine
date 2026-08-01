@@ -15,6 +15,8 @@ namespace ve::editor
     };
 
     void CaptureEditorLog(const LogRecord& record, std::string_view formattedLine) noexcept;
+    [[nodiscard]] std::string GetLastEditorLogLine();
+    void ClearCapturedEditorLog() noexcept;
 
     class ConsolePanel final : public BasePanel
     {

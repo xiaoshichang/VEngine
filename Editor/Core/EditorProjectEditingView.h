@@ -16,6 +16,7 @@
 #include "Engine/Runtime/Render/RenderViewState.h"
 
 #include <memory>
+#include <string>
 
 struct ImVec2;
 
@@ -60,5 +61,8 @@ namespace ve::editor
         Path openSceneSelectedPath_;
         bool openSceneDialogRequested_ = false;
         bool initialized_ = false;
+        Float32 footerFrameRate_ = 0.0F;
+        Float64 footerLastRefreshTime_ = -1.0;
+        std::string footerLastLogLine_;
     };
 } // namespace ve::editor

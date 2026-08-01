@@ -14,6 +14,7 @@ namespace ve::editor
 
         std::mutex gPendingLogsMutex;
         std::deque<EditorConsoleLogEntry> gPendingLogs;
+        std::string gLastLogLine;
 
         [[nodiscard]] ImVec4 GetSeverityColor(LogSeverity severity) noexcept
         {
@@ -51,10 +52,24 @@ namespace ve::editor
                 gPendingLogs.pop_front();
             }
             gPendingLogs.push_back(std::move(entry));
+            gLastLogLine.assign(formattedLine.data(), formattedLine.size());
         }
         catch (...)
         {
         }
+    }
+
+    std::string GetLastEditorLogLine()
+    {
+        std::lock_guard lock(gPendingLogsMutex);
+        return gLastLogLine;
+    }
+
+    void ClearCapturedEditorLog() noexcept
+    {
+        std::lock_guard lock(gPendingLogsMutex);
+        gPendingLogs.clear();
+        gLastLogLine.clear();
     }
 
     const char* ConsolePanel::GetName() const noexcept
@@ -69,8 +84,7 @@ namespace ve::editor
         if (ImGui::Button("Clear"))
         {
             logEntries_.clear();
-            std::lock_guard lock(gPendingLogsMutex);
-            gPendingLogs.clear();
+            ClearCapturedEditorLog();
         }
         ImGui::SameLine();
         ImGui::Checkbox("Auto-scroll", &autoScroll_);
