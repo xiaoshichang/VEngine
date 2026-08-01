@@ -28,6 +28,7 @@ void CSMain(uint index : SV_DispatchThreadID)
         page.key0 = 0xFFFFFFFFu;
         page.key1 = 0xFFFFFFFFu;
         page.lastUsedFrame = 0u;
+        page.lastRenderedFrame = 0u;
         page.flags = 0u;
     }
     else

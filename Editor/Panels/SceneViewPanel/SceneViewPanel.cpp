@@ -137,9 +137,9 @@ namespace ve::editor
         return fillMode_;
     }
 
-    bool SceneViewPanel::IsVirtualShadowPageVisualizationEnabled() const noexcept
+    RenderDebugMode SceneViewPanel::GetRenderDebugMode() const noexcept
     {
-        return visualizeVirtualShadowPages_;
+        return renderDebugMode_;
     }
 
     bool SceneViewPanel::IsGridEnabled() const noexcept
@@ -345,7 +345,15 @@ namespace ve::editor
             fillMode_ = wireframe ? rhi::RhiFillMode::Wireframe : rhi::RhiFillMode::Solid;
         }
 
-        ImGui::Checkbox("VSM Virtual Pages", &visualizeVirtualShadowPages_);
+        int debugModeIndex = static_cast<int>(renderDebugMode_);
+        const char* debugModeLabels[] = {"None", "VSM Redraw"};
+        if (ImGui::Combo("Debug", &debugModeIndex, debugModeLabels, IM_ARRAYSIZE(debugModeLabels)))
+        {
+            if (debugModeIndex >= 0 && debugModeIndex < static_cast<int>(RenderDebugMode::Count))
+            {
+                renderDebugMode_ = static_cast<RenderDebugMode>(debugModeIndex);
+            }
+        }
 
         ImGui::EndPopup();
     }

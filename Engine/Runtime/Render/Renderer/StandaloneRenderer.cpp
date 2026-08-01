@@ -18,25 +18,41 @@ namespace ve
             VE_ASSERT_ALWAYS_MESSAGE(false, message);
             std::terminate();
         }
+
+        [[nodiscard]] bool IsValidRenderDebugMode(RenderDebugMode mode) noexcept
+        {
+            return static_cast<UInt8>(mode) < static_cast<UInt8>(RenderDebugMode::Count);
+        }
     } // namespace
 
-    void ResolveStandaloneViewVirtualShadowVisualization(SizeT viewCount,
-                                                         bool fallbackVisualization,
-                                                         const std::vector<bool>& configuredVisualization,
-                                                         std::vector<bool>& resolvedVisualization)
+    void ResolveStandaloneViewDebugModes(SizeT viewCount,
+                                         RenderDebugMode fallbackMode,
+                                         const std::vector<RenderDebugMode>& configuredModes,
+                                         std::vector<RenderDebugMode>& resolvedModes)
     {
-        if (!configuredVisualization.empty() && configuredVisualization.size() != viewCount)
+        if (!IsValidRenderDebugMode(fallbackMode))
         {
-            FailStandaloneRenderer("per-view VSM visualization count must match the render-view count.");
+            FailStandaloneRenderer("family render debug mode is invalid.");
+        }
+        if (!configuredModes.empty() && configuredModes.size() != viewCount)
+        {
+            FailStandaloneRenderer("per-view render debug mode count must match the render-view count.");
+        }
+        for (const RenderDebugMode mode : configuredModes)
+        {
+            if (!IsValidRenderDebugMode(mode))
+            {
+                FailStandaloneRenderer("per-view render debug mode is invalid.");
+            }
         }
 
-        if (configuredVisualization.empty())
+        if (configuredModes.empty())
         {
-            resolvedVisualization.assign(viewCount, fallbackVisualization);
+            resolvedModes.assign(viewCount, fallbackMode);
         }
         else
         {
-            resolvedVisualization = configuredVisualization;
+            resolvedModes = configuredModes;
         }
     }
 
@@ -44,9 +60,9 @@ namespace ve
                                                    StandaloneRendererInitParam& sourceRenderer,
                                                    UInt32 familyViewIndex)
     {
-        if (!sourceRenderer.viewVisualizeVirtualShadowPages.empty() && sourceRenderer.viewVisualizeVirtualShadowPages.size() != 1)
+        if (!sourceRenderer.viewDebugModes.empty() && sourceRenderer.viewDebugModes.size() != 1)
         {
-            FailStandaloneRenderer("appended view configuration must contain at most one VSM visualization setting.");
+            FailStandaloneRenderer("appended view configuration must contain at most one render debug mode.");
         }
         for (const RendererViewPassExtension& extension : sourceRenderer.viewExtensions)
         {
@@ -56,10 +72,8 @@ namespace ve
             }
         }
 
-        const bool visualizeVirtualShadowPages = sourceRenderer.viewVisualizeVirtualShadowPages.empty()
-                                                     ? sourceRenderer.visualizeVirtualShadowPages
-                                                     : sourceRenderer.viewVisualizeVirtualShadowPages.front();
-        familyRenderer.viewVisualizeVirtualShadowPages.push_back(visualizeVirtualShadowPages);
+        const RenderDebugMode debugMode = sourceRenderer.viewDebugModes.empty() ? sourceRenderer.debugMode : sourceRenderer.viewDebugModes.front();
+        familyRenderer.viewDebugModes.push_back(debugMode);
         for (std::unique_ptr<RenderPass>& outputPass : sourceRenderer.outputPasses)
         {
             familyRenderer.outputPasses.push_back(std::move(outputPass));
@@ -76,14 +90,16 @@ namespace ve
         , transparentPass_(TransparentSceneRenderPassInitParam{})
         , viewExtensions_(std::move(initParam.viewExtensions))
     {
-        std::vector<bool> viewVisualization;
-        ResolveStandaloneViewVirtualShadowVisualization(
-            GetRendererData().views.size(), initParam.visualizeVirtualShadowPages, initParam.viewVisualizeVirtualShadowPages, viewVisualization);
+        std::vector<RenderDebugMode> viewDebugModes;
+        ResolveStandaloneViewDebugModes(GetRendererData().views.size(), initParam.debugMode, initParam.viewDebugModes, viewDebugModes);
 
-        opaquePasses_.reserve(viewVisualization.size());
-        for (const bool visualizeVirtualShadowPages : viewVisualization)
+        debugModes_ = std::move(viewDebugModes);
+        opaquePasses_.reserve(debugModes_.size());
+        for (const RenderDebugMode debugMode : debugModes_)
         {
-            opaquePasses_.push_back(std::make_unique<OpaqueSceneRenderPass>(OpaqueSceneRenderPassInitParam{visualizeVirtualShadowPages, true}));
+            opaquePasses_.push_back(debugMode == RenderDebugMode::VsmRedraw
+                                        ? nullptr
+                                        : std::make_unique<OpaqueSceneRenderPass>(OpaqueSceneRenderPassInitParam{true}));
         }
     }
 
@@ -101,6 +117,10 @@ namespace ve
         if (opaquePasses_.size() != graphData.views.size())
         {
             FailStandaloneRenderer("opaque-pass count must match its render-view count.");
+        }
+        if (debugModes_.size() != graphData.views.size())
+        {
+            FailStandaloneRenderer("render debug mode count must match its render-view count.");
         }
 
         for (const RendererViewPassExtension& extension : viewExtensions_)
@@ -137,6 +157,15 @@ namespace ve
         for (SizeT viewIndex = 0; viewIndex < graphData.views.size(); ++viewIndex)
         {
             const UInt32 passViewIndex = static_cast<UInt32>(viewIndex);
+            if (debugModes_[viewIndex] == RenderDebugMode::VsmRedraw)
+            {
+                vsmRedrawPagePass_.AddToFrameGraph(frameGraph, graphData, passViewIndex);
+                continue;
+            }
+            if (opaquePasses_[viewIndex] == nullptr)
+            {
+                FailStandaloneRenderer("opaque pass is missing for a non-debug renderer view.");
+            }
             opaquePasses_[viewIndex]->AddToFrameGraph(frameGraph, graphData, passViewIndex);
             transparentPass_.AddToFrameGraph(frameGraph, graphData, passViewIndex);
         }

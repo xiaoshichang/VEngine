@@ -59,6 +59,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/SwapchainOutputRenderPass.cpp
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.cpp
+            Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.cpp
             Engine/Runtime/Render/Renderer/StandaloneRenderer.cpp
             Engine/Runtime/Render/ShaderManager.cpp
             Engine/Runtime/Render/ViewportClient.cpp
@@ -162,6 +163,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderViewState.h
             Engine/Runtime/Render/RenderCommandQueue.h
             Engine/Runtime/Render/RenderCameraMath.h
+            Engine/Runtime/Render/RenderDebugMode.h
             Engine/Runtime/Render/RenderFramePipeline.h
             Engine/Runtime/Render/RenderFrameUniformCache.h
             Engine/Runtime/Render/RenderPerformanceStatistics.h
@@ -182,6 +184,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/SwapchainOutputRenderPass.h
             Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h
+            Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.h
             Engine/Runtime/Render/Renderer/StandaloneRenderer.h
             Engine/Runtime/Render/ShaderManager.h
             Engine/Runtime/Render/ViewportClient.h

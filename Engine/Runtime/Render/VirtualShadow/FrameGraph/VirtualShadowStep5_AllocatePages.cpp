@@ -68,6 +68,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             selectedPage.key0 = key0;
             selectedPage.key1 = key1;
             selectedPage.lastUsedFrame = frameIndex;
+            if (!cacheHit) selectedPage.lastRenderedFrame = 0u;
             selectedPage.flags = 1u | 4u | (cacheHit ? (selectedPage.flags & 2u) : 2u);
             PhysicalPages[selected] = selectedPage;
             PageTable[logical] = selected + 1u;

@@ -25,6 +25,7 @@ void CSMain(uint index : SV_DispatchThreadID)
     if ((page.flags & 6u) == 6u && matchesView)
     {
         page.flags |= 8u;
+        page.lastRenderedFrame = frameIndex;
         PhysicalPages[index] = page;
         InterlockedAdd(Statistics[4], 1u);
     }

@@ -196,8 +196,7 @@ namespace ve
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
 
-        VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
-        virtualShadowConstants.debugMode = initParam_.visualizeVirtualShadowPages ? 1u : 0u;
+        const VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
         const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
         if (!virtual_shadow_detail::IsValidVirtualShadowUniformAllocation(virtualShadowUniform))
         {

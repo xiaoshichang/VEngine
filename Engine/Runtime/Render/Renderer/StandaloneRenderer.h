@@ -1,9 +1,11 @@
 #pragma once
 
+#include "Engine/Runtime/Render/RenderDebugMode.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/DepthPrePass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.h"
 
 #include <memory>
 #include <vector>
@@ -12,16 +14,16 @@ namespace ve
 {
     struct StandaloneRendererInitParam : public BaseRendererInitParam
     {
-        bool visualizeVirtualShadowPages = false;
-        std::vector<bool> viewVisualizeVirtualShadowPages;
+        RenderDebugMode debugMode = RenderDebugMode::None;
+        std::vector<RenderDebugMode> viewDebugModes;
         std::vector<RendererViewPassExtension> viewExtensions;
     };
 
-    /// Resolves an optional explicit per-view setting, falling back to the transitional family-wide setting.
-    void ResolveStandaloneViewVirtualShadowVisualization(SizeT viewCount,
-                                                         bool fallbackVisualization,
-                                                         const std::vector<bool>& configuredVisualization,
-                                                         std::vector<bool>& resolvedVisualization);
+    /// Resolves an optional explicit per-view setting, falling back to the family-wide debug mode.
+    void ResolveStandaloneViewDebugModes(SizeT viewCount,
+                                         RenderDebugMode fallbackMode,
+                                         const std::vector<RenderDebugMode>& configuredModes,
+                                         std::vector<RenderDebugMode>& resolvedModes);
     void
     AppendStandaloneRendererViewConfiguration(StandaloneRendererInitParam& familyRenderer, StandaloneRendererInitParam& sourceRenderer, UInt32 familyViewIndex);
 
@@ -38,6 +40,8 @@ namespace ve
         DepthPrePass depthPrePass_;
         std::vector<std::unique_ptr<OpaqueSceneRenderPass>> opaquePasses_;
         TransparentSceneRenderPass transparentPass_;
+        VirtualShadowRedrawPageDebugPass vsmRedrawPagePass_;
+        std::vector<RenderDebugMode> debugModes_;
         std::vector<RendererViewPassExtension> viewExtensions_;
     };
 } // namespace ve

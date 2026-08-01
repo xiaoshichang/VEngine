@@ -56,7 +56,11 @@ cbuffer ShadowConstants : register(b4)
     InvalidationEntry invalidatedPages[2048];
     uint viewID; uint3 viewIDPadding;
 };
-struct PhysicalPage { uint key0; uint key1; uint lastUsedFrame; uint flags; };
+struct PhysicalPage
+{
+    uint key0; uint key1; uint lastUsedFrame; uint lastRenderedFrame;
+    uint flags; uint3 padding;
+};
 )";
 
         struct VirtualShadowViewRequestPassData

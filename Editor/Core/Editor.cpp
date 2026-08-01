@@ -151,7 +151,7 @@ namespace ve::editor
         std::shared_ptr<RTCamera> gameViewCameraSnapshot;
         std::shared_ptr<RTRenderViewState> gameViewState;
         rhi::RhiFillMode sceneViewFillMode = rhi::RhiFillMode::Solid;
-        bool visualizeSceneViewVirtualShadowPages = false;
+        RenderDebugMode sceneViewRenderDebugMode = RenderDebugMode::None;
         bool sceneViewGridEnabled = false;
         Float32 sceneViewGridOpacity = 0.45f;
         Float32 sceneViewGridUnitSize = 1.0f;
@@ -397,7 +397,7 @@ namespace ve::editor
         views.sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraInitParam());
         views.sceneViewState = projectEditingView_->GetSceneRenderViewState()->GetRTRenderViewState();
         views.sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
-        views.visualizeSceneViewVirtualShadowPages = projectEditingView_->IsSceneViewVirtualShadowPageVisualizationEnabled();
+        views.sceneViewRenderDebugMode = projectEditingView_->GetSceneViewRenderDebugMode();
         views.sceneViewGridEnabled = projectEditingView_->IsSceneViewGridEnabled();
         views.sceneViewGridOpacity = projectEditingView_->GetSceneViewGridOpacity();
         views.sceneViewGridUnitSize = projectEditingView_->GetSceneViewGridUnitSize();
@@ -455,7 +455,7 @@ namespace ve::editor
         sceneView.fillMode = views.sceneViewFillMode;
         sceneView.target.colorLoadAction = rhi::RhiLoadAction::Clear;
         rendererInitParam.viewFamily.views.push_back(std::move(sceneView));
-        rendererInitParam.viewVisualizeVirtualShadowPages.push_back(views.visualizeSceneViewVirtualShadowPages);
+        rendererInitParam.viewDebugModes.push_back(views.sceneViewRenderDebugMode);
 
         RendererViewPassExtension viewExtension = {};
         viewExtension.viewIndex = sceneViewIndex;
@@ -498,7 +498,7 @@ namespace ve::editor
         gameView.viewState = views.gameViewState;
         gameView.target.colorTexture = views.gameViewTexture;
         rendererInitParam.viewFamily.views.push_back(std::move(gameView));
-        rendererInitParam.viewVisualizeVirtualShadowPages.push_back(false);
+        rendererInitParam.viewDebugModes.push_back(RenderDebugMode::None);
     }
 
     std::shared_ptr<RTScene> Editor::GetActiveRenderScene() const

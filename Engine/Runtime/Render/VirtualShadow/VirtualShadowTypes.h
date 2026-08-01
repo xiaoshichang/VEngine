@@ -239,8 +239,13 @@ namespace ve
         /// Lower 32 bits of the most recent frame index that requested this page; used for LRU eviction.
         UInt32 lastUsedFrame = 0;
 
+        /// Lower 32 bits of the most recent render frame in which this page was redrawn.
+        UInt32 lastRenderedFrame = 0;
+
         /// Bit mask composed from the VirtualShadowGpuPhysicalPage* flags below.
         UInt32 flags = 0;
+
+        UInt32 padding[3] = {};
     };
 
     /// The physical slot contains a valid virtual-page mapping.
@@ -381,8 +386,8 @@ namespace ve
         /// Number of valid invalidationEntries; InvalidVirtualShadowGpuInvalidationCount invalidates every page for viewID.
         UInt32 invalidationCount = 0;
 
-        /// Boolean visualization mode consumed by the opaque scene shader; nonzero displays VSM page diagnostics.
-        UInt32 debugMode = 0;
+        /// Constant-buffer padding; unused by VSM logic.
+        UInt32 padding = 0;
 
         /// Receiver camera world position in XYZ; W is not used by VSM request selection.
         Vector4 cameraWorldPosition = Vector4::Zero();
@@ -401,7 +406,7 @@ namespace ve
     };
 
     static_assert(sizeof(VirtualShadowGpuClipmap) == 48);
-    static_assert(sizeof(VirtualShadowGpuPhysicalPage) == 16);
+    static_assert(sizeof(VirtualShadowGpuPhysicalPage) == 32);
     static_assert(sizeof(VirtualShadowGpuStatistics) == 32);
     static_assert(alignof(VirtualShadowGpuStatistics) == 16);
     static_assert(offsetof(VirtualShadowGpuStatistics, allocatedPhysicalPages) == 0);

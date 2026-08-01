@@ -161,9 +161,9 @@ namespace ve::editor
         return sceneViewPanel_.GetFillMode();
     }
 
-    bool ProjectEditingView::IsSceneViewVirtualShadowPageVisualizationEnabled() const noexcept
+    RenderDebugMode ProjectEditingView::GetSceneViewRenderDebugMode() const noexcept
     {
-        return sceneViewPanel_.IsVirtualShadowPageVisualizationEnabled();
+        return sceneViewPanel_.GetRenderDebugMode();
     }
 
     bool ProjectEditingView::IsSceneViewGridEnabled() const noexcept

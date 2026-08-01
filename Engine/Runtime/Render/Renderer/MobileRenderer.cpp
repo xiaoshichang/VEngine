@@ -30,7 +30,7 @@ namespace ve
             opaquePasses_.reserve(graphData.views.size());
             for (SizeT viewIndex = 0; viewIndex < graphData.views.size(); ++viewIndex)
             {
-                opaquePasses_.push_back(std::make_unique<OpaqueSceneRenderPass>(OpaqueSceneRenderPassInitParam{false, true}));
+                opaquePasses_.push_back(std::make_unique<OpaqueSceneRenderPass>(OpaqueSceneRenderPassInitParam{true}));
             }
             hasDepthPrePass_ = true;
         }
