@@ -1033,9 +1033,9 @@ from project-owned assets:
 
 - `Assets/EditorOnlyAsset/`: engine-owned Editor-only resources. These are copied under the Editor's `Assets/` directory
   when the Editor is built and are not included in Player packages.
-- `Assets/BuiltinAsset/`: engine-owned runtime builtin resources. These are copied under the Editor's `Assets/` directory
-  for Editor use; when referenced by the runtime manifest, they are also copied into Player packages next to
-  `VEnginePlayer.exe`.
+- `Assets/Builtin/`: engine-owned runtime builtin resources. Opening a project checks this tree; native material/scene/
+  texture files remain under `Assets/Builtin/`, while OBJ and shader sources import into `ProjectRoot/Library/Imported/<guid>/`.
+  Runtime records preserve the `Assets/Builtin/...` path for native builtin resources.
 - `ProjectRoot/Assets/`: project-authored resources. These stay under the project root during editing and are copied into
   Player packages when referenced by the runtime manifest.
 
@@ -1044,7 +1044,7 @@ The resource pipeline has three explicit responsibility layers:
 ```text
   Editor:
   EditorAssetDatabase
-    -> scans ProjectRoot/Assets/ and repository runtime builtin Assets/BuiltinAsset/Engine/ when a project opens
+    -> scans ProjectRoot/Assets/ and repository runtime builtin Assets/Builtin/ when a project opens
     -> keeps asset path -> AssetID and AssetID -> asset-record indexes current
     -> tracks imported artifact path and direct dependencies
     -> updates records as editor operations create, delete, move, reimport, or save assets
@@ -1072,8 +1072,8 @@ Shared low-level loading:
     -> supports root-reachability collection
 ```
 
-The Editor AssetDatabase scans the project `Assets/` tree plus repository runtime builtin `Assets/BuiltinAsset/Engine/`
-content, tracks native source assets and imported descriptors, and generates first-stage `.vemesh` descriptors from
+The Editor AssetDatabase scans the project `Assets/` tree plus repository runtime builtin `Assets/Builtin/` content,
+tracks native source assets and imported descriptors, and generates first-stage `.vemesh` descriptors from
 `.obj` sources without copying mesh payload data. `Assets/EditorOnlyAsset/` is outside this runtime asset scan. Player
 builds export a runtime asset manifest and resource payload set from the editor/tooling asset records.
 

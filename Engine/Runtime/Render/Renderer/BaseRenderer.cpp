@@ -89,6 +89,11 @@ namespace ve
                 FailRenderer("Renderer queue build encountered a null render item at scene index " + std::to_string(itemIndex) + ".");
             }
 
+            if (item->GetMeshResource() == nullptr)
+            {
+                continue;
+            }
+
             const auto material = std::dynamic_pointer_cast<RTMaterialResource>(item->GetMaterialResource());
             if (material == nullptr)
             {

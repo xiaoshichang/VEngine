@@ -22,6 +22,7 @@ namespace ve::editor
         Mesh,
         Material,
         Shader,
+        Texture,
         Scene,
         Script,
     };
@@ -63,7 +64,7 @@ namespace ve::editor
         [[nodiscard]] static const char* ToString(EditorAssetType type) noexcept;
 
     private:
-        [[nodiscard]] ErrorCode ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force);
+        [[nodiscard]] ErrorCode ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force, bool builtin);
         [[nodiscard]] ErrorCode ImportObjAsMesh(const Path& objProjectPath, const Guid& guid, bool force);
         [[nodiscard]] ErrorCode ImportShader(const Path& shaderProjectPath, const Guid& guid, bool force);
         [[nodiscard]] ErrorCode ResolveAssetDependencies();

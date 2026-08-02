@@ -340,7 +340,7 @@ namespace ve::editor
                 continue;
             }
 
-            const Path sourcePath = ResolveEditorContentPath(projectRoot_, runtimePath);
+            const Path sourcePath = !pair.second.asset.sourcePathOverride.IsEmpty() ? pair.second.asset.sourcePathOverride : ResolveEditorContentPath(projectRoot_, runtimePath);
             const Path destinationPath = packageDataRoot_ / runtimePath;
             ErrorCode result = CopyFileWithDirectories(sourcePath, destinationPath);
             if (result != ErrorCode::None)

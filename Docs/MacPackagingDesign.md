@@ -58,7 +58,7 @@ ProjectRoot/
                 ScriptAssembly.json
               Assets/
                 ...
-              BuiltinAsset/
+              Library/
                 ...
               Library/
                 Imported/

@@ -74,6 +74,11 @@ namespace ve::editor
                 return EditorAssetType::ObjSource;
             }
 
+            if (extension == ".vemesh")
+            {
+                return EditorAssetType::Mesh;
+            }
+
             if (extension == ".vematerial")
             {
                 return EditorAssetType::Material;
@@ -82,6 +87,12 @@ namespace ve::editor
             if (extension == ".veshader")
             {
                 return EditorAssetType::Shader;
+            }
+
+            if (extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".bmp" || extension == ".tga" ||
+                extension == ".tif" || extension == ".tiff" || extension == ".dds" || extension == ".webp" || extension == ".ktx" || extension == ".ktx2")
+            {
+                return EditorAssetType::Texture;
             }
 
             if (extension == ".vescene")
@@ -119,6 +130,8 @@ namespace ve::editor
                 return "Material";
             case EditorAssetType::Shader:
                 return "Shader";
+            case EditorAssetType::Texture:
+                return "Texture";
             case EditorAssetType::Scene:
                 return "Scene";
             case EditorAssetType::Script:
@@ -156,6 +169,8 @@ namespace ve::editor
                 return ResourceType::Material;
             case EditorAssetType::Shader:
                 return ResourceType::Shader;
+            case EditorAssetType::Texture:
+                return ResourceType::Texture;
             case EditorAssetType::Scene:
                 return ResourceType::Scene;
             case EditorAssetType::Script:
@@ -918,7 +933,7 @@ namespace ve::editor
 
         assetsByID_.clear();
         assetIDsByAssetPath_.clear();
-        const ErrorCode result = ScanAndImportDirectory(assetsRoot, false);
+        const ErrorCode result = ScanAndImportDirectory(assetsRoot, false, false);
         if (result != ErrorCode::None)
         {
             return result;
@@ -927,7 +942,7 @@ namespace ve::editor
         const Path builtinAssetsRoot = GetBuiltinAssetsRootPath();
         if (FileSystem::IsDirectory(builtinAssetsRoot))
         {
-            const ErrorCode builtinResult = ScanAndImportDirectory(builtinAssetsRoot, false);
+            const ErrorCode builtinResult = ScanAndImportDirectory(builtinAssetsRoot, false, true);
             if (builtinResult != ErrorCode::None)
             {
                 return builtinResult;
@@ -957,7 +972,7 @@ namespace ve::editor
 
         assetsByID_.clear();
         assetIDsByAssetPath_.clear();
-        const ErrorCode result = ScanAndImportDirectory(assetsRoot, true);
+        const ErrorCode result = ScanAndImportDirectory(assetsRoot, true, false);
         if (result != ErrorCode::None)
         {
             return result;
@@ -966,7 +981,7 @@ namespace ve::editor
         const Path builtinAssetsRoot = GetBuiltinAssetsRootPath();
         if (FileSystem::IsDirectory(builtinAssetsRoot))
         {
-            const ErrorCode builtinResult = ScanAndImportDirectory(builtinAssetsRoot, true);
+            const ErrorCode builtinResult = ScanAndImportDirectory(builtinAssetsRoot, true, true);
             if (builtinResult != ErrorCode::None)
             {
                 return builtinResult;
@@ -1079,6 +1094,8 @@ namespace ve::editor
             return "Material";
         case EditorAssetType::Shader:
             return "Shader";
+        case EditorAssetType::Texture:
+            return "Texture";
         case EditorAssetType::Scene:
             return "Scene";
         case EditorAssetType::Script:
@@ -1090,7 +1107,7 @@ namespace ve::editor
         return "Unknown";
     }
 
-    ErrorCode EditorAssetDatabase::ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force)
+    ErrorCode EditorAssetDatabase::ScanAndImportDirectory(const Path& physicalDirectoryPath, bool force, bool builtin)
     {
         Result<std::vector<FileSystem::DirectoryEntry>> entries = FileSystem::ListDirectory(physicalDirectoryPath);
         if (!entries)
@@ -1102,7 +1119,7 @@ namespace ve::editor
         {
             if (entry.type == FileSystem::DirectoryEntryType::Directory)
             {
-                const ErrorCode result = ScanAndImportDirectory(entry.path, force);
+                const ErrorCode result = ScanAndImportDirectory(entry.path, force, builtin);
                 if (result != ErrorCode::None)
                 {
                     return result;
@@ -1152,7 +1169,16 @@ namespace ve::editor
                     record.imported = true;
                     record.importedPath = GetImportedShaderPath(guid, shaderName.GetValue());
                 }
-                record.asset.runtimePath = record.imported ? record.importedPath : record.path;
+                else if (builtin && record.type != EditorAssetType::ObjSource && record.type != EditorAssetType::Shader)
+                {
+                    record.asset.runtimePath = Path(EditorProject::AssetsDirectoryName) / record.path;
+                    record.asset.sourcePathOverride = ResolveEditorContentPath(projectRoot_, record.path);
+                }
+
+                if (record.asset.runtimePath.IsEmpty())
+                {
+                    record.asset.runtimePath = record.imported ? record.importedPath : record.path;
+                }
 
                 AddAssetRecord(std::move(record));
             }

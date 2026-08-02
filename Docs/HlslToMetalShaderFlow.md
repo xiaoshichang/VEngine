@@ -478,9 +478,9 @@ Host behavior:
 
 Minimum shader tests:
 
-1. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D11 DXBC.
-2. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to D3D12 DXIL.
-3. Compile `Assets/BuiltinAsset/Engine/Shaders/BasicMesh.hlsl` to MSL.
+1. Compile `Assets/Builtin/Shaders/BasicMesh.hlsl` to D3D11 DXBC.
+2. Compile `Assets/Builtin/Shaders/BasicMesh.hlsl` to D3D12 DXIL.
+3. Compile `Assets/Builtin/Shaders/BasicMesh.hlsl` to MSL.
 4. Generate reflection JSON.
 5. Validate that `CameraConstants : register(b0, space0)` maps to the expected binding metadata.
 6. On Apple host, compile generated MSL to `.metallib`.
