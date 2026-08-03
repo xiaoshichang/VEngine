@@ -15,6 +15,8 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Core/EditorBuiltinResources.h
     Editor/Core/EditorEventDispatcher.h
     Editor/Core/EditorEvents.h
+    Editor/Core/EditorFooter.cpp
+    Editor/Core/EditorFooter.h
     Editor/Core/EditorInput.cpp
     Editor/Core/EditorInput.h
     Editor/Core/EditorInputBackend.h
@@ -48,6 +50,8 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Panels/AssetsPanel/AssetsPanel.h
     Editor/Panels/BasePanel/BasePanel.cpp
     Editor/Panels/BasePanel/BasePanel.h
+    Editor/Panels/ConsolePanel/ConsolePanel.cpp
+    Editor/Panels/ConsolePanel/ConsolePanel.h
     Editor/Panels/GameViewPanel/GameViewPanel.cpp
     Editor/Panels/GameViewPanel/GameViewPanel.h
     Editor/Panels/HierarchyPanel/HierarchyPanel.cpp
@@ -58,6 +62,8 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Panels/InspectorPanel/InspectorPanel.h
     Editor/Panels/InspectorPanel/InspectorPanelInternal.cpp
     Editor/Panels/InspectorPanel/InspectorPanelInternal.h
+    Editor/Panels/ProfilePanel/ProfilePanel.cpp
+    Editor/Panels/ProfilePanel/ProfilePanel.h
     Editor/Panels/SceneViewPanel/SceneViewPanel.cpp
     Editor/Panels/SceneViewPanel/SceneViewPanel.h
     Editor/RenderPass/EditorGizmoRenderPass.cpp

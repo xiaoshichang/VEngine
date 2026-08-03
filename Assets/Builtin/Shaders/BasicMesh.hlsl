@@ -44,11 +44,11 @@ cbuffer VirtualShadowConstants : register(b4, space0)
     float4 virtualShadowLightUp;
     float4 virtualShadowLightDirection;
     float4 virtualShadowAtlasAndBias;
-    VirtualShadowClipmapConstants virtualShadowClipmaps[4];
-    uint virtualShadowEnabled;
+    VirtualShadowClipmapConstants virtualShadowClipmaps[24];
     uint virtualShadowAtlasExtent;
     uint virtualShadowPhysicalPageSize;
     uint virtualShadowClipmapLevelCount;
+    uint virtualShadowAtlasPadding;
     float4x4 virtualShadowInverseViewProjection;
     uint virtualShadowScreenWidth;
     uint virtualShadowScreenHeight;
@@ -57,14 +57,15 @@ cbuffer VirtualShadowConstants : register(b4, space0)
     uint virtualShadowResetCache;
     uint virtualShadowPassLevel;
     uint virtualShadowInvalidationCount;
-    uint virtualShadowDebugMode;
+    uint virtualShadowPadding;
     float4 virtualShadowCameraWorldPosition;
     float4 virtualShadowCameraWorldForward;
     VirtualShadowInvalidationEntry virtualShadowInvalidationEntries[2048];
+    uint virtualShadowViewID;
+    uint3 virtualShadowViewIDPadding;
 };
 
-Texture2D<float> VirtualShadowAtlas : register(t1, space0);
-SamplerComparisonState VirtualShadowSampler : register(s1, space0);
+Texture2D<uint> VirtualShadowAtlas : register(t1, space0);
 StructuredBuffer<uint> VirtualShadowDensePageTable : register(t5, space0);
 
 struct VSInput
@@ -104,30 +105,22 @@ uint FindVirtualShadowPhysicalPage(uint level, int2 pageCoordinate)
     return denseEntry == 0u ? 0xFFFFFFFFu : denseEntry - 1u;
 }
 
-float SampleVirtualShadowPage(uint physicalPageIndex, float2 pagePosition, float depthReference)
+float SampleVirtualShadowPage(uint physicalPageIndex, float2 pagePosition, float receiverDepth)
 {
-    const float contentSize = 126.0f;
     uint pagesPerRow = virtualShadowAtlasExtent / virtualShadowPhysicalPageSize;
     uint2 physicalPage = uint2(physicalPageIndex % pagesPerRow, physicalPageIndex / pagesPerRow);
-    float2 contentOrigin = float2(physicalPage * virtualShadowPhysicalPageSize) + 1.0f;
-    float2 minimumPixel = contentOrigin + 0.5f;
-    float2 maximumPixel = contentOrigin + contentSize - 0.5f;
-    float2 samplePagePosition = float2(pagePosition.x, 1.0f - pagePosition.y);
-    float2 centerPixel = minimumPixel + saturate(samplePagePosition) * (contentSize - 1.0f);
-
-    float visibility = 0.0f;
-    [unroll]
-    for (int offsetY = -1; offsetY <= 1; ++offsetY)
+    uint2 pageOrigin = physicalPage * virtualShadowPhysicalPageSize;
+    uint2 pagePixel =
+        min(uint2(saturate(pagePosition) * virtualShadowPhysicalPageSize),
+            uint2(virtualShadowPhysicalPageSize - 1u, virtualShadowPhysicalPageSize - 1u));
+    uint encodedDepth = VirtualShadowAtlas.Load(int3(pageOrigin + pagePixel, 0));
+    if (encodedDepth == 0u)
     {
-        [unroll]
-        for (int offsetX = -1; offsetX <= 1; ++offsetX)
-        {
-            float2 samplePixel = clamp(centerPixel + float2(offsetX, offsetY), minimumPixel, maximumPixel);
-            visibility += VirtualShadowAtlas.SampleCmpLevelZero(
-                VirtualShadowSampler, samplePixel * virtualShadowAtlasAndBias.x, depthReference);
-        }
+        return 1.0f;
     }
-    return visibility / 9.0f;
+
+    float casterDepth = 1.0f - asfloat(encodedDepth);
+    return receiverDepth <= casterDepth ? 1.0f : 0.0f;
 }
 
 bool TryResolveVirtualShadowPage(float3 worldPosition,
@@ -140,8 +133,8 @@ bool TryResolveVirtualShadowPage(float3 worldPosition,
 {
     float cameraDepth = max(dot(worldPosition - cameraWorldPosition.xyz, cameraWorldForward.xyz), 0.0f);
     uint firstLevel = virtualShadowClipmapLevelCount - 1u;
-    [unroll]
-    for (uint levelIndex = 0u; levelIndex < 4u; ++levelIndex)
+    [loop]
+    for (uint levelIndex = 0u; levelIndex < virtualShadowClipmapLevelCount; ++levelIndex)
     {
         if (cameraDepth <= virtualShadowClipmaps[levelIndex].radiusAndDepthRange.x)
         {
@@ -192,7 +185,7 @@ bool TryResolveVirtualShadowPage(float3 worldPosition,
 
 float ComputeVirtualShadowVisibility(float3 worldPosition, float3 worldNormal, uint objectReceivesShadows)
 {
-    if (virtualShadowEnabled == 0u || objectReceivesShadows == 0u || virtualShadowAtlasExtent == 0u)
+    if (objectReceivesShadows == 0u)
     {
         return 1.0f;
     }
@@ -211,50 +204,9 @@ float ComputeVirtualShadowVisibility(float3 worldPosition, float3 worldNormal, u
     return SampleVirtualShadowPage(physicalPageIndex, pagePosition, depthReference);
 }
 
-uint HashVirtualShadowPage(uint level, int2 pageCoordinate)
-{
-    uint value = uint(pageCoordinate.x) * 0x8DA6B343u;
-    value ^= uint(pageCoordinate.y) * 0xD8163841u;
-    value ^= level * 0xCB1AB31Fu;
-    value ^= value >> 16u;
-    value *= 0x7FEB352Du;
-    value ^= value >> 15u;
-    value *= 0x846CA68Bu;
-    value ^= value >> 16u;
-    return value;
-}
-
-float3 ComputeVirtualShadowPageDebugColor(float3 worldPosition, float3 worldNormal)
-{
-    if (virtualShadowEnabled == 0u || virtualShadowAtlasExtent == 0u)
-    {
-        return float3(1.0f, 0.0f, 1.0f);
-    }
-
-    uint level;
-    int2 pageCoordinate;
-    uint physicalPageIndex;
-    float2 pagePosition;
-    float depthReference;
-    if (!TryResolveVirtualShadowPage(
-            worldPosition, worldNormal, level, pageCoordinate, physicalPageIndex, pagePosition, depthReference))
-    {
-        return float3(1.0f, 0.0f, 1.0f);
-    }
-
-    uint hash = HashVirtualShadowPage(level, pageCoordinate);
-    float3 color = float3(hash & 0xFFu, (hash >> 8u) & 0xFFu, (hash >> 16u) & 0xFFu) / 255.0f;
-    return 0.25f + color * 0.75f;
-}
-
 float4 PSMain(VSOutput input) : SV_TARGET
 {
     float3 normal = normalize(input.worldNormal);
-    if (virtualShadowDebugMode != 0u)
-    {
-        return float4(ComputeVirtualShadowPageDebugColor(input.worldPosition, normal), 1.0f);
-    }
-
     float3 lightDirection = normalize(directionalLightDirection.xyz);
     float3 lightToSurface = -lightDirection;
     float diffuse = saturate(dot(normal, lightToSurface));

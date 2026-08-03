@@ -32,6 +32,7 @@ namespace ve::rhi
         Sampler,
         StorageBuffer,
         ReadWriteStorageBuffer,
+        ReadWriteStorageTexture,
     };
 
     /// Describes the primitive topology consumed by a graphics pipeline.
@@ -186,6 +187,8 @@ namespace ve::rhi
         Bgra8Unorm,
         /// Three 32-bit floating-point channels in red, green, blue order.
         Rgb32Float,
+        /// One 32-bit unsigned integer channel.
+        R32Uint,
         /// One 32-bit floating-point depth channel.
         Depth32Float,
     };
@@ -239,6 +242,7 @@ namespace ve::rhi
         Sampled = 1 << 0,
         RenderTarget = 1 << 1,
         DepthStencil = 1 << 2,
+        Storage = 1 << 3,
     };
 
     /// Stores a two-dimensional unsigned extent.
@@ -375,6 +379,8 @@ namespace ve::rhi
         bool hasColorAttachment = true;
         bool colorAttachmentIsSwapchain = true;
         bool hasDepthAttachment = false;
+        /// Declares that an attachmentless graphics pass writes a fragment-stage unordered-access texture.
+        bool hasFragmentUavWrites = false;
     };
 
     /// Describes the intended CPU/GPU access pattern of a buffer.
@@ -385,6 +391,8 @@ namespace ve::rhi
         GpuOnly,
         /// CPU-writable memory consumed by the GPU. Supports RhiDevice::UpdateBuffer and is intended for frequently updated upload or dynamic data.
         CpuToGpu,
+        /// GPU-written memory consumed by the CPU after the submission's completion fence has finished.
+        GpuToCpu,
     };
 
     /// Selects how an UpdateBuffer write relates to existing data in a CpuToGpu buffer.

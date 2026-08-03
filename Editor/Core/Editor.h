@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorAssetDatabase.h"
 #include "Editor/Core/EditorEventDispatcher.h"
 #include "Editor/Core/EditorEvents.h"
+#include "Editor/Core/EditorFooter.h"
 #include "Editor/Core/EditorInput.h"
 #include "Editor/Core/EditorProject.h"
 #include "Editor/Core/EditorProjectRegistry.h"
@@ -26,6 +27,7 @@ struct ImDrawData;
 
 namespace ve
 {
+    class EditorGizmoRenderResources;
     class GameObject;
 }
 
@@ -148,6 +150,7 @@ namespace ve::editor
         ApplicationCommandQueue* mainThreadCommandQueue_ = nullptr;
         void* nativeWindowHandle_ = nullptr;
         EditorInput input_;
+        EditorFooter footer_;
         ProjectSelectionView* projectSelectionView_ = nullptr;
         ProjectEditingView* projectEditingView_ = nullptr;
         RenderBackend renderBackend_ = RenderBackend::D3D12;
@@ -161,6 +164,7 @@ namespace ve::editor
         Path selectedAssetPath_;
         std::unique_ptr<EditorRenderBackend> editorRenderBackend_;
         std::array<std::shared_ptr<EditorFrameDrawData>, 2> imguiDrawDataSnapshots_;
+        std::shared_ptr<ve::EditorGizmoRenderResources> gizmoRenderResources_;
         mutable std::mutex imguiContextMutex_;
         UInt32 nextImGuiDrawDataSnapshotIndex_ = 0;
         bool waitForImGuiTextureUpdates_ = false;

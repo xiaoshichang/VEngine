@@ -43,6 +43,9 @@ namespace ve
         ColorAttachment,
         DepthAttachment,
         ShaderRead,
+        ShaderReadWrite,
+        CopySource,
+        CopyDestination,
     };
 
     /// Describes how one pass accesses a logical buffer version.
@@ -50,6 +53,8 @@ namespace ve
     {
         ShaderRead,
         ShaderReadWrite,
+        CopySource,
+        CopyDestination,
     };
 
     /// Physical properties used to create and reuse graph-owned textures.

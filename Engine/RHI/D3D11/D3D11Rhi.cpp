@@ -19,6 +19,7 @@
 #include <d3d11_1.h>
 #include <d3dcompiler.h>
 #include <dxgi.h>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <string>
@@ -41,6 +42,8 @@ namespace ve::rhi
                 return DXGI_FORMAT_B8G8R8A8_UNORM;
             case RhiFormat::Rgb32Float:
                 return DXGI_FORMAT_R32G32B32_FLOAT;
+            case RhiFormat::R32Uint:
+                return DXGI_FORMAT_R32_UINT;
             case RhiFormat::Depth32Float:
                 return DXGI_FORMAT_D32_FLOAT;
             case RhiFormat::Unknown:
@@ -54,14 +57,49 @@ namespace ve::rhi
             return (static_cast<uint32_t>(usage) & static_cast<uint32_t>(flag)) != 0;
         }
 
+        [[noreturn]] void FailD3D11StorageTextureBinding(const char* message)
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, message);
+            std::terminate();
+        }
+
+        [[nodiscard]] bool HasD3D11TextureBufferUavRegisterCollision(const RhiPipelineResourceLayoutDesc& layout) noexcept
+        {
+            for (uint32_t textureIndex = 0; textureIndex < layout.bindingCount; ++textureIndex)
+            {
+                const RhiPipelineResourceBindingDesc& textureBinding = layout.bindings[textureIndex];
+                if (textureBinding.kind != RhiPipelineResourceKind::ReadWriteStorageTexture)
+                {
+                    continue;
+                }
+
+                for (uint32_t bufferIndex = 0; bufferIndex < layout.bindingCount; ++bufferIndex)
+                {
+                    const RhiPipelineResourceBindingDesc& bufferBinding = layout.bindings[bufferIndex];
+                    if (bufferBinding.kind == RhiPipelineResourceKind::ReadWriteStorageBuffer && bufferBinding.stage == textureBinding.stage &&
+                        bufferBinding.slot == textureBinding.slot)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         [[nodiscard]] bool IsD3D11TextureDescSupported(const RhiTextureDesc& desc) noexcept
         {
             const bool sampled = HasTextureUsage(desc.usage, RhiTextureUsage::Sampled);
             const bool depthStencil = HasTextureUsage(desc.usage, RhiTextureUsage::DepthStencil);
             const bool renderTarget = HasTextureUsage(desc.usage, RhiTextureUsage::RenderTarget);
+            const bool storage = HasTextureUsage(desc.usage, RhiTextureUsage::Storage);
             if (depthStencil)
             {
-                return desc.format == RhiFormat::Depth32Float && !renderTarget;
+                return desc.format == RhiFormat::Depth32Float && !renderTarget && !storage;
+            }
+            if (storage)
+            {
+                return desc.format == RhiFormat::R32Uint && !renderTarget;
             }
 
             return desc.format != RhiFormat::Depth32Float || (!sampled && !renderTarget);
@@ -283,6 +321,11 @@ namespace ve::rhi
                 flags |= D3D11_BIND_DEPTH_STENCIL;
             }
 
+            if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Storage)) != 0)
+            {
+                flags |= D3D11_BIND_UNORDERED_ACCESS;
+            }
+
             return flags;
         }
 
@@ -334,15 +377,19 @@ namespace ve::rhi
         class D3D11Buffer final : public RhiBuffer
         {
         public:
-            D3D11Buffer(ComPtr<ID3D11Buffer> buffer,
+            D3D11Buffer(ComPtr<ID3D11Device> device,
+                        ComPtr<ID3D11Buffer> buffer,
                         ComPtr<ID3D11ShaderResourceView> shaderResourceView,
                         ComPtr<ID3D11UnorderedAccessView> unorderedAccessView,
                         uint64_t size,
+                        uint32_t structureStride,
                         RhiBufferMemoryUsage memoryUsage)
-                : buffer_(std::move(buffer))
+                : device_(std::move(device))
+                , buffer_(std::move(buffer))
                 , shaderResourceView_(std::move(shaderResourceView))
                 , unorderedAccessView_(std::move(unorderedAccessView))
                 , size_(size)
+                , structureStride_(structureStride)
                 , memoryUsage_(memoryUsage)
             {
             }
@@ -362,22 +409,112 @@ namespace ve::rhi
                 return memoryUsage_;
             }
 
-            [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceView() const noexcept
+            [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceView(uint64_t offset, uint64_t size) const
             {
-                return shaderResourceView_.Get();
+                RhiStructuredBufferRange range;
+                const bool valid = TryBuildStructuredBufferRange(size_, structureStride_, offset, size, range);
+                VE_ASSERT_MESSAGE(valid, "D3D11 structured-buffer SRV range must be non-empty, in bounds, UINT-representable, and stride-aligned.");
+                if (!valid)
+                {
+                    return nullptr;
+                }
+
+                if (offset == 0 && size == size_)
+                {
+                    return shaderResourceView_.Get();
+                }
+
+                for (const ShaderResourceRangeView& cachedView : shaderResourceRangeViews_)
+                {
+                    if (cachedView.offset == offset && cachedView.size == size)
+                    {
+                        return cachedView.view.Get();
+                    }
+                }
+
+                D3D11_SHADER_RESOURCE_VIEW_DESC desc = {};
+                desc.Format = DXGI_FORMAT_UNKNOWN;
+                desc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+                desc.Buffer.FirstElement = range.firstElement;
+                desc.Buffer.NumElements = range.elementCount;
+                ComPtr<ID3D11ShaderResourceView> view;
+                const HRESULT result = device_->CreateShaderResourceView(buffer_.Get(), &desc, &view);
+                VE_ASSERT_MESSAGE(SUCCEEDED(result), "D3D11 failed to create a ranged structured-buffer shader-resource view.");
+                if (FAILED(result))
+                {
+                    return nullptr;
+                }
+
+                shaderResourceRangeViews_.push_back({offset, size, std::move(view)});
+                return shaderResourceRangeViews_.back().view.Get();
             }
 
-            [[nodiscard]] ID3D11UnorderedAccessView* GetUnorderedAccessView() const noexcept
+            [[nodiscard]] ID3D11UnorderedAccessView* GetUnorderedAccessView(uint64_t offset, uint64_t size) const
             {
-                return unorderedAccessView_.Get();
+                RhiStructuredBufferRange range;
+                const bool valid = TryBuildStructuredBufferRange(size_, structureStride_, offset, size, range);
+                VE_ASSERT_MESSAGE(valid, "D3D11 structured-buffer UAV range must be non-empty, in bounds, UINT-representable, and stride-aligned.");
+                if (!valid)
+                {
+                    return nullptr;
+                }
+
+                if (offset == 0 && size == size_)
+                {
+                    return unorderedAccessView_.Get();
+                }
+
+                for (const UnorderedAccessRangeView& cachedView : unorderedAccessRangeViews_)
+                {
+                    if (cachedView.offset == offset && cachedView.size == size)
+                    {
+                        return cachedView.view.Get();
+                    }
+                }
+
+                D3D11_UNORDERED_ACCESS_VIEW_DESC desc = {};
+                desc.Format = DXGI_FORMAT_UNKNOWN;
+                desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+                desc.Buffer.FirstElement = range.firstElement;
+                desc.Buffer.NumElements = range.elementCount;
+                ComPtr<ID3D11UnorderedAccessView> view;
+                const HRESULT result = device_->CreateUnorderedAccessView(buffer_.Get(), &desc, &view);
+                VE_ASSERT_MESSAGE(SUCCEEDED(result), "D3D11 failed to create a ranged structured-buffer unordered-access view.");
+                if (FAILED(result))
+                {
+                    return nullptr;
+                }
+
+                unorderedAccessRangeViews_.push_back({offset, size, std::move(view)});
+                return unorderedAccessRangeViews_.back().view.Get();
             }
 
         private:
+            struct ShaderResourceRangeView
+            {
+                uint64_t offset = 0;
+                uint64_t size = 0;
+                ComPtr<ID3D11ShaderResourceView> view;
+            };
+
+            struct UnorderedAccessRangeView
+            {
+                uint64_t offset = 0;
+                uint64_t size = 0;
+                ComPtr<ID3D11UnorderedAccessView> view;
+            };
+
+            ComPtr<ID3D11Device> device_;
             ComPtr<ID3D11Buffer> buffer_;
             ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
             ComPtr<ID3D11UnorderedAccessView> unorderedAccessView_;
             uint64_t size_ = 0;
+            uint32_t structureStride_ = 0;
             RhiBufferMemoryUsage memoryUsage_ = RhiBufferMemoryUsage::GpuOnly;
+
+            // D3D11 command lists all wrap the one immediate context and are recorded on VEngine's Render Thread.
+            mutable std::vector<ShaderResourceRangeView> shaderResourceRangeViews_;
+            mutable std::vector<UnorderedAccessRangeView> unorderedAccessRangeViews_;
         };
 
         class D3D11Texture final : public RhiTexture
@@ -387,11 +524,13 @@ namespace ve::rhi
                          ComPtr<ID3D11RenderTargetView> renderTargetView,
                          ComPtr<ID3D11DepthStencilView> depthStencilView,
                          ComPtr<ID3D11ShaderResourceView> shaderResourceView,
+                         ComPtr<ID3D11UnorderedAccessView> unorderedAccessView,
                          RhiTextureDesc desc)
                 : texture_(std::move(texture))
                 , renderTargetView_(std::move(renderTargetView))
                 , depthStencilView_(std::move(depthStencilView))
                 , shaderResourceView_(std::move(shaderResourceView))
+                , unorderedAccessView_(std::move(unorderedAccessView))
                 , desc_(desc)
             {
             }
@@ -436,6 +575,11 @@ namespace ve::rhi
                 return shaderResourceView_.Get();
             }
 
+            [[nodiscard]] ID3D11UnorderedAccessView* GetUnorderedAccessView() const noexcept
+            {
+                return unorderedAccessView_.Get();
+            }
+
             [[nodiscard]] void* GetNativeSampledViewHandle() const noexcept override
             {
                 return shaderResourceView_.Get();
@@ -446,6 +590,7 @@ namespace ve::rhi
             ComPtr<ID3D11RenderTargetView> renderTargetView_;
             ComPtr<ID3D11DepthStencilView> depthStencilView_;
             ComPtr<ID3D11ShaderResourceView> shaderResourceView_;
+            ComPtr<ID3D11UnorderedAccessView> unorderedAccessView_;
             RhiTextureDesc desc_ = {};
         };
 
@@ -807,10 +952,14 @@ namespace ve::rhi
 
             [[nodiscard]] bool Begin() override
             {
+                recordedDrawIndexedInstancedCount_ = 0;
+                recordedDrawCallCount_ = 0;
                 activePipeline_ = nullptr;
                 activeComputePipeline_ = nullptr;
                 activeRenderTargetView_ = nullptr;
                 activeDepthTexture_ = nullptr;
+                activeFragmentTextureUav_ = nullptr;
+                activeFragmentUavPass_ = false;
                 return true;
             }
 
@@ -821,9 +970,12 @@ namespace ve::rhi
 
             [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) override
             {
+                ClearUnorderedAccessBindings();
+                activeFragmentUavPass_ = false;
+                const bool hasAttachments = beginInfo.hasColorAttachment || beginInfo.hasDepthAttachment;
                 if ((!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
                     (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) ||
-                    (!beginInfo.hasColorAttachment && !beginInfo.hasDepthAttachment))
+                    (!hasAttachments && !beginInfo.hasFragmentUavWrites) || (hasAttachments && beginInfo.hasFragmentUavWrites))
                 {
                     return false;
                 }
@@ -881,6 +1033,7 @@ namespace ve::rhi
                 }
 
                 activeRenderTargetView_ = renderTargetView;
+                activeFragmentUavPass_ = beginInfo.hasFragmentUavWrites;
                 context_->OMSetRenderTargets(
                     beginInfo.hasColorAttachment ? 1u : 0u, beginInfo.hasColorAttachment ? &renderTargetView : nullptr, depthStencilView);
 
@@ -901,9 +1054,11 @@ namespace ve::rhi
 
             void EndRenderPass() override
             {
+                ClearUnorderedAccessBindings();
                 context_->OMSetRenderTargets(0, nullptr, nullptr);
                 activeRenderTargetView_ = nullptr;
                 activeDepthTexture_ = nullptr;
+                activeFragmentUavPass_ = false;
             }
 
             [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
@@ -925,6 +1080,35 @@ namespace ve::rhi
                 ID3D11RenderTargetView* nullRenderTarget = nullptr;
                 context_->OMSetRenderTargets(1, &nullRenderTarget, nullptr);
                 context_->CopyResource(d3dSwapchain->GetCurrentBackBuffer(), d3dTexture->GetNativeTexture());
+                return true;
+            }
+
+            [[nodiscard]] bool
+            CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
+            {
+                auto* sourceBuffer = dynamic_cast<D3D11Buffer*>(&source);
+                auto* destinationBuffer = dynamic_cast<D3D11Buffer*>(&destination);
+                if (sourceBuffer == nullptr || destinationBuffer == nullptr || sourceBuffer == destinationBuffer || size == 0 ||
+                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu ||
+                    sourceOffset > sourceBuffer->GetSize() || size > sourceBuffer->GetSize() - sourceOffset ||
+                    destinationOffset > destinationBuffer->GetSize() || size > destinationBuffer->GetSize() - destinationOffset ||
+                    destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
+                {
+                    return false;
+                }
+
+                ID3D11UnorderedAccessView* nullUnorderedAccessViews[D3D11_PS_CS_UAV_REGISTER_COUNT] = {};
+                context_->CSSetUnorderedAccessViews(0, D3D11_PS_CS_UAV_REGISTER_COUNT, nullUnorderedAccessViews, nullptr);
+                ID3D11ShaderResourceView* nullShaderResourceViews[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT] = {};
+                context_->CSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullShaderResourceViews);
+
+                D3D11_BOX sourceBox = {};
+                sourceBox.left = static_cast<UINT>(sourceOffset);
+                sourceBox.right = static_cast<UINT>(sourceOffset + size);
+                sourceBox.bottom = 1;
+                sourceBox.back = 1;
+                context_->CopySubresourceRegion(
+                    destinationBuffer->GetNativeBuffer(), 0, static_cast<UINT>(destinationOffset), 0, 0, sourceBuffer->GetNativeBuffer(), 0, &sourceBox);
                 return true;
             }
 
@@ -1024,6 +1208,10 @@ namespace ve::rhi
                 }
 
                 const auto& d3dTexture = static_cast<const D3D11Texture&>(texture);
+                if (activeFragmentTextureUav_ != nullptr && d3dTexture.GetUnorderedAccessView() == activeFragmentTextureUav_)
+                {
+                    ClearUnorderedAccessBindings();
+                }
                 if (&d3dTexture == activeDepthTexture_)
                 {
                     context_->OMSetRenderTargets(
@@ -1080,10 +1268,8 @@ namespace ve::rhi
                     return;
                 }
 
-                VE_ASSERT(offset == 0);
-                VE_ASSERT(size == buffer.GetSize());
                 const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
-                ID3D11ShaderResourceView* shaderResourceView = d3dBuffer.GetShaderResourceView();
+                ID3D11ShaderResourceView* shaderResourceView = d3dBuffer.GetShaderResourceView(offset, size);
                 VE_ASSERT_MESSAGE(shaderResourceView != nullptr, "D3D11 storage buffer binding requires a shader-resource view.");
                 if (shaderResourceView == nullptr)
                 {
@@ -1104,8 +1290,7 @@ namespace ve::rhi
                 }
             }
 
-            void SetReadWriteStorageBuffer(
-                RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            void SetReadWriteStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
             {
                 if (!ValidateBinding(RhiPipelineResourceKind::ReadWriteStorageBuffer, stage, slot))
                 {
@@ -1113,10 +1298,8 @@ namespace ve::rhi
                 }
 
                 VE_ASSERT(stage == RhiShaderStage::Compute);
-                VE_ASSERT(offset == 0);
-                VE_ASSERT(size == buffer.GetSize());
                 const auto& d3dBuffer = static_cast<const D3D11Buffer&>(buffer);
-                ID3D11UnorderedAccessView* unorderedAccessView = d3dBuffer.GetUnorderedAccessView();
+                ID3D11UnorderedAccessView* unorderedAccessView = d3dBuffer.GetUnorderedAccessView(offset, size);
                 VE_ASSERT_MESSAGE(unorderedAccessView != nullptr, "D3D11 read-write storage buffer binding requires an unordered-access view.");
                 if (stage != RhiShaderStage::Compute || unorderedAccessView == nullptr)
                 {
@@ -1124,6 +1307,59 @@ namespace ve::rhi
                 }
 
                 context_->CSSetUnorderedAccessViews(slot, 1, &unorderedAccessView, nullptr);
+            }
+
+            void SetReadWriteStorageTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
+            {
+                if (!ValidateBinding(RhiPipelineResourceKind::ReadWriteStorageTexture, stage, slot))
+                {
+                    FailD3D11StorageTextureBinding("D3D11 read-write storage texture binding is absent from the active pipeline layout.");
+                }
+
+                const auto& d3dTexture = static_cast<const D3D11Texture&>(texture);
+                ID3D11UnorderedAccessView* unorderedAccessView = d3dTexture.GetUnorderedAccessView();
+                if (unorderedAccessView == nullptr)
+                {
+                    FailD3D11StorageTextureBinding("D3D11 read-write storage texture binding requires an unordered-access view.");
+                }
+
+                if (stage == RhiShaderStage::Compute)
+                {
+                    if (activeFragmentTextureUav_ != nullptr)
+                    {
+                        ClearUnorderedAccessBindings();
+                    }
+                    context_->CSSetUnorderedAccessViews(slot, 1, &unorderedAccessView, nullptr);
+                    return;
+                }
+
+                if (stage != RhiShaderStage::Fragment)
+                {
+                    FailD3D11StorageTextureBinding("D3D11 texture UAVs support only fragment or compute shader bindings.");
+                }
+
+                const bool validFragmentBinding = activeFragmentUavPass_ && activeRenderTargetView_ == nullptr && activeDepthTexture_ == nullptr && slot == 0;
+                if (!validFragmentBinding)
+                {
+                    FailD3D11StorageTextureBinding(
+                        "D3D11 fragment texture UAVs require slot 0 in an active attachmentless render pass.");
+                }
+
+                ClearUnorderedAccessBindings();
+                context_->OMSetRenderTargetsAndUnorderedAccessViews(0, nullptr, nullptr, 0, 1, &unorderedAccessView, nullptr);
+                activeFragmentTextureUav_ = unorderedAccessView;
+            }
+
+            void InsertUavBarriers(std::span<RhiBuffer* const> buffers) override
+            {
+                // D3D11 orders UAV accesses through the immediate context.
+                static_cast<void>(buffers);
+            }
+
+            void InsertTextureUavBarriers(std::span<RhiTexture* const> textures) override
+            {
+                // D3D11 orders texture UAV accesses through the immediate context.
+                static_cast<void>(textures);
             }
 
             void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override
@@ -1135,22 +1371,37 @@ namespace ve::rhi
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 context_->Draw(vertexCount, firstVertex);
+                ++recordedDrawCallCount_;
             }
 
             void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
             {
                 context_->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
             {
                 context_->DrawIndexed(indexCount, firstIndex, vertexOffset);
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexedInstanced(
                 uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
             {
                 context_->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+                ++recordedDrawCallCount_;
+                ++recordedDrawIndexedInstancedCount_;
+            }
+
+            [[nodiscard]] uint64_t GetRecordedDrawCallCount() const noexcept override
+            {
+                return recordedDrawCallCount_;
+            }
+
+            [[nodiscard]] uint64_t GetRecordedDrawIndexedInstancedCount() const noexcept
+            {
+                return recordedDrawIndexedInstancedCount_;
             }
 
         private:
@@ -1174,6 +1425,13 @@ namespace ve::rhi
             {
                 ID3D11UnorderedAccessView* nullViews[D3D11_PS_CS_UAV_REGISTER_COUNT] = {};
                 context_->CSSetUnorderedAccessViews(0, D3D11_PS_CS_UAV_REGISTER_COUNT, nullViews, nullptr);
+                if (activeFragmentTextureUav_ != nullptr)
+                {
+                    ID3D11UnorderedAccessView* nullFragmentView = nullptr;
+                    context_->OMSetRenderTargetsAndUnorderedAccessViews(
+                        D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, nullptr, nullptr, 0, 1, &nullFragmentView, nullptr);
+                    activeFragmentTextureUav_ = nullptr;
+                }
             }
 
             ComPtr<ID3D11DeviceContext> context_;
@@ -1182,6 +1440,10 @@ namespace ve::rhi
             const D3D11ComputePipelineState* activeComputePipeline_ = nullptr;
             ID3D11RenderTargetView* activeRenderTargetView_ = nullptr;
             const D3D11Texture* activeDepthTexture_ = nullptr;
+            ID3D11UnorderedAccessView* activeFragmentTextureUav_ = nullptr;
+            bool activeFragmentUavPass_ = false;
+            uint64_t recordedDrawIndexedInstancedCount_ = 0;
+            uint64_t recordedDrawCallCount_ = 0;
         };
 
         class D3D11Device final : public RhiDevice
@@ -1357,6 +1619,12 @@ namespace ve::rhi
                 }
 
                 const bool isStorage = (static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(RhiBufferUsage::Storage)) != 0;
+                const bool isReadback = desc.usage == RhiBufferUsage::Readback;
+                if (isReadback != (desc.memoryUsage == RhiBufferMemoryUsage::GpuToCpu) || (isReadback && desc.initialData != nullptr))
+                {
+                    SetLastError("D3D11 readback buffers require GPU-to-CPU memory and no initial data.");
+                    return nullptr;
+                }
                 if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 ||
                                   desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly))
                 {
@@ -1366,9 +1634,11 @@ namespace ve::rhi
 
                 D3D11_BUFFER_DESC bufferDesc = {};
                 bufferDesc.ByteWidth = static_cast<UINT>(desc.size);
-                bufferDesc.Usage = desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
-                bufferDesc.BindFlags = ToD3D11BufferBindFlags(desc.usage);
-                bufferDesc.CPUAccessFlags = desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_CPU_ACCESS_WRITE : 0;
+                bufferDesc.Usage = isReadback ? D3D11_USAGE_STAGING
+                                             : (desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT);
+                bufferDesc.BindFlags = isReadback ? 0 : ToD3D11BufferBindFlags(desc.usage);
+                bufferDesc.CPUAccessFlags =
+                    isReadback ? D3D11_CPU_ACCESS_READ : (desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_CPU_ACCESS_WRITE : 0);
                 bufferDesc.MiscFlags = isStorage ? D3D11_RESOURCE_MISC_BUFFER_STRUCTURED : 0;
                 bufferDesc.StructureByteStride = isStorage ? desc.structureStride : 0;
 
@@ -1413,7 +1683,8 @@ namespace ve::rhi
                     }
                 }
 
-                return std::make_unique<D3D11Buffer>(buffer, shaderResourceView, unorderedAccessView, desc.size, desc.memoryUsage);
+                return std::make_unique<D3D11Buffer>(
+                    device_, buffer, shaderResourceView, unorderedAccessView, desc.size, isStorage ? desc.structureStride : 0, desc.memoryUsage);
             }
 
             void UpdateBuffer(RhiBuffer& buffer, uint64_t offset, const void* data, uint64_t size, RhiBufferUpdateMode updateMode) override
@@ -1437,6 +1708,25 @@ namespace ve::rhi
                 context_->Unmap(d3dBuffer.GetNativeBuffer(), 0);
             }
 
+            [[nodiscard]] bool ReadBuffer(const RhiBuffer& buffer, uint64_t offset, void* destination, uint64_t size) override
+            {
+                const auto* d3dBuffer = dynamic_cast<const D3D11Buffer*>(&buffer);
+                if (d3dBuffer == nullptr || d3dBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu || destination == nullptr || size == 0 ||
+                    offset > d3dBuffer->GetSize() || size > d3dBuffer->GetSize() - offset)
+                {
+                    return false;
+                }
+
+                D3D11_MAPPED_SUBRESOURCE mappedResource = {};
+                if (FAILED(context_->Map(d3dBuffer->GetNativeBuffer(), 0, D3D11_MAP_READ, 0, &mappedResource)))
+                {
+                    return false;
+                }
+                std::memcpy(destination, static_cast<const std::byte*>(mappedResource.pData) + offset, static_cast<size_t>(size));
+                context_->Unmap(d3dBuffer->GetNativeBuffer(), 0);
+                return true;
+            }
+
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
             {
                 if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
@@ -1446,7 +1736,7 @@ namespace ve::rhi
                 }
                 if (!IsD3D11TextureDescSupported(desc))
                 {
-                    SetLastError("D3D11 texture descriptor has an unsupported depth sampling combination.");
+                    SetLastError("D3D11 texture descriptor has an unsupported format and usage combination.");
                     return nullptr;
                 }
 
@@ -1514,7 +1804,27 @@ namespace ve::rhi
                     }
                 }
 
-                return std::make_unique<D3D11Texture>(texture, std::move(renderTargetView), std::move(depthStencilView), std::move(shaderResourceView), desc);
+                ComPtr<ID3D11UnorderedAccessView> unorderedAccessView;
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Storage)) != 0)
+                {
+                    D3D11_UNORDERED_ACCESS_VIEW_DESC unorderedAccessViewDesc = {};
+                    unorderedAccessViewDesc.Format = ToDxgiFormat(desc.format);
+                    unorderedAccessViewDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+                    result = device_->CreateUnorderedAccessView(texture.Get(), &unorderedAccessViewDesc, &unorderedAccessView);
+                    if (FAILED(result))
+                    {
+                        SetLastError(MakeHResultError("ID3D11Device::CreateUnorderedAccessView texture", result));
+                        return nullptr;
+                    }
+                }
+
+                return std::make_unique<D3D11Texture>(
+                    texture,
+                    std::move(renderTargetView),
+                    std::move(depthStencilView),
+                    std::move(shaderResourceView),
+                    std::move(unorderedAccessView),
+                    desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override
@@ -1621,6 +1931,52 @@ namespace ve::rhi
                     SetLastError("D3D11 graphics pipeline resource layout is invalid or contains duplicate bindings.");
                     return nullptr;
                 }
+
+                bool hasReadWriteStorageTexture = false;
+                for (uint32_t bindingIndex = 0; bindingIndex < desc.resourceLayout.bindingCount; ++bindingIndex)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = desc.resourceLayout.bindings[bindingIndex];
+                    if (binding.kind != RhiPipelineResourceKind::ReadWriteStorageTexture)
+                    {
+                        continue;
+                    }
+
+                    hasReadWriteStorageTexture = true;
+                    if (binding.stage != RhiShaderStage::Fragment)
+                    {
+                        SetLastError("D3D11 graphics read-write storage texture bindings require the fragment stage.");
+                        return nullptr;
+                    }
+                    if (binding.slot >= D3D11_PS_CS_UAV_REGISTER_COUNT)
+                    {
+                        SetLastError("D3D11 graphics read-write storage texture binding slot is outside the native UAV range.");
+                        return nullptr;
+                    }
+                    if (binding.slot != 0)
+                    {
+                        SetLastError("D3D11 graphics read-write storage texture bindings require fragment UAV slot 0.");
+                        return nullptr;
+                    }
+                }
+
+                if (HasD3D11TextureBufferUavRegisterCollision(desc.resourceLayout))
+                {
+                    SetLastError("D3D11 graphics pipeline read-write storage buffers and textures cannot share a native UAV register.");
+                    return nullptr;
+                }
+                if (hasReadWriteStorageTexture && desc.boundShaderState.fragmentShader == nullptr)
+                {
+                    SetLastError("D3D11 graphics pipelines with read-write storage textures require a fragment shader.");
+                    return nullptr;
+                }
+                if (hasReadWriteStorageTexture &&
+                    (desc.colorAttachmentCount != 0 || desc.colorFormat != RhiFormat::Unknown || desc.depthFormat != RhiFormat::Unknown ||
+                     desc.depthStencilState.depthTestEnabled || desc.depthStencilState.depthWriteEnabled || desc.depthStencilState.stencilEnabled))
+                {
+                    SetLastError("D3D11 graphics pipelines with read-write storage textures must be attachmentless.");
+                    return nullptr;
+                }
+
                 if (desc.colorAttachmentCount > 1 || (desc.colorAttachmentCount == 0 && desc.colorFormat != RhiFormat::Unknown) ||
                     (desc.colorAttachmentCount == 1 && (desc.colorFormat == RhiFormat::Unknown || desc.colorFormat == RhiFormat::Depth32Float)))
                 {
@@ -1778,6 +2134,32 @@ namespace ve::rhi
                     return nullptr;
                 }
 
+                for (uint32_t bindingIndex = 0; bindingIndex < desc.resourceLayout.bindingCount; ++bindingIndex)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = desc.resourceLayout.bindings[bindingIndex];
+                    if (binding.kind != RhiPipelineResourceKind::ReadWriteStorageTexture)
+                    {
+                        continue;
+                    }
+
+                    if (binding.stage != RhiShaderStage::Compute)
+                    {
+                        SetLastError("D3D11 compute read-write storage texture bindings require the compute stage.");
+                        return nullptr;
+                    }
+                    if (binding.slot >= D3D11_PS_CS_UAV_REGISTER_COUNT)
+                    {
+                        SetLastError("D3D11 compute read-write storage texture binding slot is outside the native UAV range.");
+                        return nullptr;
+                    }
+                }
+
+                if (HasD3D11TextureBufferUavRegisterCollision(desc.resourceLayout))
+                {
+                    SetLastError("D3D11 compute pipeline read-write storage buffers and textures cannot share a native UAV register.");
+                    return nullptr;
+                }
+
                 const auto* computeShaderModule = dynamic_cast<const D3D11ShaderModule*>(desc.computeShader);
                 if (computeShaderModule == nullptr || computeShaderModule->GetStage() != RhiShaderStage::Compute)
                 {
@@ -1877,5 +2259,11 @@ namespace ve::rhi
         }
 
         return device;
+    }
+
+    uint64_t GetD3D11RecordedDrawIndexedInstancedCount(const RhiCommandList& commandList) noexcept
+    {
+        const auto* d3dCommandList = dynamic_cast<const D3D11CommandList*>(&commandList);
+        return d3dCommandList != nullptr ? d3dCommandList->GetRecordedDrawIndexedInstancedCount() : 0;
     }
 } // namespace ve::rhi

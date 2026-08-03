@@ -2,6 +2,7 @@
 
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderResource.h"
@@ -12,6 +13,7 @@
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
+#include <exception>
 #include <iterator>
 #include <string>
 #include <utility>
@@ -216,6 +218,13 @@ float AxisLine(float coordinate, float width)
             return result;
         }
 
+        [[noreturn]] void FailSceneGridPass(const std::string& message)
+        {
+            VE_LOG_ERROR("SceneGridRenderPass: {}", message);
+            VE_ASSERT_ALWAYS_MESSAGE(false, message.c_str());
+            std::terminate();
+        }
+
         [[nodiscard]] Int32 BuildSceneGridPipelineVariant(rhi::RhiFormat targetFormat, bool depthEnabled) noexcept
         {
             return static_cast<Int32>(targetFormat) | (depthEnabled ? (1 << 16) : 0);
@@ -263,47 +272,66 @@ float AxisLine(float coordinate, float width)
     {
     }
 
-    void SceneGridRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
+    void SceneGridRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData, UInt32 viewIndex)
     {
+        if (viewIndex >= graphData.views.size() || viewIndex >= frameGraph.GetRendererData().views.size() || !graphData.views[viewIndex].color.IsValid())
+        {
+            FailSceneGridPass("registration requires a valid indexed view and color target.");
+        }
         struct GridPassData
         {
+            UInt32 viewIndex = 0;
             FrameGraphTextureHandle color;
             FrameGraphTextureHandle depth;
         };
 
         frameGraph.AddRasterPass<GridPassData>(
             "SceneGridPass",
-            [&graphData](FrameGraphBuilder& builder, GridPassData& passData)
+            [&graphData, viewIndex](FrameGraphBuilder& builder, GridPassData& passData)
             {
-                passData.color = builder.WriteColorAttachment(graphData.color, rhi::RhiLoadAction::Load);
-                graphData.color = passData.color;
-                if (graphData.depth.IsValid())
+                RendererViewFrameGraphData& viewGraphData = graphData.views[viewIndex];
+                passData.viewIndex = viewIndex;
+                passData.color = builder.WriteColorAttachment(viewGraphData.color, rhi::RhiLoadAction::Load);
+                viewGraphData.color = passData.color;
+                if (viewGraphData.depth.IsValid())
                 {
-                    passData.depth = builder.ReadDepthAttachment(graphData.depth);
+                    passData.depth = builder.ReadDepthAttachment(viewGraphData.depth);
                 }
             },
-            [this](const GridPassData&, RenderPassContext& context) { return Execute(context); });
+            [this](const GridPassData& passData, RenderPassContext& context)
+            {
+                Execute(context, passData.viewIndex);
+            });
     }
 
-    ErrorCode SceneGridRenderPass::Execute(RenderPassContext& context)
+    void SceneGridRenderPass::Execute(RenderPassContext& context, UInt32 viewIndex)
     {
         VE_ASSERT_RENDER_THREAD();
-        if (initParam_.opacity <= 0.0f)
+        if (viewIndex >= context.rendererData.views.size())
         {
-            return ErrorCode::None;
+            FailSceneGridPass("execution references an out-of-bounds renderer view.");
+        }
+        const RendererViewData& viewData = context.GetView(viewIndex);
+        if (initParam_.opacity <= 0.0f || viewData.view.camera == nullptr)
+        {
+            return;
         }
 
         EnsureResources(context);
         EnsurePipeline(context);
-        if (pipelineState_ == nullptr)
+        if (pipelineState_ == nullptr || vertexBuffer_ == nullptr)
         {
-            return ErrorCode::InvalidState;
+            FailSceneGridPass("execution requires initialized pipeline and vertex-buffer resources.");
         }
         const SceneGridUniformData gridUniformData = BuildUniformData(initParam_);
         const UniformBufferAllocation gridUniform = context.frameData.UploadUniform(&gridUniformData, sizeof(gridUniformData));
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
         const UniformBufferAllocation viewUniform =
-            context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+            context.frameData.GetViewUniform(viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        if (gridUniform.buffer == nullptr || viewUniform.buffer == nullptr)
+        {
+            FailSceneGridPass("execution failed to allocate required grid or view uniforms.");
+        }
 
         rhi::RhiCommandList& commandList = context.commandList;
         commandList.SetPipeline(*pipelineState_);
@@ -313,7 +341,6 @@ float AxisLine(float coordinate, float width)
         commandList.Draw(12, 0);
 
         context.frameData.RetainTransientResource(std::move(vertexBuffer_));
-        return ErrorCode::None;
     }
 
     void SceneGridRenderPass::EnsureResources(RenderPassContext& context)
@@ -326,7 +353,10 @@ float AxisLine(float coordinate, float width)
         const std::vector<RTMeshVertex> vertices = BuildGridPlaneVertices();
         vertexBuffer_ = context.device.CreateBuffer(
             MakeBufferDesc(static_cast<UInt64>(vertices.size() * sizeof(RTMeshVertex)), rhi::RhiBufferUsage::Vertex, vertices.data(), "SceneGridVertexBuffer"));
-        VE_ASSERT_MESSAGE(vertexBuffer_ != nullptr, "SceneGridRenderPass failed to create vertex buffer.");
+        if (vertexBuffer_ == nullptr)
+        {
+            FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to create the grid vertex buffer."));
+        }
     }
 
     void SceneGridRenderPass::EnsurePipeline(RenderPassContext& context)
@@ -339,7 +369,10 @@ float AxisLine(float coordinate, float width)
         }
 
         ShaderManager* shaderManager = context.frameData.shaderManager;
-        VE_ASSERT_MESSAGE(shaderManager != nullptr, "SceneGridRenderPass requires a ShaderManager.");
+        if (shaderManager == nullptr)
+        {
+            FailSceneGridPass("pipeline creation requires the frame ShaderManager.");
+        }
 
         rhi::RhiShaderModuleDesc vertexShaderDesc = {};
         vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
@@ -348,7 +381,10 @@ float AxisLine(float coordinate, float width)
         vertexShaderDesc.debugName = "SceneGridVertexShader";
 
         rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.device, SceneGridVertexShaderID, vertexShaderDesc);
-        VE_ASSERT_MESSAGE(vertexShader != nullptr, "SceneGridRenderPass failed to get vertex shader.");
+        if (vertexShader == nullptr)
+        {
+            FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to get the grid vertex shader."));
+        }
 
         rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
         fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
@@ -357,7 +393,10 @@ float AxisLine(float coordinate, float width)
         fragmentShaderDesc.debugName = "SceneGridFragmentShader";
 
         rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.device, SceneGridFragmentShaderID, fragmentShaderDesc);
-        VE_ASSERT_MESSAGE(fragmentShader != nullptr, "SceneGridRenderPass failed to get fragment shader.");
+        if (fragmentShader == nullptr)
+        {
+            FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to get the grid fragment shader."));
+        }
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
         positionAttribute.semanticName = "POSITION";
@@ -397,9 +436,7 @@ float AxisLine(float coordinate, float width)
             context.device, GraphicsPipelineID{"SceneGridPipeline", BuildSceneGridPipelineVariant(targetFormat, depthEnabled)}, pipelineDesc);
         if (pipelineState_ == nullptr)
         {
-            const std::string message = BuildDeviceFailureMessage(context.device, "SceneGridRenderPass failed to create pipeline state.");
-            VE_ASSERT_MESSAGE(pipelineState_ != nullptr, message.c_str());
-            return;
+            FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to create the grid pipeline state."));
         }
         pipelineColorFormat_ = targetFormat;
         pipelineDepthEnabled_ = depthEnabled;

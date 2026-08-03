@@ -39,6 +39,7 @@ namespace ve
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
         SceneSystemEditorCallback editorCallback;
         std::function<void()> runtimeStartFrameCallback;
+        std::function<void()> runtimeFrameEndCallback;
         std::function<void(const OSEvent& event)> runtimeOSEventCallback;
         std::shared_ptr<RTRenderTexture> playerSceneColorTexture;
         std::shared_ptr<RenderViewState> playerViewState;
@@ -123,6 +124,18 @@ namespace ve
             }
         }
 
+        void UpdateSceneRenderPoses(SceneSystemImpl& impl, const TimeSnapshot& timeSnapshot)
+        {
+            if (impl.scene == nullptr || impl.scene->GetExecutionMode() != SceneExecutionMode::Runtime || impl.physicsSystem == nullptr ||
+                !impl.physicsSystem->IsInitialized() || timeSnapshot.fixedDeltaSeconds <= 0.0f)
+            {
+                return;
+            }
+
+            const Float32 alpha = static_cast<Float32>(timeSnapshot.fixedAccumulatorSeconds / static_cast<Float64>(timeSnapshot.fixedDeltaSeconds));
+            impl.physicsSystem->UpdateSceneRenderPoses(*impl.scene, alpha);
+        }
+
         void ClearActiveScenePhysics(SceneSystemImpl& impl) noexcept
         {
             if (impl.scene != nullptr && impl.physicsSystem != nullptr && impl.physicsSystem->IsInitialized())
@@ -173,12 +186,14 @@ namespace ve
             }
 
             BaseRendererInitParam rendererInitParam = {};
-            rendererInitParam.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
+            rendererInitParam.viewFamily.scene = impl.scene != nullptr ? impl.scene->GetRTScene() : nullptr;
+            RenderView playerView = {};
             CameraComponent* camera = impl.scene != nullptr ? impl.scene->GetCamera() : nullptr;
-            rendererInitParam.camera = camera != nullptr ? camera->GetRTCamera() : nullptr;
+            playerView.camera = camera != nullptr ? camera->GetRTCamera() : nullptr;
             VE_ASSERT_MESSAGE(impl.playerViewState != nullptr, "Player rendering requires a persistent render view state.");
-            rendererInitParam.viewState = impl.playerViewState->GetRTRenderViewState();
-            rendererInitParam.target.colorTexture = impl.playerSceneColorTexture;
+            playerView.viewState = impl.playerViewState->GetRTRenderViewState();
+            playerView.target.colorTexture = impl.playerSceneColorTexture;
+            rendererInitParam.viewFamily.views.push_back(std::move(playerView));
 
             PlayerRenderFramePipelineInitParam pipelineInitParam = {};
             pipelineInitParam.sceneRenderer = std::move(rendererInitParam);
@@ -222,6 +237,10 @@ namespace ve
         {
             impl.sceneThreadRenderThreadFrameEndSync->NotifySceneThreadFrameEndAndWait(
                 impl.stopRequested, [&impl](UInt32 fenceIndex) { impl.renderSystem->SubmitFrameEndFenceSignal(fenceIndex); });
+            if (impl.runtimeFrameEndCallback != nullptr)
+            {
+                impl.runtimeFrameEndCallback();
+            }
         }
 
         void SceneThreadLoop(SceneSystemImpl& impl)
@@ -246,6 +265,7 @@ namespace ve
                     const TimeSnapshot timeSnapshot = impl.timeSystem->GetSnapshot();
                     FixedUpdateScene(impl, timeSnapshot);
                     UpdateScene(impl, timeSnapshot.deltaSeconds);
+                    UpdateSceneRenderPoses(impl, timeSnapshot);
 
                     BeforeRenderScene(impl);
                     SceneThreadLoop_Render(impl);
@@ -479,7 +499,7 @@ namespace ve
         impl_->inputSystem = &inputSystem;
         impl_->renderSystem = &renderSystem;
         impl_->physicsSystem = &physicsSystem;
-        impl_->playerViewState = std::make_shared<RenderViewState>(RenderViewStateDesc{"PlayerView", 4096});
+        impl_->playerViewState = std::make_shared<RenderViewState>(RenderViewStateDesc{"PlayerView"});
         impl_->stopRequested.store(false, std::memory_order_release);
         impl_->startLoopEvent.Reset();
 
@@ -561,6 +581,7 @@ namespace ve
         impl_->renderSystem = nullptr;
         impl_->physicsSystem = nullptr;
         impl_->runtimeStartFrameCallback = nullptr;
+        impl_->runtimeFrameEndCallback = nullptr;
         impl_->runtimeOSEventCallback = nullptr;
         impl_->playerSceneColorTexture.reset();
         impl_->playerViewState.reset();
@@ -690,6 +711,11 @@ namespace ve
     void SceneSystem::SetRuntimeStartFrameCallback(std::function<void()> callback) noexcept
     {
         impl_->runtimeStartFrameCallback = std::move(callback);
+    }
+
+    void SceneSystem::SetRuntimeFrameEndCallback(std::function<void()> callback) noexcept
+    {
+        impl_->runtimeFrameEndCallback = std::move(callback);
     }
 
     void SceneSystem::SetRuntimeOSEventCallback(std::function<void(const OSEvent& event)> callback) noexcept

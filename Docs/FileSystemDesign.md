@@ -249,12 +249,14 @@ root:
 
 - `Assets/EditorOnlyAsset/` stores engine-owned Editor-only resources. The Editor build copies this directory under the
   Editor's `Assets/` directory; Player packages do not include it.
-- `Assets/BuiltinAsset/` stores engine-owned runtime builtin resources. The Editor build copies this directory under the
-  Editor's `Assets/` directory; Player packages include referenced runtime builtin files.
+- `Assets/Builtin/` stores engine-owned runtime builtin resources. The Editor checks this directory when the project opens;
+  native resources remain in the `Assets/Builtin/` runtime path, while importable mesh/shader sources produce Library
+  artifacts.
+- Player packages include referenced runtime builtin files under `Data/Assets/Builtin/`.
 - `ProjectRoot/Assets/` stores project-authored resources. Player packages include referenced project runtime files.
 
-The Editor AssetDatabase currently scans `ProjectRoot/Assets/` and repository `Assets/BuiltinAsset/Engine/` for `.obj`,
-`.vematerial`, `.veshader`, and `.vescene` files. `.obj` files are native source assets; missing `.vemesh` descriptors
+The Editor AssetDatabase currently scans `ProjectRoot/Assets/` and repository `Assets/Builtin/` for `.obj`, `.vematerial`,
+`.veshader`, textures, meshes, and `.vescene` files. `.obj` files are native source assets; missing `.vemesh` descriptors
 are generated into `Library/` and reference the source OBJ rather than copying actual mesh data.
 `Assets/EditorOnlyAsset/` is not scanned into runtime asset metadata.
 

@@ -27,6 +27,7 @@ namespace ve
 
         [[nodiscard]] virtual Result<PhysicsBodyTransform> GetBodyTransform(PhysicsBodyHandle body) const = 0;
         [[nodiscard]] virtual ErrorCode SetBodyTransform(PhysicsBodyHandle body, const PhysicsBodyTransform& transform) = 0;
+        [[nodiscard]] virtual Result<bool> IsBodyActive(PhysicsBodyHandle body) const = 0;
 
         [[nodiscard]] virtual Result<Vector3> GetBodyLinearVelocity(PhysicsBodyHandle body) const = 0;
         [[nodiscard]] virtual ErrorCode SetBodyLinearVelocity(PhysicsBodyHandle body, Vector3 velocity) = 0;

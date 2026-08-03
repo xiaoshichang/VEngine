@@ -26,6 +26,7 @@ namespace ve
 
         [[nodiscard]] Result<PhysicsBodyTransform> GetBodyTransform(PhysicsBodyHandle body) const override;
         [[nodiscard]] ErrorCode SetBodyTransform(PhysicsBodyHandle body, const PhysicsBodyTransform& transform) override;
+        [[nodiscard]] Result<bool> IsBodyActive(PhysicsBodyHandle body) const override;
 
         [[nodiscard]] Result<Vector3> GetBodyLinearVelocity(PhysicsBodyHandle body) const override;
         [[nodiscard]] ErrorCode SetBodyLinearVelocity(PhysicsBodyHandle body, Vector3 velocity) override;

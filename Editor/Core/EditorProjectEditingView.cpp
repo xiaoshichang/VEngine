@@ -18,7 +18,7 @@ namespace ve::editor
         constexpr float HierarchyWidth = 260.0F;
         constexpr float InspectorWidth = 310.0F;
         constexpr float AssetsHeight = 230.0F;
-        constexpr float StatusBarHeight = 24.0F;
+        constexpr float BottomPanelHeight = 400.0F;
         constexpr float ToolbarHeight = 32.0F;
         constexpr float OpenSceneDialogWidth = 560.0F;
         constexpr float OpenSceneDialogHeight = 420.0F;
@@ -59,10 +59,12 @@ namespace ve::editor
         gameViewPanel_.Init(editor);
         assetsPanel_.Init(editor);
         inspectorPanel_.Init(editor);
+        consolePanel_.Init(editor);
+        profilePanel_.Init(editor);
         initialized_ = true;
     }
 
-    void ProjectEditingView::Render(Editor& editor)
+    void ProjectEditingView::Render(Editor& editor, Float32 contentBottom)
     {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         RenderMainMenu(editor);
@@ -73,8 +75,8 @@ namespace ve::editor
         buildPackageDialog_.Render(editor);
 
         const float contentTop = viewport->WorkPos.y + menuBarHeight + ToolbarHeight + PanelGap;
-        const float statusBarY = viewport->WorkPos.y + viewport->WorkSize.y - StatusBarHeight;
-        const float contentHeight = (std::max)(0.0F, statusBarY - contentTop - PanelGap);
+        const float bottomPanelY = contentBottom - BottomPanelHeight;
+        const float contentHeight = (std::max)(0.0F, bottomPanelY - contentTop - PanelGap);
         const ImVec2 origin(viewport->WorkPos.x, contentTop);
         const ImVec2 available(viewport->WorkSize.x, contentHeight);
         const float centerWidth = (std::max)(320.0F, available.x - HierarchyWidth - InspectorWidth - PanelGap * 2.0F);
@@ -90,7 +92,29 @@ namespace ve::editor
 
         inspectorPanel_.Render(ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
 
-        RenderStatusBar(editor, ImVec2(viewport->WorkPos.x, statusBarY), ImVec2(viewport->WorkSize.x, StatusBarHeight));
+        constexpr ImGuiWindowFlags BottomPanelWindowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                                            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, bottomPanelY), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, BottomPanelHeight), ImGuiCond_Always);
+        if (ImGui::Begin("EditorBottomPanels", nullptr, BottomPanelWindowFlags))
+        {
+            if (ImGui::BeginTabBar("EditorBottomPanelTabs"))
+            {
+                if (ImGui::BeginTabItem("Console"))
+                {
+                    consolePanel_.RenderContentInCurrentWindow();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Profile"))
+                {
+                    profilePanel_.RenderContentInCurrentWindow();
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
+        }
+        ImGui::End();
+
     }
 
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewTexture() const noexcept
@@ -108,9 +132,9 @@ namespace ve::editor
         return sceneViewPanel_.GetFillMode();
     }
 
-    bool ProjectEditingView::IsSceneViewVirtualShadowPageVisualizationEnabled() const noexcept
+    RenderDebugMode ProjectEditingView::GetSceneViewRenderDebugMode() const noexcept
     {
-        return sceneViewPanel_.IsVirtualShadowPageVisualizationEnabled();
+        return sceneViewPanel_.GetRenderDebugMode();
     }
 
     bool ProjectEditingView::IsSceneViewGridEnabled() const noexcept
@@ -371,26 +395,4 @@ namespace ve::editor
         ImGui::EndPopup();
     }
 
-    void ProjectEditingView::RenderStatusBar(Editor& editor, const ImVec2& position, const ImVec2& size)
-    {
-        constexpr ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
-                                                 ImGuiWindowFlags_NoScrollWithMouse;
-
-        ImGui::SetNextWindowPos(position);
-        ImGui::SetNextWindowSize(size);
-
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0F, 3.0F));
-        if (!ImGui::Begin("EditorStatusBar", nullptr, WindowFlags))
-        {
-            ImGui::End();
-            ImGui::PopStyleVar();
-            return;
-        }
-
-        const Float32 framesPerSecond = editor.GetRuntime().GetTimeSystem().GetAverageFrameRate();
-        ImGui::Text("FPS: %.1f", framesPerSecond);
-        ImGui::End();
-        ImGui::PopStyleVar();
-    }
 } // namespace ve::editor

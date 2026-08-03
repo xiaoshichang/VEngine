@@ -24,6 +24,9 @@ namespace ve
         AssetID id;
         ResourceType type = ResourceType::Unknown;
         Path runtimePath;
+        // Editor-only physical source path for repository-owned builtin assets.
+        // This is intentionally omitted from runtime manifests.
+        Path sourcePathOverride;
         std::vector<AssetID> dependencies;
         std::string contentHash;
     };

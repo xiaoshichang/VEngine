@@ -20,6 +20,21 @@ namespace ve
         /// Declares a shader read of an existing logical buffer version.
         [[nodiscard]] FrameGraphBufferHandle Read(FrameGraphBufferHandle handle);
 
+        /// Declares shader read-write access and returns the newly written logical texture version.
+        [[nodiscard]] FrameGraphTextureHandle Write(FrameGraphTextureHandle handle);
+
+        /// Declares a copy-source read of an existing logical texture version.
+        [[nodiscard]] FrameGraphTextureHandle ReadCopySource(FrameGraphTextureHandle handle);
+
+        /// Declares a copy-destination write and returns the newly written logical texture version.
+        [[nodiscard]] FrameGraphTextureHandle WriteCopyDestination(FrameGraphTextureHandle handle);
+
+        /// Declares a copy-source read of an existing logical buffer version.
+        [[nodiscard]] FrameGraphBufferHandle ReadCopySource(FrameGraphBufferHandle handle);
+
+        /// Declares a copy-destination write and returns the newly written logical buffer version.
+        [[nodiscard]] FrameGraphBufferHandle WriteCopyDestination(FrameGraphBufferHandle handle);
+
         /// Declares a shader read-write access and returns the newly written logical buffer version.
         [[nodiscard]] FrameGraphBufferHandle Write(FrameGraphBufferHandle handle);
 
@@ -36,6 +51,14 @@ namespace ve
         void SetRenderArea(const rhi::RhiRenderArea& renderArea) noexcept;
         void SetViewport(const rhi::RhiViewport& viewport) noexcept;
         void SetScissor(const rhi::RhiScissorRect& scissorRect) noexcept;
+
+        /// Makes prior unordered-access writes to one declared buffer visible before this compute pass executes.
+        /// Use only at a cross-pass RAW/WAW boundary; resource binding itself is synchronization-free.
+        void AddUavBarrierBeforeExecute(FrameGraphBufferHandle handle) noexcept;
+
+        /// Orders prior UAV writes to one declared read-write texture before this pass executes.
+        void AddUavBarrierBeforeExecute(FrameGraphTextureHandle handle) noexcept;
+
         void SetSideEffect() noexcept;
         [[nodiscard]] const RendererData& GetRendererData() const noexcept;
 

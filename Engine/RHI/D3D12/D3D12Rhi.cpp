@@ -21,6 +21,7 @@
 #include <d3d12.h>
 #include <d3dcompiler.h>
 #include <dxgi1_6.h>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -66,6 +67,8 @@ namespace ve::rhi
                 return DXGI_FORMAT_B8G8R8A8_UNORM;
             case RhiFormat::Rgb32Float:
                 return DXGI_FORMAT_R32G32B32_FLOAT;
+            case RhiFormat::R32Uint:
+                return DXGI_FORMAT_R32_UINT;
             case RhiFormat::Depth32Float:
                 return DXGI_FORMAT_D32_FLOAT;
             case RhiFormat::Unknown:
@@ -79,16 +82,54 @@ namespace ve::rhi
             return (static_cast<uint32_t>(usage) & static_cast<uint32_t>(flag)) != 0;
         }
 
-        [[nodiscard]] bool IsD3D12TextureDescSupported(const RhiTextureDesc& desc) noexcept
+        [[noreturn]] void FailD3D12StorageTextureBinding(const char* message)
         {
-            const bool depthStencil = HasTextureUsage(desc.usage, RhiTextureUsage::DepthStencil);
-            const bool renderTarget = HasTextureUsage(desc.usage, RhiTextureUsage::RenderTarget);
-            if (depthStencil)
+            VE_ASSERT_ALWAYS_MESSAGE(false, message);
+            std::terminate();
+        }
+
+        [[nodiscard]] bool HasD3D12TextureBufferUavRegisterCollision(const RhiPipelineResourceLayoutDesc& layout) noexcept
+        {
+            for (uint32_t textureIndex = 0; textureIndex < layout.bindingCount; ++textureIndex)
             {
-                return desc.format == RhiFormat::Depth32Float && !renderTarget;
+                const RhiPipelineResourceBindingDesc& textureBinding = layout.bindings[textureIndex];
+                if (textureBinding.kind != RhiPipelineResourceKind::ReadWriteStorageTexture)
+                {
+                    continue;
+                }
+
+                for (uint32_t bufferIndex = 0; bufferIndex < layout.bindingCount; ++bufferIndex)
+                {
+                    const RhiPipelineResourceBindingDesc& bufferBinding = layout.bindings[bufferIndex];
+                    const bool shaderVisibilitiesOverlap = bufferBinding.stage == textureBinding.stage || bufferBinding.stage == RhiShaderStage::Compute ||
+                                                           textureBinding.stage == RhiShaderStage::Compute;
+                    if (bufferBinding.kind == RhiPipelineResourceKind::ReadWriteStorageBuffer && shaderVisibilitiesOverlap &&
+                        bufferBinding.slot == textureBinding.slot)
+                    {
+                        return true;
+                    }
+                }
             }
 
-            return desc.format != RhiFormat::Depth32Float;
+            return false;
+        }
+
+        [[nodiscard]] bool IsD3D12TextureDescSupported(const RhiTextureDesc& desc) noexcept
+        {
+            const bool sampled = HasTextureUsage(desc.usage, RhiTextureUsage::Sampled);
+            const bool depthStencil = HasTextureUsage(desc.usage, RhiTextureUsage::DepthStencil);
+            const bool renderTarget = HasTextureUsage(desc.usage, RhiTextureUsage::RenderTarget);
+            const bool storage = HasTextureUsage(desc.usage, RhiTextureUsage::Storage);
+            if (depthStencil)
+            {
+                return desc.format == RhiFormat::Depth32Float && !renderTarget && !storage;
+            }
+            if (storage)
+            {
+                return desc.format == RhiFormat::R32Uint && !renderTarget;
+            }
+
+            return desc.format != RhiFormat::Depth32Float || (!sampled && !renderTarget);
         }
 
         [[nodiscard]] DXGI_FORMAT ToD3D12TextureResourceFormat(const RhiTextureDesc& desc) noexcept
@@ -327,6 +368,11 @@ namespace ve::rhi
             if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::DepthStencil)) != 0)
             {
                 flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+            }
+
+            if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Storage)) != 0)
+            {
+                flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
             }
 
             return flags;
@@ -859,6 +905,7 @@ namespace ve::rhi
                          ComPtr<ID3D12DescriptorHeap> dsvHeap,
                          std::shared_ptr<D3D12ShaderResourceDescriptorAllocator> shaderResourceDescriptorAllocator,
                          RhiNativeShaderResourceDescriptor shaderResourceDescriptor,
+                         RhiNativeShaderResourceDescriptor unorderedAccessDescriptor,
                          RhiTextureDesc desc,
                          D3D12_RESOURCE_STATES resourceState,
                          UINT dsvDescriptorSize)
@@ -867,6 +914,7 @@ namespace ve::rhi
                 , dsvHeap_(std::move(dsvHeap))
                 , shaderResourceDescriptorAllocator_(std::move(shaderResourceDescriptorAllocator))
                 , shaderResourceDescriptor_(shaderResourceDescriptor)
+                , unorderedAccessDescriptor_(unorderedAccessDescriptor)
                 , desc_(desc)
                 , resourceState_(resourceState)
                 , dsvDescriptorSize_(dsvDescriptorSize)
@@ -878,6 +926,10 @@ namespace ve::rhi
                 if (HasShaderResourceView())
                 {
                     shaderResourceDescriptorAllocator_->Release(shaderResourceDescriptor_);
+                }
+                if (HasUnorderedAccessView())
+                {
+                    shaderResourceDescriptorAllocator_->Release(unorderedAccessDescriptor_);
                 }
             }
 
@@ -950,6 +1002,23 @@ namespace ve::rhi
                 return D3D12_GPU_DESCRIPTOR_HANDLE{shaderResourceDescriptor_.gpuHandle};
             }
 
+            [[nodiscard]] bool HasUnorderedAccessView() const noexcept
+            {
+                return shaderResourceDescriptorAllocator_ != nullptr && unorderedAccessDescriptor_.gpuHandle != 0;
+            }
+
+            [[nodiscard]] ID3D12DescriptorHeap* GetUnorderedAccessViewHeap() const noexcept
+            {
+                VE_ASSERT(HasUnorderedAccessView());
+                return static_cast<ID3D12DescriptorHeap*>(shaderResourceDescriptorAllocator_->GetNativeHeapHandle());
+            }
+
+            [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetUnorderedAccessView() const noexcept
+            {
+                VE_ASSERT(HasUnorderedAccessView());
+                return D3D12_GPU_DESCRIPTOR_HANDLE{unorderedAccessDescriptor_.gpuHandle};
+            }
+
             [[nodiscard]] void* GetNativeSampledViewHandle() const noexcept override
             {
                 return reinterpret_cast<void*>(static_cast<uintptr_t>(shaderResourceDescriptor_.gpuHandle));
@@ -971,6 +1040,7 @@ namespace ve::rhi
             ComPtr<ID3D12DescriptorHeap> dsvHeap_;
             std::shared_ptr<D3D12ShaderResourceDescriptorAllocator> shaderResourceDescriptorAllocator_;
             RhiNativeShaderResourceDescriptor shaderResourceDescriptor_ = {};
+            RhiNativeShaderResourceDescriptor unorderedAccessDescriptor_ = {};
             RhiTextureDesc desc_ = {};
             D3D12_RESOURCE_STATES resourceState_ = D3D12_RESOURCE_STATE_COMMON;
             UINT dsvDescriptorSize_ = 0;
@@ -1024,6 +1094,11 @@ namespace ve::rhi
             [[nodiscard]] ID3D12Fence* GetNativeFence() const noexcept
             {
                 return fence_.Get();
+            }
+
+            [[nodiscard]] HANDLE GetNativeEvent() const noexcept
+            {
+                return fenceEvent_;
             }
 
             [[nodiscard]] bool IsComplete(uint64_t value) const noexcept override
@@ -1191,14 +1266,25 @@ namespace ve::rhi
                            RhiExtent2D extent,
                            RhiFormat colorFormat,
                            uint32_t bufferCount,
+                           uint32_t swapchainFlags,
                            std::string* lastError)
                 : device_(std::move(device))
                 , swapchain_(std::move(swapchain))
                 , extent_(extent)
                 , colorFormat_(colorFormat)
                 , bufferCount_(bufferCount)
+                , swapchainFlags_(swapchainFlags)
                 , lastError_(lastError)
             {
+            }
+
+            ~D3D12Swapchain() override
+            {
+                if (frameLatencyWaitableObject_ != nullptr)
+                {
+                    CloseHandle(frameLatencyWaitableObject_);
+                    frameLatencyWaitableObject_ = nullptr;
+                }
             }
 
             [[nodiscard]] bool Initialize()
@@ -1217,6 +1303,20 @@ namespace ve::rhi
 
                 rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
                 renderTargets_.resize(bufferCount_);
+
+                ComPtr<IDXGISwapChain2> swapchain2;
+                result = swapchain_.As(&swapchain2);
+                if (FAILED(result) || FAILED(swapchain2->SetMaximumFrameLatency(bufferCount_)))
+                {
+                    SetLastError("Failed to configure the D3D12 swapchain frame latency.");
+                    return false;
+                }
+                frameLatencyWaitableObject_ = swapchain2->GetFrameLatencyWaitableObject();
+                if (frameLatencyWaitableObject_ == nullptr)
+                {
+                    SetLastError("D3D12 frame-latency waitable object is unavailable.");
+                    return false;
+                }
 
                 return CreateRenderTargets();
             }
@@ -1239,7 +1339,8 @@ namespace ve::rhi
                     renderTarget.Reset();
                 }
 
-                const HRESULT result = swapchain_->ResizeBuffers(bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), 0);
+                const HRESULT result =
+                    swapchain_->ResizeBuffers(bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), swapchainFlags_);
                 if (FAILED(result))
                 {
                     SetLastError(MakeD3D12Error(device_.Get(), "IDXGISwapChain3::ResizeBuffers", result));
@@ -1265,6 +1366,36 @@ namespace ve::rhi
             [[nodiscard]] uint32_t GetBufferCount() const noexcept override
             {
                 return bufferCount_;
+            }
+
+            [[nodiscard]] bool WaitForFrameStart(RhiFence& completionFence, uint64_t completionValue) override
+            {
+                auto* d3dFence = dynamic_cast<D3D12FenceObject*>(&completionFence);
+                if (d3dFence == nullptr || frameLatencyWaitableObject_ == nullptr)
+                {
+                    SetLastError("D3D12 frame start requires its swapchain waitable object and a D3D12 fence.");
+                    return false;
+                }
+
+                if (completionValue == 0 || d3dFence->IsComplete(completionValue))
+                {
+                    return WaitForSingleObject(frameLatencyWaitableObject_, INFINITE) == WAIT_OBJECT_0;
+                }
+
+                const HRESULT result = d3dFence->GetNativeFence()->SetEventOnCompletion(completionValue, d3dFence->GetNativeEvent());
+                if (FAILED(result))
+                {
+                    SetLastError(MakeD3D12Error(device_.Get(), "ID3D12Fence::SetEventOnCompletion frame start", result));
+                    return false;
+                }
+
+                const HANDLE waitableObjects[] = {frameLatencyWaitableObject_, d3dFence->GetNativeEvent()};
+                if (WaitForMultipleObjects(static_cast<DWORD>(std::size(waitableObjects)), waitableObjects, TRUE, INFINITE) != WAIT_OBJECT_0)
+                {
+                    SetLastError("Failed waiting for the D3D12 swapchain and reusable frame context.");
+                    return false;
+                }
+                return true;
             }
 
             [[nodiscard]] bool Present() override
@@ -1336,8 +1467,10 @@ namespace ve::rhi
             RhiExtent2D extent_ = {};
             RhiFormat colorFormat_ = RhiFormat::Bgra8Unorm;
             uint32_t bufferCount_ = 2;
+            uint32_t swapchainFlags_ = 0;
             uint32_t frameIndex_ = 0;
             uint32_t rtvDescriptorSize_ = 0;
+            HANDLE frameLatencyWaitableObject_ = nullptr;
             std::string* lastError_ = nullptr;
         };
 
@@ -1353,10 +1486,13 @@ namespace ve::rhi
 
             [[nodiscard]] bool Begin() override
             {
+                recordedDrawIndexedInstancedCount_ = 0;
+                recordedDrawCallCount_ = 0;
                 activeSwapchain_ = nullptr;
                 activeTexture_ = nullptr;
                 activeDepthTexture_ = nullptr;
                 activeDepthShouldTransitionToShaderRead_ = false;
+                activeFragmentUavPass_ = false;
                 activePipeline_ = nullptr;
                 activeComputePipeline_ = nullptr;
                 activeResourceHeap_ = nullptr;
@@ -1381,11 +1517,11 @@ namespace ve::rhi
 
             [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) override
             {
-                auto* d3dSwapchain = dynamic_cast<D3D12Swapchain*>(&swapchain);
-
-                if (d3dSwapchain == nullptr || (!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
-                    (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) ||
-                    (!beginInfo.hasColorAttachment && !beginInfo.hasDepthAttachment))
+                activeFragmentUavPass_ = false;
+                const bool hasAttachments = beginInfo.hasColorAttachment || beginInfo.hasDepthAttachment;
+                if ((!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
+                    (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) || (!hasAttachments && !beginInfo.hasFragmentUavWrites) ||
+                    (hasAttachments && beginInfo.hasFragmentUavWrites))
                 {
                     return false;
                 }
@@ -1401,6 +1537,11 @@ namespace ve::rhi
                 if (beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain)
                 {
                     if (colorAttachment.texture != nullptr)
+                    {
+                        return false;
+                    }
+                    auto* d3dSwapchain = dynamic_cast<D3D12Swapchain*>(&swapchain);
+                    if (d3dSwapchain == nullptr)
                     {
                         return false;
                     }
@@ -1447,6 +1588,7 @@ namespace ve::rhi
                                                  beginInfo.hasColorAttachment ? &rtvHandle : nullptr,
                                                  FALSE,
                                                  beginInfo.hasDepthAttachment ? &dsvHandle : nullptr);
+                activeFragmentUavPass_ = beginInfo.hasFragmentUavWrites;
 
                 if (beginInfo.hasColorAttachment && colorAttachment.loadAction == RhiLoadAction::Clear)
                 {
@@ -1487,6 +1629,7 @@ namespace ve::rhi
                 activeTexture_ = nullptr;
                 activeDepthTexture_ = nullptr;
                 activeDepthShouldTransitionToShaderRead_ = false;
+                activeFragmentUavPass_ = false;
             }
 
             [[nodiscard]] bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) override
@@ -1510,6 +1653,38 @@ namespace ve::rhi
                 TransitionResource(d3dSwapchain->GetCurrentRenderTarget(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
                 commandList_->CopyResource(d3dSwapchain->GetCurrentRenderTarget(), d3dTexture->GetNativeResource());
                 TransitionResource(d3dSwapchain->GetCurrentRenderTarget(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+                return true;
+            }
+
+            [[nodiscard]] bool
+            CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
+            {
+                auto* sourceBuffer = dynamic_cast<D3D12Buffer*>(&source);
+                auto* destinationBuffer = dynamic_cast<D3D12Buffer*>(&destination);
+                if (sourceBuffer == nullptr || destinationBuffer == nullptr || sourceBuffer == destinationBuffer || size == 0 ||
+                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu ||
+                    sourceOffset > sourceBuffer->GetSize() || size > sourceBuffer->GetSize() - sourceOffset ||
+                    destinationOffset > destinationBuffer->GetSize() || size > destinationBuffer->GetSize() - destinationOffset ||
+                    destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
+                {
+                    return false;
+                }
+
+                if (sourceBuffer->GetResourceState() != D3D12_RESOURCE_STATE_GENERIC_READ)
+                {
+                    TransitionResource(
+                        sourceBuffer->GetNativeResource(), sourceBuffer->GetResourceState(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                    sourceBuffer->SetResourceState(D3D12_RESOURCE_STATE_COPY_SOURCE);
+                }
+                if (destinationBuffer->GetResourceState() != D3D12_RESOURCE_STATE_COPY_DEST)
+                {
+                    TransitionResource(
+                        destinationBuffer->GetNativeResource(), destinationBuffer->GetResourceState(), D3D12_RESOURCE_STATE_COPY_DEST);
+                    destinationBuffer->SetResourceState(D3D12_RESOURCE_STATE_COPY_DEST);
+                }
+
+                commandList_->CopyBufferRegion(
+                    destinationBuffer->GetNativeResource(), destinationOffset, sourceBuffer->GetNativeResource(), sourceOffset, size);
                 return true;
             }
 
@@ -1689,12 +1864,89 @@ namespace ve::rhi
                 auto& d3dBuffer = const_cast<D3D12Buffer&>(static_cast<const D3D12Buffer&>(buffer));
                 TransitionResource(d3dBuffer.GetNativeResource(), d3dBuffer.GetResourceState(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 d3dBuffer.SetResourceState(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                D3D12_RESOURCE_BARRIER barrier = {};
-                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-                barrier.UAV.pResource = d3dBuffer.GetNativeResource();
-                commandList_->ResourceBarrier(1, &barrier);
                 commandList_->SetComputeRootUnorderedAccessView(
                     rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+            }
+
+            void SetReadWriteStorageTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
+            {
+                UINT rootParameterIndex = 0;
+                if (!ResolveRootParameter(RhiPipelineResourceKind::ReadWriteStorageTexture, stage, slot, rootParameterIndex))
+                {
+                    FailD3D12StorageTextureBinding("D3D12 read-write storage texture binding is absent from the active pipeline layout.");
+                }
+
+                auto& d3dTexture = const_cast<D3D12Texture&>(static_cast<const D3D12Texture&>(texture));
+                if (!d3dTexture.HasUnorderedAccessView())
+                {
+                    FailD3D12StorageTextureBinding("D3D12 read-write storage texture binding requires an unordered-access view.");
+                }
+
+                if (stage == RhiShaderStage::Fragment)
+                {
+                    const bool validFragmentBinding = activePipeline_ != nullptr && activeFragmentUavPass_ && activeSwapchain_ == nullptr &&
+                                                      activeTexture_ == nullptr && activeDepthTexture_ == nullptr && slot == 0;
+                    if (!validFragmentBinding)
+                    {
+                        FailD3D12StorageTextureBinding("D3D12 fragment texture UAVs require slot 0 in an active attachmentless render pass.");
+                    }
+                }
+                else if (stage != RhiShaderStage::Compute || activeComputePipeline_ == nullptr)
+                {
+                    FailD3D12StorageTextureBinding("D3D12 texture UAVs support only fragment or compute shader bindings.");
+                }
+
+                TransitionResource(d3dTexture.GetNativeResource(), d3dTexture.GetResourceState(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                d3dTexture.SetResourceState(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                activeResourceHeap_ = d3dTexture.GetUnorderedAccessViewHeap();
+                UpdateDescriptorTable(rootParameterIndex, d3dTexture.GetUnorderedAccessView());
+                ApplyDescriptorHeapsAndTables();
+            }
+
+            void InsertUavBarriers(std::span<RhiBuffer* const> buffers) override
+            {
+                std::vector<D3D12_RESOURCE_BARRIER> barriers;
+                barriers.reserve(buffers.size());
+                for (RhiBuffer* buffer : buffers)
+                {
+                    VE_ASSERT_MESSAGE(buffer != nullptr, "D3D12 UAV barrier requires a valid buffer.");
+                    D3D12_RESOURCE_BARRIER barrier = {};
+                    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                    barrier.UAV.pResource = static_cast<D3D12Buffer*>(buffer)->GetNativeResource();
+                    barriers.push_back(barrier);
+                }
+                if (!barriers.empty())
+                {
+                    commandList_->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+                }
+            }
+
+            void InsertTextureUavBarriers(std::span<RhiTexture* const> textures) override
+            {
+                std::vector<D3D12_RESOURCE_BARRIER> barriers;
+                barriers.reserve(textures.size());
+                for (RhiTexture* texture : textures)
+                {
+                    if (texture == nullptr)
+                    {
+                        FailD3D12StorageTextureBinding("D3D12 texture UAV barrier requires a valid texture.");
+                    }
+
+                    auto* d3dTexture = static_cast<D3D12Texture*>(texture);
+                    if (!d3dTexture->HasUnorderedAccessView())
+                    {
+                        FailD3D12StorageTextureBinding("D3D12 texture UAV barrier requires a storage texture.");
+                    }
+
+                    D3D12_RESOURCE_BARRIER barrier = {};
+                    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+                    barrier.UAV.pResource = d3dTexture->GetNativeResource();
+                    barriers.push_back(barrier);
+                }
+                if (!barriers.empty())
+                {
+                    commandList_->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
+                }
             }
 
             void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override
@@ -1706,22 +1958,37 @@ namespace ve::rhi
             void Draw(uint32_t vertexCount, uint32_t firstVertex) override
             {
                 commandList_->DrawInstanced(vertexCount, 1, firstVertex, 0);
+                ++recordedDrawCallCount_;
             }
 
             void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
             {
                 commandList_->DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) override
             {
                 commandList_->DrawIndexedInstanced(indexCount, 1, firstIndex, vertexOffset, 0);
+                ++recordedDrawCallCount_;
             }
 
             void DrawIndexedInstanced(
                 uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
             {
                 commandList_->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+                ++recordedDrawCallCount_;
+                ++recordedDrawIndexedInstancedCount_;
+            }
+
+            [[nodiscard]] uint64_t GetRecordedDrawCallCount() const noexcept override
+            {
+                return recordedDrawCallCount_;
+            }
+
+            [[nodiscard]] uint64_t GetRecordedDrawIndexedInstancedCount() const noexcept
+            {
+                return recordedDrawIndexedInstancedCount_;
             }
 
             [[nodiscard]] void* GetNativeCommandBufferHandle() const noexcept override
@@ -1813,11 +2080,14 @@ namespace ve::rhi
             D3D12Texture* activeTexture_ = nullptr;
             D3D12Texture* activeDepthTexture_ = nullptr;
             bool activeDepthShouldTransitionToShaderRead_ = false;
+            bool activeFragmentUavPass_ = false;
             const D3D12PipelineState* activePipeline_ = nullptr;
             const D3D12ComputePipelineState* activeComputePipeline_ = nullptr;
             ID3D12DescriptorHeap* activeResourceHeap_ = nullptr;
             ID3D12DescriptorHeap* activeSamplerHeap_ = nullptr;
             std::vector<BoundDescriptorTable> boundDescriptorTables_;
+            uint64_t recordedDrawIndexedInstancedCount_ = 0;
+            uint64_t recordedDrawCallCount_ = 0;
         };
 
         class D3D12Device final : public RhiDevice
@@ -2007,6 +2277,7 @@ namespace ve::rhi
                 swapchainDesc.BufferCount = std::max(desc.bufferCount, 2u);
                 swapchainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
                 swapchainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+                swapchainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
                 ComPtr<IDXGISwapChain1> swapchain;
                 HRESULT result = factory_->CreateSwapChainForHwnd(queue_.Get(), window, &swapchainDesc, nullptr, nullptr, &swapchain);
@@ -2028,8 +2299,13 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                auto rhiSwapchain = std::make_unique<D3D12Swapchain>(
-                    device_, swapchain3, RhiExtent2D{desc.width, desc.height}, desc.colorFormat, swapchainDesc.BufferCount, &lastError_);
+                auto rhiSwapchain = std::make_unique<D3D12Swapchain>(device_,
+                                                                    swapchain3,
+                                                                    RhiExtent2D{desc.width, desc.height},
+                                                                    desc.colorFormat,
+                                                                    swapchainDesc.BufferCount,
+                                                                    swapchainDesc.Flags,
+                                                                    &lastError_);
 
                 if (!rhiSwapchain->Initialize())
                 {
@@ -2048,6 +2324,12 @@ namespace ve::rhi
                 }
 
                 const bool isStorage = (static_cast<uint32_t>(desc.usage) & static_cast<uint32_t>(RhiBufferUsage::Storage)) != 0;
+                const bool isReadback = desc.usage == RhiBufferUsage::Readback;
+                if (isReadback != (desc.memoryUsage == RhiBufferMemoryUsage::GpuToCpu) || (isReadback && desc.initialData != nullptr))
+                {
+                    SetLastError("D3D12 readback buffers require GPU-to-CPU memory and no initial data.");
+                    return nullptr;
+                }
                 if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 ||
                                   desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly || desc.initialData != nullptr))
                 {
@@ -2057,7 +2339,7 @@ namespace ve::rhi
                 }
 
                 D3D12_HEAP_PROPERTIES heapProperties = {};
-                heapProperties.Type = isStorage ? D3D12_HEAP_TYPE_DEFAULT : D3D12_HEAP_TYPE_UPLOAD;
+                heapProperties.Type = isReadback ? D3D12_HEAP_TYPE_READBACK : (isStorage ? D3D12_HEAP_TYPE_DEFAULT : D3D12_HEAP_TYPE_UPLOAD);
                 heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
                 heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
                 heapProperties.CreationNodeMask = 1;
@@ -2075,7 +2357,9 @@ namespace ve::rhi
                 resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
                 resourceDesc.Flags = isStorage ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
 
-                const D3D12_RESOURCE_STATES initialState = isStorage ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_GENERIC_READ;
+                const D3D12_RESOURCE_STATES initialState =
+                    isReadback ? D3D12_RESOURCE_STATE_COPY_DEST
+                               : (isStorage ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_GENERIC_READ);
 
                 ComPtr<ID3D12Resource> resource;
                 HRESULT result = device_->CreateCommittedResource(
@@ -2137,6 +2421,27 @@ namespace ve::rhi
                 std::memcpy(d3dBuffer.GetMappedData() + offset, data, static_cast<size_t>(size));
             }
 
+            [[nodiscard]] bool ReadBuffer(const RhiBuffer& buffer, uint64_t offset, void* destination, uint64_t size) override
+            {
+                const auto* d3dBuffer = dynamic_cast<const D3D12Buffer*>(&buffer);
+                if (d3dBuffer == nullptr || d3dBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu || destination == nullptr || size == 0 ||
+                    offset > d3dBuffer->GetSize() || size > d3dBuffer->GetSize() - offset)
+                {
+                    return false;
+                }
+
+                void* mappedData = nullptr;
+                const D3D12_RANGE readRange{static_cast<SIZE_T>(offset), static_cast<SIZE_T>(offset + size)};
+                if (FAILED(d3dBuffer->GetNativeResource()->Map(0, &readRange, &mappedData)))
+                {
+                    return false;
+                }
+                std::memcpy(destination, static_cast<const std::byte*>(mappedData) + offset, static_cast<size_t>(size));
+                const D3D12_RANGE writtenRange = {};
+                d3dBuffer->GetNativeResource()->Unmap(0, &writtenRange);
+                return true;
+            }
+
             [[nodiscard]] std::unique_ptr<RhiTexture> CreateTexture(const RhiTextureDesc& desc) override
             {
                 if (desc.dimension != RhiTextureDimension::Texture2D || desc.width == 0 || desc.height == 0)
@@ -2146,7 +2451,7 @@ namespace ve::rhi
                 }
                 if (!IsD3D12TextureDescSupported(desc))
                 {
-                    SetLastError("D3D12 texture descriptor has an unsupported depth sampling combination.");
+                    SetLastError("D3D12 texture descriptor has an unsupported format or usage combination.");
                     return nullptr;
                 }
 
@@ -2376,8 +2681,34 @@ namespace ve::rhi
                     device_->CreateShaderResourceView(resource.Get(), &srvDesc, D3D12_CPU_DESCRIPTOR_HANDLE{shaderResourceDescriptor.cpuHandle});
                 }
 
-                return std::make_unique<D3D12Texture>(
-                    resource, rtvHeap, dsvHeap, shaderResourceDescriptorAllocator_, shaderResourceDescriptor, desc, resourceState, dsvDescriptorSize);
+                RhiNativeShaderResourceDescriptor unorderedAccessDescriptor = {};
+                if ((usageValue & static_cast<uint32_t>(RhiTextureUsage::Storage)) != 0)
+                {
+                    if (!shaderResourceDescriptorAllocator_->Allocate(unorderedAccessDescriptor))
+                    {
+                        if (shaderResourceDescriptor.gpuHandle != 0)
+                        {
+                            shaderResourceDescriptorAllocator_->Release(shaderResourceDescriptor);
+                        }
+                        SetLastError("D3D12 UAV descriptor heap is exhausted.");
+                        return nullptr;
+                    }
+
+                    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+                    uavDesc.Format = ToDxgiFormat(desc.format);
+                    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+                    device_->CreateUnorderedAccessView(resource.Get(), nullptr, &uavDesc, D3D12_CPU_DESCRIPTOR_HANDLE{unorderedAccessDescriptor.cpuHandle});
+                }
+
+                return std::make_unique<D3D12Texture>(resource,
+                                                      rtvHeap,
+                                                      dsvHeap,
+                                                      shaderResourceDescriptorAllocator_,
+                                                      shaderResourceDescriptor,
+                                                      unorderedAccessDescriptor,
+                                                      desc,
+                                                      resourceState,
+                                                      dsvDescriptorSize);
             }
 
             [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override
@@ -2484,6 +2815,51 @@ namespace ve::rhi
                     SetLastError("D3D12 graphics pipeline resource layout is invalid or contains duplicate bindings.");
                     return nullptr;
                 }
+
+                bool hasReadWriteStorageTexture = false;
+                for (uint32_t bindingIndex = 0; bindingIndex < desc.resourceLayout.bindingCount; ++bindingIndex)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = desc.resourceLayout.bindings[bindingIndex];
+                    if (binding.kind != RhiPipelineResourceKind::ReadWriteStorageTexture)
+                    {
+                        continue;
+                    }
+
+                    hasReadWriteStorageTexture = true;
+                    if (binding.stage != RhiShaderStage::Fragment)
+                    {
+                        SetLastError("D3D12 graphics read-write storage texture bindings require the fragment stage.");
+                        return nullptr;
+                    }
+                    if (binding.slot >= D3D12_PS_CS_UAV_REGISTER_COUNT)
+                    {
+                        SetLastError("D3D12 graphics read-write storage texture binding slot is outside the native UAV range.");
+                        return nullptr;
+                    }
+                    if (binding.slot != 0)
+                    {
+                        SetLastError("D3D12 graphics read-write storage texture bindings require fragment UAV slot 0.");
+                        return nullptr;
+                    }
+                }
+
+                if (HasD3D12TextureBufferUavRegisterCollision(desc.resourceLayout))
+                {
+                    SetLastError("D3D12 graphics pipeline read-write storage buffers and textures cannot share a native UAV register.");
+                    return nullptr;
+                }
+                if (hasReadWriteStorageTexture && desc.boundShaderState.fragmentShader == nullptr)
+                {
+                    SetLastError("D3D12 graphics pipelines with read-write storage textures require a fragment shader.");
+                    return nullptr;
+                }
+                if (hasReadWriteStorageTexture &&
+                    (desc.colorAttachmentCount != 0 || desc.colorFormat != RhiFormat::Unknown || desc.depthFormat != RhiFormat::Unknown ||
+                     desc.depthStencilState.depthTestEnabled || desc.depthStencilState.depthWriteEnabled || desc.depthStencilState.stencilEnabled))
+                {
+                    SetLastError("D3D12 graphics pipelines with read-write storage textures must be attachmentless.");
+                    return nullptr;
+                }
                 if (desc.colorAttachmentCount > 1 || (desc.colorAttachmentCount == 0 && desc.colorFormat != RhiFormat::Unknown) ||
                     (desc.colorAttachmentCount == 1 && (desc.colorFormat == RhiFormat::Unknown || desc.colorFormat == RhiFormat::Depth32Float)))
                 {
@@ -2532,8 +2908,18 @@ namespace ve::rhi
                     }
 
                     D3D12_DESCRIPTOR_RANGE& descriptorRange = descriptorRanges[index];
-                    descriptorRange.RangeType =
-                        binding.kind == RhiPipelineResourceKind::SampledTexture ? D3D12_DESCRIPTOR_RANGE_TYPE_SRV : D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                    if (binding.kind == RhiPipelineResourceKind::ReadWriteStorageTexture)
+                    {
+                        descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                    }
+                    else if (binding.kind == RhiPipelineResourceKind::SampledTexture)
+                    {
+                        descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                    }
+                    else
+                    {
+                        descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                    }
                     descriptorRange.NumDescriptors = 1;
                     descriptorRange.BaseShaderRegister = binding.slot;
                     descriptorRange.RegisterSpace = 0;
@@ -2676,6 +3062,21 @@ namespace ve::rhi
                     return nullptr;
                 }
 
+                for (uint32_t bindingIndex = 0; bindingIndex < desc.resourceLayout.bindingCount; ++bindingIndex)
+                {
+                    const RhiPipelineResourceBindingDesc& binding = desc.resourceLayout.bindings[bindingIndex];
+                    if (binding.kind == RhiPipelineResourceKind::ReadWriteStorageTexture && binding.slot >= D3D12_PS_CS_UAV_REGISTER_COUNT)
+                    {
+                        SetLastError("D3D12 compute read-write storage texture binding slot is outside the native UAV range.");
+                        return nullptr;
+                    }
+                }
+                if (HasD3D12TextureBufferUavRegisterCollision(desc.resourceLayout))
+                {
+                    SetLastError("D3D12 compute pipeline read-write storage buffers and textures cannot share a native UAV register.");
+                    return nullptr;
+                }
+
                 const auto* computeShaderModule = dynamic_cast<const D3D12ShaderModule*>(desc.computeShader);
                 if (computeShaderModule == nullptr || computeShaderModule->GetStage() != RhiShaderStage::Compute)
                 {
@@ -2716,8 +3117,18 @@ namespace ve::rhi
                     }
 
                     D3D12_DESCRIPTOR_RANGE& descriptorRange = descriptorRanges[index];
-                    descriptorRange.RangeType =
-                        binding.kind == RhiPipelineResourceKind::SampledTexture ? D3D12_DESCRIPTOR_RANGE_TYPE_SRV : D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                    if (binding.kind == RhiPipelineResourceKind::ReadWriteStorageTexture)
+                    {
+                        descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                    }
+                    else if (binding.kind == RhiPipelineResourceKind::SampledTexture)
+                    {
+                        descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                    }
+                    else
+                    {
+                        descriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                    }
                     descriptorRange.NumDescriptors = 1;
                     descriptorRange.BaseShaderRegister = binding.slot;
                     descriptorRange.RegisterSpace = 0;
@@ -2941,5 +3352,11 @@ namespace ve::rhi
         }
 
         return device;
+    }
+
+    uint64_t GetD3D12RecordedDrawIndexedInstancedCount(const RhiCommandList& commandList) noexcept
+    {
+        const auto* d3dCommandList = dynamic_cast<const D3D12CommandList*>(&commandList);
+        return d3dCommandList != nullptr ? d3dCommandList->GetRecordedDrawIndexedInstancedCount() : 0;
     }
 } // namespace ve::rhi

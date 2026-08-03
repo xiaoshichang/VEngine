@@ -4,9 +4,11 @@
 #include "Editor/Core/EditorProjectDirectoryDialog.h"
 #include "Editor/Core/Gizmos.h"
 #include "Editor/Panels/AssetsPanel/AssetsPanel.h"
+#include "Editor/Panels/ConsolePanel/ConsolePanel.h"
 #include "Editor/Panels/GameViewPanel/GameViewPanel.h"
 #include "Editor/Panels/HierarchyPanel/HierarchyPanel.h"
 #include "Editor/Panels/InspectorPanel/InspectorPanel.h"
+#include "Editor/Panels/ProfilePanel/ProfilePanel.h"
 #include "Editor/Panels/SceneViewPanel/SceneViewPanel.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/FileSystem/Path.h"
@@ -27,11 +29,11 @@ namespace ve::editor
         ProjectEditingView() = default;
 
         void Init(Editor& editor);
-        void Render(Editor& editor);
+        void Render(Editor& editor, Float32 contentBottom);
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewTexture() const noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetSceneViewFillMode() const noexcept;
-        [[nodiscard]] bool IsSceneViewVirtualShadowPageVisualizationEnabled() const noexcept;
+        [[nodiscard]] RenderDebugMode GetSceneViewRenderDebugMode() const noexcept;
         [[nodiscard]] bool IsSceneViewGridEnabled() const noexcept;
         [[nodiscard]] Float32 GetSceneViewGridOpacity() const noexcept;
         [[nodiscard]] Float32 GetSceneViewGridUnitSize() const noexcept;
@@ -45,13 +47,14 @@ namespace ve::editor
         void RenderMainMenu(Editor& editor);
         void RenderToolbar(Editor& editor, const ImVec2& position, const ImVec2& size);
         void RenderOpenSceneDialog(Editor& editor);
-        void RenderStatusBar(Editor& editor, const ImVec2& position, const ImVec2& size);
 
         HierarchyPanel hierarchyPanel_;
         SceneViewPanel sceneViewPanel_;
         GameViewPanel gameViewPanel_;
         InspectorPanel inspectorPanel_;
         AssetsPanel assetsPanel_;
+        ConsolePanel consolePanel_;
+        ProfilePanel profilePanel_;
         ProjectDirectoryDialog projectDirectoryDialog_;
         EditorBuildPackageDialog buildPackageDialog_;
         Path openSceneSelectedPath_;

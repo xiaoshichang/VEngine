@@ -1,7 +1,5 @@
 #include "Editor/macOS/MacEditorWindowPlacement.h"
 
-#include "Engine/Runtime/Platform/DebugConsole.h"
-
 #import <AppKit/AppKit.h>
 
 namespace ve::editor
@@ -61,6 +59,5 @@ namespace ve::editor
         }
 
         PlaceWindowAtVisibleTopLeft(editorWindow);
-        PlaceDebugConsoleNearWindow(nativeWindowHandle);
     }
 } // namespace ve::editor

@@ -39,7 +39,7 @@ namespace ve
         std::filesystem::path filePath = std::filesystem::path("Logs") / "VEngine.log";
     };
 
-    /// Structured log record delivered to callbacks before the formatted line reaches sinks.
+    /// Structured log record delivered to callbacks alongside the canonical formatted log line.
     struct LogRecord
     {
         LogSeverity severity = LogSeverity::Info;
@@ -48,8 +48,9 @@ namespace ve
         SourceLocation location = SourceLocation::current();
     };
 
-    /// Optional log callback used by tests and future Editor Console integration.
-    using LogCallback = void (*)(const LogRecord& record);
+    /// Optional log callback used by tests and Editor Console integration.
+    /// The formatted line is generated once by the logging facade and is valid only for the callback invocation.
+    using LogCallback = void (*)(const LogRecord& record, std::string_view formattedLine);
 
     [[nodiscard]] LoggingConfig MakeDefaultLoggingConfig();
 

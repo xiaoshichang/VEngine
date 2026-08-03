@@ -20,6 +20,31 @@ namespace ve
         return frameGraph_.ReadBuffer(passIndex_, handle, FrameGraphBufferAccess::ShaderRead);
     }
 
+    FrameGraphTextureHandle FrameGraphBuilder::Write(FrameGraphTextureHandle handle)
+    {
+        return frameGraph_.WriteTexture(passIndex_, handle, FrameGraphTextureAccess::ShaderReadWrite);
+    }
+
+    FrameGraphTextureHandle FrameGraphBuilder::ReadCopySource(FrameGraphTextureHandle handle)
+    {
+        return frameGraph_.ReadTexture(passIndex_, handle, FrameGraphTextureAccess::CopySource);
+    }
+
+    FrameGraphTextureHandle FrameGraphBuilder::WriteCopyDestination(FrameGraphTextureHandle handle)
+    {
+        return frameGraph_.WriteTexture(passIndex_, handle, FrameGraphTextureAccess::CopyDestination);
+    }
+
+    FrameGraphBufferHandle FrameGraphBuilder::ReadCopySource(FrameGraphBufferHandle handle)
+    {
+        return frameGraph_.ReadBuffer(passIndex_, handle, FrameGraphBufferAccess::CopySource);
+    }
+
+    FrameGraphBufferHandle FrameGraphBuilder::WriteCopyDestination(FrameGraphBufferHandle handle)
+    {
+        return frameGraph_.WriteBuffer(passIndex_, handle, FrameGraphBufferAccess::CopyDestination);
+    }
+
     FrameGraphBufferHandle FrameGraphBuilder::Write(FrameGraphBufferHandle handle)
     {
         return frameGraph_.WriteBuffer(passIndex_, handle, FrameGraphBufferAccess::ShaderReadWrite);
@@ -53,6 +78,16 @@ namespace ve
     void FrameGraphBuilder::SetScissor(const rhi::RhiScissorRect& scissorRect) noexcept
     {
         frameGraph_.SetScissor(passIndex_, scissorRect);
+    }
+
+    void FrameGraphBuilder::AddUavBarrierBeforeExecute(FrameGraphBufferHandle handle) noexcept
+    {
+        frameGraph_.AddUavBarrierBeforeExecute(passIndex_, handle);
+    }
+
+    void FrameGraphBuilder::AddUavBarrierBeforeExecute(FrameGraphTextureHandle handle) noexcept
+    {
+        frameGraph_.AddUavBarrierBeforeExecute(passIndex_, handle);
     }
 
     void FrameGraphBuilder::SetSideEffect() noexcept

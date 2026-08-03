@@ -207,9 +207,32 @@ namespace ve::editor
         if (gameObject.GetComponent<MeshRenderComponent>() == nullptr)
         {
             renderAddEntry("Mesh Renderer",
-                           [&gameObject]()
+                           [this, &gameObject]()
                            {
-                               Result<MeshRenderComponent*> result = gameObject.AddComponent<MeshRenderComponent>();
+                               constexpr const char* DefaultMeshPath = "Builtin/Meshes/Cube.obj";
+                               constexpr const char* DefaultMaterialPath = "Builtin/Materials/Default.vematerial";
+                               ResourceSystem& resourceSystem = editor_->GetRuntime().GetResourceSystem();
+                               Result<AssetRef<MeshResource>> mesh = editor_->GetResourceLoader().LoadResource<MeshResource>(
+                                   Path(DefaultMeshPath), editor_->GetAssetDatabase(), resourceSystem);
+                               if (!mesh)
+                               {
+                                   VE_LOG_WARN_CATEGORY("Editor", "Failed to load default mesh renderer mesh '{}': {}", DefaultMeshPath,
+                                                        mesh.GetError().GetMessage());
+                                   return;
+                               }
+
+                               Result<AssetRef<MaterialResource>> material = editor_->GetResourceLoader().LoadResource<MaterialResource>(
+                                   Path(DefaultMaterialPath), editor_->GetAssetDatabase(), resourceSystem);
+                               if (!material)
+                               {
+                                   VE_LOG_WARN_CATEGORY("Editor", "Failed to load default mesh renderer material '{}': {}", DefaultMaterialPath,
+                                                        material.GetError().GetMessage());
+                                   return;
+                               }
+
+                               resourceSystem.EnsureRenderResource(mesh.GetValue(), editor_->GetRenderSystem());
+                               resourceSystem.EnsureRenderResource(material.GetValue(), editor_->GetRenderSystem());
+                               Result<MeshRenderComponent*> result = gameObject.AddComponent<MeshRenderComponent>(mesh.MoveValue(), material.MoveValue());
                                if (!result)
                                {
                                    VE_LOG_WARN_CATEGORY("Editor", "Failed to add mesh renderer component: {}", result.GetError().GetMessage());

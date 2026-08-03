@@ -1,16 +1,14 @@
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
 
-#include "Engine/RHI/Common/RhiDevice.h"
-#include "Engine/Runtime/Render/RenderCameraMath.h"
-#include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h"
 
 #include <algorithm>
-#include <memory>
+#include <limits>
+#include <unordered_set>
 
 namespace ve
 {
-    VirtualShadowViewCache::~VirtualShadowViewCache() = default;
-
     namespace
     {
         bool TryInvertMatrix(const Matrix44& matrix, Matrix44& inverse) noexcept
@@ -77,31 +75,74 @@ namespace ve
             return true;
         }
 
-    } // namespace
+        [[nodiscard]] bool NearlyEqualMatrix(const Matrix44& left, const Matrix44& right) noexcept
+        {
+            for (SizeT row = 0; row < 4; ++row)
+            {
+                for (SizeT column = 0; column < 4; ++column)
+                {
+                    if (!NearlyEqual(left.Get(row, column), right.Get(row, column)))
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
 
-    VirtualShadowViewCache::VirtualShadowViewCache(UInt32 atlasExtent)
-        : atlasExtent_(atlasExtent)
-    {
-    }
+        [[nodiscard]] bool NearlyEqualDirection(const Vector3& left, const Vector3& right) noexcept
+        {
+            return NearlyEqual(left.GetX(), right.GetX()) && NearlyEqual(left.GetY(), right.GetY()) && NearlyEqual(left.GetZ(), right.GetZ());
+        }
+    } // namespace
 
     VirtualShadowFramePacket VirtualShadowViewCache::PrepareFrame(const VirtualShadowPrepareInput& input)
     {
+        if (input.resetSceneCache)
+        {
+            pendingResetSceneCache_ = true;
+            pendingInvalidateViewPages_ = false;
+            std::vector<Aabb>().swap(pendingChangedCasterBounds_);
+        }
+        else if (!pendingResetSceneCache_ && !pendingInvalidateViewPages_)
+        {
+            for (const Aabb& changedBounds : input.changedCasterBounds)
+            {
+                if (!changedBounds.IsFiniteAndValid())
+                {
+                    continue;
+                }
+                if (pendingChangedCasterBounds_.size() >= VirtualShadowMaxPendingInvalidationBoundCount)
+                {
+                    pendingInvalidateViewPages_ = true;
+                    std::vector<Aabb>().swap(pendingChangedCasterBounds_);
+                    break;
+                }
+                pendingChangedCasterBounds_.push_back(changedBounds);
+            }
+        }
+
         VirtualShadowFramePacket packet;
-        packet.atlasExtent = atlasExtent_;
+        packet.viewID = input.viewID;
+        packet.projectionRevision = projectionRevision_;
         packet.frameIndex = input.frameIndex;
         packet.screenWidth = input.screenWidth;
         packet.screenHeight = input.screenHeight;
-        const Matrix44& cameraLocalToWorld = input.cameraLocalToWorld;
-        packet.cameraWorldPosition = Vector4(cameraLocalToWorld.Get(0, 3), cameraLocalToWorld.Get(1, 3), cameraLocalToWorld.Get(2, 3), 1.0f);
-        Vector3 cameraForward = cameraLocalToWorld.TransformDirection(Vector3::UnitZ()).Normalized();
+        packet.cameraWorldPosition =
+            Vector4(input.cameraLocalToWorld.Get(0, 3), input.cameraLocalToWorld.Get(1, 3), input.cameraLocalToWorld.Get(2, 3), 1.0f);
+        Vector3 cameraForward = input.cameraLocalToWorld.TransformDirection(Vector3::UnitZ()).Normalized();
         if (cameraForward.LengthSquared() == 0.0f)
         {
             cameraForward = Vector3::UnitZ();
         }
         packet.cameraWorldForward = Vector4(cameraForward, 0.0f);
-        if (!input.light.enabled || GetGpuPhysicalPageCapacity() == 0)
+        if (packet.viewID > VirtualShadowMaximumViewID || packet.viewID == InvalidVirtualShadowViewID)
         {
-            return packet;
+            FailVirtualShadow("VSM requires a valid stable view ID.");
+        }
+        if (!input.light.enabled)
+        {
+            FailVirtualShadow("VSM requires an enabled shadow-casting directional light.");
         }
 
         packet.clipmaps = BuildVirtualShadowClipmaps(input.cameraLocalToWorld, input.light.direction, input.light.shadowDistance);
@@ -118,305 +159,120 @@ namespace ve
             return packet;
         }
 
-        const bool resetForShadowDistance = !hasShadowDistance_ || !NearlyEqual(lastShadowDistance_, input.light.shadowDistance);
-        lastShadowDistance_ = input.light.shadowDistance;
-        hasShadowDistance_ = true;
+        bool projectionCompatible = hasProjectionSignature_ && NearlyEqual(projectionShadowDistance_, packet.clipmaps.shadowDistance) &&
+                                    NearlyEqualDirection(projectionLightDirection_, input.light.direction);
+        if (hasProjectionSignature_ && projectionCompatible)
+        {
+            for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
+            {
+                projectionCompatible &=
+                    NearlyEqual(projectionPageWorldSizes_[levelIndex], packet.clipmaps.levels[levelIndex].pageWorldSize) &&
+                    projectionDepthEpochs_[levelIndex] == packet.clipmaps.levels[levelIndex].depthEpoch;
+            }
+        }
 
-        packet.enabled = true;
+        if (!hasProjectionSignature_ || !projectionCompatible)
+        {
+            projectionRevision_ = projectionRevision_ == std::numeric_limits<UInt32>::max() ? 1u : projectionRevision_ + 1u;
+            packet.invalidateViewPages = hasProjectionSignature_;
+            projectionShadowDistance_ = packet.clipmaps.shadowDistance;
+            projectionLightDirection_ = input.light.direction;
+            for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
+            {
+                projectionPageWorldSizes_[levelIndex] = packet.clipmaps.levels[levelIndex].pageWorldSize;
+                projectionDepthEpochs_[levelIndex] = packet.clipmaps.levels[levelIndex].depthEpoch;
+            }
+            hasProjectionSignature_ = true;
+        }
+        packet.projectionRevision = projectionRevision_;
+        packet.invalidateViewPages |= pendingInvalidateViewPages_;
         packet.depthBias = input.light.depthBias;
         packet.normalBias = input.light.normalBias;
         packet.inverseViewProjection = inverseViewProjection.Transposed();
+        packet.resetSceneCache = pendingResetSceneCache_;
 
-        std::vector<VirtualShadowCasterSnapshot> casters;
-        casters.reserve(input.items.size());
-        for (const VirtualShadowSceneItem& item : input.items)
+        std::unordered_set<VirtualShadowPageKey, VirtualShadowPageKeyHash> invalidatedKeys;
+        bool capacityExceeded = false;
+        if (!packet.invalidateViewPages)
         {
-            if (item.opaque && item.castShadows && item.worldBounds.IsFiniteAndValid())
+            for (const Aabb& changedBounds : pendingChangedCasterBounds_)
             {
-                casters.push_back({item.renderItemID, item.revision, item.worldBounds, true});
+                const VirtualShadowPageKeyBuildResult projection =
+                    BuildAbsoluteVirtualShadowPageKeysForBounds(
+                        packet.viewID, packet.clipmaps, changedBounds, VirtualShadowMaxInvalidationPageCount);
+                if (projection.exceededCapacity)
+                {
+                    capacityExceeded = true;
+                    break;
+                }
+                for (const VirtualShadowPageKey key : projection.keys)
+                {
+                    if (!invalidatedKeys.contains(key) && invalidatedKeys.size() >= VirtualShadowMaxInvalidationPageCount)
+                    {
+                        capacityExceeded = true;
+                        break;
+                    }
+                    invalidatedKeys.insert(key);
+                }
+                if (capacityExceeded)
+                {
+                    break;
+                }
             }
         }
-        const VirtualShadowInvalidationResult invalidation = invalidationTracker_.Update(input.frameIndex,
-                                                                                         packet.clipmaps,
-                                                                                         input.light.direction,
-                                                                                         casters,
-                                                                                         VirtualShadowInvalidationCoverage::AllAbsolutePages,
-                                                                                         VirtualShadowMaxInvalidationPageCount);
-        if (invalidation.invalidatedKeys.size() > VirtualShadowMaxInvalidationPageCount)
+        if (capacityExceeded)
         {
-            packet.invalidateAllGpuPages = true;
+            packet.invalidateViewPages = true;
         }
-        else
+        if (!packet.invalidateViewPages)
         {
-            packet.invalidatedPageKeys = invalidation.invalidatedKeys;
+            packet.invalidatedPageKeys.assign(invalidatedKeys.begin(), invalidatedKeys.end());
+            std::ranges::sort(packet.invalidatedPageKeys,
+                              [](VirtualShadowPageKey left, VirtualShadowPageKey right)
+                              { return left.key1 != right.key1 ? left.key1 < right.key1 : left.key0 < right.key0; });
         }
-        packet.resetGpuCache = invalidation.fullInvalidation || resetForShadowDistance || gpuCacheResetPending_;
+
+        const bool receiverChanged = !hasReceiverSignature_ || !NearlyEqualMatrix(receiverViewProjection_, input.viewProjection) ||
+                                     !NearlyEqualMatrix(receiverCameraLocalToWorld_, input.cameraLocalToWorld);
+        packet.requiresRequestUpdate =
+            receiverChanged || packet.resetSceneCache || packet.invalidateViewPages || !packet.invalidatedPageKeys.empty();
+        packet.requiresPageRendering = packet.requiresRequestUpdate;
+        receiverViewProjection_ = input.viewProjection;
+        receiverCameraLocalToWorld_ = input.cameraLocalToWorld;
+        hasReceiverSignature_ = true;
+
+        pendingChangedCasterBounds_.clear();
+        pendingResetSceneCache_ = false;
+        pendingInvalidateViewPages_ = false;
         return packet;
     }
 
-    VirtualShadowFramePacket
-    VirtualShadowViewCache::PrepareFrame(UInt64 frameIndex, const RTCamera& camera, const RTScene& scene, UInt32 targetWidth, UInt32 targetHeight)
+    void VirtualShadowViewCache::QueueChangedCasterBounds(std::span<const Aabb> changedCasterBounds)
     {
-        VirtualShadowLightInput light;
-        for (SizeT lightIndex = 0; lightIndex < scene.GetLightCount(); ++lightIndex)
+        if (pendingResetSceneCache_ || pendingInvalidateViewPages_)
         {
-            const std::shared_ptr<RTLight> sceneLight = scene.GetLight(lightIndex);
-            if (sceneLight != nullptr && sceneLight->GetType() == RTLightType::Directional)
-            {
-                light = VirtualShadowLightInput{sceneLight->CastShadows(),
-                                                sceneLight->GetDirection(),
-                                                sceneLight->GetShadowDistance(),
-                                                sceneLight->GetDepthBias(),
-                                                sceneLight->GetNormalBias()};
-                break;
-            }
+            return;
         }
-
-        std::vector<VirtualShadowSceneItem> items;
-        items.reserve(scene.GetRenderItemCount());
-        for (SizeT itemIndex = 0; itemIndex < scene.GetRenderItemCount(); ++itemIndex)
+        for (const Aabb& changedBounds : changedCasterBounds)
         {
-            const std::shared_ptr<RTRenderItem> renderItem = scene.GetRenderItem(itemIndex);
-            if (renderItem == nullptr)
+            if (!changedBounds.IsFiniteAndValid())
             {
                 continue;
             }
-            const Aabb localBounds = Aabb::FromCenterExtents(renderItem->GetBoundsCenter(), renderItem->GetBoundsExtents());
-            const std::shared_ptr<RTMaterialResource> material = std::dynamic_pointer_cast<RTMaterialResource>(renderItem->GetMaterialResource());
-            const bool opaque = material != nullptr && material->GetDesc().renderQueue == RenderQueue::Opaque;
-            items.push_back({renderItem->GetRenderItemID(),
-                             renderItem->GetRevision(),
-                             localBounds.Transformed(renderItem->GetLocalToWorld()),
-                             opaque,
-                             renderItem->CastShadows()});
+            if (pendingChangedCasterBounds_.size() >= VirtualShadowMaxPendingInvalidationBoundCount)
+            {
+                pendingInvalidateViewPages_ = true;
+                std::vector<Aabb>().swap(pendingChangedCasterBounds_);
+                return;
+            }
+            pendingChangedCasterBounds_.push_back(changedBounds);
         }
-
-        VirtualShadowPrepareInput input;
-        input.frameIndex = frameIndex;
-        input.screenWidth = targetWidth;
-        input.screenHeight = targetHeight;
-        input.cameraLocalToWorld = camera.GetLocalToWorld();
-        input.viewProjection = BuildCameraViewProjection(camera, rhi::RhiExtent2D{targetWidth, targetHeight});
-        input.light = light;
-        input.items = items;
-        return PrepareFrame(input);
-    }
-
-    bool VirtualShadowViewCache::EnsureSamplingResources(rhi::RhiDevice& device, const std::string& viewName)
-    {
-        if (resourceDevice_ != &device)
-        {
-            comparisonSampler_.reset();
-            atlasTexture_.reset();
-            fallbackAtlasTexture_.reset();
-            gpuPageMarksBuffer_.reset();
-            gpuPageTableBuffer_.reset();
-            gpuRequestListBuffer_.reset();
-            gpuRequestCountsBuffer_.reset();
-            samplingPageTableBuffer_.reset();
-            gpuPhysicalPagesBuffer_.reset();
-            resourceDevice_ = &device;
-            gpuShadowsAvailable_ = true;
-            gpuCacheResetPending_ = true;
-        }
-
-        if (samplingPageTableBuffer_ == nullptr)
-        {
-            rhi::RhiBufferDesc desc = {};
-            desc.size = sizeof(UInt32);
-            desc.usage = rhi::RhiBufferUsage::Storage;
-            desc.memoryUsage = rhi::RhiBufferMemoryUsage::GpuOnly;
-            desc.structureStride = sizeof(UInt32);
-            const std::string debugName = viewName + ".VirtualShadowSamplingPageTable";
-            desc.debugName = debugName.c_str();
-            samplingPageTableBuffer_ = device.CreateBuffer(desc);
-        }
-
-        if (fallbackAtlasTexture_ == nullptr)
-        {
-            rhi::RhiTextureDesc textureDesc = {};
-            textureDesc.width = 1;
-            textureDesc.height = 1;
-            textureDesc.format = rhi::RhiFormat::Depth32Float;
-            textureDesc.usage =
-                static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) | static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
-            const std::string debugName = viewName + ".VirtualShadowFallbackAtlas";
-            textureDesc.debugName = debugName.c_str();
-            fallbackAtlasTexture_ = device.CreateTexture(textureDesc);
-        }
-
-        if (comparisonSampler_ == nullptr)
-        {
-            rhi::RhiSamplerDesc samplerDesc = {};
-            samplerDesc.filter = rhi::RhiSamplerFilter::Point;
-            samplerDesc.addressU = rhi::RhiSamplerAddressMode::Clamp;
-            samplerDesc.addressV = rhi::RhiSamplerAddressMode::Clamp;
-            samplerDesc.addressW = rhi::RhiSamplerAddressMode::Clamp;
-            samplerDesc.reductionMode = rhi::RhiSamplerReductionMode::Comparison;
-            samplerDesc.comparisonFunction = rhi::RhiCompareFunction::LessEqual;
-            comparisonSampler_ = device.CreateSampler(samplerDesc);
-        }
-
-        return samplingPageTableBuffer_ != nullptr && fallbackAtlasTexture_ != nullptr && comparisonSampler_ != nullptr;
-    }
-
-    bool VirtualShadowViewCache::EnsureGpuResources(rhi::RhiDevice& device, const std::string& viewName)
-    {
-        if (!EnsureSamplingResources(device, viewName))
-        {
-            return false;
-        }
-
-        if (atlasTexture_ == nullptr)
-        {
-            rhi::RhiTextureDesc atlasDesc = {};
-            atlasDesc.width = atlasExtent_;
-            atlasDesc.height = atlasExtent_;
-            atlasDesc.format = rhi::RhiFormat::Depth32Float;
-            atlasDesc.usage =
-                static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) | static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
-            const std::string debugName = viewName + ".VirtualShadowAtlas";
-            atlasDesc.debugName = debugName.c_str();
-            atlasTexture_ = device.CreateTexture(atlasDesc);
-        }
-
-        const auto createStorageBuffer = [&device](UInt64 size, UInt32 stride, const char* debugName)
-        {
-            rhi::RhiBufferDesc desc = {};
-            desc.size = size;
-            desc.usage = rhi::RhiBufferUsage::Storage;
-            desc.memoryUsage = rhi::RhiBufferMemoryUsage::GpuOnly;
-            desc.structureStride = stride;
-            desc.debugName = debugName;
-            return device.CreateBuffer(desc);
-        };
-        if (gpuPageMarksBuffer_ == nullptr)
-        {
-            gpuPageMarksBuffer_ =
-                createStorageBuffer(static_cast<UInt64>(VirtualShadowLogicalPageCount) * sizeof(UInt32), sizeof(UInt32), "VirtualShadowPageMarks");
-            gpuCacheResetPending_ = true;
-        }
-        if (gpuPageTableBuffer_ == nullptr)
-        {
-            gpuPageTableBuffer_ =
-                createStorageBuffer(static_cast<UInt64>(VirtualShadowLogicalPageCount) * sizeof(UInt32), sizeof(UInt32), "VirtualShadowDensePageTable");
-            gpuCacheResetPending_ = true;
-        }
-        if (gpuRequestListBuffer_ == nullptr)
-        {
-            gpuRequestListBuffer_ =
-                createStorageBuffer(static_cast<UInt64>(VirtualShadowLogicalPageCount) * sizeof(UInt32), sizeof(UInt32), "VirtualShadowRequestList");
-            gpuCacheResetPending_ = true;
-        }
-        if (gpuRequestCountsBuffer_ == nullptr)
-        {
-            gpuRequestCountsBuffer_ =
-                createStorageBuffer(static_cast<UInt64>(VirtualShadowClipmapLevelCount) * sizeof(UInt32), sizeof(UInt32), "VirtualShadowRequestCounts");
-            gpuCacheResetPending_ = true;
-        }
-        if (gpuPhysicalPagesBuffer_ == nullptr)
-        {
-            gpuPhysicalPagesBuffer_ = createStorageBuffer(static_cast<UInt64>(GetGpuPhysicalPageCapacity()) * sizeof(VirtualShadowGpuPhysicalPage),
-                                                          sizeof(VirtualShadowGpuPhysicalPage),
-                                                          "VirtualShadowPhysicalPages");
-            gpuCacheResetPending_ = true;
-        }
-
-        return atlasTexture_ != nullptr && comparisonSampler_ != nullptr && gpuPageMarksBuffer_ != nullptr && gpuPageTableBuffer_ != nullptr &&
-               gpuRequestListBuffer_ != nullptr && gpuRequestCountsBuffer_ != nullptr && gpuPhysicalPagesBuffer_ != nullptr;
-    }
-
-    bool VirtualShadowViewCache::CanUseGpuShadows(const rhi::RhiDevice& device) const noexcept
-    {
-        return resourceDevice_ != &device || gpuShadowsAvailable_;
-    }
-
-    void VirtualShadowViewCache::DisableGpuShadows() noexcept
-    {
-        gpuShadowsAvailable_ = false;
-    }
-
-    UInt32 VirtualShadowViewCache::GetAtlasExtent() const noexcept
-    {
-        return atlasExtent_;
-    }
-
-    rhi::RhiTexture* VirtualShadowViewCache::GetAtlasTexture() noexcept
-    {
-        return atlasTexture_.get();
-    }
-
-    const rhi::RhiTexture* VirtualShadowViewCache::GetAtlasTexture() const noexcept
-    {
-        return atlasTexture_.get();
-    }
-
-    rhi::RhiTexture* VirtualShadowViewCache::GetFallbackAtlasTexture() noexcept
-    {
-        return fallbackAtlasTexture_.get();
-    }
-
-    const rhi::RhiTexture* VirtualShadowViewCache::GetFallbackAtlasTexture() const noexcept
-    {
-        return fallbackAtlasTexture_.get();
-    }
-
-    rhi::RhiSampler* VirtualShadowViewCache::GetComparisonSampler() noexcept
-    {
-        return comparisonSampler_.get();
-    }
-
-    const rhi::RhiSampler* VirtualShadowViewCache::GetComparisonSampler() const noexcept
-    {
-        return comparisonSampler_.get();
-    }
-
-    rhi::RhiBuffer* VirtualShadowViewCache::GetGpuPageMarksBuffer() noexcept
-    {
-        return gpuPageMarksBuffer_.get();
-    }
-
-    rhi::RhiBuffer* VirtualShadowViewCache::GetGpuPageTableBuffer() noexcept
-    {
-        return gpuPageTableBuffer_.get();
-    }
-
-    rhi::RhiBuffer* VirtualShadowViewCache::GetGpuRequestListBuffer() noexcept
-    {
-        return gpuRequestListBuffer_.get();
-    }
-
-    rhi::RhiBuffer* VirtualShadowViewCache::GetGpuRequestCountsBuffer() noexcept
-    {
-        return gpuRequestCountsBuffer_.get();
-    }
-
-    rhi::RhiBuffer* VirtualShadowViewCache::GetSamplingPageTableBuffer() noexcept
-    {
-        return gpuPageTableBuffer_ != nullptr ? gpuPageTableBuffer_.get() : samplingPageTableBuffer_.get();
-    }
-
-    rhi::RhiBuffer* VirtualShadowViewCache::GetGpuPhysicalPagesBuffer() noexcept
-    {
-        return gpuPhysicalPagesBuffer_.get();
-    }
-
-    UInt32 VirtualShadowViewCache::GetGpuPhysicalPageCapacity() const noexcept
-    {
-        return std::min(GetVirtualShadowPhysicalPageCapacity(atlasExtent_), VirtualShadowMaxPhysicalPageCount);
-    }
-
-    bool VirtualShadowViewCache::ConsumeGpuCacheReset() noexcept
-    {
-        const bool reset = gpuCacheResetPending_;
-        gpuCacheResetPending_ = false;
-        return reset;
     }
 
     VirtualShadowGpuConstants BuildVirtualShadowGpuConstants(const VirtualShadowFramePacket& packet) noexcept
     {
         VirtualShadowGpuConstants constants = {};
-        if (!packet.valid || !packet.enabled || !packet.clipmaps.valid || packet.atlasExtent == 0)
+        if (!packet.valid || !packet.clipmaps.valid || packet.atlasExtent == 0)
         {
             return constants;
         }
@@ -429,7 +285,7 @@ namespace ve
         constants.atlasAndBias = Vector4(1.0f / static_cast<Float32>(packet.atlasExtent),
                                          normalizedDepthBias,
                                          packet.normalBias,
-                                         static_cast<Float32>(VirtualShadowPhysicalPageContentSize) / static_cast<Float32>(VirtualShadowPhysicalPageSize));
+                                         0.0f);
         for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
         {
             const VirtualShadowClipmapLevel& level = packet.clipmaps.levels[levelIndex];
@@ -445,18 +301,16 @@ namespace ve
             gpuLevel.originPageY = level.originPageY;
             gpuLevel.depthEpoch = level.depthEpoch;
         }
-        constants.enabled = 1;
         constants.atlasExtent = packet.atlasExtent;
         constants.inverseViewProjection = packet.inverseViewProjection;
         constants.screenWidth = packet.screenWidth;
         constants.screenHeight = packet.screenHeight;
-        constants.physicalPageCapacity =
-            packet.atlasExtent == 0 ? 0 : std::min(GetVirtualShadowPhysicalPageCapacity(packet.atlasExtent), VirtualShadowMaxPhysicalPageCount);
+        constants.physicalPageCapacity = std::min(GetVirtualShadowPhysicalPageCapacity(packet.atlasExtent), VirtualShadowMaxPhysicalPageCount);
         constants.frameIndex = static_cast<UInt32>(packet.frameIndex);
-        constants.resetCache = packet.resetGpuCache ? 1u : 0u;
         constants.cameraWorldPosition = packet.cameraWorldPosition;
         constants.cameraWorldForward = packet.cameraWorldForward;
-        if (packet.invalidateAllGpuPages)
+        constants.viewID = packet.viewID;
+        if (packet.invalidateViewPages)
         {
             constants.invalidationCount = InvalidVirtualShadowGpuInvalidationCount;
         }

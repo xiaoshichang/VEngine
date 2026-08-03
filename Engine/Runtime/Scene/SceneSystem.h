@@ -128,6 +128,7 @@ namespace ve
         /// Player and future runtime shells use this for frame-start work that must happen on the Scene Thread without
         /// depending on Editor-only callbacks.
         void SetRuntimeStartFrameCallback(std::function<void()> callback) noexcept;
+        void SetRuntimeFrameEndCallback(std::function<void()> callback) noexcept;
 
         /// Assigns the runtime OS-event hook executed on the Scene Thread before editor/input dispatch.
         ///

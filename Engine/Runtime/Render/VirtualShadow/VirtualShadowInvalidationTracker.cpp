@@ -9,6 +9,11 @@ namespace ve
 {
     namespace
     {
+        bool AreBoundsNearlyEqual(const Aabb& left, const Aabb& right) noexcept
+        {
+            return left.GetMinimum().IsNearlyEqual(right.GetMinimum()) && left.GetMaximum().IsNearlyEqual(right.GetMaximum());
+        }
+
         Aabb TransformBoundsToLightSpace(const VirtualShadowLightBasis& basis, const Aabb& worldBounds)
         {
             const Vector3& minimum = worldBounds.GetMinimum();
@@ -31,152 +36,150 @@ namespace ve
             return Aabb(lightMinimum, lightMaximum);
         }
 
-        bool AppendInvalidationKeys(std::unordered_set<VirtualShadowPageKey, VirtualShadowPageKeyHash>& keys,
-                                    const VirtualShadowClipmapSet& clipmaps,
-                                    const Aabb& bounds,
-                                    VirtualShadowInvalidationCoverage coverage,
-                                    SizeT maximumInvalidatedKeys)
+        std::vector<VirtualShadowPageKey>
+        BuildVirtualShadowWorkingRegionPageKeysForBounds(UInt32 viewID, const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds);
+
+        std::vector<VirtualShadowPageKey>
+        BuildVirtualShadowWorkingRegionPageKeysForBounds(UInt32 viewID, const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds)
         {
-            if (coverage == VirtualShadowInvalidationCoverage::CurrentWorkingRegion)
+            if (viewID == InvalidVirtualShadowViewID || viewID > VirtualShadowMaximumViewID || !clipmaps.valid || !worldBounds.IsFiniteAndValid())
             {
-                const std::vector<VirtualShadowPageKey> boundKeys = BuildVirtualShadowPageKeysForBounds(clipmaps, bounds);
-                keys.insert(boundKeys.begin(), boundKeys.end());
-                return keys.size() <= maximumInvalidatedKeys;
+                return {};
             }
 
-            if (!clipmaps.valid || !bounds.IsFiniteAndValid())
-            {
-                return true;
-            }
-
-            const Aabb lightBounds = TransformBoundsToLightSpace(clipmaps.lightBasis, bounds);
+            const Aabb lightBounds = TransformBoundsToLightSpace(clipmaps.lightBasis, worldBounds);
+            std::unordered_set<VirtualShadowPageKey, VirtualShadowPageKeyHash> uniqueKeys;
             for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
             {
                 const VirtualShadowClipmapLevel& level = clipmaps.levels[levelIndex];
-                Int32 minimumPageX = 0;
-                Int32 minimumPageY = 0;
-                Int32 maximumPageX = 0;
-                Int32 maximumPageY = 0;
-                if (!TryQuantizeVirtualShadowPageRange(
-                        lightBounds.GetMinimum().GetX(), lightBounds.GetMaximum().GetX(), level.pageWorldSize, minimumPageX, maximumPageX) ||
-                    !TryQuantizeVirtualShadowPageRange(
-                        lightBounds.GetMinimum().GetY(), lightBounds.GetMaximum().GetY(), level.pageWorldSize, minimumPageY, maximumPageY))
+                const Float32 depthCenter = static_cast<Float32>(level.depthEpoch) * clipmaps.depthStep;
+                if (lightBounds.GetMaximum().GetZ() < depthCenter - clipmaps.shadowDistance ||
+                    lightBounds.GetMinimum().GetZ() > depthCenter + clipmaps.shadowDistance)
                 {
                     continue;
                 }
 
-                minimumPageX = std::max(minimumPageX, -32768);
-                minimumPageY = std::max(minimumPageY, -32768);
-                maximumPageX = std::min(maximumPageX, 32767);
-                maximumPageY = std::min(maximumPageY, 32767);
+                Int32 workingMinimumX = 0;
+                Int32 workingMinimumY = 0;
+                Int32 workingMaximumX = 0;
+                Int32 workingMaximumY = 0;
+                Int32 boundsMinimumX = 0;
+                Int32 boundsMinimumY = 0;
+                Int32 boundsMaximumX = 0;
+                Int32 boundsMaximumY = 0;
+                if (!TryBuildVirtualShadowWorkingRegion(level.originPageX, workingMinimumX, workingMaximumX) ||
+                    !TryBuildVirtualShadowWorkingRegion(level.originPageY, workingMinimumY, workingMaximumY) ||
+                    !TryQuantizeVirtualShadowPageRange(
+                        lightBounds.GetMinimum().GetX(), lightBounds.GetMaximum().GetX(), level.pageWorldSize, boundsMinimumX, boundsMaximumX) ||
+                    !TryQuantizeVirtualShadowPageRange(
+                        lightBounds.GetMinimum().GetY(), lightBounds.GetMaximum().GetY(), level.pageWorldSize, boundsMinimumY, boundsMaximumY))
+                {
+                    continue;
+                }
+
+                const Int32 minimumPageX = std::max(boundsMinimumX, workingMinimumX);
+                const Int32 minimumPageY = std::max(boundsMinimumY, workingMinimumY);
+                const Int32 maximumPageX = std::min(boundsMaximumX, workingMaximumX);
+                const Int32 maximumPageY = std::min(boundsMaximumY, workingMaximumY);
                 for (Int32 pageY = minimumPageY; pageY <= maximumPageY; ++pageY)
                 {
                     for (Int32 pageX = minimumPageX; pageX <= maximumPageX; ++pageX)
                     {
-                        const VirtualShadowPageKey key = VirtualShadowPageKey::Create(pageX, pageY, levelIndex, level.depthEpoch);
+                        const VirtualShadowPageKey key = VirtualShadowPageKey::Create(pageX, pageY, levelIndex, viewID);
                         if (key.IsValid())
                         {
-                            keys.insert(key);
-                            if (keys.size() > maximumInvalidatedKeys)
-                            {
-                                return false;
-                            }
+                            uniqueKeys.insert(key);
                         }
                     }
                 }
             }
-            return true;
+
+            std::vector<VirtualShadowPageKey> result(uniqueKeys.begin(), uniqueKeys.end());
+            std::ranges::sort(result,
+                              [](VirtualShadowPageKey left, VirtualShadowPageKey right)
+                              { return left.key1 != right.key1 ? left.key1 < right.key1 : left.key0 < right.key0; });
+            return result;
         }
     } // namespace
 
-    std::vector<VirtualShadowPageKey> BuildVirtualShadowPageKeysForBounds(const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds)
+    VirtualShadowPageKeyBuildResult BuildAbsoluteVirtualShadowPageKeysForBounds(
+        UInt32 viewID, const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds, SizeT maximumPageKeyCount)
     {
-        if (!clipmaps.valid || !worldBounds.IsFiniteAndValid())
+        VirtualShadowPageKeyBuildResult result;
+        if (viewID == InvalidVirtualShadowViewID || viewID > VirtualShadowMaximumViewID || !clipmaps.valid || !worldBounds.IsFiniteAndValid())
         {
-            return {};
+            return result;
         }
 
         const Aabb lightBounds = TransformBoundsToLightSpace(clipmaps.lightBasis, worldBounds);
-        std::unordered_set<VirtualShadowPageKey, VirtualShadowPageKeyHash> uniqueKeys;
+        if (!lightBounds.IsFiniteAndValid())
+        {
+            result.exceededCapacity = true;
+            return result;
+        }
         for (UInt32 levelIndex = 0; levelIndex < VirtualShadowClipmapLevelCount; ++levelIndex)
         {
             const VirtualShadowClipmapLevel& level = clipmaps.levels[levelIndex];
-            const Float32 depthCenter = static_cast<Float32>(level.depthEpoch) * clipmaps.depthStep;
-            if (lightBounds.GetMaximum().GetZ() < depthCenter - clipmaps.shadowDistance ||
-                lightBounds.GetMinimum().GetZ() > depthCenter + clipmaps.shadowDistance)
+            Int32 minimumPageX = 0;
+            Int32 minimumPageY = 0;
+            Int32 maximumPageX = 0;
+            Int32 maximumPageY = 0;
+            if (!TryQuantizeVirtualShadowPageRange(
+                    lightBounds.GetMinimum().GetX(), lightBounds.GetMaximum().GetX(), level.pageWorldSize, minimumPageX, maximumPageX) ||
+                !TryQuantizeVirtualShadowPageRange(
+                    lightBounds.GetMinimum().GetY(), lightBounds.GetMaximum().GetY(), level.pageWorldSize, minimumPageY, maximumPageY))
             {
-                continue;
+                result.exceededCapacity = true;
+                return result;
             }
 
-            Int32 workingMinimumX = 0;
-            Int32 workingMinimumY = 0;
-            Int32 workingMaximumX = 0;
-            Int32 workingMaximumY = 0;
-            Int32 boundsMinimumX = 0;
-            Int32 boundsMinimumY = 0;
-            Int32 boundsMaximumX = 0;
-            Int32 boundsMaximumY = 0;
-            if (!TryBuildVirtualShadowWorkingRegion(level.originPageX, workingMinimumX, workingMaximumX) ||
-                !TryBuildVirtualShadowWorkingRegion(level.originPageY, workingMinimumY, workingMaximumY) ||
-                !TryQuantizeVirtualShadowPageRange(
-                    lightBounds.GetMinimum().GetX(), lightBounds.GetMaximum().GetX(), level.pageWorldSize, boundsMinimumX, boundsMaximumX) ||
-                !TryQuantizeVirtualShadowPageRange(
-                    lightBounds.GetMinimum().GetY(), lightBounds.GetMaximum().GetY(), level.pageWorldSize, boundsMinimumY, boundsMaximumY))
-            {
-                continue;
-            }
-
-            const Int32 minimumPageX = std::max(boundsMinimumX, workingMinimumX);
-            const Int32 minimumPageY = std::max(boundsMinimumY, workingMinimumY);
-            const Int32 maximumPageX = std::min(boundsMaximumX, workingMaximumX);
-            const Int32 maximumPageY = std::min(boundsMaximumY, workingMaximumY);
+            minimumPageX = std::max(minimumPageX, -32768);
+            minimumPageY = std::max(minimumPageY, -32768);
+            maximumPageX = std::min(maximumPageX, 32767);
+            maximumPageY = std::min(maximumPageY, 32767);
             for (Int32 pageY = minimumPageY; pageY <= maximumPageY; ++pageY)
             {
                 for (Int32 pageX = minimumPageX; pageX <= maximumPageX; ++pageX)
                 {
-                    const VirtualShadowPageKey key = VirtualShadowPageKey::Create(pageX, pageY, levelIndex, level.depthEpoch);
-                    if (key.IsValid())
+                    const VirtualShadowPageKey key = VirtualShadowPageKey::Create(pageX, pageY, levelIndex, viewID);
+                    if (!key.IsValid())
                     {
-                        uniqueKeys.insert(key);
+                        continue;
                     }
+                    if (result.keys.size() >= maximumPageKeyCount)
+                    {
+                        result.exceededCapacity = true;
+                        return result;
+                    }
+                    result.keys.push_back(key);
                 }
             }
         }
 
-        std::vector<VirtualShadowPageKey> result(uniqueKeys.begin(), uniqueKeys.end());
-        std::ranges::sort(result,
+        std::ranges::sort(result.keys,
                           [](VirtualShadowPageKey left, VirtualShadowPageKey right)
                           { return left.key1 != right.key1 ? left.key1 < right.key1 : left.key0 < right.key0; });
         return result;
     }
 
-    VirtualShadowInvalidationResult VirtualShadowInvalidationTracker::Update(UInt64 frameIndex,
-                                                                             const VirtualShadowClipmapSet& clipmaps,
-                                                                             Vector3 lightDirection,
-                                                                             std::span<const VirtualShadowCasterSnapshot> casters)
+    std::vector<VirtualShadowPageKey>
+    BuildVirtualShadowPageKeysForBounds(UInt32 viewID, const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds)
     {
-        return Update(
-            frameIndex, clipmaps, lightDirection, casters, VirtualShadowInvalidationCoverage::CurrentWorkingRegion, std::numeric_limits<SizeT>::max());
+        return BuildVirtualShadowWorkingRegionPageKeysForBounds(viewID, clipmaps, worldBounds);
     }
 
-    VirtualShadowInvalidationResult VirtualShadowInvalidationTracker::Update(UInt64 frameIndex,
-                                                                             const VirtualShadowClipmapSet& clipmaps,
-                                                                             Vector3 lightDirection,
-                                                                             std::span<const VirtualShadowCasterSnapshot> casters,
-                                                                             VirtualShadowInvalidationCoverage coverage,
-                                                                             SizeT maximumInvalidatedKeys)
+    VirtualShadowSceneInvalidationResult VirtualShadowInvalidationTracker::UpdateScene(
+        UInt64 frameIndex, Vector3 lightDirection, std::span<const VirtualShadowCasterSnapshot> casters)
     {
-        VirtualShadowInvalidationResult result;
+        VirtualShadowSceneInvalidationResult result;
         lightDirection = lightDirection.Normalized();
         if (hasLightDirection_ && !lastLightDirection_.IsNearlyEqual(lightDirection))
         {
-            result.fullInvalidation = true;
+            result.lightBasisChanged = true;
         }
         lastLightDirection_ = lightDirection;
         hasLightDirection_ = true;
 
-        std::unordered_set<VirtualShadowPageKey, VirtualShadowPageKeyHash> invalidatedKeys;
-        bool keyCapacityAvailable = true;
         for (const VirtualShadowCasterSnapshot& caster : casters)
         {
             if (!caster.castShadows || !caster.worldBounds.IsFiniteAndValid())
@@ -188,24 +191,17 @@ namespace ve
                 trackedCasters_.try_emplace(caster.renderItemID, VirtualShadowTrackedCaster{caster.revision, caster.worldBounds, frameIndex});
             if (inserted)
             {
-                if (keyCapacityAvailable)
-                {
-                    keyCapacityAvailable = AppendInvalidationKeys(invalidatedKeys, clipmaps, caster.worldBounds, coverage, maximumInvalidatedKeys);
-                }
+                result.changedBounds.push_back(caster.worldBounds);
+                result.changedCasterIDs.push_back(caster.renderItemID);
                 continue;
             }
 
             VirtualShadowTrackedCaster& tracked = iterator->second;
-            if (tracked.revision != caster.revision)
+            if (tracked.revision != caster.revision || !AreBoundsNearlyEqual(tracked.worldBounds, caster.worldBounds))
             {
-                if (keyCapacityAvailable)
-                {
-                    keyCapacityAvailable = AppendInvalidationKeys(invalidatedKeys, clipmaps, tracked.worldBounds, coverage, maximumInvalidatedKeys);
-                }
-                if (keyCapacityAvailable)
-                {
-                    keyCapacityAvailable = AppendInvalidationKeys(invalidatedKeys, clipmaps, caster.worldBounds, coverage, maximumInvalidatedKeys);
-                }
+                result.changedBounds.push_back(tracked.worldBounds);
+                result.changedBounds.push_back(caster.worldBounds);
+                result.changedCasterIDs.push_back(caster.renderItemID);
                 tracked.revision = caster.revision;
                 tracked.worldBounds = caster.worldBounds;
             }
@@ -216,10 +212,8 @@ namespace ve
         {
             if (iterator->second.lastSeenFrame != frameIndex)
             {
-                if (keyCapacityAvailable)
-                {
-                    keyCapacityAvailable = AppendInvalidationKeys(invalidatedKeys, clipmaps, iterator->second.worldBounds, coverage, maximumInvalidatedKeys);
-                }
+                result.changedBounds.push_back(iterator->second.worldBounds);
+                result.changedCasterIDs.push_back(iterator->first);
                 iterator = trackedCasters_.erase(iterator);
             }
             else
@@ -228,10 +222,6 @@ namespace ve
             }
         }
 
-        result.invalidatedKeys.assign(invalidatedKeys.begin(), invalidatedKeys.end());
-        std::ranges::sort(result.invalidatedKeys,
-                          [](VirtualShadowPageKey left, VirtualShadowPageKey right)
-                          { return left.key1 != right.key1 ? left.key1 < right.key1 : left.key0 < right.key0; });
         return result;
     }
 

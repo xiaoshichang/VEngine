@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <limits>
 #include <utility>
 
 namespace ve
@@ -71,11 +72,13 @@ namespace ve
         return static_cast<UInt32>(desc_.indices.size());
     }
 
-    void RTMeshResource::InitRenderResource(rhi::RhiDevice& device, RTMeshResourceDesc desc)
+    void RTMeshResource::InitRenderResource(rhi::RhiDevice& device,
+                                            RTMeshResourceDesc desc,
+                                            std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource();
+        ResetRenderResource(retiredResources);
         desc_ = std::move(desc);
 
         if (desc_.vertices.empty())
@@ -97,11 +100,17 @@ namespace ve
         VE_ASSERT_MESSAGE(indexBuffer_ != nullptr, "RTMeshResource failed to create index buffer.");
     }
 
-    void RTMeshResource::ResetRenderResource() noexcept
+    void RTMeshResource::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        indexBuffer_.reset();
-        vertexBuffer_.reset();
+        if (indexBuffer_ != nullptr)
+        {
+            retiredResources.push_back(std::move(indexBuffer_));
+        }
+        if (vertexBuffer_ != nullptr)
+        {
+            retiredResources.push_back(std::move(vertexBuffer_));
+        }
     }
 
     RTShaderResource::RTShaderResource(RTShaderResourceDesc desc)
@@ -139,12 +148,20 @@ namespace ve
         return fragmentShader_.get();
     }
 
-    void RTShaderResource::InitRenderResource(rhi::RhiDevice& device, RTShaderResourceDesc desc)
+    UInt64 RTShaderResource::GetRevision() const noexcept
+    {
+        return revision_;
+    }
+
+    void RTShaderResource::InitRenderResource(rhi::RhiDevice& device,
+                                              RTShaderResourceDesc desc,
+                                              std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource();
+        ResetRenderResource(retiredResources);
         desc_ = std::move(desc);
+        bool createdArtifact = false;
 
         for (const RTShaderStageResourceDesc& stageDesc : desc_.stages)
         {
@@ -179,23 +196,44 @@ namespace ve
 
             std::unique_ptr<rhi::RhiShaderModule> shader = device.CreateShaderModule(shaderDesc);
             VE_ASSERT_MESSAGE(shader != nullptr, "RTShaderResource failed to create shader module.");
+            if (shader == nullptr)
+            {
+                continue;
+            }
 
             if (stageDesc.stage == rhi::RhiShaderStage::Vertex)
             {
                 vertexShader_ = std::move(shader);
+                createdArtifact = true;
             }
             else if (stageDesc.stage == rhi::RhiShaderStage::Fragment)
             {
                 fragmentShader_ = std::move(shader);
+                createdArtifact = true;
+            }
+        }
+
+        if (createdArtifact)
+        {
+            VE_ASSERT_MESSAGE(revision_ != std::numeric_limits<UInt64>::max(), "RTShaderResource revision overflow.");
+            if (revision_ != std::numeric_limits<UInt64>::max())
+            {
+                ++revision_;
             }
         }
     }
 
-    void RTShaderResource::ResetRenderResource() noexcept
+    void RTShaderResource::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        fragmentShader_.reset();
-        vertexShader_.reset();
+        if (fragmentShader_ != nullptr)
+        {
+            retiredResources.push_back(std::move(fragmentShader_));
+        }
+        if (vertexShader_ != nullptr)
+        {
+            retiredResources.push_back(std::move(vertexShader_));
+        }
     }
 
     RTMaterialResource::RTMaterialResource(RTMaterialResourceDesc desc)

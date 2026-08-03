@@ -38,13 +38,20 @@ namespace ve
         }
     } // namespace
 
-    MeshRenderComponent::MeshRenderComponent(Scene& scene, GameObject& owner)
+    MeshRenderComponent::MeshRenderComponent(Scene& scene, GameObject& owner, AssetRef<MeshResource> mesh, AssetRef<MaterialResource> material)
         : Component(scene, owner)
+        , mesh_(std::move(mesh))
+        , material_(std::move(material))
         , renderItemID_(AllocateRenderItemID())
         , rtRenderItem_(nullptr)
     {
         BuildRenderItem();
         RegisterTransformChangedCallback();
+    }
+
+    MeshRenderComponent::MeshRenderComponent(Scene& scene, GameObject& owner, AssetRef<MaterialResource> material)
+        : MeshRenderComponent(scene, owner, AssetRef<MeshResource>{}, std::move(material))
+    {
     }
 
     MeshRenderComponent::~MeshRenderComponent()
@@ -197,7 +204,7 @@ namespace ve
             materialResource != nullptr ? materialResource->GetRTMaterialResource() : nullptr,
             boundsCenter_,
             boundsExtents_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
             renderItemID_,
             castShadows_,
             receiveShadows_,
@@ -218,7 +225,7 @@ namespace ve
             materialResource != nullptr ? materialResource->GetRTMaterialResource() : nullptr,
             boundsCenter_,
             boundsExtents_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
             renderItemID_,
             castShadows_,
             receiveShadows_,

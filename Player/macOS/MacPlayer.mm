@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Core/Version.h"
+#include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/DebugConsole.h"
@@ -43,6 +44,7 @@ int main(int argc, char* argv[])
         initParam.runtime.ioSystem.threadName = "VEngineMacPlayerIOThread";
         initParam.runtime.renderSystem.threadName = "VEngineMacPlayerRenderThread";
         initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
+        initParam.runtime.enableProfileSystem = VE_BUILD_DEBUG != 0;
 
         const ve::Path executableDirectory = ve::FileSystem::GetExecutableDirectory();
         const ve::Path bundleContentsDirectory = executableDirectory.GetParentPath();

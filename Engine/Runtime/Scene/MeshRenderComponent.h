@@ -15,7 +15,8 @@ namespace ve
     class MeshRenderComponent final : public Component
     {
     public:
-        MeshRenderComponent(Scene& scene, GameObject& owner);
+        MeshRenderComponent(Scene& scene, GameObject& owner, AssetRef<MeshResource> mesh, AssetRef<MaterialResource> material);
+        MeshRenderComponent(Scene& scene, GameObject& owner, AssetRef<MaterialResource> material);
         ~MeshRenderComponent() override;
 
         [[nodiscard]] const AssetRef<MeshResource>& GetMesh() const noexcept;

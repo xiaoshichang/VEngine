@@ -239,6 +239,11 @@ namespace ve
 
     Path ResourceSystem::ResolveRuntimePath(const AssetRecord& record) const
     {
+        if (!record.sourcePathOverride.IsEmpty())
+        {
+            return record.sourcePathOverride;
+        }
+
         if (record.runtimePath.IsEmpty())
         {
             return Path();

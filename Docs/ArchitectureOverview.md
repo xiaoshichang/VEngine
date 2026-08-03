@@ -633,6 +633,58 @@ render proxies, snapshots, or render commands produced by the Scene Thread.
 command queue rules are defined in `Docs/RenderSystemDesign.md`. RHI documents remain focused on backend graphics
 objects such as devices, swapchains, resources, command lists, pipelines, bindings, and GPU synchronization.
 
+Directional Virtual Shadow Maps are coordinated by the render-system-owned `VirtualShadowManager`. A frame-local
+renderer consumes one view family and builds one FrameGraph, while every structure that accelerates later frames stays
+in the manager's per-scene cache:
+
+```text
+RenderSystem-owned VirtualShadowManager
+  -> one VirtualShadowSceneCache per RTScene
+       -> shared physical atlas, physical metadata, and allocator
+       -> shared page-table storage with one slice per view
+  -> one frame-local BaseRenderer per RenderViewFamily
+       -> one FrameGraph
+            -> DepthPrePass[view]
+            -> focused VSM request, residency, raster, finalization, and readback passes
+            -> Opaque / Transparent[view]
+            -> product output passes
+```
+
+The generic `DepthPrePass` produces receiver depth for every view. `VirtualShadowManager::AddToFrameGraph` then prepares
+all family views, imports persistent scene resources once, and registers small passes with explicit versioned read/write
+dependencies. FrameGraph derives execution order; there is no separate pre-render scheduler or legacy GPU pipeline.
+Opaque and Transparent consume the final shared atlas version and the requesting view's page-table slice. Scene caches
+never share physical resources with another `RTScene`.
+
+A logical page key is `(viewID, level, absolutePageX, absolutePageY)`. `viewID` is stable and makes identical coordinates
+from different views distinct, while absolute page coordinates keep a page's light-space XY footprint stable. Moving a
+clipmap origin therefore rewrites the dense view slice but reuses resident keys for the overlapping region; only newly
+exposed edge pages need allocation. XY panning alone does not invalidate cached pages. A depth-anchor or otherwise
+incompatible projection change invalidates only the affected view, while a directional-light basis change resets the
+scene cache.
+
+Allocation is deterministic: family order, with each view processed from coarse to fine clipmap levels. View-priority
+rotation is not implemented. Resident hits for all family views are pinned before allocation, and newly allocated pages
+are pinned immediately, so a later view cannot reclaim a page already requested by an earlier view. When no unpinned
+physical page remains, the request stays unmapped rather than overwriting an earlier mapping; sampling falls back to a
+mapped coarser level or to the no-shadow result.
+
+VSM is mandatory for the current renderer topology. Every rendered family requires a valid scene, camera for every
+view, supported backend, shadow-casting directional light, receiver depth, and real atlas/page-table resources. D3D11
+and D3D12 implement this path; Metal terminates during VSM graph construction until its implementation is added.
+Missing contracts and graph, resource, command-recording, submission, or presentation failures log an error and invoke
+the always-on termination path. There are no disabled-shadow bindings, placeholder resources, prepared transactions,
+rollback, retry, or legacy scheduling alternatives.
+
+VSM performance counters follow the same scene/family ownership boundary. Each `VirtualShadowSceneCache` owns one GPU
+counter buffer that accumulates all views prepared for that scene in the current frame. `VirtualShadowManager` records a
+copy into one readback buffer per in-flight `FrameContext` slot, and `RenderSystem` reads that copy only after the
+matching slot's existing completion fence has been waited and before that slot is reused. Successful submission
+associates the exact fence/value with the slot; no begin/commit/abort statistics transaction exists. Publication is
+therefore normally delayed by the in-flight frame count and never adds a synchronous GPU wait. A monotonically assigned
+scene identity rejects late samples from a retired scene. Main Thread and Editor code can read only the latest value snapshot through
+`RenderSystem::GetPerformanceStatistics`; they never access VSM caches, readback buffers, or RHI objects directly.
+
 ### 7.13 RHI
 
 `RHI` is the graphics backend abstraction layer.
@@ -981,9 +1033,9 @@ from project-owned assets:
 
 - `Assets/EditorOnlyAsset/`: engine-owned Editor-only resources. These are copied under the Editor's `Assets/` directory
   when the Editor is built and are not included in Player packages.
-- `Assets/BuiltinAsset/`: engine-owned runtime builtin resources. These are copied under the Editor's `Assets/` directory
-  for Editor use; when referenced by the runtime manifest, they are also copied into Player packages next to
-  `VEnginePlayer.exe`.
+- `Assets/Builtin/`: engine-owned runtime builtin resources. Opening a project checks this tree; native material/scene/
+  texture files remain under `Assets/Builtin/`, while OBJ and shader sources import into `ProjectRoot/Library/Imported/<guid>/`.
+  Runtime records preserve the `Assets/Builtin/...` path for native builtin resources.
 - `ProjectRoot/Assets/`: project-authored resources. These stay under the project root during editing and are copied into
   Player packages when referenced by the runtime manifest.
 
@@ -992,7 +1044,7 @@ The resource pipeline has three explicit responsibility layers:
 ```text
   Editor:
   EditorAssetDatabase
-    -> scans ProjectRoot/Assets/ and repository runtime builtin Assets/BuiltinAsset/Engine/ when a project opens
+    -> scans ProjectRoot/Assets/ and repository runtime builtin Assets/Builtin/ when a project opens
     -> keeps asset path -> AssetID and AssetID -> asset-record indexes current
     -> tracks imported artifact path and direct dependencies
     -> updates records as editor operations create, delete, move, reimport, or save assets
@@ -1020,8 +1072,8 @@ Shared low-level loading:
     -> supports root-reachability collection
 ```
 
-The Editor AssetDatabase scans the project `Assets/` tree plus repository runtime builtin `Assets/BuiltinAsset/Engine/`
-content, tracks native source assets and imported descriptors, and generates first-stage `.vemesh` descriptors from
+The Editor AssetDatabase scans the project `Assets/` tree plus repository runtime builtin `Assets/Builtin/` content,
+tracks native source assets and imported descriptors, and generates first-stage `.vemesh` descriptors from
 `.obj` sources without copying mesh payload data. `Assets/EditorOnlyAsset/` is outside this runtime asset scan. Player
 builds export a runtime asset manifest and resource payload set from the editor/tooling asset records.
 

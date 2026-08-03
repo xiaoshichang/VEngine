@@ -16,15 +16,15 @@ namespace ve
         Float32 unitSize = 1.0f;
     };
 
-    class SceneGridRenderPass final : public RenderPass
+    class SceneGridRenderPass final : public ViewRenderPass
     {
     public:
         explicit SceneGridRenderPass(SceneGridRenderPassInitParam initParam);
 
-        void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) override;
+        void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData, UInt32 viewIndex) override;
 
     private:
-        [[nodiscard]] ErrorCode Execute(RenderPassContext& context);
+        void Execute(RenderPassContext& context, UInt32 viewIndex);
         void EnsureResources(RenderPassContext& context);
         void EnsurePipeline(RenderPassContext& context);
 

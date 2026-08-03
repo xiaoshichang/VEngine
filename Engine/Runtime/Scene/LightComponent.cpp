@@ -27,7 +27,7 @@ namespace ve
 
         [[nodiscard]] Vector3 GetDirectionFromTransform(const TransformComponent* transform) noexcept
         {
-            return transform != nullptr ? transform->GetWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized() : Vector3::UnitZ();
+            return transform != nullptr ? transform->GetRenderWorldMatrix().TransformDirection(Vector3::UnitZ()).Normalized() : Vector3::UnitZ();
         }
 
         void IncrementShadowRevision(UInt64& shadowRevision) noexcept
@@ -215,7 +215,7 @@ namespace ve
             depthBias_,
             normalBias_,
             shadowRevision_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
         };
     }
 
@@ -238,7 +238,7 @@ namespace ve
             depthBias_,
             normalBias_,
             shadowRevision_,
-            transform != nullptr ? transform->GetWorldMatrix() : Matrix44::Identity(),
+            transform != nullptr ? transform->GetRenderWorldMatrix() : Matrix44::Identity(),
         };
     }
 

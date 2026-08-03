@@ -35,6 +35,7 @@ namespace ve
 
         [[nodiscard]] Result<PhysicsBodyTransform> GetBodyTransform(PhysicsBodyHandle body) const;
         [[nodiscard]] ErrorCode SetBodyTransform(PhysicsBodyHandle body, const PhysicsBodyTransform& transform);
+        [[nodiscard]] Result<bool> IsBodyActive(PhysicsBodyHandle body) const;
 
         [[nodiscard]] Result<Vector3> GetBodyLinearVelocity(PhysicsBodyHandle body) const;
         [[nodiscard]] ErrorCode SetBodyLinearVelocity(PhysicsBodyHandle body, Vector3 velocity);
@@ -43,6 +44,9 @@ namespace ve
 
         [[nodiscard]] ErrorCode SyncSceneBeforeStep(Scene& scene);
         [[nodiscard]] ErrorCode WriteBackSceneAfterStep(Scene& scene);
+
+        /// Applies each Rigidbody's rendering-only interpolation mode. Render poses are never written back to Jolt.
+        void UpdateSceneRenderPoses(Scene& scene, Float32 alpha) noexcept;
         void ClearSceneSyncState(Scene& scene) noexcept;
 
     private:

@@ -3,6 +3,7 @@
 #include "Editor/Core/EditorBuiltinResources.h"
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
@@ -10,7 +11,10 @@
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <algorithm>
+#include <exception>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -176,12 +180,27 @@ struct VSOutput
 }
 )";
 
-        [[nodiscard]] rhi::RhiBufferDesc MakeBufferDesc(UInt64 size, rhi::RhiBufferUsage usage, const void* initialData, const char* debugName) noexcept
+        [[nodiscard]] UInt64 GrowBufferCapacity(UInt64 currentCapacity, UInt64 requiredCapacity) noexcept
+        {
+            constexpr UInt64 InitialCapacity = 4096;
+            UInt64 capacity = std::max(currentCapacity, InitialCapacity);
+            while (capacity < requiredCapacity)
+            {
+                if (capacity > std::numeric_limits<UInt64>::max() / 2)
+                {
+                    return requiredCapacity;
+                }
+                capacity *= 2;
+            }
+            return capacity;
+        }
+
+        [[nodiscard]] rhi::RhiBufferDesc MakeDynamicVertexBufferDesc(UInt64 size, const char* debugName) noexcept
         {
             rhi::RhiBufferDesc desc = {};
             desc.size = size;
-            desc.usage = usage;
-            desc.initialData = initialData;
+            desc.usage = rhi::RhiBufferUsage::Vertex;
+            desc.memoryUsage = rhi::RhiBufferMemoryUsage::CpuToGpu;
             desc.debugName = debugName;
             return desc;
         }
@@ -204,6 +223,13 @@ struct VSOutput
             return result;
         }
 
+        [[noreturn]] void FailEditorGizmoPass(const std::string& message)
+        {
+            VE_LOG_ERROR("EditorGizmoRenderPass: {}", message);
+            VE_ASSERT_ALWAYS_MESSAGE(false, message.c_str());
+            std::terminate();
+        }
+
         [[nodiscard]] Int32 BuildEditorGizmoPipelineVariant(rhi::RhiFormat targetFormat) noexcept
         {
             return static_cast<Int32>(targetFormat);
@@ -216,90 +242,111 @@ struct VSOutput
     {
     }
 
-    void EditorGizmoRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
+    void EditorGizmoRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData, UInt32 viewIndex)
     {
+        if (viewIndex >= graphData.views.size() || viewIndex >= frameGraph.GetRendererData().views.size() || !graphData.views[viewIndex].color.IsValid())
+        {
+            FailEditorGizmoPass("registration requires a valid indexed view and color target.");
+        }
         struct GizmoPassData
         {
+            UInt32 viewIndex = 0;
             FrameGraphTextureHandle color;
         };
 
         frameGraph.AddRasterPass<GizmoPassData>(
             "EditorGizmoPass",
-            [&graphData](FrameGraphBuilder& builder, GizmoPassData& passData)
+            [&graphData, viewIndex](FrameGraphBuilder& builder, GizmoPassData& passData)
             {
-                passData.color = builder.WriteColorAttachment(graphData.color, rhi::RhiLoadAction::Load);
-                graphData.color = passData.color;
+                RendererViewFrameGraphData& viewGraphData = graphData.views[viewIndex];
+                passData.viewIndex = viewIndex;
+                passData.color = builder.WriteColorAttachment(viewGraphData.color, rhi::RhiLoadAction::Load);
+                viewGraphData.color = passData.color;
             },
-            [this](const GizmoPassData&, RenderPassContext& context) { return Execute(context); });
+            [this](const GizmoPassData& passData, RenderPassContext& context)
+            {
+                Execute(context, passData.viewIndex);
+            });
     }
 
-    ErrorCode EditorGizmoRenderPass::Execute(RenderPassContext& context)
+    void EditorGizmoRenderPass::Execute(RenderPassContext& context, UInt32 viewIndex)
     {
         VE_ASSERT_RENDER_THREAD();
-        if (initParam_.drawList == nullptr || (initParam_.drawList->lines.empty() && initParam_.drawList->icons.empty()))
+        if (viewIndex >= context.rendererData.views.size())
         {
-            return ErrorCode::None;
+            FailEditorGizmoPass("execution references an out-of-bounds renderer view.");
+        }
+        if (initParam_.drawList == nullptr)
+        {
+            FailEditorGizmoPass("execution requires a gizmo draw list.");
+        }
+        if (initParam_.resources == nullptr)
+        {
+            FailEditorGizmoPass("execution requires persistent gizmo render resources.");
+        }
+        if (initParam_.drawList->lines.empty() && initParam_.drawList->icons.empty())
+        {
+            return;
+        }
+        const RendererViewData& viewData = context.GetView(viewIndex);
+        if (viewData.view.camera == nullptr)
+        {
+            FailEditorGizmoPass("queued gizmo draws require a camera.");
         }
 
         EnsurePipeline(context);
-        if (linePipelineState_ == nullptr || iconPipelineState_ == nullptr)
+        EditorGizmoRenderResources& resources = *initParam_.resources;
+        if (resources.linePipelineState_ == nullptr || resources.iconPipelineState_ == nullptr)
         {
-            return ErrorCode::InvalidState;
+            FailEditorGizmoPass("execution requires initialized line and icon pipelines.");
         }
-        if (!EnsureIconResources(context))
+        if (!initParam_.drawList->icons.empty())
         {
-            return ErrorCode::InvalidState;
+            EnsureIconResources(context);
         }
-        if (!UploadFrameResources(context))
-        {
-            return ErrorCode::InvalidState;
-        }
+        UploadFrameResources(context);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
         const UniformBufferAllocation viewUniform =
-            context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+            context.frameData.GetViewUniform(viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        if (viewUniform.buffer == nullptr)
+        {
+            FailEditorGizmoPass("execution failed to allocate the required view uniform.");
+        }
 
         rhi::RhiCommandList& commandList = context.commandList;
         if (uploadedIconVertexCount_ > 0)
         {
-            commandList.SetPipeline(*iconPipelineState_);
+            commandList.SetPipeline(*resources.iconPipelineState_);
             commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
-            commandList.SetTexture(rhi::RhiShaderStage::Fragment, 0, *iconAtlasTexture_);
-            commandList.SetSampler(rhi::RhiShaderStage::Fragment, 0, *iconSampler_);
+            commandList.SetTexture(rhi::RhiShaderStage::Fragment, 0, *resources.iconAtlasTexture_);
+            commandList.SetSampler(rhi::RhiShaderStage::Fragment, 0, *resources.iconSampler_);
             commandList.SetVertexBuffer(0, *iconVertexBuffer_, sizeof(EditorGizmoIconVertex), 0);
             commandList.Draw(static_cast<UInt32>(uploadedIconVertexCount_), 0);
         }
 
         if (uploadedLineVertexCount_ > 0)
         {
-            commandList.SetPipeline(*linePipelineState_);
+            commandList.SetPipeline(*resources.linePipelineState_);
             commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
             commandList.SetVertexBuffer(0, *lineVertexBuffer_, sizeof(EditorGizmoVertex), 0);
             commandList.Draw(static_cast<UInt32>(uploadedLineVertexCount_), 0);
         }
-
-        if (lineVertexBuffer_ != nullptr)
-        {
-            context.frameData.RetainTransientResource(std::move(lineVertexBuffer_));
-        }
-        if (iconVertexBuffer_ != nullptr)
-        {
-            context.frameData.RetainTransientResource(std::move(iconVertexBuffer_));
-        }
-        context.frameData.RetainTransientResource(std::move(iconAtlasTexture_));
-        context.frameData.RetainTransientResource(std::move(iconSampler_));
-        return ErrorCode::None;
     }
 
     void EditorGizmoRenderPass::EnsurePipeline(RenderPassContext& context)
     {
+        EditorGizmoRenderResources& resources = *initParam_.resources;
         const rhi::RhiFormat targetFormat = context.executionInfo.colorFormat;
-        if (linePipelineState_ != nullptr && iconPipelineState_ != nullptr && pipelineColorFormat_ == targetFormat)
+        if (resources.linePipelineState_ != nullptr && resources.iconPipelineState_ != nullptr && resources.pipelineColorFormat_ == targetFormat)
         {
             return;
         }
 
         ShaderManager* shaderManager = context.frameData.shaderManager;
-        VE_ASSERT_MESSAGE(shaderManager != nullptr, "EditorGizmoRenderPass requires a ShaderManager.");
+        if (shaderManager == nullptr)
+        {
+            FailEditorGizmoPass("pipeline creation requires the frame ShaderManager.");
+        }
 
         rhi::RhiShaderModuleDesc lineVertexShaderDesc = {};
         lineVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
@@ -308,7 +355,10 @@ struct VSOutput
         lineVertexShaderDesc.debugName = "EditorGizmoLineVertexShader";
 
         rhi::RhiShaderModule* lineVertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoLineVertexShaderID, lineVertexShaderDesc);
-        VE_ASSERT_MESSAGE(lineVertexShader != nullptr, "EditorGizmoRenderPass failed to get line vertex shader.");
+        if (lineVertexShader == nullptr)
+        {
+            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the line vertex shader."));
+        }
 
         rhi::RhiShaderModuleDesc lineFragmentShaderDesc = {};
         lineFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
@@ -317,7 +367,10 @@ struct VSOutput
         lineFragmentShaderDesc.debugName = "EditorGizmoLineFragmentShader";
 
         rhi::RhiShaderModule* lineFragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoLineFragmentShaderID, lineFragmentShaderDesc);
-        VE_ASSERT_MESSAGE(lineFragmentShader != nullptr, "EditorGizmoRenderPass failed to get line fragment shader.");
+        if (lineFragmentShader == nullptr)
+        {
+            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the line fragment shader."));
+        }
 
         rhi::RhiShaderModuleDesc iconVertexShaderDesc = {};
         iconVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
@@ -326,7 +379,10 @@ struct VSOutput
         iconVertexShaderDesc.debugName = "EditorGizmoIconVertexShader";
 
         rhi::RhiShaderModule* iconVertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoIconVertexShaderID, iconVertexShaderDesc);
-        VE_ASSERT_MESSAGE(iconVertexShader != nullptr, "EditorGizmoRenderPass failed to get icon vertex shader.");
+        if (iconVertexShader == nullptr)
+        {
+            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the icon vertex shader."));
+        }
 
         rhi::RhiShaderModuleDesc iconFragmentShaderDesc = {};
         iconFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
@@ -335,7 +391,10 @@ struct VSOutput
         iconFragmentShaderDesc.debugName = "EditorGizmoIconFragmentShader";
 
         rhi::RhiShaderModule* iconFragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoIconFragmentShaderID, iconFragmentShaderDesc);
-        VE_ASSERT_MESSAGE(iconFragmentShader != nullptr, "EditorGizmoRenderPass failed to get icon fragment shader.");
+        if (iconFragmentShader == nullptr)
+        {
+            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the icon fragment shader."));
+        }
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
         positionAttribute.semanticName = "POSITION";
@@ -373,13 +432,11 @@ struct VSOutput
         linePipelineDesc.colorFormat = targetFormat;
         linePipelineDesc.debugName = "EditorGizmoLinePipeline";
 
-        linePipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+        resources.linePipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
             context.device, GraphicsPipelineID{"EditorGizmoLinePipeline", BuildEditorGizmoPipelineVariant(targetFormat)}, linePipelineDesc);
-        if (linePipelineState_ == nullptr)
+        if (resources.linePipelineState_ == nullptr)
         {
-            const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create line pipeline state.");
-            VE_ASSERT_MESSAGE(linePipelineState_ != nullptr, message.c_str());
-            return;
+            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the line pipeline state."));
         }
 
         rhi::RhiVertexAttributeDesc iconPositionAttribute = {};
@@ -423,20 +480,19 @@ struct VSOutput
         iconPipelineDesc.colorFormat = targetFormat;
         iconPipelineDesc.debugName = "EditorGizmoIconPipeline";
 
-        iconPipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+        resources.iconPipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
             context.device, GraphicsPipelineID{"EditorGizmoIconPipeline", BuildEditorGizmoPipelineVariant(targetFormat)}, iconPipelineDesc);
-        if (iconPipelineState_ == nullptr)
+        if (resources.iconPipelineState_ == nullptr)
         {
-            const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create icon pipeline state.");
-            VE_ASSERT_MESSAGE(iconPipelineState_ != nullptr, message.c_str());
-            return;
+            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the icon pipeline state."));
         }
-        pipelineColorFormat_ = targetFormat;
+        resources.pipelineColorFormat_ = targetFormat;
     }
 
-    bool EditorGizmoRenderPass::EnsureIconResources(RenderPassContext& context)
+    void EditorGizmoRenderPass::EnsureIconResources(RenderPassContext& context)
     {
-        if (iconAtlasTexture_ == nullptr)
+        EditorGizmoRenderResources& resources = *initParam_.resources;
+        if (resources.iconAtlasTexture_ == nullptr)
         {
             const editor::BuiltinGizmoIconAtlas atlas = editor::GenerateBuiltinGizmoIconAtlas();
             rhi::RhiTextureDesc textureDesc = {};
@@ -451,72 +507,79 @@ struct VSOutput
             textureDesc.initialDataRowPitch = atlas.rowPitch;
             textureDesc.debugName = "BuiltinGizmoIconAtlas";
 
-            iconAtlasTexture_ = context.device.CreateTexture(textureDesc);
-            if (iconAtlasTexture_ == nullptr)
+            resources.iconAtlasTexture_ = context.device.CreateTexture(textureDesc);
+            if (resources.iconAtlasTexture_ == nullptr)
             {
-                const std::string message =
-                    BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create builtin gizmo icon atlas texture.");
-                VE_ASSERT_MESSAGE(iconAtlasTexture_ != nullptr, message.c_str());
-                return false;
+                FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the builtin gizmo icon atlas texture."));
             }
         }
 
-        if (iconSampler_ == nullptr)
+        if (resources.iconSampler_ == nullptr)
         {
-            iconSampler_ = context.device.CreateSampler(rhi::StaticRenderStates::BilinearClampSampler);
-            if (iconSampler_ == nullptr)
+            resources.iconSampler_ = context.device.CreateSampler(rhi::StaticRenderStates::BilinearClampSampler);
+            if (resources.iconSampler_ == nullptr)
             {
-                const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create builtin gizmo icon sampler.");
-                VE_ASSERT_MESSAGE(iconSampler_ != nullptr, message.c_str());
-                return false;
+                FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the builtin gizmo icon sampler."));
             }
         }
-
-        return true;
     }
 
-    bool EditorGizmoRenderPass::UploadFrameResources(RenderPassContext& context)
+    void EditorGizmoRenderPass::UploadFrameResources(RenderPassContext& context)
     {
-        VE_ASSERT(initParam_.drawList != nullptr);
+        if (initParam_.drawList == nullptr)
+        {
+            FailEditorGizmoPass("frame-resource upload requires a gizmo draw list.");
+        }
         uploadedLineVertexCount_ = initParam_.drawList->lines.size();
         uploadedIconVertexCount_ = initParam_.drawList->icons.size();
+        if (uploadedLineVertexCount_ > static_cast<SizeT>(std::numeric_limits<UInt32>::max()) ||
+            uploadedIconVertexCount_ > static_cast<SizeT>(std::numeric_limits<UInt32>::max()))
+        {
+            FailEditorGizmoPass("draw-list vertex count exceeds the RHI draw-call range.");
+        }
+
+        EditorGizmoRenderResources& resources = *initParam_.resources;
+        const UInt32 frameSlot = static_cast<UInt32>(context.frameData.frameIndex % RenderFrameContextCount);
+        lineVertexBuffer_ = nullptr;
+        iconVertexBuffer_ = nullptr;
 
         if (uploadedLineVertexCount_ > 0)
         {
-            lineVertexBuffer_ = context.device.CreateBuffer(MakeBufferDesc(static_cast<UInt64>(uploadedLineVertexCount_ * sizeof(EditorGizmoVertex)),
-                                                                           rhi::RhiBufferUsage::Vertex,
-                                                                           initParam_.drawList->lines.data(),
-                                                                           "EditorGizmoLineVertexBuffer"));
-            if (lineVertexBuffer_ == nullptr)
+            const UInt64 requiredSize = static_cast<UInt64>(uploadedLineVertexCount_ * sizeof(EditorGizmoVertex));
+            if (resources.lineVertexBuffers_[frameSlot] == nullptr || resources.lineVertexBufferCapacities_[frameSlot] < requiredSize)
             {
-                const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create line vertex buffer.");
-                VE_ASSERT_MESSAGE(lineVertexBuffer_ != nullptr, message.c_str());
-                return false;
+                const UInt64 capacity = GrowBufferCapacity(resources.lineVertexBufferCapacities_[frameSlot], requiredSize);
+                resources.lineVertexBuffers_[frameSlot] =
+                    context.device.CreateBuffer(MakeDynamicVertexBufferDesc(capacity, "EditorGizmoLineVertexBuffer"));
+                if (resources.lineVertexBuffers_[frameSlot] == nullptr)
+                {
+                    FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the line vertex buffer."));
+                }
+                resources.lineVertexBufferCapacities_[frameSlot] = capacity;
             }
-        }
-        else
-        {
-            lineVertexBuffer_.reset();
+            lineVertexBuffer_ = resources.lineVertexBuffers_[frameSlot].get();
+            context.device.UpdateBuffer(
+                *lineVertexBuffer_, 0, initParam_.drawList->lines.data(), requiredSize, rhi::RhiBufferUpdateMode::Discard);
         }
 
         if (uploadedIconVertexCount_ > 0)
         {
-            iconVertexBuffer_ = context.device.CreateBuffer(MakeBufferDesc(static_cast<UInt64>(uploadedIconVertexCount_ * sizeof(EditorGizmoIconVertex)),
-                                                                           rhi::RhiBufferUsage::Vertex,
-                                                                           initParam_.drawList->icons.data(),
-                                                                           "EditorGizmoIconVertexBuffer"));
-            if (iconVertexBuffer_ == nullptr)
+            const UInt64 requiredSize = static_cast<UInt64>(uploadedIconVertexCount_ * sizeof(EditorGizmoIconVertex));
+            if (resources.iconVertexBuffers_[frameSlot] == nullptr || resources.iconVertexBufferCapacities_[frameSlot] < requiredSize)
             {
-                const std::string message = BuildDeviceFailureMessage(context.device, "EditorGizmoRenderPass failed to create icon vertex buffer.");
-                VE_ASSERT_MESSAGE(iconVertexBuffer_ != nullptr, message.c_str());
-                return false;
+                const UInt64 capacity = GrowBufferCapacity(resources.iconVertexBufferCapacities_[frameSlot], requiredSize);
+                resources.iconVertexBuffers_[frameSlot] =
+                    context.device.CreateBuffer(MakeDynamicVertexBufferDesc(capacity, "EditorGizmoIconVertexBuffer"));
+                if (resources.iconVertexBuffers_[frameSlot] == nullptr)
+                {
+                    FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the icon vertex buffer."));
+                }
+                resources.iconVertexBufferCapacities_[frameSlot] = capacity;
             }
+            iconVertexBuffer_ = resources.iconVertexBuffers_[frameSlot].get();
+            context.device.UpdateBuffer(
+                *iconVertexBuffer_, 0, initParam_.drawList->icons.data(), requiredSize, rhi::RhiBufferUpdateMode::Discard);
         }
-        else
-        {
-            iconVertexBuffer_.reset();
-        }
-        return true;
     }
 
 } // namespace ve

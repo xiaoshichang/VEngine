@@ -6,14 +6,14 @@
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
-#include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
-#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
+#include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <cstdint>
+#include <exception>
 #include <iterator>
 #include <string>
 
@@ -25,11 +25,44 @@ namespace ve
 
         struct OpaqueScenePassData
         {
+            UInt32 viewIndex = 0;
             FrameGraphTextureHandle color;
             FrameGraphTextureHandle depth;
             FrameGraphTextureHandle virtualShadowAtlas;
             FrameGraphBufferHandle virtualShadowPageTable;
+            VirtualShadowSamplingSnapshot virtualShadowSampling;
         };
+
+        [[noreturn]] void FailOpaqueScenePass(const std::string& message)
+        {
+            VE_LOG_ERROR("{}: {}", OpaqueScenePassName, message);
+            VE_ASSERT_ALWAYS_MESSAGE(false, message.c_str());
+            std::terminate();
+        }
+
+        [[noreturn]] void FailOpaqueSceneItem(SizeT itemIndex, const char* message)
+        {
+            FailOpaqueScenePass("render item[" + std::to_string(itemIndex) + "] " + message);
+        }
+
+        void ValidateVirtualShadowBindings(const ResolvedFrameGraphTexture& atlas,
+                                           const ResolvedFrameGraphBuffer& table,
+                                           const VirtualShadowSamplingSnapshot& sampling)
+        {
+            if (atlas.texture == nullptr || table.buffer == nullptr || sampling.atlas == nullptr || sampling.pageTable == nullptr)
+            {
+                FailOpaqueScenePass("execution requires complete VSM atlas and page-table bindings.");
+            }
+            if (atlas.texture != sampling.atlas || table.buffer != sampling.pageTable)
+            {
+                FailOpaqueScenePass("resolved VSM resources do not match the view sampling snapshot.");
+            }
+            if (sampling.pageTableSize != VirtualShadowLogicalPageBufferSize || sampling.pageTableOffset > sampling.pageTable->GetSize() ||
+                sampling.pageTableSize > sampling.pageTable->GetSize() - sampling.pageTableOffset)
+            {
+                FailOpaqueScenePass("VSM page-table binding does not cover one valid logical page-table slice.");
+            }
+        }
 
         [[nodiscard]] std::shared_ptr<RTShaderResource> FindFirstShaderResource(const std::vector<std::shared_ptr<RTRenderItem>>& items) noexcept
         {
@@ -73,62 +106,80 @@ namespace ve
     {
     }
 
-    void OpaqueSceneRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData)
+    void OpaqueSceneRenderPass::AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData, UInt32 viewIndex)
     {
+        if (viewIndex >= graphData.views.size() || viewIndex >= frameGraph.GetRendererData().views.size())
+        {
+            FailOpaqueScenePass("registration requires a valid renderer view index.");
+        }
         frameGraph.AddRasterPass<OpaqueScenePassData>(
-            OpaqueScenePassName,
-            [this, &graphData](FrameGraphBuilder& builder, OpaqueScenePassData& passData)
+            std::string(OpaqueScenePassName) + "[" + std::to_string(viewIndex) + "]",
+            [this, &graphData, viewIndex](FrameGraphBuilder& builder, OpaqueScenePassData& passData)
             {
+                RendererViewFrameGraphData& viewGraphData = graphData.views[viewIndex];
+                const RendererViewData& viewData = builder.GetRendererData().views[viewIndex];
+                passData.viewIndex = viewIndex;
                 rhi::RhiColor clearColor = {};
-                if (builder.GetRendererData().resolvedCamera != nullptr)
+                if (viewData.view.camera != nullptr)
                 {
-                    clearColor = builder.GetRendererData().resolvedCamera->GetClearColor();
+                    clearColor = viewData.view.camera->GetClearColor();
                 }
 
-                passData.color = builder.WriteColorAttachment(graphData.color, initParam_.colorLoadAction, clearColor);
-                graphData.color = passData.color;
+                passData.color = builder.WriteColorAttachment(viewGraphData.color, viewData.view.target.colorLoadAction, clearColor);
+                viewGraphData.color = passData.color;
 
-                if (graphData.depth.IsValid())
+                if (viewGraphData.depth.IsValid())
                 {
-                    passData.depth =
-                        builder.WriteDepthAttachment(graphData.depth, graphData.depthPrepassReady ? rhi::RhiLoadAction::Load : rhi::RhiLoadAction::Clear);
-                    graphData.depth = passData.depth;
+                    passData.depth = builder.WriteDepthAttachment(viewGraphData.depth,
+                                                                  initParam_.loadDepthFromPrePass ? rhi::RhiLoadAction::Load : rhi::RhiLoadAction::Clear);
+                    viewGraphData.depth = passData.depth;
                 }
 
-                if (graphData.virtualShadowAtlas.IsValid())
+                if (!graphData.virtualShadowAtlas.IsValid() || !viewGraphData.virtualShadowPageTable.IsValid())
                 {
-                    passData.virtualShadowAtlas = builder.Read(graphData.virtualShadowAtlas);
+                    FailOpaqueScenePass("registration requires final VSM graph handles.");
                 }
-                if (graphData.virtualShadowPageTable.IsValid())
-                {
-                    passData.virtualShadowPageTable = builder.Read(graphData.virtualShadowPageTable);
-                }
+                passData.virtualShadowAtlas = builder.Read(graphData.virtualShadowAtlas);
+                passData.virtualShadowPageTable = builder.Read(viewGraphData.virtualShadowPageTable);
+                passData.virtualShadowSampling = viewGraphData.virtualShadowSampling;
             },
             [this](const OpaqueScenePassData& passData, const FrameGraphPassResources& resources, RenderPassContext& context)
-            { return Draw(resources, passData.virtualShadowAtlas, passData.virtualShadowPageTable, context); });
+            {
+                Draw(resources, passData.virtualShadowAtlas, passData.virtualShadowPageTable, passData.virtualShadowSampling, passData.viewIndex, context);
+            });
     }
 
-    ErrorCode OpaqueSceneRenderPass::Draw(const FrameGraphPassResources& resources,
-                                          FrameGraphTextureHandle virtualShadowAtlas,
-                                          FrameGraphBufferHandle virtualShadowPageTable,
-                                          RenderPassContext& context)
+    void OpaqueSceneRenderPass::Draw(const FrameGraphPassResources& resources,
+                                     FrameGraphTextureHandle virtualShadowAtlas,
+                                     FrameGraphBufferHandle virtualShadowPageTable,
+                                     const VirtualShadowSamplingSnapshot& virtualShadowSampling,
+                                     UInt32 viewIndex,
+                                     RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
-        const std::vector<std::shared_ptr<RTRenderItem>>& items = context.rendererData.opaqueItems;
-        if (items.empty())
+        if (!virtualShadowAtlas.IsValid() || !virtualShadowPageTable.IsValid())
         {
-            return ErrorCode::None;
+            FailOpaqueScenePass("execution requires final VSM graph handles.");
+        }
+        const ResolvedFrameGraphTexture atlas = resources.GetTexture(virtualShadowAtlas);
+        const ResolvedFrameGraphBuffer table = resources.GetBuffer(virtualShadowPageTable);
+        ValidateVirtualShadowBindings(atlas, table, virtualShadowSampling);
+        if (viewIndex >= context.rendererData.views.size())
+        {
+            FailOpaqueScenePass("execution references an out-of-bounds renderer view.");
+        }
+        const RendererViewData& viewData = context.GetView(viewIndex);
+        const std::vector<std::shared_ptr<RTRenderItem>>& items = context.rendererData.opaqueItems;
+        if (viewData.view.camera == nullptr || items.empty())
+        {
+            return;
         }
         if (context.rendererData.scene == nullptr)
         {
-            return ErrorCode::InvalidState;
+            FailOpaqueScenePass("execution requires a render scene when opaque draws are queued.");
         }
 
-        const ErrorCode pipelineResult = EnsurePipeline(context);
-        if (pipelineResult != ErrorCode::None)
-        {
-            return pipelineResult;
-        }
+        EnsurePipeline(context, viewIndex);
 
         rhi::RhiCommandList& commandList = context.commandList;
         commandList.SetPipeline(*pipelineState_);
@@ -136,60 +187,52 @@ namespace ve
         const UniformBufferAllocation frameUniform = context.frameData.GetFrameUniform(*context.rendererData.scene);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
         const UniformBufferAllocation viewUniform =
-            context.frameData.GetViewUniform(context.rendererData.resolvedCamera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+            context.frameData.GetViewUniform(viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        if (frameUniform.buffer == nullptr || viewUniform.buffer == nullptr)
+        {
+            FailOpaqueScenePass("execution failed to allocate required frame or view uniforms.");
+        }
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *frameUniform.buffer, frameUniform.offset, frameUniform.size);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
         commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
 
-        VirtualShadowGpuConstants virtualShadowConstants = {};
-        if (context.rendererData.virtualShadowPacket != nullptr)
-        {
-            virtualShadowConstants = BuildVirtualShadowGpuConstants(*context.rendererData.virtualShadowPacket);
-        }
-        virtualShadowConstants.debugMode = initParam_.visualizeVirtualShadowPages ? 1u : 0u;
+        const VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
         const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
-        commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 4, *virtualShadowUniform.buffer, virtualShadowUniform.offset, virtualShadowUniform.size);
-        if (virtualShadowPageTable.IsValid())
+        if (!virtual_shadow_detail::IsValidVirtualShadowUniformAllocation(virtualShadowUniform))
         {
-            const ResolvedFrameGraphBuffer table = resources.GetBuffer(virtualShadowPageTable);
-            if (table.buffer != nullptr)
-            {
-                commandList.SetStorageBuffer(rhi::RhiShaderStage::Fragment, 5, *table.buffer, 0, table.buffer->GetSize());
-            }
+            FailOpaqueScenePass("execution failed to allocate the required VSM uniform.");
         }
-        if (virtualShadowAtlas.IsValid() && context.rendererData.viewState != nullptr)
-        {
-            const ResolvedFrameGraphTexture atlas = resources.GetTexture(virtualShadowAtlas);
-            rhi::RhiSampler* comparisonSampler = context.rendererData.viewState->GetVirtualShadowViewCache().GetComparisonSampler();
-            if (atlas.texture != nullptr && comparisonSampler != nullptr)
-            {
-                commandList.SetTexture(rhi::RhiShaderStage::Fragment, 1, *atlas.texture);
-                commandList.SetSampler(rhi::RhiShaderStage::Fragment, 1, *comparisonSampler);
-            }
-        }
+        BindVirtualShadowSampling(commandList, virtualShadowSampling, virtualShadowUniform);
 
         for (SizeT itemIndex = 0; itemIndex < items.size(); ++itemIndex)
         {
             const std::shared_ptr<RTRenderItem>& item = items[itemIndex];
             if (item == nullptr)
             {
-                VE_LOG_WARN("%s skipping null render item at queue index %zu.", OpaqueScenePassName, itemIndex);
-                continue;
+                FailOpaqueSceneItem(itemIndex, "is null.");
             }
 
             const auto meshResource = std::dynamic_pointer_cast<RTMeshResource>(item->GetMeshResource());
-            if (meshResource == nullptr || meshResource->GetVertexBuffer() == nullptr)
+            if (meshResource == nullptr)
             {
-                VE_LOG_WARN("%s skipping render item at queue index %zu due to missing mesh data.", OpaqueScenePassName, itemIndex);
-                continue;
+                FailOpaqueSceneItem(itemIndex, "requires an RTMeshResource.");
+            }
+            if (meshResource->GetVertexBuffer() == nullptr || meshResource->GetVertexStride() == 0 || meshResource->GetVertexCount() == 0)
+            {
+                FailOpaqueSceneItem(itemIndex, "requires a non-empty vertex buffer, stride, and vertex count.");
+            }
+            if ((meshResource->GetIndexBuffer() == nullptr) != (meshResource->GetIndexCount() == 0))
+            {
+                FailOpaqueSceneItem(itemIndex, "requires its index buffer and index count to be both present or both absent.");
             }
 
             const UniformBufferAllocation objectUniform = context.frameData.GetObjectUniform(*item);
-            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 2, *objectUniform.buffer, objectUniform.offset, objectUniform.size);
-            if (!BindMaterialUniform(context, *item))
+            if (objectUniform.buffer == nullptr)
             {
-                continue;
+                FailOpaqueSceneItem(itemIndex, "failed to allocate its object uniform.");
             }
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 2, *objectUniform.buffer, objectUniform.offset, objectUniform.size);
+            BindMaterialUniform(context, *item);
 
             commandList.SetVertexBuffer(0, *meshResource->GetVertexBuffer(), meshResource->GetVertexStride(), 0);
             if (meshResource->GetIndexBuffer() != nullptr && meshResource->GetIndexCount() > 0)
@@ -202,38 +245,36 @@ namespace ve
                 commandList.Draw(meshResource->GetVertexCount(), 0);
             }
         }
-        return ErrorCode::None;
     }
 
-    ErrorCode OpaqueSceneRenderPass::EnsurePipeline(RenderPassContext& context)
+    void OpaqueSceneRenderPass::EnsurePipeline(RenderPassContext& context, UInt32 viewIndex)
     {
         std::shared_ptr<RTShaderResource> shaderResource = FindFirstShaderResource(context.rendererData.opaqueItems);
-        VE_ASSERT_ALWAYS_MESSAGE(shaderResource != nullptr, "Opaque scene pass requires an initialized material shader resource.");
         if (shaderResource == nullptr)
         {
-            return ErrorCode::InvalidState;
+            FailOpaqueScenePass("queued draws require an initialized material shader resource.");
         }
 
         rhi::RhiShaderModule* vertexShader = shaderResource->GetVertexShader();
         rhi::RhiShaderModule* fragmentShader = shaderResource->GetFragmentShader();
         if (vertexShader == nullptr || fragmentShader == nullptr)
         {
-            VE_ASSERT_ALWAYS_MESSAGE(false, "Opaque scene pass material shader resource is not initialized.");
-            return ErrorCode::InvalidState;
+            FailOpaqueScenePass("material shader resource is missing its vertex or fragment module.");
         }
 
+        const rhi::RhiFillMode fillMode = context.GetView(viewIndex).view.fillMode;
         const rhi::RhiFormat targetFormat = context.executionInfo.colorFormat;
         const bool depthEnabled = context.executionInfo.depthEnabled;
-        if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == initParam_.fillMode &&
-            pipelineDepthEnabled_ == depthEnabled && pipelineShaderResource_.lock() == shaderResource)
+        if (pipelineState_ != nullptr && pipelineColorFormat_ == targetFormat && pipelineFillMode_ == fillMode && pipelineDepthEnabled_ == depthEnabled &&
+            pipelineShaderResource_.lock() == shaderResource)
         {
-            return ErrorCode::None;
+            return;
         }
 
         ShaderManager* shaderManager = context.frameData.shaderManager;
         if (shaderManager == nullptr)
         {
-            return ErrorCode::InvalidState;
+            FailOpaqueScenePass("pipeline creation requires the frame ShaderManager.");
         }
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
@@ -257,13 +298,12 @@ namespace ve
             {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 3},
             {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Fragment, 4},
             {rhi::RhiPipelineResourceKind::SampledTexture, rhi::RhiShaderStage::Fragment, 1},
-            {rhi::RhiPipelineResourceKind::Sampler, rhi::RhiShaderStage::Fragment, 1},
             {rhi::RhiPipelineResourceKind::StorageBuffer, rhi::RhiShaderStage::Fragment, 5},
         };
         rhi::RhiGraphicsPipelineDesc pipelineDesc = {};
         pipelineDesc.blendState = rhi::StaticRenderStates::OpaqueBlend;
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
-        pipelineDesc.rasterizerState.fillMode = initParam_.fillMode;
+        pipelineDesc.rasterizerState.fillMode = fillMode;
         pipelineDesc.depthStencilState = depthEnabled ? rhi::StaticRenderStates::DepthReadWriteLessEqual : rhi::StaticRenderStates::DepthDisabled;
         pipelineDesc.boundShaderState.vertexShader = vertexShader;
         pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
@@ -277,38 +317,41 @@ namespace ve
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = OpaqueScenePassName;
 
-        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(context.device,
-                                                                    GraphicsPipelineID{BuildPipelineName(*shaderResource, *vertexShader, *fragmentShader),
-                                                                                       BuildPipelineVariant(targetFormat, initParam_.fillMode, depthEnabled)},
-                                                                    pipelineDesc);
+        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+            context.device,
+            GraphicsPipelineID{BuildPipelineName(*shaderResource, *vertexShader, *fragmentShader), BuildPipelineVariant(targetFormat, fillMode, depthEnabled)},
+            pipelineDesc);
         if (pipelineState_ == nullptr)
         {
-            VE_ASSERT_ALWAYS_MESSAGE(false, "Opaque scene pass failed to create its graphics pipeline.");
-            return ErrorCode::PlatformError;
+            FailOpaqueScenePass("failed to create its graphics pipeline.");
         }
 
         pipelineColorFormat_ = targetFormat;
-        pipelineFillMode_ = initParam_.fillMode;
+        pipelineFillMode_ = fillMode;
         pipelineDepthEnabled_ = depthEnabled;
         pipelineShaderResource_ = shaderResource;
-        return ErrorCode::None;
     }
 
-    bool OpaqueSceneRenderPass::BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item)
+    void OpaqueSceneRenderPass::BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item)
     {
         const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item.GetMaterialResource());
-        if (materialResource != nullptr && materialResource->GetUniformBuffer() != nullptr)
+        if (materialResource == nullptr)
         {
-            context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment,
-                                                 3,
-                                                 *materialResource->GetUniformBuffer(),
-                                                 materialResource->GetUniformBufferOffset(),
-                                                 materialResource->GetUniformBufferSize());
-            return true;
+            FailOpaqueScenePass("queued render item requires an RTMaterialResource.");
         }
-
-        VE_ASSERT_ALWAYS_MESSAGE(false, "Opaque scene pass requires a material resource with an initialized uniform buffer.");
-        return false;
+        if (materialResource->GetShaderResource() == nullptr)
+        {
+            FailOpaqueScenePass("queued render item material requires an initialized shader resource.");
+        }
+        if (materialResource->GetUniformBuffer() == nullptr || materialResource->GetUniformBufferSize() == 0)
+        {
+            FailOpaqueScenePass("queued render item material requires an initialized uniform buffer.");
+        }
+        context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment,
+                                             3,
+                                             *materialResource->GetUniformBuffer(),
+                                             materialResource->GetUniformBufferOffset(),
+                                             materialResource->GetUniformBufferSize());
     }
 
 } // namespace ve

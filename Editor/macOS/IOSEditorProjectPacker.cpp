@@ -124,6 +124,7 @@ namespace ve::editor
             case EditorAssetType::Mesh:
             case EditorAssetType::Material:
             case EditorAssetType::Shader:
+            case EditorAssetType::Texture:
             case EditorAssetType::Scene:
                 return true;
             case EditorAssetType::Script:
@@ -671,7 +672,8 @@ namespace ve::editor
                 continue;
             }
 
-            const Path sourcePath = ResolveEditorContentPath(projectRoot_, record.asset.runtimePath);
+            const Path sourcePath = !record.asset.sourcePathOverride.IsEmpty() ? record.asset.sourcePathOverride :
+                                                                                ResolveEditorContentPath(projectRoot_, record.asset.runtimePath);
             if (record.type == EditorAssetType::Shader)
             {
                 std::vector<Path> artifactPaths;

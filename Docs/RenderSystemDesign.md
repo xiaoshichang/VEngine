@@ -13,11 +13,11 @@ The first version intentionally keeps the renderer narrow while making the runti
 - Provide CPU-side flushing for submitted render commands.
 - Initialize and shut down the selected RHI device on the Render Thread.
 - Create and destroy the main swapchain from the platform window surface.
-- Render one or more RTScene views through renderer objects, then let a frame pipeline handle product-specific
-  presentation.
-- Provide a lightweight pass orchestration shape through `BaseRenderer`, `ForwardRenderer`, and `RenderPass`.
-- Leave RenderWorld, render-resource registries, upload scheduling, full frame graph dependency analysis, and viewport
-  registration for later renderer work.
+- Aggregate one scene's frame views into a `RenderViewFamily`, render the family through one renderer-owned FrameGraph,
+  then let a frame pipeline provide product-specific output passes.
+- Keep cross-frame acceleration structures, including `VirtualShadowManager`, under `RenderSystem` ownership.
+- Leave a general RenderWorld, render-resource registries, upload scheduling, transient-resource aliasing, async queues,
+  and viewport registration for later renderer work.
 
 ## 1.1 Render Resource Ownership Model
 
@@ -151,79 +151,65 @@ The first version does not create or own:
 
 ## 5. Frame Pipeline, Renderer, And Render Pass Model
 
-The render layer keeps three concepts separate:
+The render layer keeps four concepts separate:
 
 - `RenderFramePipeline` describes how a product surface records one whole frame. The Editor pipeline can render editor
   views and then draw ImGui. The Player pipeline renders the scene into an intermediate color texture and copies that
   texture to the main swapchain.
-- `BaseRenderer` describes how to render one `RTScene` into one render target. It owns long-lived `RenderPass` objects,
-  builds per-frame pass data, updates render-world extension points, and executes the pass list.
-- `RenderPass` is a reusable pass that declares attachments in `Setup()` and records draw commands in `Execute()`.
+- `BaseRenderer` is frame-local and renders one `RenderViewFamily`. It owns the frame's single `FrameGraph`.
+- `FrameGraph` collects versioned resource declarations, validates dependencies, culls unused work, derives execution
+  order, and executes the retained passes.
+- `RenderPass` registers one or more graph nodes and declares their reads and writes. Pass callbacks record commands and
+  return `void`.
 
-First-stage player frame flow:
+Player frame flow:
 
 ```text
 PlayerRenderFramePipeline
   Ensure player scene color texture matches swapchain
-  ForwardRenderer.RenderScene(RTScene -> scene color texture)
-  Copy scene color texture -> swapchain
+  Build one-view RenderViewFamily
+  Construct frame-local StandaloneRenderer
+    Build and execute one FrameGraph
+      DepthPrePass
+      mandatory VSM passes
+      Opaque / Transparent
+      Copy scene color texture -> swapchain
   Submit and present
 ```
 
-First-stage editor frame flow:
+Editor frame flow:
 
 ```text
 EditorRenderFramePipeline
-  ForwardRenderer.RenderScene(RTScene -> Game View texture)
-  Future renderer(s) may render Scene View or previews with different settings
-  Draw ImGui overlay into swapchain
+  Aggregate Game View and Scene View for the same RTScene
+  Construct frame-local StandaloneRenderer
+    Build and execute one FrameGraph
+      DepthPrePass[view]
+      family-wide mandatory VSM passes
+      Opaque / Transparent[view]
+      view-local Grid / Gizmo extensions
+      ImGui overlay -> swapchain
   Submit and present
 ```
 
-The current implementation keeps `UpdateRenderWorld()` and `BuildVisibleDrawLists()` as explicit no-op extension points
-until render proxies and mesh draw lists exist. This keeps the threading boundary visible without introducing a partial
-RenderWorld.
+`StandaloneRenderer` and `MobileRenderer` distinguish renderer topology rather than product environment. Renderer,
+FrameRenderPipeline, FrameGraph, and pass instances live for one frame. `RendererData` is family-oriented: the opaque
+queue is shared while views retain their camera, targets, transparent queue, and VSM page-table slice.
 
-`ForwardRenderer` is the first concrete `BaseRenderer`. Future renderers can derive from `BaseRenderer` as
-`DeferredRenderer`, `RenderGraphRenderer`, or more specialized editor preview renderers. Editor Game View and Scene View
-are intentionally free to use different renderer instances and different pass lists.
+The generic `DepthPrePass[view]` produces receiver depth. The render-system-owned `VirtualShadowManager` imports one
+scene-shared physical atlas and metadata pool, prepares every view, and registers focused request, residency, page
+raster, finalization, and asynchronous statistics-copy nodes. Opaque and Transparent must read the final atlas and the
+correct per-view page-table slice.
 
-Renderer-level passes use this interface:
+VSM is mandatory in the current renderer topology. Missing scene, camera, supported backend, shadow-casting directional
+light, receiver depth, resource, or pipeline is fatal. Metal intentionally terminates at graph construction until its
+VSM implementation exists. There are no disabled-shadow or placeholder bindings, prepared transactions, rollback,
+retry, legacy pre-render scheduler, or recoverable pass-execution status channel.
 
-```cpp
-class RenderPass
-{
-public:
-    virtual const char* GetName() const noexcept = 0;
-    virtual void Setup(RenderPassBuilder& builder) = 0;
-    virtual void Execute(RenderPassContext& context) = 0;
-};
-```
-
-`Setup()` runs every frame and declares the pass attachment shape through `RenderPassBuilder`. `Execute()` records draw
-commands through `RenderPassContext` after the RHI render pass has begun. The pass object itself is long-lived; the pass
-descriptor, viewport, scissor, and frame context are rebuilt per frame.
-
-Passes are intended to be assembled differently by different renderers. For example, a later `PreDepthPass` can be added
-to Forward, Deferred, or RenderGraph-style renderers without changing the frame pipeline that presents the result.
-
-The first concrete scene pass is the opaque forward pass:
-
-```text
-OpaqueScenePass
-  Setup:
-    write configured color attachment
-    clear -> store
-
-  Execute:
-    choose the active RTScene camera
-    bind lighting/material/object constants
-    draw visible mesh items
-```
-
-This is intentionally not a full render graph. There is no automatic pass culling, transient resource aliasing, resource
-state inference, or graph-level scheduling yet. The current goal is to make the frame-pipeline, renderer, and pass
-ownership boundaries real while keeping the first rendering vertical slice small.
+`FrameRenderPipeline::RenderFrame`, renderer entry points, and pass callbacks return `void`. Graph validation and RHI
+operations may still produce diagnostics internally, but renderer orchestration logs actionable context and invokes the
+always-on termination path instead of propagating an `ErrorCode`. Submission and presentation follow the same
+fail-fast rule for the current frame pipeline.
 
 ## 6. Command Queue Model
 

@@ -797,7 +797,7 @@ namespace ve
             MeshRenderComponent* mesh = gameObject.GetComponent<MeshRenderComponent>();
             if (mesh == nullptr)
             {
-                Result<MeshRenderComponent*> result = gameObject.AddComponentWithoutRenderRegistration<MeshRenderComponent>();
+                Result<MeshRenderComponent*> result = gameObject.AddComponentWithoutRenderRegistration<MeshRenderComponent>(AssetRef<MaterialResource>{});
                 if (!result)
                 {
                     return result.GetError().GetCode();

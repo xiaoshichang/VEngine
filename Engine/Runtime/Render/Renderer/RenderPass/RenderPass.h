@@ -2,12 +2,15 @@
 
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
-#include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
+#include "Engine/Runtime/Render/RenderViewFamily.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphResource.h"
+#include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowFrameGraph.h"
+#include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 namespace ve
@@ -17,31 +20,41 @@ namespace ve
     class RTRenderItem;
     class RTRenderViewState;
     class RTScene;
-    struct VirtualShadowFramePacket;
 
-    /// Renderer-owned scene choices and the queue lists built once for one view.
+    struct RendererViewData
+    {
+        RenderView view;
+        VirtualShadowSamplingSnapshot virtualShadowSampling;
+        std::vector<std::shared_ptr<RTRenderItem>> transparentItems;
+    };
+
+    /// Renderer-owned scene choices and queue lists for one render view family.
     struct RendererData
     {
         std::shared_ptr<RTScene> scene;
-        std::shared_ptr<RTCamera> resolvedCamera;
-        std::shared_ptr<RTRenderViewState> viewState;
-        std::shared_ptr<VirtualShadowFramePacket> virtualShadowPacket;
         std::vector<std::shared_ptr<RTRenderItem>> opaqueItems;
-        std::vector<std::shared_ptr<RTRenderItem>> transparentItems;
+        std::unordered_set<UInt64> virtualShadowDirtyCasterIDs;
+        std::vector<RendererViewData> views;
+    };
+
+    struct RendererViewFrameGraphData
+    {
+        FrameGraphTextureHandle color;
+        FrameGraphTextureHandle depth;
+        FrameGraphBufferHandle virtualShadowPageTable;
+        VirtualShadowSamplingSnapshot virtualShadowSampling;
     };
 
     /// The current logical attachment versions shared while renderer passes register themselves.
     struct RendererFrameGraphData
     {
-        FrameGraphTextureHandle color;
-        FrameGraphTextureHandle depth;
+        std::vector<RendererViewFrameGraphData> views;
         FrameGraphTextureHandle virtualShadowAtlas;
-        FrameGraphBufferHandle virtualShadowPageMarks;
-        FrameGraphBufferHandle virtualShadowPageTable;
-        FrameGraphBufferHandle virtualShadowRequestList;
-        FrameGraphBufferHandle virtualShadowRequestCounts;
         FrameGraphBufferHandle virtualShadowPhysicalPages;
-        bool depthPrepassReady = false;
+        FrameGraphBufferHandle virtualShadowStatistics;
+        VirtualShadowPreparedFamilyGraphData virtualShadowPreparedFamily;
+        VirtualShadowFrameGraphResources virtualShadowResources;
+        FrameGraphTextureHandle swapchainColor;
     };
 
     /// Logical raster state exposed to draw code after FrameGraph has resolved the native attachments.
@@ -72,6 +85,8 @@ namespace ve
         const RenderPassExecutionInfo& executionInfo;
         rhi::RhiDevice& device;
         rhi::RhiCommandList& commandList;
+
+        [[nodiscard]] const RendererViewData& GetView(UInt32 viewIndex) const noexcept;
     };
 
     /// Long-lived renderer pass that declares one or more nodes in a frame graph.
@@ -82,6 +97,14 @@ namespace ve
         virtual ~RenderPass() = default;
 
         virtual void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData) = 0;
+    };
+
+    class ViewRenderPass : public NonCopyable
+    {
+    public:
+        virtual ~ViewRenderPass() = default;
+
+        virtual void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData, UInt32 viewIndex) = 0;
     };
 
 } // namespace ve

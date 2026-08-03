@@ -24,31 +24,29 @@ namespace ve
         UInt64 lastSeenFrame = 0;
     };
 
-    struct VirtualShadowInvalidationResult
+    struct VirtualShadowPageKeyBuildResult
     {
-        std::vector<VirtualShadowPageKey> invalidatedKeys;
-        bool fullInvalidation = false;
+        std::vector<VirtualShadowPageKey> keys;
+        bool exceededCapacity = false;
     };
 
-    enum class VirtualShadowInvalidationCoverage
+    struct VirtualShadowSceneInvalidationResult
     {
-        CurrentWorkingRegion,
-        AllAbsolutePages
+        bool lightBasisChanged = false;
+        std::vector<Aabb> changedBounds;
+        std::vector<UInt64> changedCasterIDs;
     };
 
-    [[nodiscard]] std::vector<VirtualShadowPageKey> BuildVirtualShadowPageKeysForBounds(const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds);
+    [[nodiscard]] std::vector<VirtualShadowPageKey>
+    BuildVirtualShadowPageKeysForBounds(UInt32 viewID, const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds);
+    [[nodiscard]] VirtualShadowPageKeyBuildResult BuildAbsoluteVirtualShadowPageKeysForBounds(
+        UInt32 viewID, const VirtualShadowClipmapSet& clipmaps, const Aabb& worldBounds, SizeT maximumPageKeyCount);
 
     class VirtualShadowInvalidationTracker
     {
     public:
-        [[nodiscard]] VirtualShadowInvalidationResult
-        Update(UInt64 frameIndex, const VirtualShadowClipmapSet& clipmaps, Vector3 lightDirection, std::span<const VirtualShadowCasterSnapshot> casters);
-        [[nodiscard]] VirtualShadowInvalidationResult Update(UInt64 frameIndex,
-                                                             const VirtualShadowClipmapSet& clipmaps,
-                                                             Vector3 lightDirection,
-                                                             std::span<const VirtualShadowCasterSnapshot> casters,
-                                                             VirtualShadowInvalidationCoverage coverage,
-                                                             SizeT maximumInvalidatedKeys);
+        [[nodiscard]] VirtualShadowSceneInvalidationResult
+        UpdateScene(UInt64 frameIndex, Vector3 lightDirection, std::span<const VirtualShadowCasterSnapshot> casters);
         void Clear() noexcept;
         [[nodiscard]] UInt32 GetTrackedCasterCount() const noexcept;
 

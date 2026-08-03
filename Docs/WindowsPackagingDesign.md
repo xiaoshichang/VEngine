@@ -10,7 +10,7 @@ Current scope:
 - Platform: Windows x64 only.
 - Player binary: existing `VEnginePlayer.exe` built next to the running `VEngineEditor.exe`.
 - Assets: runtime asset files referenced by the Editor asset database, including required runtime files imported from
-  repository-level `Assets/BuiltinAsset/Engine/` sources.
+  repository-level `Assets/Builtin/` sources.
 - Asset metadata: exported `AssetManifest.json`.
 - Shader cross-platform handling: out of scope for this slice.
 - Build execution: one packaging step is advanced from the Editor modal each frame. A background build worker can be
@@ -19,8 +19,8 @@ Current scope:
 ## 2. Project Build Root
 
 Packages are written under the project root, next to `Assets/`, `Library/`, and `VEProject.json`.
-Repository-level engine assets live beside the project root under `Assets/BuiltinAsset/` and
-`Assets/EditorOnlyAsset/`. `Assets/BuiltinAsset/Engine/` may feed runtime imports and packages. Editor-only engine
+Repository-level engine assets live beside the project root under `Assets/Builtin/` and
+`Assets/EditorOnlyAsset/`. `Assets/Builtin/` may feed runtime imports and packages. Editor-only engine
 assets are copied with Editor builds but are not copied into Player packages.
 
 ```text
@@ -53,8 +53,6 @@ ProjectRoot/
           AssetManifest.json
           Assets/
             ...
-          BuiltinAsset/
-            ...
           Library/
             Imported/
               ...
@@ -65,7 +63,7 @@ Directory responsibilities:
 
 - `Bin/`: Windows executable payload for the packaged player.
 - `Data/`: project data consumed by the runtime. It preserves runtime asset paths so existing resource loading behavior
-  can resolve `Assets/...`, `BuiltinAsset/...`, and `Library/...` paths.
+  can resolve `Assets/...` and `Library/...` paths.
 - `Data/AssetManifest.json`: runtime manifest exported from `EditorAssetDatabase`.
 - `Data/VEProject.json`: copied project descriptor for future player bootstrapping and diagnostics.
 - Packaged Windows Player startup probes the sibling `Data/` directory beside `Bin/`, loads `AssetManifest.json`, then
@@ -80,8 +78,8 @@ The Editor modal presents and executes these steps:
 1. Prepare directories under `Build/`.
 2. Refresh the asset database so imports and metadata are current.
 3. Export `AssetManifest.json` into the package `Data/` directory.
-4. Copy every runtime asset referenced by the manifest into `Data/` while preserving `Assets/...`, `BuiltinAsset/...`,
-   and `Library/...` paths.
+4. Copy every runtime asset referenced by the manifest into `Data/` while preserving `Assets/...` and `Library/...`
+   paths.
 5. Copy `VEnginePlayer.exe` into `Bin/`.
 6. Write `PackageInfo.json` with basic package metadata.
 

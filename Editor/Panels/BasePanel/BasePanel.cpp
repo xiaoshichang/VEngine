@@ -22,7 +22,12 @@ namespace ve::editor
         ImGui::SetNextWindowPos(position, ImGuiCond_Always);
         ImGui::SetNextWindowSize(size, ImGuiCond_Always);
         ImGui::Begin(GetName(), nullptr, FixedPanelFlags());
-        RenderContent();
+        RenderContentInCurrentWindow();
         ImGui::End();
+    }
+
+    void BasePanel::RenderContentInCurrentWindow()
+    {
+        RenderContent();
     }
 } // namespace ve::editor

@@ -54,8 +54,10 @@ namespace ve
         [[nodiscard]] UInt32 GetVertexCount() const noexcept;
         [[nodiscard]] UInt32 GetIndexCount() const noexcept;
 
-        void InitRenderResource(rhi::RhiDevice& device, RTMeshResourceDesc desc);
-        void ResetRenderResource() noexcept;
+        void InitRenderResource(rhi::RhiDevice& device,
+                                RTMeshResourceDesc desc,
+                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
+        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
 
     private:
         RTMeshResourceDesc desc_;
@@ -90,14 +92,18 @@ namespace ve
         [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept;
         [[nodiscard]] rhi::RhiShaderModule* GetFragmentShader() noexcept;
         [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept;
+        [[nodiscard]] UInt64 GetRevision() const noexcept;
 
-        void InitRenderResource(rhi::RhiDevice& device, RTShaderResourceDesc desc);
-        void ResetRenderResource() noexcept;
+        void InitRenderResource(rhi::RhiDevice& device,
+                                RTShaderResourceDesc desc,
+                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
+        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
 
     private:
         RTShaderResourceDesc desc_;
         std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
         std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
+        UInt64 revision_ = 0;
     };
 
     struct RTMaterialResourceDesc

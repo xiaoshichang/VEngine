@@ -1,4 +1,5 @@
 #include "Engine/Runtime/Core/Version.h"
+#include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/iOS/IOSWindow.h"
 #include "Player/Windows/VEnginePlayer.h"
@@ -11,16 +12,16 @@
 
 namespace
 {
-    void VEngineIOSLogCallback(const ve::LogRecord& record)
+    void VEngineIOSLogCallback(const ve::LogRecord& record, std::string_view formattedLine)
     {
-        NSString* category = [NSString stringWithUTF8String:record.category != nullptr ? record.category : "General"];
-        NSString* message = [[NSString alloc] initWithBytes:record.message.data() length:record.message.size() encoding:NSUTF8StringEncoding];
+        (void)record;
+        NSString* message = [[NSString alloc] initWithBytes:formattedLine.data() length:formattedLine.size() encoding:NSUTF8StringEncoding];
         if (message == nil)
         {
             message = @"";
         }
 
-        NSLog(@"[VEngine][%s][%@] %@", ve::ToString(record.severity), category, message);
+        NSLog(@"[VEngine] %@", message);
     }
 
     UIInterfaceOrientationMask GetConfiguredInterfaceOrientationMask()
@@ -167,6 +168,7 @@ namespace
     initParam.runtime.ioSystem.threadName = "VEngineIOSPlayerIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineIOSPlayerRenderThread";
     initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
+    initParam.runtime.enableProfileSystem = VE_BUILD_DEBUG != 0;
 
     engineApplication_ = std::make_unique<ve::VEnginePlayer>(std::move(initParam));
     const int initResult = engineApplication_->Init();

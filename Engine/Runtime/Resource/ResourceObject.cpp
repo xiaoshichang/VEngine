@@ -374,8 +374,7 @@ namespace ve
     {
         try
         {
-            renderSystem.EnqueueCommand(
-                RenderCommand{"ReleaseRTMeshResource", [rtMeshResource = rtMeshResource_]() { rtMeshResource->ResetRenderResource(); }});
+            renderSystem.ReleaseRenderResource(rtMeshResource_);
         }
         catch (...)
         {
@@ -627,8 +626,7 @@ namespace ve
     {
         try
         {
-            renderSystem.EnqueueCommand(
-                RenderCommand{"ReleaseRTShaderResource", [rtShaderResource = rtShaderResource_]() { rtShaderResource->ResetRenderResource(); }});
+            renderSystem.ReleaseRenderResource(rtShaderResource_);
         }
         catch (...)
         {
