@@ -147,9 +147,22 @@ namespace ve::rhi
         /// may later replace this with a scaling/color-conversion blit path while keeping the frame-pipeline contract.
         [[nodiscard]] virtual bool CopyTextureToSwapchain(RhiTexture& sourceTexture, RhiSwapchain& swapchain) = 0;
 
+        /// Copies mip level 0 (subresource 0) from one texture into another texture's mip level 0.
+        ///
+        /// The source and destination base width, height, and format must match, but their total mip counts may differ.
+        /// On D3D11, a successful copy clears current shader-resource, unordered-access, and output bindings to prevent
+        /// hazards. Callers must rebind those resources before later draw or dispatch commands.
+        [[nodiscard]] virtual bool CopyTexture(RhiTexture& sourceTexture, RhiTexture& destinationTexture) = 0;
+
+        /// Copies subresource 0 of the current swapchain back buffer into a texture's mip level 0.
+        ///
+        /// The swapchain and destination base width, height, and format must match, but the destination may have more
+        /// mip levels. On D3D11, a successful copy clears current shader-resource, unordered-access, and output bindings
+        /// to prevent hazards. Callers must rebind those resources before later draw or dispatch commands.
+        [[nodiscard]] virtual bool CopySwapchainToTexture(RhiSwapchain& swapchain, RhiTexture& destinationTexture) = 0;
+
         /// Copies one bounded buffer range while recording.
-        [[nodiscard]] virtual bool
-        CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) = 0;
+        [[nodiscard]] virtual bool CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) = 0;
 
         /// Sets the active graphics pipeline.
         virtual void SetPipeline(const RhiPipelineState& pipelineState) = 0;
@@ -208,8 +221,7 @@ namespace ve::rhi
         virtual void DrawIndexed(uint32_t indexCount, uint32_t firstIndex, int32_t vertexOffset) = 0;
 
         /// Issues an indexed instanced draw call.
-        virtual void
-        DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
+        virtual void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
 
         [[nodiscard]] virtual uint64_t GetRecordedDrawCallCount() const noexcept
         {

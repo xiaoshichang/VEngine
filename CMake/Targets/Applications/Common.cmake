@@ -52,6 +52,10 @@ set(VE_EDITOR_COMMON_SOURCES
     Editor/Panels/BasePanel/BasePanel.h
     Editor/Panels/ConsolePanel/ConsolePanel.cpp
     Editor/Panels/ConsolePanel/ConsolePanel.h
+    Editor/Panels/FrameGraphDebugPanel/FrameGraphDebugPanel.cpp
+    Editor/Panels/FrameGraphDebugPanel/FrameGraphDebugPanel.h
+    Editor/Panels/FrameGraphDebugPanel/FrameGraphDebugPanelModel.cpp
+    Editor/Panels/FrameGraphDebugPanel/FrameGraphDebugPanelModel.h
     Editor/Panels/GameViewPanel/GameViewPanel.cpp
     Editor/Panels/GameViewPanel/GameViewPanel.h
     Editor/Panels/HierarchyPanel/HierarchyPanel.cpp

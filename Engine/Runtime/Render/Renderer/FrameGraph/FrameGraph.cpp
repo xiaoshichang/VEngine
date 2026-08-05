@@ -2,6 +2,8 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphTransientResourcePool.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -99,6 +101,8 @@ namespace ve
             std::vector<ResourceVersion> versions{ResourceVersion{}};
             UInt32 firstUse = InvalidPassIndex;
             UInt32 lastUse = InvalidPassIndex;
+            FrameGraphDebugPreview* debugPreview = nullptr;
+            bool internal = false;
 
             [[nodiscard]] bool IsImported() const noexcept
             {
@@ -144,6 +148,8 @@ namespace ve
             std::vector<FrameGraphTextureHandle> textureUavBarriersBeforeExecute;
             bool sideEffect = false;
             bool retained = false;
+            FrameGraphDebugPreview* debugPreview = nullptr;
+            bool internal = false;
         };
 
         explicit Impl(FrameGraphExecuteContext inContext)
@@ -753,13 +759,22 @@ namespace ve
 
     std::vector<FrameGraphPassDiagnostics> FrameGraph::GetPassDiagnostics() const
     {
+        std::vector<std::optional<UInt32>> compiledIndices(impl_->passes.size());
+        for (UInt32 compiledIndex = 0; compiledIndex < impl_->compiledPassOrder.size(); ++compiledIndex)
+        {
+            compiledIndices[impl_->compiledPassOrder[compiledIndex]] = compiledIndex;
+        }
+
         std::vector<FrameGraphPassDiagnostics> diagnostics;
         diagnostics.reserve(impl_->passes.size());
-        for (const Impl::PassNode& pass : impl_->passes)
+        for (UInt32 passIndex = 0; passIndex < impl_->passes.size(); ++passIndex)
         {
+            const Impl::PassNode& pass = impl_->passes[passIndex];
             FrameGraphPassDiagnostics diagnostic = {};
             diagnostic.name = pass.name;
             diagnostic.type = pass.raster ? FrameGraphPassType::Raster : FrameGraphPassType::Compute;
+            diagnostic.compiledIndex = compiledIndices[passIndex];
+            diagnostic.internal = pass.internal;
             diagnostic.bufferUavBarriersBeforeExecute = pass.bufferUavBarriersBeforeExecute;
             diagnostic.textureUavBarriersBeforeExecute = pass.textureUavBarriersBeforeExecute;
             if (pass.depthAttachment.has_value())
@@ -1302,6 +1317,12 @@ namespace ve
             transientBacking->texture = transientPool.AcquireTexture(resource.desc, resource.name.c_str());
             if (transientBacking->texture == nullptr)
             {
+                if (resource.internal && resource.debugPreview != nullptr)
+                {
+                    resource.debugPreview->state = FrameGraphDebugPreviewState::Failed;
+                    resource.debugPreview->message = "staging texture allocation failed";
+                    continue;
+                }
                 return ErrorCode::OutOfMemory;
             }
         }
@@ -1382,7 +1403,293 @@ namespace ve
         }
     }
 
+    Error FrameGraph::PrepareDebugCapture(FrameGraphDebugFrameCapture& capture)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        if (impl_->stage != FrameGraphStage::SetupComplete)
+        {
+            return Error(ErrorCode::InvalidState, "FrameGraph::PrepareDebugCapture requires a completed Setup phase.");
+        }
+        if (!IsFrameGraphDebugPreviewScaleValid(capture.request.previewScale))
+        {
+            return Error(ErrorCode::InvalidArgument, "Frame graph debug capture has an invalid preview scale.");
+        }
+
+        const Error originalCompile = CompileInternal();
+        if (!originalCompile.IsOk())
+        {
+            return originalCompile;
+        }
+
+        FrameGraphDebugSourceGraph source;
+        source.frameIndex = impl_->context.frameData.frameIndex;
+        source.compiledPassOrder = impl_->compiledPassOrder;
+        source.passes.reserve(impl_->passes.size());
+        for (UInt32 passIndex = 0; passIndex < impl_->passes.size(); ++passIndex)
+        {
+            const Impl::PassNode& pass = impl_->passes[passIndex];
+            FrameGraphDebugSourcePass sourcePass;
+            sourcePass.name = pass.name;
+            sourcePass.type = pass.raster ? FrameGraphDebugPassType::Raster : FrameGraphDebugPassType::Compute;
+            sourcePass.registrationIndex = passIndex;
+            sourcePass.retained = pass.retained;
+            sourcePass.sideEffect = pass.sideEffect;
+            sourcePass.textureUavBarriers = pass.textureUavBarriersBeforeExecute;
+            sourcePass.bufferUavBarriers = pass.bufferUavBarriersBeforeExecute;
+            sourcePass.accesses.reserve(pass.textureAccesses.size() + pass.bufferAccesses.size());
+            for (const TextureAccessRecord& access : pass.textureAccesses)
+            {
+                FrameGraphDebugAccess debugAccess;
+                debugAccess.resourceKind = FrameGraphDebugResourceKind::Texture;
+                debugAccess.resourceIndex = access.input.index;
+                debugAccess.inputVersion = access.input.version;
+                debugAccess.accessValue = static_cast<UInt32>(access.access);
+                debugAccess.write = access.mode == TextureAccessMode::Write;
+                if (debugAccess.write)
+                {
+                    debugAccess.outputVersion = access.output.version;
+                }
+                sourcePass.accesses.push_back(debugAccess);
+            }
+            for (const BufferAccessRecord& access : pass.bufferAccesses)
+            {
+                FrameGraphDebugAccess debugAccess;
+                debugAccess.resourceKind = FrameGraphDebugResourceKind::Buffer;
+                debugAccess.resourceIndex = access.input.index;
+                debugAccess.inputVersion = access.input.version;
+                debugAccess.accessValue = static_cast<UInt32>(access.access);
+                debugAccess.write = access.mode == TextureAccessMode::Write;
+                if (debugAccess.write)
+                {
+                    debugAccess.outputVersion = access.output.version;
+                }
+                sourcePass.accesses.push_back(debugAccess);
+            }
+            if (pass.colorAttachment)
+            {
+                const ColorAttachmentRecord& attachment = *pass.colorAttachment;
+                sourcePass.attachments.push_back(
+                    {attachment.handle.index, attachment.handle.version, attachment.loadAction, attachment.storeAction, false, false});
+            }
+            if (pass.depthAttachment)
+            {
+                const DepthAttachmentRecord& attachment = *pass.depthAttachment;
+                sourcePass.attachments.push_back(
+                    {attachment.handle.index, attachment.handle.version, attachment.loadAction, attachment.storeAction, true, attachment.readOnly});
+            }
+            source.passes.push_back(std::move(sourcePass));
+        }
+
+        source.textures.reserve(impl_->textures.size());
+        for (UInt32 textureIndex = 0; textureIndex < impl_->textures.size(); ++textureIndex)
+        {
+            const Impl::TextureResourceNode& texture = impl_->textures[textureIndex];
+            FrameGraphDebugSourceTexture sourceTexture;
+            sourceTexture.name = texture.name;
+            sourceTexture.desc = texture.desc;
+            sourceTexture.imported = texture.IsImported();
+            const ImportedFrameGraphTexture* imported = texture.GetImportedBacking();
+            sourceTexture.swapchain = imported != nullptr && imported->isSwapchain;
+            sourceTexture.versions.reserve(texture.versions.size());
+            for (UInt32 versionIndex = 0; versionIndex < texture.versions.size(); ++versionIndex)
+            {
+                const Impl::ResourceVersion& version = texture.versions[versionIndex];
+                FrameGraphDebugSourceVersion sourceVersion;
+                sourceVersion.producer = version.producer;
+                sourceVersion.readers = version.readers;
+                if (versionIndex + 1 < texture.versions.size())
+                {
+                    sourceVersion.nextWriter = texture.versions[versionIndex + 1].producer;
+                }
+                sourceVersion.exported =
+                    std::find(impl_->exportedTextures.begin(), impl_->exportedTextures.end(), FrameGraphTextureHandle{textureIndex, versionIndex}) !=
+                    impl_->exportedTextures.end();
+                sourceTexture.versions.push_back(std::move(sourceVersion));
+            }
+            source.textures.push_back(std::move(sourceTexture));
+        }
+
+        source.buffers.reserve(impl_->buffers.size());
+        for (UInt32 bufferIndex = 0; bufferIndex < impl_->buffers.size(); ++bufferIndex)
+        {
+            const Impl::BufferResourceNode& buffer = impl_->buffers[bufferIndex];
+            FrameGraphDebugSourceBuffer sourceBuffer;
+            sourceBuffer.name = buffer.name;
+            sourceBuffer.size = buffer.backing.buffer != nullptr ? buffer.backing.buffer->GetSize() : 0;
+            sourceBuffer.versions.reserve(buffer.versions.size());
+            for (UInt32 versionIndex = 0; versionIndex < buffer.versions.size(); ++versionIndex)
+            {
+                const Impl::ResourceVersion& version = buffer.versions[versionIndex];
+                FrameGraphDebugSourceVersion sourceVersion;
+                sourceVersion.producer = version.producer;
+                sourceVersion.readers = version.readers;
+                if (versionIndex + 1 < buffer.versions.size())
+                {
+                    sourceVersion.nextWriter = buffer.versions[versionIndex + 1].producer;
+                }
+                sourceVersion.exported =
+                    std::find(impl_->exportedBuffers.begin(), impl_->exportedBuffers.end(), FrameGraphBufferHandle{bufferIndex, versionIndex}) !=
+                    impl_->exportedBuffers.end();
+                sourceBuffer.versions.push_back(std::move(sourceVersion));
+            }
+            source.buffers.push_back(std::move(sourceBuffer));
+        }
+
+        FrameGraphDebugBuildResult buildResult = BuildFrameGraphDebugData(source, capture.request);
+        capture.data = std::move(buildResult.data);
+        std::vector<FrameGraphDebugCapturePlanEntry> capturePlan = std::move(buildResult.capturePlan);
+
+        impl_->ResetCompileResults();
+        impl_->stage = FrameGraphStage::SettingUp;
+
+        const auto failPreview = [](FrameGraphDebugPreview& preview, ErrorCode code, std::string reason)
+        {
+            preview.state = FrameGraphDebugPreviewState::Failed;
+            preview.message = std::move(reason) + " (" + ToString(code) + ")";
+        };
+        const auto addUsage = [](rhi::RhiTextureUsage usage, rhi::RhiTextureUsage added)
+        { return static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(usage) | static_cast<UInt32>(added)); };
+
+        for (const FrameGraphDebugCapturePlanEntry& entry : capturePlan)
+        {
+            VE_ASSERT(entry.textureIndex < impl_->textures.size());
+            VE_ASSERT(entry.textureIndex < capture.data->textures.size());
+            const FrameGraphTextureDesc sourceDesc = impl_->textures[entry.textureIndex].desc;
+            FrameGraphDebugPreview& preview = capture.data->textures[entry.textureIndex].versions[entry.version].preview;
+            const FrameGraphDebugPreviewMode previewMode = SelectFrameGraphDebugPreviewMode(sourceDesc.format);
+            if (previewMode == FrameGraphDebugPreviewMode::Unsupported)
+            {
+                failPreview(preview, ErrorCode::Unsupported, "unsupported texture format");
+                continue;
+            }
+            if (impl_->context.frameData.device == nullptr)
+            {
+                failPreview(preview, ErrorCode::InvalidState, "render device unavailable");
+                continue;
+            }
+
+            auto previewOwner = std::make_shared<FrameGraphDebugPreviewTexture>();
+            const std::string previewName = "FrameGraphDebugPreview." + std::to_string(entry.textureIndex) + "." + std::to_string(entry.version);
+            const ErrorCode previewAllocationResult = previewOwner->Initialize(*impl_->context.frameData.device, entry.previewExtent, previewName);
+            if (previewAllocationResult != ErrorCode::None)
+            {
+                failPreview(preview, previewAllocationResult, "preview texture allocation failed");
+                continue;
+            }
+            preview.texture = previewOwner;
+
+            FrameGraphTextureDesc previewDesc;
+            previewDesc.width = entry.previewExtent.width;
+            previewDesc.height = entry.previewExtent.height;
+            previewDesc.format = rhi::RhiFormat::Rgba8Unorm;
+            previewDesc.usage = addUsage(rhi::RhiTextureUsage::Sampled, rhi::RhiTextureUsage::RenderTarget);
+            const FrameGraphTextureHandle previewTarget = ImportTexture(previewName, previewDesc, ImportedFrameGraphTexture{previewOwner->GetTexture(), false});
+            impl_->textures[previewTarget.index].internal = true;
+            impl_->textures[previewTarget.index].debugPreview = &preview;
+
+            FrameGraphTextureHandle conversionSource{entry.textureIndex, entry.version};
+            if (entry.swapchain || entry.requiresSampleableStaging)
+            {
+                FrameGraphTextureDesc stagingDesc = sourceDesc;
+                stagingDesc.usage = addUsage(stagingDesc.usage, rhi::RhiTextureUsage::Sampled);
+                const FrameGraphTextureHandle staging = CreateTexture(previewName + ".Staging", stagingDesc);
+                impl_->textures[staging.index].internal = true;
+                impl_->textures[staging.index].debugPreview = &preview;
+
+                struct CopyPassData
+                {
+                    FrameGraphTextureHandle source;
+                    FrameGraphTextureHandle destination;
+                };
+                AddComputePass<CopyPassData>(
+                    previewName + ".Copy",
+                    [conversionSource, staging](FrameGraphBuilder& builder, CopyPassData& data)
+                    {
+                        data.source = builder.ReadCopySource(conversionSource);
+                        data.destination = builder.WriteCopyDestination(staging);
+                    },
+                    [&preview, swapchain = entry.swapchain](const CopyPassData& data, const FrameGraphPassResources& resources, RenderPassContext& context)
+                    {
+                        const ResolvedFrameGraphTexture destination = resources.GetTexture(data.destination);
+                        if (destination.texture == nullptr)
+                        {
+                            preview.state = FrameGraphDebugPreviewState::Failed;
+                            preview.message = "staging texture allocation failed";
+                            return;
+                        }
+
+                        bool copied = false;
+                        if (swapchain)
+                        {
+                            copied = context.frameData.mainSwapchain != nullptr &&
+                                     context.commandList.CopySwapchainToTexture(*context.frameData.mainSwapchain, *destination.texture);
+                        }
+                        else
+                        {
+                            const ResolvedFrameGraphTexture source = resources.GetTexture(data.source);
+                            copied = source.texture != nullptr && context.commandList.CopyTexture(*source.texture, *destination.texture);
+                        }
+                        if (!copied)
+                        {
+                            preview.state = FrameGraphDebugPreviewState::Failed;
+                            preview.message = "texture staging copy failed";
+                        }
+                    });
+                impl_->passes.back().internal = true;
+                impl_->passes.back().debugPreview = &preview;
+                conversionSource = FrameGraphTextureHandle{staging.index, 1};
+            }
+
+            struct ConversionPassData
+            {
+                FrameGraphTextureHandle source;
+                FrameGraphTextureHandle destination;
+            };
+            AddRasterPass<ConversionPassData>(
+                previewName + ".Convert",
+                [conversionSource, previewTarget](FrameGraphBuilder& builder, ConversionPassData& data)
+                {
+                    data.source = builder.Read(conversionSource);
+                    data.destination = builder.WriteColorAttachment(previewTarget, rhi::RhiLoadAction::DontCare);
+                    builder.SetSideEffect();
+                },
+                [&preview, previewMode](const ConversionPassData& data, const FrameGraphPassResources& resources, RenderPassContext& context)
+                {
+                    if (preview.state == FrameGraphDebugPreviewState::Failed)
+                    {
+                        return;
+                    }
+                    const ResolvedFrameGraphTexture source = resources.GetTexture(data.source);
+                    if (source.texture == nullptr)
+                    {
+                        preview.state = FrameGraphDebugPreviewState::Failed;
+                        preview.message = "preview conversion source unavailable";
+                        return;
+                    }
+                    const ErrorCode conversionResult = RecordFrameGraphDebugPreviewConversion(*source.texture, previewMode, context);
+                    if (conversionResult != ErrorCode::None)
+                    {
+                        preview.state = FrameGraphDebugPreviewState::Failed;
+                        preview.message = std::string("preview conversion failed (") + ToString(conversionResult) + ")";
+                        return;
+                    }
+                    preview.state = FrameGraphDebugPreviewState::Ready;
+                    preview.message.clear();
+                });
+            impl_->passes.back().internal = true;
+            impl_->passes.back().debugPreview = &preview;
+        }
+
+        impl_->stage = FrameGraphStage::SetupComplete;
+        return Error();
+    }
+
     Error FrameGraph::Compile()
+    {
+        return CompileInternal();
+    }
+
+    Error FrameGraph::CompileInternal()
     {
         VE_ASSERT_RENDER_THREAD();
         if (impl_->stage != FrameGraphStage::SetupComplete)
@@ -1466,6 +1773,27 @@ namespace ve
             const rhi::RhiRenderPassBeginInfo beginInfo = impl_->BuildRenderPassBeginInfo(pass);
             const RenderPassExecutionInfo executionInfo = impl_->BuildRenderPassExecutionInfo(pass);
 
+            const bool missingInternalTexture = pass.internal && std::any_of(pass.textureAccesses.begin(),
+                                                                             pass.textureAccesses.end(),
+                                                                             [this](const TextureAccessRecord& access)
+                                                                             {
+                                                                                 const ResolvedFrameGraphTexture resolved = impl_->ResolveTexture(access.input);
+                                                                                 return resolved.texture == nullptr && !resolved.isSwapchain;
+                                                                             });
+            if (missingInternalTexture)
+            {
+                if (pass.debugPreview != nullptr)
+                {
+                    if (pass.debugPreview->state != FrameGraphDebugPreviewState::Failed)
+                    {
+                        pass.debugPreview->state = FrameGraphDebugPreviewState::Failed;
+                        pass.debugPreview->message = "debug capture texture unavailable";
+                    }
+                }
+                impl_->ReleasePassTextures(orderIndex, transientPool);
+                continue;
+            }
+
             // Step 3: materialize explicit unordered-access visibility boundaries before recording the pass body.
             if (!pass.bufferUavBarriersBeforeExecute.empty())
             {
@@ -1492,6 +1820,19 @@ namespace ve
             // Step 4: raster passes open native attachments; compute passes record directly on the command list.
             if (pass.raster && !commandList.BeginRenderPass(*impl_->context.frameData.mainSwapchain, beginInfo))
             {
+                if (pass.internal)
+                {
+                    if (pass.debugPreview != nullptr)
+                    {
+                        if (pass.debugPreview->state != FrameGraphDebugPreviewState::Failed)
+                        {
+                            pass.debugPreview->state = FrameGraphDebugPreviewState::Failed;
+                            pass.debugPreview->message = "preview render pass could not begin";
+                        }
+                    }
+                    impl_->ReleasePassTextures(orderIndex, transientPool);
+                    continue;
+                }
                 impl_->ReleaseAllTextures(transientPool);
                 impl_->stage = FrameGraphStage::Failed;
                 return ErrorCode::PlatformError;
@@ -1509,7 +1850,10 @@ namespace ve
             {
                 commandList.EndRenderPass();
             }
-            impl_->lastExecutionPassNames.push_back(pass.name);
+            if (!pass.internal)
+            {
+                impl_->lastExecutionPassNames.push_back(pass.name);
+            }
 
             // Step 6: return graph-owned textures immediately after their last compiled use.
             impl_->ReleasePassTextures(orderIndex, transientPool);

@@ -20,6 +20,7 @@ namespace ve
 {
     class FrameGraphBuilder;
     class FrameGraph;
+    struct FrameGraphDebugFrameCapture;
 
     template<typename Callback>
     concept FrameGraphSetupCallback = requires(std::decay_t<Callback>& callback, FrameGraph& frameGraph) {
@@ -84,6 +85,8 @@ namespace ve
         std::optional<rhi::RhiLoadAction> depthAttachmentLoadAction;
         std::vector<FrameGraphTextureAccessDiagnostics> textureAccesses;
         std::vector<FrameGraphBufferAccessDiagnostics> bufferAccesses;
+        std::optional<UInt32> compiledIndex;
+        bool internal = false;
     };
 
     template<typename PassData, typename Callback>
@@ -196,6 +199,9 @@ namespace ve
         /// Compile phase: validates declarations, builds dependencies, culls/sorts passes, and analyzes transient lifetimes.
         [[nodiscard]] Error Compile();
 
+        /// Compiles and snapshots the original declarations, then appends best-effort internal preview passes.
+        [[nodiscard]] Error PrepareDebugCapture(FrameGraphDebugFrameCapture& capture);
+
         /// Execute phase: resolves physical resources and records each compiled pass into the current command list.
         [[nodiscard]] ErrorCode Execute();
 
@@ -229,6 +235,7 @@ namespace ve
         void AddUavBarrierBeforeExecute(UInt32 passIndex, FrameGraphBufferHandle handle) noexcept;
         void AddUavBarrierBeforeExecute(UInt32 passIndex, FrameGraphTextureHandle handle) noexcept;
         void SetSideEffect(UInt32 passIndex) noexcept;
+        [[nodiscard]] Error CompileInternal();
         [[nodiscard]] ResolvedFrameGraphTexture ResolveTexture(FrameGraphTextureHandle handle) const noexcept;
         [[nodiscard]] ResolvedFrameGraphTexture ResolvePassTexture(UInt32 passIndex, FrameGraphTextureHandle handle) const noexcept;
         [[nodiscard]] ResolvedFrameGraphBuffer ResolveBuffer(FrameGraphBufferHandle handle) const noexcept;

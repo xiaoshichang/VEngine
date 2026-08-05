@@ -18,7 +18,7 @@ namespace ve::editor
         constexpr float HierarchyWidth = 260.0F;
         constexpr float InspectorWidth = 310.0F;
         constexpr float AssetsHeight = 230.0F;
-        constexpr float BottomPanelHeight = 400.0F;
+        constexpr float BottomPanelHeight = 500.0F;
         constexpr float ToolbarHeight = 32.0F;
         constexpr float OpenSceneDialogWidth = 560.0F;
         constexpr float OpenSceneDialogHeight = 420.0F;
@@ -61,7 +61,24 @@ namespace ve::editor
         inspectorPanel_.Init(editor);
         consolePanel_.Init(editor);
         profilePanel_.Init(editor);
+        frameGraphDebugPanel_.Init(editor);
         initialized_ = true;
+    }
+
+    bool ProjectEditingView::Shutdown()
+    {
+        if (!initialized_)
+        {
+            return true;
+        }
+
+        if (!frameGraphDebugPanel_.Shutdown())
+        {
+            return false;
+        }
+
+        initialized_ = false;
+        return true;
     }
 
     void ProjectEditingView::Render(Editor& editor, Float32 contentBottom)
@@ -92,8 +109,8 @@ namespace ve::editor
 
         inspectorPanel_.Render(ImVec2(centerX + centerWidth + PanelGap, origin.y), ImVec2(InspectorWidth, available.y));
 
-        constexpr ImGuiWindowFlags BottomPanelWindowFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                                            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
+        constexpr ImGuiWindowFlags BottomPanelWindowFlags =
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
         ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, bottomPanelY), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, BottomPanelHeight), ImGuiCond_Always);
         if (ImGui::Begin("EditorBottomPanels", nullptr, BottomPanelWindowFlags))
@@ -110,11 +127,15 @@ namespace ve::editor
                     profilePanel_.RenderContentInCurrentWindow();
                     ImGui::EndTabItem();
                 }
+                if (ImGui::BeginTabItem("Frame Graph"))
+                {
+                    frameGraphDebugPanel_.RenderContentInCurrentWindow();
+                    ImGui::EndTabItem();
+                }
                 ImGui::EndTabBar();
             }
         }
         ImGui::End();
-
     }
 
     std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewTexture() const noexcept

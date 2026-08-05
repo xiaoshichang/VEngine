@@ -64,6 +64,7 @@ function(ve_add_windows_editor)
     add_dependencies(VEngineWinEditor VEngineShaderTool VEngineEngineScriptHost)
 
     ve_setup_imgui(VEngineWinEditor)
+    ve_setup_imgui_node_editor(VEngineWinEditor)
     ve_add_editor_packaging_definitions(VEngineWinEditor)
 
     add_custom_command(TARGET VEngineWinEditor POST_BUILD

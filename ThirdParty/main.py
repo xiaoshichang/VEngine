@@ -192,6 +192,8 @@ def main(argv: list[str]) -> int:
         return run(root / "Boost" / "main.py", *args)
     if dependency == "imgui":
         return run(root / "ImGui" / "main.py", *args)
+    if dependency == "imgui-node-editor":
+        return run(root / "ImGuiNodeEditor" / "main.py", *args)
     if dependency == "directxshadercompiler":
         return run(root / "DirectXShaderCompiler" / "main.py", *args)
     if dependency == "dotnet":

@@ -952,6 +952,7 @@ namespace ve::rhi
 
             [[nodiscard]] bool Begin() override
             {
+                recording_ = true;
                 recordedDrawIndexedInstancedCount_ = 0;
                 recordedDrawCallCount_ = 0;
                 activePipeline_ = nullptr;
@@ -965,6 +966,7 @@ namespace ve::rhi
 
             [[nodiscard]] bool End() override
             {
+                recording_ = false;
                 return true;
             }
 
@@ -974,8 +976,8 @@ namespace ve::rhi
                 activeFragmentUavPass_ = false;
                 const bool hasAttachments = beginInfo.hasColorAttachment || beginInfo.hasDepthAttachment;
                 if ((!beginInfo.hasColorAttachment && beginInfo.colorAttachmentIsSwapchain) ||
-                    (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) ||
-                    (!hasAttachments && !beginInfo.hasFragmentUavWrites) || (hasAttachments && beginInfo.hasFragmentUavWrites))
+                    (!beginInfo.hasColorAttachment && beginInfo.colorAttachment.texture != nullptr) || (!hasAttachments && !beginInfo.hasFragmentUavWrites) ||
+                    (hasAttachments && beginInfo.hasFragmentUavWrites))
                 {
                     return false;
                 }
@@ -1083,16 +1085,53 @@ namespace ve::rhi
                 return true;
             }
 
-            [[nodiscard]] bool
-            CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
+            [[nodiscard]] bool CopyTexture(RhiTexture& sourceTexture, RhiTexture& destinationTexture) override
+            {
+                auto* source = dynamic_cast<D3D11Texture*>(&sourceTexture);
+                auto* destination = dynamic_cast<D3D11Texture*>(&destinationTexture);
+                if (source == nullptr || destination == nullptr || source == destination || !recording_ || IsRenderPassActive() ||
+                    sourceTexture.GetWidth() != destinationTexture.GetWidth() || sourceTexture.GetHeight() != destinationTexture.GetHeight() ||
+                    sourceTexture.GetFormat() != destinationTexture.GetFormat() || source->GetNativeTexture() == nullptr ||
+                    destination->GetNativeTexture() == nullptr)
+                {
+                    return false;
+                }
+
+                UnbindCopyHazards();
+                context_->CopySubresourceRegion(destination->GetNativeTexture(), 0, 0, 0, 0, source->GetNativeTexture(), 0, nullptr);
+                return true;
+            }
+
+            [[nodiscard]] bool CopySwapchainToTexture(RhiSwapchain& swapchain, RhiTexture& destinationTexture) override
+            {
+                auto* d3dSwapchain = dynamic_cast<D3D11Swapchain*>(&swapchain);
+                auto* destination = dynamic_cast<D3D11Texture*>(&destinationTexture);
+                if (d3dSwapchain == nullptr || destination == nullptr || !recording_ || IsRenderPassActive())
+                {
+                    return false;
+                }
+
+                const RhiExtent2D swapchainExtent = d3dSwapchain->GetExtent();
+                if (destinationTexture.GetWidth() != swapchainExtent.width || destinationTexture.GetHeight() != swapchainExtent.height ||
+                    destinationTexture.GetFormat() != d3dSwapchain->GetColorFormat() || d3dSwapchain->GetCurrentBackBuffer() == nullptr ||
+                    destination->GetNativeTexture() == nullptr)
+                {
+                    return false;
+                }
+
+                UnbindCopyHazards();
+                context_->CopySubresourceRegion(destination->GetNativeTexture(), 0, 0, 0, 0, d3dSwapchain->GetCurrentBackBuffer(), 0, nullptr);
+                return true;
+            }
+
+            [[nodiscard]] bool CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
             {
                 auto* sourceBuffer = dynamic_cast<D3D11Buffer*>(&source);
                 auto* destinationBuffer = dynamic_cast<D3D11Buffer*>(&destination);
                 if (sourceBuffer == nullptr || destinationBuffer == nullptr || sourceBuffer == destinationBuffer || size == 0 ||
-                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu ||
-                    sourceOffset > sourceBuffer->GetSize() || size > sourceBuffer->GetSize() - sourceOffset ||
-                    destinationOffset > destinationBuffer->GetSize() || size > destinationBuffer->GetSize() - destinationOffset ||
-                    destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
+                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu || sourceOffset > sourceBuffer->GetSize() ||
+                    size > sourceBuffer->GetSize() - sourceOffset || destinationOffset > destinationBuffer->GetSize() ||
+                    size > destinationBuffer->GetSize() - destinationOffset || destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
                 {
                     return false;
                 }
@@ -1341,8 +1380,7 @@ namespace ve::rhi
                 const bool validFragmentBinding = activeFragmentUavPass_ && activeRenderTargetView_ == nullptr && activeDepthTexture_ == nullptr && slot == 0;
                 if (!validFragmentBinding)
                 {
-                    FailD3D11StorageTextureBinding(
-                        "D3D11 fragment texture UAVs require slot 0 in an active attachmentless render pass.");
+                    FailD3D11StorageTextureBinding("D3D11 fragment texture UAVs require slot 0 in an active attachmentless render pass.");
                 }
 
                 ClearUnorderedAccessBindings();
@@ -1386,8 +1424,7 @@ namespace ve::rhi
                 ++recordedDrawCallCount_;
             }
 
-            void DrawIndexedInstanced(
-                uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
+            void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
             {
                 context_->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
                 ++recordedDrawCallCount_;
@@ -1405,6 +1442,18 @@ namespace ve::rhi
             }
 
         private:
+            [[nodiscard]] bool IsRenderPassActive() const noexcept
+            {
+                return activeRenderTargetView_ != nullptr || activeDepthTexture_ != nullptr || activeFragmentUavPass_;
+            }
+
+            void UnbindCopyHazards()
+            {
+                ClearShaderResourceBindings();
+                ClearUnorderedAccessBindings();
+                context_->OMSetRenderTargets(0, nullptr, nullptr);
+            }
+
             [[nodiscard]] bool ValidateBinding(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot) const noexcept
             {
                 const bool valid = (activePipeline_ != nullptr && activePipeline_->HasBinding(kind, stage, slot)) ||
@@ -1442,6 +1491,7 @@ namespace ve::rhi
             const D3D11Texture* activeDepthTexture_ = nullptr;
             ID3D11UnorderedAccessView* activeFragmentTextureUav_ = nullptr;
             bool activeFragmentUavPass_ = false;
+            bool recording_ = false;
             uint64_t recordedDrawIndexedInstancedCount_ = 0;
             uint64_t recordedDrawCallCount_ = 0;
         };
@@ -1625,8 +1675,7 @@ namespace ve::rhi
                     SetLastError("D3D11 readback buffers require GPU-to-CPU memory and no initial data.");
                     return nullptr;
                 }
-                if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 ||
-                                  desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly))
+                if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 || desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly))
                 {
                     SetLastError("D3D11 storage buffers require a non-zero structure stride, an aligned size, and GPU-only memory.");
                     return nullptr;
@@ -1634,8 +1683,8 @@ namespace ve::rhi
 
                 D3D11_BUFFER_DESC bufferDesc = {};
                 bufferDesc.ByteWidth = static_cast<UINT>(desc.size);
-                bufferDesc.Usage = isReadback ? D3D11_USAGE_STAGING
-                                             : (desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT);
+                bufferDesc.Usage =
+                    isReadback ? D3D11_USAGE_STAGING : (desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT);
                 bufferDesc.BindFlags = isReadback ? 0 : ToD3D11BufferBindFlags(desc.usage);
                 bufferDesc.CPUAccessFlags =
                     isReadback ? D3D11_CPU_ACCESS_READ : (desc.memoryUsage == RhiBufferMemoryUsage::CpuToGpu ? D3D11_CPU_ACCESS_WRITE : 0);
@@ -1819,12 +1868,7 @@ namespace ve::rhi
                 }
 
                 return std::make_unique<D3D11Texture>(
-                    texture,
-                    std::move(renderTargetView),
-                    std::move(depthStencilView),
-                    std::move(shaderResourceView),
-                    std::move(unorderedAccessView),
-                    desc);
+                    texture, std::move(renderTargetView), std::move(depthStencilView), std::move(shaderResourceView), std::move(unorderedAccessView), desc);
             }
 
             [[nodiscard]] std::unique_ptr<RhiSampler> CreateSampler(const RhiSamplerDesc& desc) override

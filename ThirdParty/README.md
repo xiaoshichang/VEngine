@@ -21,6 +21,7 @@ The script prepares:
 - Microsoft .NET Runtime 10.0.9 under `DotNet/win-x64/10.0.9` and `DotNet/osx-arm64/10.0.9`.
 - Windows SDK `fxc.exe` under `WindowsSdkTools/Tools/x64`.
 - Dear ImGui is vendored under `ImGui/imgui-1.92.8`.
+- imgui-node-editor is vendored under `ImGuiNodeEditor/imgui-node-editor-55a7dbf` for Editor targets.
 - Jolt Physics source under `Jolt/Source`.
 
 Generated source checkouts, archives, build directories, and binaries are ignored by git. Vendored source libraries and

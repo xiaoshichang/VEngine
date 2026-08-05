@@ -11,6 +11,7 @@
 #include "Engine/Runtime/Render/RenderTarget.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Threading/FrameEndSync.h"
 #include "Engine/Runtime/Threading/Thread.h"
@@ -162,6 +163,18 @@ namespace ve
         /// Returns the latest fence-completed render statistics without synchronously invoking the Render Thread.
         [[nodiscard]] RenderPerformanceStatistics GetPerformanceStatistics() const;
         [[nodiscard]] UInt64 GetRecordedDrawCallCount() const noexcept;
+
+        /// Arms a one-shot capture of the next main-swapchain frame.
+        [[nodiscard]] ErrorCode RequestFrameGraphDebugCapture(Float32 previewScale);
+        [[nodiscard]] FrameGraphDebugCaptureStatus GetFrameGraphDebugCaptureStatus() const;
+        [[nodiscard]] std::string GetFrameGraphDebugCaptureFailure() const;
+        [[nodiscard]] std::shared_ptr<const FrameGraphDebugData> TakeFrameGraphDebugData();
+
+        /// Returns panel-owned capture data to the Render Thread for fence-safe preview retirement.
+        ///
+        /// A null return means ownership was accepted. A non-null return transfers ownership back to the caller, which
+        /// must assign it back to its panel pointer. The panel must call this before render-backend shutdown.
+        [[nodiscard]] std::shared_ptr<const FrameGraphDebugData> RetireFrameGraphDebugData(std::shared_ptr<const FrameGraphDebugData> data);
 
         /// Creates the main swapchain on the Render Thread.
         ///

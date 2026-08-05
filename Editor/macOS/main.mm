@@ -1,12 +1,11 @@
-#include "Editor/macOS/MacEditorApplication.h"
 #include "Editor/Core/EditorStartup.h"
 #include "Editor/Panels/ConsolePanel/ConsolePanel.h"
-#include "Engine/Runtime/FileSystem/Path.h"
+#include "Editor/macOS/MacEditorApplication.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Logging/Log.h"
 
 #import <AppKit/AppKit.h>
-
 #include <cstdlib>
 #include <filesystem>
 #include <string>
@@ -38,15 +37,14 @@ int main(int argc, char* argv[])
         initParam.name = "VEngineEditor";
         initParam.mainWindow.title = "VEngine Editor";
         initParam.mainWindow.width = 1600;
-        initParam.mainWindow.height = 1200;
+        initParam.mainWindow.height = 1300;
         initParam.mainWindow.visible = true;
         initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
 
         const ve::Path executableDirectory = ve::FileSystem::GetExecutableDirectory();
         const ve::Path bundleContentsDirectory = executableDirectory.GetParentPath();
         initParam.runtime.scriptingSystem.scriptHostRoot = bundleContentsDirectory / "Resources" / "Managed" / "VEngine.ScriptHost";
-        initParam.runtime.scriptingSystem.runtimeConfigPath =
-            initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
+        initParam.runtime.scriptingSystem.runtimeConfigPath = initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
         initParam.runtime.scriptingSystem.dotNetRuntimeRoot = bundleContentsDirectory / "Resources" / "DotNet" / "osx-arm64" / "10.0.9";
 
         std::vector<std::string> arguments;

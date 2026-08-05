@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Render/ShaderManager.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <functional>
@@ -83,9 +84,8 @@ namespace ve
             return message;
         }
 
-        [[nodiscard]] std::string BuildGraphicsPipelineCreateFailureMessage(const rhi::RhiDevice& device,
-                                                                            const GraphicsPipelineID& id,
-                                                                            const rhi::RhiGraphicsPipelineDesc& desc)
+        [[nodiscard]] std::string
+        BuildGraphicsPipelineCreateFailureMessage(const rhi::RhiDevice& device, const GraphicsPipelineID& id, const rhi::RhiGraphicsPipelineDesc& desc)
         {
             std::string message = "ShaderManager failed to create graphics pipeline.";
             message += " name='";
@@ -146,7 +146,7 @@ namespace ve
         return existing != shaders_.end() ? existing->second.get() : nullptr;
     }
 
-    rhi::RhiShaderModule* ShaderManager::GetOrCompileShader(rhi::RhiDevice& device, ShaderID id, const rhi::RhiShaderModuleDesc& desc)
+    rhi::RhiShaderModule* ShaderManager::TryGetOrCompileShader(rhi::RhiDevice& device, ShaderID id, const rhi::RhiShaderModuleDesc& desc)
     {
         VE_ASSERT_RENDER_THREAD();
         if (rhi::RhiShaderModule* shader = GetShader(id); shader != nullptr)
@@ -158,13 +158,24 @@ namespace ve
         if (shader == nullptr)
         {
             const std::string message = BuildShaderCompileFailureMessage(device, id, desc);
-            VE_ASSERT_MESSAGE(shader != nullptr, message.c_str());
+            VE_LOG_ERROR("{}", message);
             return nullptr;
         }
 
         rhi::RhiShaderModule* shaderPtr = shader.get();
         shaders_.emplace(id, std::move(shader));
         return shaderPtr;
+    }
+
+    rhi::RhiShaderModule* ShaderManager::GetOrCompileShader(rhi::RhiDevice& device, ShaderID id, const rhi::RhiShaderModuleDesc& desc)
+    {
+        rhi::RhiShaderModule* shader = TryGetOrCompileShader(device, id, desc);
+        if (shader == nullptr)
+        {
+            const std::string message = BuildShaderCompileFailureMessage(device, id, desc);
+            VE_ASSERT_MESSAGE(shader != nullptr, message.c_str());
+        }
+        return shader;
     }
 
     rhi::RhiPipelineState* ShaderManager::GetGraphicsPipeline(GraphicsPipelineID id) noexcept
@@ -179,9 +190,8 @@ namespace ve
         return existing != graphicsPipelines_.end() ? existing->second.get() : nullptr;
     }
 
-    rhi::RhiPipelineState* ShaderManager::GetOrCreateGraphicsPipeline(rhi::RhiDevice& device,
-                                                                      GraphicsPipelineID id,
-                                                                      const rhi::RhiGraphicsPipelineDesc& desc)
+    rhi::RhiPipelineState*
+    ShaderManager::TryGetOrCreateGraphicsPipeline(rhi::RhiDevice& device, GraphicsPipelineID id, const rhi::RhiGraphicsPipelineDesc& desc)
     {
         VE_ASSERT_RENDER_THREAD();
         if (rhi::RhiPipelineState* pipeline = GetGraphicsPipeline(id); pipeline != nullptr)
@@ -193,13 +203,24 @@ namespace ve
         if (pipeline == nullptr)
         {
             const std::string message = BuildGraphicsPipelineCreateFailureMessage(device, id, desc);
-            VE_ASSERT_MESSAGE(pipeline != nullptr, message.c_str());
+            VE_LOG_ERROR("{}", message);
             return nullptr;
         }
 
         rhi::RhiPipelineState* pipelinePtr = pipeline.get();
         graphicsPipelines_.emplace(std::move(id), std::move(pipeline));
         return pipelinePtr;
+    }
+
+    rhi::RhiPipelineState* ShaderManager::GetOrCreateGraphicsPipeline(rhi::RhiDevice& device, GraphicsPipelineID id, const rhi::RhiGraphicsPipelineDesc& desc)
+    {
+        rhi::RhiPipelineState* pipeline = TryGetOrCreateGraphicsPipeline(device, id, desc);
+        if (pipeline == nullptr)
+        {
+            const std::string message = BuildGraphicsPipelineCreateFailureMessage(device, id, desc);
+            VE_ASSERT_MESSAGE(pipeline != nullptr, message.c_str());
+        }
+        return pipeline;
     }
 
     rhi::RhiComputePipelineState* ShaderManager::GetComputePipeline(ComputePipelineID id) noexcept

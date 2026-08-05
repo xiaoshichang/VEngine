@@ -15,6 +15,7 @@ include(CMake/ThirdParty/SetupWindowsSdkTools.cmake)
 include(CMake/ThirdParty/SetupDirectXShaderCompiler.cmake)
 include(CMake/ThirdParty/SetupSlang.cmake)
 include(CMake/ThirdParty/SetupImGui.cmake)
+include(CMake/ThirdParty/SetupImGuiNodeEditor.cmake)
 include(CMake/ThirdParty/SetupJolt.cmake)
 
 include(CMake/Targets/Engine.cmake)

@@ -838,11 +838,8 @@ namespace ve::rhi
         class D3D12Buffer final : public RhiBuffer
         {
         public:
-            D3D12Buffer(ComPtr<ID3D12Resource> resource,
-                        uint64_t size,
-                        RhiBufferMemoryUsage memoryUsage,
-                        std::byte* mappedData,
-                        D3D12_RESOURCE_STATES resourceState)
+            D3D12Buffer(
+                ComPtr<ID3D12Resource> resource, uint64_t size, RhiBufferMemoryUsage memoryUsage, std::byte* mappedData, D3D12_RESOURCE_STATES resourceState)
                 : resource_(std::move(resource))
                 , size_(size)
                 , memoryUsage_(memoryUsage)
@@ -1339,8 +1336,7 @@ namespace ve::rhi
                     renderTarget.Reset();
                 }
 
-                const HRESULT result =
-                    swapchain_->ResizeBuffers(bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), swapchainFlags_);
+                const HRESULT result = swapchain_->ResizeBuffers(bufferCount_, extent.width, extent.height, ToDxgiFormat(colorFormat_), swapchainFlags_);
                 if (FAILED(result))
                 {
                     SetLastError(MakeD3D12Error(device_.Get(), "IDXGISwapChain3::ResizeBuffers", result));
@@ -1486,6 +1482,7 @@ namespace ve::rhi
 
             [[nodiscard]] bool Begin() override
             {
+                recording_ = false;
                 recordedDrawIndexedInstancedCount_ = 0;
                 recordedDrawCallCount_ = 0;
                 activeSwapchain_ = nullptr;
@@ -1507,12 +1504,15 @@ namespace ve::rhi
                 }
 
                 result = commandList_->Reset(commandAllocator_.Get(), nullptr);
-                return SUCCEEDED(result);
+                recording_ = SUCCEEDED(result);
+                return recording_;
             }
 
             [[nodiscard]] bool End() override
             {
-                return SUCCEEDED(commandList_->Close());
+                const bool ended = SUCCEEDED(commandList_->Close());
+                recording_ = false;
+                return ended;
             }
 
             [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) override
@@ -1656,30 +1656,89 @@ namespace ve::rhi
                 return true;
             }
 
-            [[nodiscard]] bool
-            CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
+            [[nodiscard]] bool CopyTexture(RhiTexture& sourceTexture, RhiTexture& destinationTexture) override
+            {
+                auto* source = dynamic_cast<D3D12Texture*>(&sourceTexture);
+                auto* destination = dynamic_cast<D3D12Texture*>(&destinationTexture);
+                if (source == nullptr || destination == nullptr || source == destination || !recording_ || IsRenderPassActive() ||
+                    sourceTexture.GetWidth() != destinationTexture.GetWidth() || sourceTexture.GetHeight() != destinationTexture.GetHeight() ||
+                    sourceTexture.GetFormat() != destinationTexture.GetFormat() || source->GetNativeResource() == nullptr ||
+                    destination->GetNativeResource() == nullptr)
+                {
+                    return false;
+                }
+
+                TransitionResource(source->GetNativeResource(), source->GetResourceState(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                source->SetResourceState(D3D12_RESOURCE_STATE_COPY_SOURCE);
+                TransitionResource(destination->GetNativeResource(), destination->GetResourceState(), D3D12_RESOURCE_STATE_COPY_DEST);
+                destination->SetResourceState(D3D12_RESOURCE_STATE_COPY_DEST);
+
+                D3D12_TEXTURE_COPY_LOCATION sourceLocation = {};
+                sourceLocation.pResource = source->GetNativeResource();
+                sourceLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                sourceLocation.SubresourceIndex = 0;
+                D3D12_TEXTURE_COPY_LOCATION destinationLocation = {};
+                destinationLocation.pResource = destination->GetNativeResource();
+                destinationLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                destinationLocation.SubresourceIndex = 0;
+                commandList_->CopyTextureRegion(&destinationLocation, 0, 0, 0, &sourceLocation, nullptr);
+                return true;
+            }
+
+            [[nodiscard]] bool CopySwapchainToTexture(RhiSwapchain& swapchain, RhiTexture& destinationTexture) override
+            {
+                auto* d3dSwapchain = dynamic_cast<D3D12Swapchain*>(&swapchain);
+                auto* destination = dynamic_cast<D3D12Texture*>(&destinationTexture);
+                if (d3dSwapchain == nullptr || destination == nullptr || !recording_ || IsRenderPassActive())
+                {
+                    return false;
+                }
+
+                const RhiExtent2D swapchainExtent = d3dSwapchain->GetExtent();
+                ID3D12Resource* source = d3dSwapchain->GetCurrentRenderTarget();
+                if (destinationTexture.GetWidth() != swapchainExtent.width || destinationTexture.GetHeight() != swapchainExtent.height ||
+                    destinationTexture.GetFormat() != d3dSwapchain->GetColorFormat() || source == nullptr || destination->GetNativeResource() == nullptr)
+                {
+                    return false;
+                }
+
+                TransitionResource(source, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_SOURCE);
+                TransitionResource(destination->GetNativeResource(), destination->GetResourceState(), D3D12_RESOURCE_STATE_COPY_DEST);
+                destination->SetResourceState(D3D12_RESOURCE_STATE_COPY_DEST);
+
+                D3D12_TEXTURE_COPY_LOCATION sourceLocation = {};
+                sourceLocation.pResource = source;
+                sourceLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                sourceLocation.SubresourceIndex = 0;
+                D3D12_TEXTURE_COPY_LOCATION destinationLocation = {};
+                destinationLocation.pResource = destination->GetNativeResource();
+                destinationLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                destinationLocation.SubresourceIndex = 0;
+                commandList_->CopyTextureRegion(&destinationLocation, 0, 0, 0, &sourceLocation, nullptr);
+                TransitionResource(source, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_PRESENT);
+                return true;
+            }
+
+            [[nodiscard]] bool CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
             {
                 auto* sourceBuffer = dynamic_cast<D3D12Buffer*>(&source);
                 auto* destinationBuffer = dynamic_cast<D3D12Buffer*>(&destination);
                 if (sourceBuffer == nullptr || destinationBuffer == nullptr || sourceBuffer == destinationBuffer || size == 0 ||
-                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu ||
-                    sourceOffset > sourceBuffer->GetSize() || size > sourceBuffer->GetSize() - sourceOffset ||
-                    destinationOffset > destinationBuffer->GetSize() || size > destinationBuffer->GetSize() - destinationOffset ||
-                    destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
+                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu || sourceOffset > sourceBuffer->GetSize() ||
+                    size > sourceBuffer->GetSize() - sourceOffset || destinationOffset > destinationBuffer->GetSize() ||
+                    size > destinationBuffer->GetSize() - destinationOffset || destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
                 {
                     return false;
                 }
 
                 if (sourceBuffer->GetResourceState() != D3D12_RESOURCE_STATE_GENERIC_READ)
                 {
-                    TransitionResource(
-                        sourceBuffer->GetNativeResource(), sourceBuffer->GetResourceState(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                    TransitionResource(sourceBuffer->GetNativeResource(), sourceBuffer->GetResourceState(), D3D12_RESOURCE_STATE_COPY_SOURCE);
                     sourceBuffer->SetResourceState(D3D12_RESOURCE_STATE_COPY_SOURCE);
                 }
                 if (destinationBuffer->GetResourceState() != D3D12_RESOURCE_STATE_COPY_DEST)
                 {
-                    TransitionResource(
-                        destinationBuffer->GetNativeResource(), destinationBuffer->GetResourceState(), D3D12_RESOURCE_STATE_COPY_DEST);
+                    TransitionResource(destinationBuffer->GetNativeResource(), destinationBuffer->GetResourceState(), D3D12_RESOURCE_STATE_COPY_DEST);
                     destinationBuffer->SetResourceState(D3D12_RESOURCE_STATE_COPY_DEST);
                 }
 
@@ -1844,8 +1903,7 @@ namespace ve::rhi
                 }
             }
 
-            void SetReadWriteStorageBuffer(
-                RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
+            void SetReadWriteStorageBuffer(RhiShaderStage stage, uint32_t slot, const RhiBuffer& buffer, uint64_t offset, uint64_t size) override
             {
                 UINT rootParameterIndex = 0;
                 if (!ResolveRootParameter(RhiPipelineResourceKind::ReadWriteStorageBuffer, stage, slot, rootParameterIndex))
@@ -1864,8 +1922,7 @@ namespace ve::rhi
                 auto& d3dBuffer = const_cast<D3D12Buffer&>(static_cast<const D3D12Buffer&>(buffer));
                 TransitionResource(d3dBuffer.GetNativeResource(), d3dBuffer.GetResourceState(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
                 d3dBuffer.SetResourceState(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                commandList_->SetComputeRootUnorderedAccessView(
-                    rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
+                commandList_->SetComputeRootUnorderedAccessView(rootParameterIndex, d3dBuffer.GetNativeResource()->GetGPUVirtualAddress() + offset);
             }
 
             void SetReadWriteStorageTexture(RhiShaderStage stage, uint32_t slot, const RhiTexture& texture) override
@@ -1973,8 +2030,7 @@ namespace ve::rhi
                 ++recordedDrawCallCount_;
             }
 
-            void DrawIndexedInstanced(
-                uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
+            void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
             {
                 commandList_->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
                 ++recordedDrawCallCount_;
@@ -2003,6 +2059,11 @@ namespace ve::rhi
                 D3D12_GPU_DESCRIPTOR_HANDLE handle = {};
             };
 
+            [[nodiscard]] bool IsRenderPassActive() const noexcept
+            {
+                return activeSwapchain_ != nullptr || activeTexture_ != nullptr || activeDepthTexture_ != nullptr || activeFragmentUavPass_;
+            }
+
             void TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
             {
                 if (resource == nullptr || before == after)
@@ -2023,8 +2084,7 @@ namespace ve::rhi
             [[nodiscard]] bool ResolveRootParameter(RhiPipelineResourceKind kind, RhiShaderStage stage, uint32_t slot, UINT& rootParameterIndex) const noexcept
             {
                 const bool found = (activePipeline_ != nullptr && activePipeline_->FindRootParameter(kind, stage, slot, rootParameterIndex)) ||
-                                   (activeComputePipeline_ != nullptr &&
-                                    activeComputePipeline_->FindRootParameter(kind, stage, slot, rootParameterIndex));
+                                   (activeComputePipeline_ != nullptr && activeComputePipeline_->FindRootParameter(kind, stage, slot, rootParameterIndex));
                 VE_ASSERT_MESSAGE(found, "D3D12 resource binding is absent from the active pipeline layout.");
                 return found;
             }
@@ -2081,6 +2141,7 @@ namespace ve::rhi
             D3D12Texture* activeDepthTexture_ = nullptr;
             bool activeDepthShouldTransitionToShaderRead_ = false;
             bool activeFragmentUavPass_ = false;
+            bool recording_ = false;
             const D3D12PipelineState* activePipeline_ = nullptr;
             const D3D12ComputePipelineState* activeComputePipeline_ = nullptr;
             ID3D12DescriptorHeap* activeResourceHeap_ = nullptr;
@@ -2299,13 +2360,8 @@ namespace ve::rhi
                     return nullptr;
                 }
 
-                auto rhiSwapchain = std::make_unique<D3D12Swapchain>(device_,
-                                                                    swapchain3,
-                                                                    RhiExtent2D{desc.width, desc.height},
-                                                                    desc.colorFormat,
-                                                                    swapchainDesc.BufferCount,
-                                                                    swapchainDesc.Flags,
-                                                                    &lastError_);
+                auto rhiSwapchain = std::make_unique<D3D12Swapchain>(
+                    device_, swapchain3, RhiExtent2D{desc.width, desc.height}, desc.colorFormat, swapchainDesc.BufferCount, swapchainDesc.Flags, &lastError_);
 
                 if (!rhiSwapchain->Initialize())
                 {
@@ -2330,11 +2386,10 @@ namespace ve::rhi
                     SetLastError("D3D12 readback buffers require GPU-to-CPU memory and no initial data.");
                     return nullptr;
                 }
-                if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 ||
-                                  desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly || desc.initialData != nullptr))
+                if (isStorage && (desc.structureStride == 0 || desc.size % desc.structureStride != 0 || desc.memoryUsage != RhiBufferMemoryUsage::GpuOnly ||
+                                  desc.initialData != nullptr))
                 {
-                    SetLastError(
-                        "D3D12 storage buffers require a non-zero structure stride, an aligned size, GPU-only memory, and GPU initialization.");
+                    SetLastError("D3D12 storage buffers require a non-zero structure stride, an aligned size, GPU-only memory, and GPU initialization.");
                     return nullptr;
                 }
 
@@ -2358,12 +2413,11 @@ namespace ve::rhi
                 resourceDesc.Flags = isStorage ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
 
                 const D3D12_RESOURCE_STATES initialState =
-                    isReadback ? D3D12_RESOURCE_STATE_COPY_DEST
-                               : (isStorage ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_GENERIC_READ);
+                    isReadback ? D3D12_RESOURCE_STATE_COPY_DEST : (isStorage ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_GENERIC_READ);
 
                 ComPtr<ID3D12Resource> resource;
-                HRESULT result = device_->CreateCommittedResource(
-                    &heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, initialState, nullptr, IID_PPV_ARGS(&resource));
+                HRESULT result =
+                    device_->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resourceDesc, initialState, nullptr, IID_PPV_ARGS(&resource));
 
                 if (FAILED(result))
                 {
@@ -2897,11 +2951,9 @@ namespace ve::rhi
                     if (binding.kind == RhiPipelineResourceKind::UniformBuffer || binding.kind == RhiPipelineResourceKind::StorageBuffer ||
                         binding.kind == RhiPipelineResourceKind::ReadWriteStorageBuffer)
                     {
-                        rootParameter.ParameterType = binding.kind == RhiPipelineResourceKind::UniformBuffer
-                                                          ? D3D12_ROOT_PARAMETER_TYPE_CBV
-                                                      : binding.kind == RhiPipelineResourceKind::StorageBuffer
-                                                          ? D3D12_ROOT_PARAMETER_TYPE_SRV
-                                                          : D3D12_ROOT_PARAMETER_TYPE_UAV;
+                        rootParameter.ParameterType = binding.kind == RhiPipelineResourceKind::UniformBuffer   ? D3D12_ROOT_PARAMETER_TYPE_CBV
+                                                      : binding.kind == RhiPipelineResourceKind::StorageBuffer ? D3D12_ROOT_PARAMETER_TYPE_SRV
+                                                                                                               : D3D12_ROOT_PARAMETER_TYPE_UAV;
                         rootParameter.Descriptor.ShaderRegister = binding.slot;
                         rootParameter.Descriptor.RegisterSpace = 0;
                         continue;
@@ -3106,11 +3158,9 @@ namespace ve::rhi
                     if (binding.kind == RhiPipelineResourceKind::UniformBuffer || binding.kind == RhiPipelineResourceKind::StorageBuffer ||
                         binding.kind == RhiPipelineResourceKind::ReadWriteStorageBuffer)
                     {
-                        rootParameter.ParameterType = binding.kind == RhiPipelineResourceKind::UniformBuffer
-                                                          ? D3D12_ROOT_PARAMETER_TYPE_CBV
-                                                      : binding.kind == RhiPipelineResourceKind::StorageBuffer
-                                                          ? D3D12_ROOT_PARAMETER_TYPE_SRV
-                                                          : D3D12_ROOT_PARAMETER_TYPE_UAV;
+                        rootParameter.ParameterType = binding.kind == RhiPipelineResourceKind::UniformBuffer   ? D3D12_ROOT_PARAMETER_TYPE_CBV
+                                                      : binding.kind == RhiPipelineResourceKind::StorageBuffer ? D3D12_ROOT_PARAMETER_TYPE_SRV
+                                                                                                               : D3D12_ROOT_PARAMETER_TYPE_UAV;
                         rootParameter.Descriptor.ShaderRegister = binding.slot;
                         rootParameter.Descriptor.RegisterSpace = 0;
                         continue;

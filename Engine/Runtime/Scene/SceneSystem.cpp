@@ -282,6 +282,10 @@ namespace ve
                 impl.scene->Clear();
             }
             impl.scene = nullptr;
+            if (impl.editorCallback.onShutdown != nullptr)
+            {
+                impl.editorCallback.onShutdown();
+            }
             impl.renderSystem->Flush();
 
             impl.sceneThreadIdValue.store(0, std::memory_order_release);

@@ -36,6 +36,8 @@ namespace ve
         /// keyboard and mouse input belongs to game runtime input instead of editor UI.
         std::function<bool(const OSEvent& event)> onOSEvent = nullptr;
         std::function<std::shared_ptr<FrameRenderPipeline>()> onRender = nullptr;
+        /// Releases Editor-owned Scene Thread state before the Scene Thread id is unregistered.
+        std::function<void()> onShutdown = nullptr;
     };
 
     /// Describes the Scene Thread created by SceneSystem::Initialize().

@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -265,6 +266,7 @@ namespace ve::editor
             .onStartFrame = [this]() { StartFrame(); },
             .onOSEvent = [this](const OSEvent& event) { return HandleOSEvent(event); },
             .onRender = [this]() { return Render(); },
+            .onShutdown = [this]() { ShutdownSceneThreadState(); },
         });
 
         VE_LOG_INFO_CATEGORY("Editor", "Editor initialized.");
@@ -382,8 +384,7 @@ namespace ve::editor
 
         waitForImGuiTextureUpdates_ = snapshot->SnapUsingSwap(sourceDrawData, ImGui::GetTime());
         std::shared_ptr<EditorFrameDrawData> frameDrawData = snapshot;
-        nextImGuiDrawDataSnapshotIndex_ =
-            static_cast<UInt32>((nextImGuiDrawDataSnapshotIndex_ + 1) % imguiDrawDataSnapshots_.size());
+        nextImGuiDrawDataSnapshotIndex_ = static_cast<UInt32>((nextImGuiDrawDataSnapshotIndex_ + 1) % imguiDrawDataSnapshots_.size());
         return frameDrawData;
     }
 
@@ -508,6 +509,16 @@ namespace ve::editor
         return sceneSystem_ != nullptr && sceneSystem_->GetScene() != nullptr ? sceneSystem_->GetScene()->GetRTScene() : nullptr;
     }
 
+    void Editor::ShutdownSceneThreadState() noexcept
+    {
+        VE_ASSERT_SCENE_THREAD();
+        if (projectEditingView_ != nullptr && !projectEditingView_->Shutdown())
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Editor failed to enqueue FrameGraph debug snapshot retirement before Scene Thread shutdown.");
+            std::terminate();
+        }
+    }
+
     void Editor::UnInit() noexcept
     {
         if (!initialized_.load(std::memory_order_acquire))
@@ -528,6 +539,11 @@ namespace ve::editor
         }
 
         VE_ASSERT_MESSAGE(renderSystem_ != nullptr, "Editor::UnInit requires renderSystem_ to be valid.");
+        if (projectEditingView_ != nullptr && !projectEditingView_->Shutdown())
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "Editor failed to enqueue FrameGraph debug snapshot retirement before render backend shutdown.");
+            std::terminate();
+        }
         if (renderSystem_->IsInitialized())
         {
             renderSystem_->WaitIdle();

@@ -1,6 +1,5 @@
 #include "Engine/Runtime/Render/RenderSystem.h"
 
-
 #if VE_PLATFORM_WINDOWS && VE_ENABLE_D3D11
 #include "Engine/RHI/D3D11/D3D11Rhi.h"
 #endif
@@ -20,6 +19,7 @@
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowManager.h"
 #include "Engine/Runtime/Threading/Atomic.h"
@@ -59,6 +59,7 @@ namespace ve
         ShaderManager shaderManager;
         std::unique_ptr<VirtualShadowManager> virtualShadowManager;
         std::vector<std::unique_ptr<rhi::RhiObject>> pendingRetiredResources;
+        FrameGraphDebugCaptureExchange frameGraphDebugCapture;
         Atomic<UInt64> pendingMainSwapchainExtent{0};
         AtomicBool mainSwapchainResizeCommandQueued{false};
         UInt64 nextFrameIndex = 1;
@@ -86,9 +87,7 @@ namespace ve
             std::terminate();
         }
 
-        void RequireRenderSystemFrameSuccess(ErrorCode result,
-                                             std::string_view context,
-                                             const rhi::RhiDevice* device)
+        void RequireRenderSystemFrameSuccess(ErrorCode result, std::string_view context, const rhi::RhiDevice* device)
         {
             if (result != ErrorCode::None)
             {
@@ -223,9 +222,8 @@ namespace ve
             return ErrorCode::None;
         }
 
-        [[nodiscard]] ErrorCode PrepareMainSwapchainFrame(RenderSystemImpl& impl,
-                                                          FrameRenderPipelineData& frameData,
-                                                          std::optional<RenderPerformanceStatistics>& completedStatistics)
+        [[nodiscard]] ErrorCode
+        PrepareMainSwapchainFrame(RenderSystemImpl& impl, FrameRenderPipelineData& frameData, std::optional<RenderPerformanceStatistics>& completedStatistics)
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
@@ -278,9 +276,8 @@ namespace ve
             auto& submitContext = *static_cast<MainSwapchainSubmitContext*>(context);
             try
             {
-                const bool submitted = submitContext.device->Submit(submitContext.frameContext->GetCommandList(),
-                                                                     &submitContext.frameContext->GetCompletionFence(),
-                                                                     submissionFenceValue);
+                const bool submitted = submitContext.device->Submit(
+                    submitContext.frameContext->GetCommandList(), &submitContext.frameContext->GetCompletionFence(), submissionFenceValue);
                 if (!submitted)
                 {
                     FailRenderSystemFrame("RenderSystem failed to submit the frame", ErrorCode::PlatformError, submitContext.device);
@@ -304,8 +301,7 @@ namespace ve
 
             FrameContext& frameContext = *frameData.frameContext;
             MainSwapchainSubmitContext submitContext{impl.device.get(), &frameContext};
-            return frameContext.SubmitWithRetainedResources(
-                framePipeline, impl.pendingRetiredResources, &SubmitMainSwapchainFrameCallback, &submitContext);
+            return frameContext.SubmitWithRetainedResources(framePipeline, impl.pendingRetiredResources, &SubmitMainSwapchainFrameCallback, &submitContext);
         }
 
         [[nodiscard]] ErrorCode PresentMainSwapchainFrame(RenderSystemImpl& impl)
@@ -315,16 +311,46 @@ namespace ve
             return impl.mainSwapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
         }
 
+        void RetireFrameGraphDebugDataOnRenderThread(RenderSystemImpl& impl, std::shared_ptr<const FrameGraphDebugData> data)
+        {
+            VE_ASSERT_RENDER_THREAD();
+            if (data == nullptr)
+            {
+                return;
+            }
+
+            std::vector<std::shared_ptr<FrameGraphDebugPreviewTexture>> previewTextures = CollectFrameGraphDebugPreviewTextures(*data);
+            for (const std::shared_ptr<FrameGraphDebugPreviewTexture>& previewTexture : previewTextures)
+            {
+                previewTexture->Reset(impl.pendingRetiredResources);
+            }
+
+            // Both the immutable snapshot and the temporary owner list are released on the Render Thread. Every
+            // preview owner is empty after Reset, so its destructor cannot release a live RHI object on another thread.
+            data.reset();
+        }
+
         void RenderMainSwapchainFrame(RenderSystemImpl& impl, const std::shared_ptr<FrameRenderPipeline>& framePipeline)
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(framePipeline != nullptr);
+
+            std::optional<FrameGraphDebugCaptureRequest> debugRequest = impl.frameGraphDebugCapture.ConsumeRequest();
+            FrameGraphDebugFrameCapture debugCapture;
+            if (debugRequest.has_value())
+            {
+                debugCapture.request = *debugRequest;
+            }
 
             // Phase 1: acquire a reusable GPU frame slot and assemble the Render Thread execution context.
             FrameRenderPipelineData frameData = {};
             std::optional<RenderPerformanceStatistics> completedStatistics;
             const ErrorCode prepareResult = PrepareMainSwapchainFrame(impl, frameData, completedStatistics);
             RequireRenderSystemFrameSuccess(prepareResult, "RenderSystem failed to prepare the frame", impl.device.get());
+            if (debugRequest.has_value())
+            {
+                frameData.frameGraphDebugCapture = &debugCapture;
+            }
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
             framePipeline->RenderFrame(frameData);
             impl.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);
@@ -338,6 +364,12 @@ namespace ve
             // Phase 3: submit the recorded work and bind its object lifetime to the selected FrameContext fence.
             const ErrorCode submitResult = SubmitMainSwapchainFrame(impl, frameData, framePipeline);
             RequireRenderSystemFrameSuccess(submitResult, "RenderSystem failed to submit the frame", impl.device.get());
+            if (debugRequest.has_value())
+            {
+                FrameGraphDebugCapturePublishResult completion = CompleteFrameGraphDebugCapture(
+                    impl.frameGraphDebugCapture, submitResult, *debugRequest, std::move(debugCapture.data), std::move(debugCapture.failureMessage));
+                RetireFrameGraphDebugDataOnRenderThread(impl, std::move(completion.dataToRetire));
+            }
             if (frameData.virtualShadowManager != nullptr && statisticsSceneIdentity != 0)
             {
                 const UInt32 frameSlotIndex = static_cast<UInt32>(frameData.frameIndex % RenderFrameContextCount);
@@ -409,6 +441,7 @@ namespace ve
                 impl.device->WaitIdle();
             }
 
+            RetireFrameGraphDebugDataOnRenderThread(impl, impl.frameGraphDebugCapture.Reset());
             impl.pendingRetiredResources.clear();
             impl.submittedFrameIndices.fill(0);
             impl.performanceStatistics.Reset();
@@ -483,8 +516,7 @@ namespace ve
             }
 
             impl.mainSwapchainResizeCommandQueued.store(false, std::memory_order_release);
-            if (impl.pendingMainSwapchainExtent.load(std::memory_order_acquire) == 0 ||
-                !impl.acceptingCommands.load(std::memory_order_acquire))
+            if (impl.pendingMainSwapchainExtent.load(std::memory_order_acquire) == 0 || !impl.acceptingCommands.load(std::memory_order_acquire))
             {
                 return;
             }
@@ -498,8 +530,7 @@ namespace ve
 
         void QueueMainSwapchainResizeCommand(RenderSystemImpl& impl)
         {
-            EnqueueInternalCommand(
-                impl, RenderCommand{"RenderSystemResizeMainSwapchain", [&impl]() { ProcessMainSwapchainResize(impl); }});
+            EnqueueInternalCommand(impl, RenderCommand{"RenderSystemResizeMainSwapchain", [&impl]() { ProcessMainSwapchainResize(impl); }});
         }
 
         void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
@@ -698,6 +729,74 @@ namespace ve
         return impl_->recordedDrawCallCount.load(std::memory_order_acquire);
     }
 
+    ErrorCode RenderSystem::RequestFrameGraphDebugCapture(Float32 previewScale)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
+        auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
+
+        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        {
+            return ErrorCode::InvalidState;
+        }
+        return impl_->frameGraphDebugCapture.RequestCapture(previewScale);
+    }
+
+    FrameGraphDebugCaptureStatus RenderSystem::GetFrameGraphDebugCaptureStatus() const
+    {
+        return impl_->frameGraphDebugCapture.GetStatus();
+    }
+
+    std::string RenderSystem::GetFrameGraphDebugCaptureFailure() const
+    {
+        return impl_->frameGraphDebugCapture.GetFailureMessage();
+    }
+
+    std::shared_ptr<const FrameGraphDebugData> RenderSystem::TakeFrameGraphDebugData()
+    {
+        VE_ASSERT_SCENE_THREAD();
+        return impl_->frameGraphDebugCapture.TakePublishedData();
+    }
+
+    std::shared_ptr<const FrameGraphDebugData> RenderSystem::RetireFrameGraphDebugData(std::shared_ptr<const FrameGraphDebugData> data)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        if (data == nullptr)
+        {
+            return nullptr;
+        }
+
+        impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
+        auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
+
+        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        {
+            return data;
+        }
+
+        ErrorCode pushResult = ErrorCode::Unknown;
+        try
+        {
+            RenderCommand retireCommand{
+                "RenderSystemRetireFrameGraphDebugData",
+                [this, queuedData = data]() mutable { RetireFrameGraphDebugDataOnRenderThread(*impl_, std::move(queuedData)); },
+            };
+            pushResult = impl_->commandQueue.Push(std::move(retireCommand));
+        }
+        catch (...)
+        {
+            return data;
+        }
+
+        if (pushResult != ErrorCode::None)
+        {
+            return data;
+        }
+
+        impl_->commandSemaphore.Release();
+        return nullptr;
+    }
+
     ErrorCode RenderSystem::CreateMainSwapchain(const RenderSurfaceDesc& desc)
     {
         ErrorCode validateResult = ValidateSurfaceDesc(desc);
@@ -864,10 +963,7 @@ namespace ve
         VE_ASSERT_MESSAGE(meshResource != nullptr, "RenderSystem::ReleaseRenderResource requires a mesh resource.");
 
         EnqueueCommand("RenderSystemReleaseMeshResource",
-                       [this, meshResource = std::move(meshResource)]()
-                       {
-                           meshResource->ResetRenderResource(impl_->pendingRetiredResources);
-                       });
+                       [this, meshResource = std::move(meshResource)]() { meshResource->ResetRenderResource(impl_->pendingRetiredResources); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource)
@@ -876,10 +972,7 @@ namespace ve
         VE_ASSERT_MESSAGE(shaderResource != nullptr, "RenderSystem::ReleaseRenderResource requires a shader resource.");
 
         EnqueueCommand("RenderSystemReleaseShaderResource",
-                       [this, shaderResource = std::move(shaderResource)]()
-                       {
-                           shaderResource->ResetRenderResource(impl_->pendingRetiredResources);
-                       });
+                       [this, shaderResource = std::move(shaderResource)]() { shaderResource->ResetRenderResource(impl_->pendingRetiredResources); });
     }
 
     void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline)
@@ -887,11 +980,7 @@ namespace ve
         VE_ASSERT_SCENE_THREAD();
         VE_ASSERT_MESSAGE(framePipeline != nullptr, "RenderSystem::RenderFrame requires a frame pipeline.");
 
-        EnqueueCommand("RenderSystemRenderFrame",
-                       [this, framePipeline = std::move(framePipeline)]()
-                       {
-                           RenderMainSwapchainFrame(*impl_, framePipeline);
-                       });
+        EnqueueCommand("RenderSystemRenderFrame", [this, framePipeline = std::move(framePipeline)]() { RenderMainSwapchainFrame(*impl_, framePipeline); });
     }
 
     void RenderSystem::EnqueueCommand(RenderCommand command)

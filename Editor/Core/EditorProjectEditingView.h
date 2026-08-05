@@ -5,6 +5,7 @@
 #include "Editor/Core/Gizmos.h"
 #include "Editor/Panels/AssetsPanel/AssetsPanel.h"
 #include "Editor/Panels/ConsolePanel/ConsolePanel.h"
+#include "Editor/Panels/FrameGraphDebugPanel/FrameGraphDebugPanel.h"
 #include "Editor/Panels/GameViewPanel/GameViewPanel.h"
 #include "Editor/Panels/HierarchyPanel/HierarchyPanel.h"
 #include "Editor/Panels/InspectorPanel/InspectorPanel.h"
@@ -29,6 +30,7 @@ namespace ve::editor
         ProjectEditingView() = default;
 
         void Init(Editor& editor);
+        [[nodiscard]] bool Shutdown();
         void Render(Editor& editor, Float32 contentBottom);
         [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewTexture() const noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
@@ -55,6 +57,7 @@ namespace ve::editor
         AssetsPanel assetsPanel_;
         ConsolePanel consolePanel_;
         ProfilePanel profilePanel_;
+        FrameGraphDebugPanel frameGraphDebugPanel_;
         ProjectDirectoryDialog projectDirectoryDialog_;
         EditorBuildPackageDialog buildPackageDialog_;
         Path openSceneSelectedPath_;

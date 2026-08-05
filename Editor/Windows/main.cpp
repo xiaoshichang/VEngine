@@ -1,6 +1,6 @@
-#include "Editor/Windows/WindowsEditorApplication.h"
 #include "Editor/Core/EditorStartup.h"
 #include "Editor/Panels/ConsolePanel/ConsolePanel.h"
+#include "Editor/Windows/WindowsEditorApplication.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h"
@@ -83,7 +83,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.name = "VEngineWinEditor";
     initParam.mainWindow.title = "VEngine Win Editor";
     initParam.mainWindow.width = 2400;
-    initParam.mainWindow.height = 1200;
+    initParam.mainWindow.height = 1300;
     initParam.mainWindow.visible = true;
     initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineWinEditorJobWorker";
     initParam.runtime.ioSystem.threadName = "VEngineWinEditorIOThread";

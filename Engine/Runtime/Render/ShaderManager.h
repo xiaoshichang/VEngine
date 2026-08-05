@@ -48,12 +48,14 @@ namespace ve
 
         [[nodiscard]] rhi::RhiShaderModule* GetShader(ShaderID id) noexcept;
         [[nodiscard]] const rhi::RhiShaderModule* GetShader(ShaderID id) const noexcept;
+        [[nodiscard]] rhi::RhiShaderModule* TryGetOrCompileShader(rhi::RhiDevice& device, ShaderID id, const rhi::RhiShaderModuleDesc& desc);
         [[nodiscard]] rhi::RhiShaderModule* GetOrCompileShader(rhi::RhiDevice& device, ShaderID id, const rhi::RhiShaderModuleDesc& desc);
         [[nodiscard]] rhi::RhiPipelineState* GetGraphicsPipeline(GraphicsPipelineID id) noexcept;
         [[nodiscard]] const rhi::RhiPipelineState* GetGraphicsPipeline(GraphicsPipelineID id) const noexcept;
-        [[nodiscard]] rhi::RhiPipelineState* GetOrCreateGraphicsPipeline(rhi::RhiDevice& device,
-                                                                         GraphicsPipelineID id,
-                                                                         const rhi::RhiGraphicsPipelineDesc& desc);
+        [[nodiscard]] rhi::RhiPipelineState*
+        TryGetOrCreateGraphicsPipeline(rhi::RhiDevice& device, GraphicsPipelineID id, const rhi::RhiGraphicsPipelineDesc& desc);
+        [[nodiscard]] rhi::RhiPipelineState*
+        GetOrCreateGraphicsPipeline(rhi::RhiDevice& device, GraphicsPipelineID id, const rhi::RhiGraphicsPipelineDesc& desc);
         [[nodiscard]] rhi::RhiComputePipelineState* GetComputePipeline(ComputePipelineID id) noexcept;
         [[nodiscard]] rhi::RhiComputePipelineState*
         GetOrCreateComputePipeline(rhi::RhiDevice& device, ComputePipelineID id, const rhi::RhiComputePipelineDesc& desc);

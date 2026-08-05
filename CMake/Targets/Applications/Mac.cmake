@@ -97,6 +97,7 @@ function(ve_add_mac_editor)
     add_dependencies(VEngineMacEditor VEngineShaderTool VEngineEngineScriptHost)
 
     ve_setup_imgui(VEngineMacEditor)
+    ve_setup_imgui_node_editor(VEngineMacEditor)
     ve_add_editor_packaging_definitions(VEngineMacEditor)
 
     ve_copy_mac_scripting_payload(VEngineMacEditor)

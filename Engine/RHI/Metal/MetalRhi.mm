@@ -656,12 +656,15 @@ namespace ve::rhi
                 {
                     commandBuffer_ = [[commandQueue_ commandBuffer] retain];
                 }
-                return commandBuffer_ != nil;
+                recording_ = commandBuffer_ != nil;
+                return recording_;
             }
 
             [[nodiscard]] bool End() override
             {
-                return commandBuffer_ != nil;
+                const bool ended = commandBuffer_ != nil;
+                recording_ = false;
+                return ended;
             }
 
             [[nodiscard]] bool BeginRenderPass(RhiSwapchain& swapchain, const RhiRenderPassBeginInfo& beginInfo) override
@@ -836,16 +839,83 @@ namespace ve::rhi
                 return true;
             }
 
-            [[nodiscard]] bool
-            CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
+            [[nodiscard]] bool CopyTexture(RhiTexture& sourceTexture, RhiTexture& destinationTexture) override
+            {
+                auto* source = dynamic_cast<MetalTexture*>(&sourceTexture);
+                auto* destination = dynamic_cast<MetalTexture*>(&destinationTexture);
+                if (source == nullptr || destination == nullptr || source == destination || commandBuffer_ == nil || !recording_ ||
+                    renderCommandEncoder_ != nil || sourceTexture.GetWidth() != destinationTexture.GetWidth() ||
+                    sourceTexture.GetHeight() != destinationTexture.GetHeight() || sourceTexture.GetFormat() != destinationTexture.GetFormat() ||
+                    source->GetNativeTexture() == nil || destination->GetNativeTexture() == nil)
+                {
+                    return false;
+                }
+
+                id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer_ blitCommandEncoder];
+                if (blitEncoder == nil)
+                {
+                    return false;
+                }
+
+                const MTLSize copySize = MTLSizeMake(sourceTexture.GetWidth(), sourceTexture.GetHeight(), 1);
+                [blitEncoder copyFromTexture:source->GetNativeTexture()
+                                 sourceSlice:0
+                                 sourceLevel:0
+                                sourceOrigin:MTLOriginMake(0, 0, 0)
+                                  sourceSize:copySize
+                                   toTexture:destination->GetNativeTexture()
+                            destinationSlice:0
+                            destinationLevel:0
+                           destinationOrigin:MTLOriginMake(0, 0, 0)];
+                [blitEncoder endEncoding];
+                return true;
+            }
+
+            [[nodiscard]] bool CopySwapchainToTexture(RhiSwapchain& swapchain, RhiTexture& destinationTexture) override
+            {
+                auto* metalSwapchain = dynamic_cast<MetalSwapchain*>(&swapchain);
+                auto* destination = dynamic_cast<MetalTexture*>(&destinationTexture);
+                if (metalSwapchain == nullptr || destination == nullptr || commandBuffer_ == nil || !recording_ || renderCommandEncoder_ != nil ||
+                    drawable_ == nil)
+                {
+                    return false;
+                }
+
+                const RhiExtent2D swapchainExtent = metalSwapchain->GetExtent();
+                if (destinationTexture.GetWidth() != swapchainExtent.width || destinationTexture.GetHeight() != swapchainExtent.height ||
+                    destinationTexture.GetFormat() != metalSwapchain->GetColorFormat() || drawable_.texture == nil || destination->GetNativeTexture() == nil)
+                {
+                    return false;
+                }
+
+                id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer_ blitCommandEncoder];
+                if (blitEncoder == nil)
+                {
+                    return false;
+                }
+
+                const MTLSize copySize = MTLSizeMake(swapchainExtent.width, swapchainExtent.height, 1);
+                [blitEncoder copyFromTexture:drawable_.texture
+                                 sourceSlice:0
+                                 sourceLevel:0
+                                sourceOrigin:MTLOriginMake(0, 0, 0)
+                                  sourceSize:copySize
+                                   toTexture:destination->GetNativeTexture()
+                            destinationSlice:0
+                            destinationLevel:0
+                           destinationOrigin:MTLOriginMake(0, 0, 0)];
+                [blitEncoder endEncoding];
+                return true;
+            }
+
+            [[nodiscard]] bool CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) override
             {
                 auto* sourceBuffer = dynamic_cast<MetalBuffer*>(&source);
                 auto* destinationBuffer = dynamic_cast<MetalBuffer*>(&destination);
                 if (sourceBuffer == nullptr || destinationBuffer == nullptr || sourceBuffer == destinationBuffer || commandBuffer_ == nil || size == 0 ||
-                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu ||
-                    sourceOffset > sourceBuffer->GetSize() || size > sourceBuffer->GetSize() - sourceOffset ||
-                    destinationOffset > destinationBuffer->GetSize() || size > destinationBuffer->GetSize() - destinationOffset ||
-                    destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
+                    sourceBuffer->GetMemoryUsage() == RhiBufferMemoryUsage::GpuToCpu || sourceOffset > sourceBuffer->GetSize() ||
+                    size > sourceBuffer->GetSize() - sourceOffset || destinationOffset > destinationBuffer->GetSize() ||
+                    size > destinationBuffer->GetSize() - destinationOffset || destinationBuffer->GetMemoryUsage() != RhiBufferMemoryUsage::GpuToCpu)
                 {
                     return false;
                 }
@@ -1048,10 +1118,10 @@ namespace ve::rhi
             void DrawInstanced(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override
             {
                 [renderCommandEncoder_ drawPrimitives:primitiveType_
-                                         vertexStart:firstVertex
-                                         vertexCount:vertexCount
+                                          vertexStart:firstVertex
+                                          vertexCount:vertexCount
                                         instanceCount:instanceCount
-                                        baseInstance:firstInstance];
+                                         baseInstance:firstInstance];
                 ++recordedDrawCallCount_;
             }
 
@@ -1062,13 +1132,12 @@ namespace ve::rhi
                 [renderCommandEncoder_ drawIndexedPrimitives:primitiveType_
                                                   indexCount:indexCount
                                                    indexType:indexType_
-                                                   indexBuffer:indexBuffer_
+                                                 indexBuffer:indexBuffer_
                                            indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)];
                 ++recordedDrawCallCount_;
             }
 
-            void DrawIndexedInstanced(
-                uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
+            void DrawIndexedInstanced(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override
             {
                 const NSUInteger indexSize = indexType_ == MTLIndexTypeUInt16 ? sizeof(uint16_t) : sizeof(uint32_t);
                 [renderCommandEncoder_ drawIndexedPrimitives:primitiveType_
@@ -1077,7 +1146,7 @@ namespace ve::rhi
                                                  indexBuffer:indexBuffer_
                                            indexBufferOffset:indexBufferOffset_ + (firstIndex * indexSize)
                                                instanceCount:instanceCount
-                                                baseVertex:vertexOffset
+                                                  baseVertex:vertexOffset
                                                 baseInstance:firstInstance];
                 ++recordedDrawCallCount_;
             }
@@ -1118,6 +1187,7 @@ namespace ve::rhi
 
                 [commandBuffer_ commit];
 
+                recording_ = false;
                 [drawable_ release];
                 drawable_ = nil;
                 [commandBuffer_ release];
@@ -1135,6 +1205,7 @@ namespace ve::rhi
 
             void ResetTransientState() noexcept
             {
+                recording_ = false;
                 if (renderCommandEncoder_ != nil)
                 {
                     [renderCommandEncoder_ endEncoding];
@@ -1153,6 +1224,7 @@ namespace ve::rhi
             uint64_t recordedDrawCallCount_ = 0;
             id<MTLRenderCommandEncoder> renderCommandEncoder_ = nil;
             id<CAMetalDrawable> drawable_ = nil;
+            bool recording_ = false;
             id<MTLBuffer> indexBuffer_ = nil;
             uint64_t indexBufferOffset_ = 0;
             MTLIndexType indexType_ = MTLIndexTypeUInt32;

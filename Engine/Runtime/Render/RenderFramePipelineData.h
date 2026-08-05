@@ -10,6 +10,7 @@ namespace ve
     class ShaderManager;
     class FrameContext;
     class FrameGraphTransientResourcePool;
+    struct FrameGraphDebugFrameCapture;
     class RTCamera;
     class RTRenderItem;
     class RTScene;
@@ -36,6 +37,7 @@ namespace ve
         ShaderManager* shaderManager = nullptr;
         FrameContext* frameContext = nullptr;
         VirtualShadowManager* virtualShadowManager = nullptr;
+        FrameGraphDebugFrameCapture* frameGraphDebugCapture = nullptr;
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
         [[nodiscard]] FrameGraphTransientResourcePool& GetFrameGraphTransientResourcePool() const;

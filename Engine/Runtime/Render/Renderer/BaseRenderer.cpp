@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
+#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -158,8 +159,7 @@ namespace ve
         RequireRenderer(frameRenderData_ != nullptr && frameRenderData_->device != nullptr && frameRenderData_->frameContext != nullptr &&
                             frameRenderData_->mainSwapchain != nullptr && frameRenderData_->shaderManager != nullptr,
                         "Renderer family requires initialized frame services.");
-        RequireRenderer(!rendererData_.views.empty() || !outputPasses_.empty(),
-                        "Renderer family requires at least one render view or output pass.");
+        RequireRenderer(!rendererData_.views.empty() || !outputPasses_.empty(), "Renderer family requires at least one render view or output pass.");
         RequireRenderer(rendererData_.views.size() <= static_cast<SizeT>(std::numeric_limits<UInt32>::max()),
                         "Renderer family view count exceeds its frame-graph index range.");
 
@@ -259,6 +259,15 @@ namespace ve
                 exportColor(graphData.swapchainColor);
             });
         lastFrameGraphPassDiagnostics_ = frameGraph.GetPassDiagnostics();
+
+        if (frameRenderData_->frameGraphDebugCapture != nullptr)
+        {
+            const Error debugPrepareResult = frameGraph.PrepareDebugCapture(*frameRenderData_->frameGraphDebugCapture);
+            if (!debugPrepareResult.IsOk())
+            {
+                frameRenderData_->frameGraphDebugCapture->failureMessage = debugPrepareResult.GetMessage();
+            }
+        }
 
         Error compileResult = frameGraph.Compile();
         if (!compileResult.IsOk())
