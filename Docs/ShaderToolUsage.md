@@ -196,12 +196,12 @@ Bindable shader resource on line 8 must declare an explicit register.
 
 实际文件中会同时包含 Vertex 和 Pixel 两个 stage。
 
-## 7. 示例一：编译仓库自带 BasicMesh
+## 7. 示例一：编译仓库自带 LitBlinnPhong
 
 仓库当前带有 DemoProject 使用的基础 mesh shader：
 
 ```text
-Assets\Builtin\Shaders\BasicMesh.hlsl
+Assets\Builtin\Shaders\LitBlinnPhong.hlsl
 ```
 
 从仓库根目录运行：
@@ -210,9 +210,9 @@ Assets\Builtin\Shaders\BasicMesh.hlsl
 cmd /c CMake\Scripts\WithMsvc.bat ^
   Build\windows-msvc-release\Release\VEngineShaderTool.exe ^
   compile ^
-  --source Assets\Builtin\Shaders\BasicMesh.hlsl ^
-  --output Build\Generated\ShaderExamples\BasicMesh ^
-  --name BasicMesh ^
+  --source Assets\Builtin\Shaders\LitBlinnPhong.hlsl ^
+  --output Build\Generated\ShaderExamples\LitBlinnPhong ^
+  --name LitBlinnPhong ^
   --dxc ThirdParty\DirectXShaderCompiler\Build\Windows64\1.9.2602.17\Tools\x64\dxc.exe ^
   --fxc fxc ^
   --slang ThirdParty\Slang\slang-2026.12-windows-x86_64\bin\slangc.exe
@@ -221,20 +221,20 @@ cmd /c CMake\Scripts\WithMsvc.bat ^
 成功时最后会输出：
 
 ```text
-Shader flow complete: BasicMesh
+Shader flow complete: LitBlinnPhong
 ```
 
 查看输出目录：
 
 ```bat
-dir Build\Generated\ShaderExamples\BasicMesh
+dir Build\Generated\ShaderExamples\LitBlinnPhong
 ```
 
 可以重点检查：
 
 ```bat
-type Build\Generated\ShaderExamples\BasicMesh\BasicMesh.veshader.json
-type Build\Generated\ShaderExamples\BasicMesh\BasicMesh.PS.metal
+type Build\Generated\ShaderExamples\LitBlinnPhong\LitBlinnPhong.veshader.json
+type Build\Generated\ShaderExamples\LitBlinnPhong\LitBlinnPhong.PS.metal
 ```
 
 ## 8. 示例二：最小带常量缓冲的颜色 Shader
@@ -351,12 +351,12 @@ cmd /c CMake\Scripts\WithMsvc.bat cmake --build --preset windows-msvc-tests
 cmd /c CMake\Scripts\WithMsvc.bat ctest --preset windows-msvc-tests
 ```
 
-ShaderTool 变更当前应通过本教程中的 `--help`、成功编译 `BasicMesh`、以及缺少显式绑定的失败示例做手动 smoke
+ShaderTool 变更当前应通过本教程中的 `--help`、成功编译 `LitBlinnPhong`、以及缺少显式绑定的失败示例做手动 smoke
 验证。后续接入自动化测试时，建议补上这些 CTest 用例：
 
 - `VEngineShaderToolHelp`
-- `VEngineShaderToolCompileBasicMesh`
-- `VEngineShaderToolValidateBasicMesh`
+- `VEngineShaderToolCompileLitBlinnPhong`
+- `VEngineShaderToolValidateLitBlinnPhong`
 - `VEngineShaderToolRejectsMissingRegister`
 
 建议测试产物生成到：

@@ -209,9 +209,13 @@ float4 PSMain(VSOutput input) : SV_TARGET
     float3 normal = normalize(input.worldNormal);
     float3 lightDirection = normalize(directionalLightDirection.xyz);
     float3 lightToSurface = -lightDirection;
+    float3 surfaceToCamera = normalize(cameraWorldPosition.xyz - input.worldPosition);
+    float3 halfDirection = normalize(lightToSurface + surfaceToCamera);
     float diffuse = saturate(dot(normal, lightToSurface));
+    float specular = pow(saturate(dot(normal, halfDirection)), 32.0f);
     float shadowVisibility = ComputeVirtualShadowVisibility(input.worldPosition, normal, input.receiveShadows);
     float3 lightColor = directionalLightColorAndIntensity.rgb;
-    float3 litColor = baseColor.rgb * (ambientColor.rgb + (lightColor * directionalLightColorAndIntensity.w * diffuse * shadowVisibility));
+    float3 directLight = lightColor * directionalLightColorAndIntensity.w * shadowVisibility;
+    float3 litColor = baseColor.rgb * (ambientColor.rgb + directLight * diffuse) + directLight * specular * 0.25f;
     return float4(saturate(litColor), baseColor.a);
 }

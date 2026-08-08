@@ -606,7 +606,7 @@ public sealed class Transform : Component
 Shader source files use `PascalCase`.
 
 ```text
-BasicMesh.hlsl
+LitBlinnPhong.hlsl
 ```
 
 HLSL rules:

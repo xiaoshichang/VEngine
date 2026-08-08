@@ -132,7 +132,7 @@ Shaders/
     Common/
       Packing.hlsli
       Lighting.hlsli
-    BasicMesh.hlsl
+    LitBlinnPhong.hlsl
   Generated/
     DXBC/
     DXIL/
@@ -148,8 +148,8 @@ Example:
 
 ```json
 {
-    "name": "BasicMesh",
-    "source": "Shaders/HLSL/BasicMesh.hlsl",
+    "name": "LitBlinnPhong",
+    "source": "Shaders/HLSL/LitBlinnPhong.hlsl",
     "stages": [
         {
             "stage": "Vertex",
@@ -176,8 +176,8 @@ Compile with DXC to DXIL.
 Command shape:
 
 ```text
-dxc -T vs_6_0 -E VSMain -Fo BasicMesh.VS.dxil BasicMesh.hlsl
-dxc -T ps_6_0 -E PSMain -Fo BasicMesh.PS.dxil BasicMesh.hlsl
+dxc -T vs_6_0 -E VSMain -Fo LitBlinnPhong.VS.dxil LitBlinnPhong.hlsl
+dxc -T ps_6_0 -E PSMain -Fo LitBlinnPhong.PS.dxil LitBlinnPhong.hlsl
 ```
 
 Later milestones may move to newer shader model profiles, but the first stage should use the lowest SM6 profile that
@@ -190,8 +190,8 @@ Compile with `D3DCompile` or `fxc` to DXBC.
 Command shape:
 
 ```text
-fxc /T vs_5_0 /E VSMain /Fo BasicMesh.VS.dxbc BasicMesh.hlsl
-fxc /T ps_5_0 /E PSMain /Fo BasicMesh.PS.dxbc BasicMesh.hlsl
+fxc /T vs_5_0 /E VSMain /Fo LitBlinnPhong.VS.dxbc LitBlinnPhong.hlsl
+fxc /T ps_5_0 /E PSMain /Fo LitBlinnPhong.PS.dxbc LitBlinnPhong.hlsl
 ```
 
 If `VEngineShaderTool` uses the API path instead of shelling out, it should call `D3DCompile` with equivalent target
@@ -204,8 +204,8 @@ Emit MSL directly with Slang.
 Command shape:
 
 ```text
-slangc -stage vertex -entry VSMain -profile vs_6_0 -target metal -o BasicMesh.VS.metal -reflection-json BasicMesh.VS.reflect.json BasicMesh.hlsl
-slangc -stage pixel -entry PSMain -profile ps_6_0 -target metal -o BasicMesh.PS.metal -reflection-json BasicMesh.PS.reflect.json BasicMesh.hlsl
+slangc -stage vertex -entry VSMain -profile vs_6_0 -target metal -o LitBlinnPhong.VS.metal -reflection-json LitBlinnPhong.VS.reflect.json LitBlinnPhong.hlsl
+slangc -stage pixel -entry PSMain -profile ps_6_0 -target metal -o LitBlinnPhong.PS.metal -reflection-json LitBlinnPhong.PS.reflect.json LitBlinnPhong.hlsl
 ```
 
 ### 5.5 Metal Library Output
@@ -215,9 +215,9 @@ Compile generated MSL to a Metal library as part of the Apple build or asset-coo
 Command shape:
 
 ```text
-xcrun -sdk macosx metal -c BasicMesh.VS.metal -o BasicMesh.VS.air
-xcrun -sdk macosx metal -c BasicMesh.PS.metal -o BasicMesh.PS.air
-xcrun -sdk macosx metallib BasicMesh.VS.air BasicMesh.PS.air -o BasicMesh.metallib
+xcrun -sdk macosx metal -c LitBlinnPhong.VS.metal -o LitBlinnPhong.VS.air
+xcrun -sdk macosx metal -c LitBlinnPhong.PS.metal -o LitBlinnPhong.PS.air
+xcrun -sdk macosx metallib LitBlinnPhong.VS.air LitBlinnPhong.PS.air -o LitBlinnPhong.metallib
 ```
 
 The SDK should match the target:
@@ -304,7 +304,7 @@ and Metal remain natural.
 Recommended output:
 
 ```text
-Shaders/Generated/Reflection/BasicMesh.Default.veshader.json
+Shaders/Generated/Reflection/LitBlinnPhong.Default.veshader.json
 ```
 
 Minimal schema:
@@ -312,7 +312,7 @@ Minimal schema:
 ```json
 {
     "schemaVersion": 1,
-    "name": "BasicMesh",
+    "name": "LitBlinnPhong",
     "variant": "Default",
     "sourceHash": "hash",
     "stages": [
@@ -320,9 +320,9 @@ Minimal schema:
             "stage": "Vertex",
             "entry": "VSMain",
             "artifacts": {
-                "d3d11": "Shaders/Generated/DXBC/BasicMesh.Default.VS.dxbc",
-                "d3d12": "Shaders/Generated/DXIL/BasicMesh.Default.VS.dxil",
-                "metal": "Shaders/Generated/MetalLib/BasicMesh.Default.metallib"
+                "d3d11": "Shaders/Generated/DXBC/LitBlinnPhong.Default.VS.dxbc",
+                "d3d12": "Shaders/Generated/DXIL/LitBlinnPhong.Default.VS.dxil",
+                "metal": "Shaders/Generated/MetalLib/LitBlinnPhong.Default.metallib"
             },
             "resources": [
                 {
@@ -478,9 +478,9 @@ Host behavior:
 
 Minimum shader tests:
 
-1. Compile `Assets/Builtin/Shaders/BasicMesh.hlsl` to D3D11 DXBC.
-2. Compile `Assets/Builtin/Shaders/BasicMesh.hlsl` to D3D12 DXIL.
-3. Compile `Assets/Builtin/Shaders/BasicMesh.hlsl` to MSL.
+1. Compile `Assets/Builtin/Shaders/LitBlinnPhong.hlsl` to D3D11 DXBC.
+2. Compile `Assets/Builtin/Shaders/LitBlinnPhong.hlsl` to D3D12 DXIL.
+3. Compile `Assets/Builtin/Shaders/LitBlinnPhong.hlsl` to MSL.
 4. Generate reflection JSON.
 5. Validate that `CameraConstants : register(b0, space0)` maps to the expected binding metadata.
 6. On Apple host, compile generated MSL to `.metallib`.

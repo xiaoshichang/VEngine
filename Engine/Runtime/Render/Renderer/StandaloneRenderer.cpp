@@ -99,7 +99,7 @@ namespace ve
         {
             opaquePasses_.push_back(debugMode == RenderDebugMode::VsmRedraw || debugMode == RenderDebugMode::ShadowCasterDirty
                                         ? nullptr
-                                        : std::make_unique<OpaqueSceneRenderPass>(OpaqueSceneRenderPassInitParam{true}));
+                                        : std::make_unique<OpaqueForwardPass>(OpaqueForwardPassInitParam{true}));
         }
     }
 

@@ -1,7 +1,7 @@
 {
     "schemaVersion": 2,
     "name": "Cube Magenta",
-    "shader": "Builtin/Shaders/BasicMesh",
+    "shader": "Builtin/Shaders/LitBlinnPhong",
     "properties": {
         "baseColor": [
             0.9,

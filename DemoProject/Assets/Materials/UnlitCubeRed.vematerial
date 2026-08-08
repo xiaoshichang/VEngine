@@ -1,0 +1,8 @@
+{
+    "schemaVersion": 2,
+    "name": "Unlit Cube Red",
+    "shader": "Builtin/Shaders/UnlitBasicColor",
+    "properties": {
+        "baseColor": [1, 0.05, 0.02, 1]
+    }
+}

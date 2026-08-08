@@ -1,0 +1,56 @@
+{
+    "schemaVersion": 2,
+    "name": "UnlitBasicColor",
+    "source": "UnlitBasicColor.hlsl",
+    "passes": [
+        {
+            "name": "DepthOnly",
+            "type": "DepthOnly",
+            "stages": [
+                "Vertex"
+            ]
+        },
+        {
+            "name": "OpaqueForward",
+            "type": "OpaqueForward",
+            "stages": [
+                "Vertex",
+                "Pixel"
+            ]
+        },
+        {
+            "name": "ShadowCaster",
+            "type": "ShadowCaster",
+            "stages": [
+                "Vertex",
+                "Pixel"
+            ]
+        }
+    ],
+    "material": {
+        "constantBuffer": "MaterialConstants",
+        "constantBufferSize": 256,
+        "properties": [
+            {
+                "name": "baseColor",
+                "displayName": "Base Color",
+                "type": "Color",
+                "default": [
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "binding": {
+                    "kind": "ConstantBuffer",
+                    "buffer": "MaterialConstants",
+                    "field": "baseColor",
+                    "offset": 0,
+                    "size": 16,
+                    "slot": 3,
+                    "space": 0
+                }
+            }
+        ]
+    }
+}

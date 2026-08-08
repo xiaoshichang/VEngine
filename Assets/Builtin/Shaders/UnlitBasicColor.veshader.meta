@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "guid": "99999999-9999-9999-9999-999999999994",
+    "assetType": "Shader",
+    "sourcePath": "Builtin/Shaders/UnlitBasicColor.veshader",
+    "importer": "ShaderImporter",
+    "importSettings": {}
+}

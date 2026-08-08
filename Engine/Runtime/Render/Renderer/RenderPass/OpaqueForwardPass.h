@@ -10,15 +10,15 @@ namespace ve
     class FrameGraphPassResources;
     class RTShaderResource;
 
-    struct OpaqueSceneRenderPassInitParam
+    struct OpaqueForwardPassInitParam
     {
         bool loadDepthFromPrePass = false;
     };
 
-    class OpaqueSceneRenderPass final : public ViewRenderPass
+    class OpaqueForwardPass final : public ViewRenderPass
     {
     public:
-        explicit OpaqueSceneRenderPass(OpaqueSceneRenderPassInitParam initParam);
+        explicit OpaqueForwardPass(OpaqueForwardPassInitParam initParam);
 
         void AddToFrameGraph(FrameGraph& frameGraph, RendererFrameGraphData& graphData, UInt32 viewIndex) override;
 
@@ -31,7 +31,7 @@ namespace ve
                   RenderPassContext& context);
         void EnsurePipeline(RenderPassContext& context, UInt32 viewIndex, const std::shared_ptr<RTShaderResource>& shaderResource);
         void BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
-        OpaqueSceneRenderPassInitParam initParam_;
+        OpaqueForwardPassInitParam initParam_;
         rhi::RhiPipelineState* pipelineState_ = nullptr;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;

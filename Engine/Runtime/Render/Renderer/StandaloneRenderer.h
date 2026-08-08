@@ -3,7 +3,7 @@
 #include "Engine/Runtime/Render/RenderDebugMode.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/DepthPrePass.h"
-#include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueSceneRenderPass.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/OpaqueForwardPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/ShadowCasterDirtyDebugPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/TransparentSceneRenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.h"
@@ -39,7 +39,7 @@ namespace ve
         void AddSceneAndExtensionPasses(FrameGraph& frameGraph, RendererFrameGraphData& graphData);
 
         DepthPrePass depthPrePass_;
-        std::vector<std::unique_ptr<OpaqueSceneRenderPass>> opaquePasses_;
+        std::vector<std::unique_ptr<OpaqueForwardPass>> opaquePasses_;
         TransparentSceneRenderPass transparentPass_;
         VirtualShadowRedrawPageDebugPass vsmRedrawPagePass_;
         ShadowCasterDirtyDebugPass shadowCasterDirtyPass_;

@@ -1,0 +1,8 @@
+{
+    "schemaVersion": 2,
+    "name": "Unlit Cube Magenta",
+    "shader": "Builtin/Shaders/UnlitBasicColor",
+    "properties": {
+        "baseColor": [0.9, 0.18, 0.78, 1]
+    }
+}

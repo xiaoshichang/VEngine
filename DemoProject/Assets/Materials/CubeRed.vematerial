@@ -1,7 +1,7 @@
 {
     "schemaVersion": 2,
     "name": "Cube Red",
-    "shader": "Builtin/Shaders/BasicMesh",
+    "shader": "Builtin/Shaders/LitBlinnPhong",
     "properties": {
         "baseColor": [1E0, 1E0, 1E0, 1E0],
         "mainTexture": null
