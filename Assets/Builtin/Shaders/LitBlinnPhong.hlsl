@@ -110,17 +110,30 @@ float SampleVirtualShadowPage(uint physicalPageIndex, float2 pagePosition, float
     uint pagesPerRow = virtualShadowAtlasExtent / virtualShadowPhysicalPageSize;
     uint2 physicalPage = uint2(physicalPageIndex % pagesPerRow, physicalPageIndex / pagesPerRow);
     uint2 pageOrigin = physicalPage * virtualShadowPhysicalPageSize;
-    uint2 pagePixel =
-        min(uint2(saturate(pagePosition) * virtualShadowPhysicalPageSize),
-            uint2(virtualShadowPhysicalPageSize - 1u, virtualShadowPhysicalPageSize - 1u));
-    uint encodedDepth = VirtualShadowAtlas.Load(int3(pageOrigin + pagePixel, 0));
-    if (encodedDepth == 0u)
+    const float texelSize = 1.0f / virtualShadowPhysicalPageSize;
+    const float2 minimumPagePosition = float2(0.5f, 0.5f) * texelSize;
+    const float2 maximumPagePosition = 1.0f - minimumPagePosition;
+    const float2 centerPosition = clamp(pagePosition, minimumPagePosition, maximumPagePosition);
+    float visibility = 0.0f;
+    [unroll]
+    for (int y = -1; y <= 1; ++y)
     {
-        return 1.0f;
+        [unroll]
+        for (int x = -1; x <= 1; ++x)
+        {
+            const float2 samplePosition = clamp(centerPosition + float2(x, y) * texelSize,
+                                                 minimumPagePosition,
+                                                 maximumPagePosition);
+            const uint2 pagePixel = min(uint2(samplePosition * virtualShadowPhysicalPageSize),
+                                        uint2(virtualShadowPhysicalPageSize - 1u, virtualShadowPhysicalPageSize - 1u));
+            const uint encodedDepth = VirtualShadowAtlas.Load(int3(pageOrigin + pagePixel, 0));
+            if (encodedDepth == 0u || receiverDepth <= 1.0f - asfloat(encodedDepth))
+            {
+                visibility += 1.0f;
+            }
+        }
     }
-
-    float casterDepth = 1.0f - asfloat(encodedDepth);
-    return receiverDepth <= casterDepth ? 1.0f : 0.0f;
+    return visibility / 9.0f;
 }
 
 bool TryResolveVirtualShadowPage(float3 worldPosition,
