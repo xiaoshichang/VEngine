@@ -59,7 +59,8 @@ namespace ve
 
         [[nodiscard]] rhi::RhiPipelineState* GetDepthPipeline(RenderPassContext& context, RTShaderResource& shaderResource, rhi::RhiFillMode fillMode)
         {
-            rhi::RhiShaderModule* vertexShader = shaderResource.GetVertexShader();
+            RTShaderPass* shaderPass = shaderResource.GetPass(ShaderPassType::DepthOnly);
+            rhi::RhiShaderModule* vertexShader = shaderPass != nullptr ? shaderPass->GetVertexShader() : nullptr;
             if (vertexShader == nullptr || context.frameData.shaderManager == nullptr)
             {
                 return nullptr;
@@ -168,6 +169,10 @@ namespace ve
                 FailDepthPrePassItem(itemIndex, "requires an initialized shader resource.");
             }
 
+            if (!material->GetShaderResource()->HasPass(ShaderPassType::DepthOnly))
+            {
+                continue;
+            }
             rhi::RhiPipelineState* pipeline = GetDepthPipeline(context, *material->GetShaderResource(), viewData.view.fillMode);
             if (pipeline == nullptr)
             {

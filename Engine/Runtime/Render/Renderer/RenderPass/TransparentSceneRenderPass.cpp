@@ -64,24 +64,6 @@ namespace ve
             }
         }
 
-        [[nodiscard]] std::shared_ptr<RTShaderResource> FindFirstShaderResource(const std::vector<std::shared_ptr<RTRenderItem>>& items) noexcept
-        {
-            for (const std::shared_ptr<RTRenderItem>& item : items)
-            {
-                if (item == nullptr)
-                {
-                    continue;
-                }
-
-                const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item->GetMaterialResource());
-                if (materialResource != nullptr && materialResource->GetShaderResource() != nullptr)
-                {
-                    return materialResource->GetShaderResource();
-                }
-            }
-            return nullptr;
-        }
-
         [[nodiscard]] Int32 BuildPipelineVariant(rhi::RhiFormat targetFormat, rhi::RhiFillMode fillMode, bool depthEnabled) noexcept
         {
             return static_cast<Int32>(targetFormat) | (static_cast<Int32>(fillMode) << 8) | (depthEnabled ? (1 << 16) : 0) | (1 << 17);
@@ -170,10 +152,7 @@ namespace ve
             FailTransparentScenePass("execution requires a render scene when transparent draws are queued.");
         }
 
-        EnsurePipeline(context, viewIndex);
-
         rhi::RhiCommandList& commandList = context.commandList;
-        commandList.SetPipeline(*pipelineState_);
 
         const UniformBufferAllocation frameUniform = context.frameData.GetFrameUniform(*context.rendererData.scene);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
@@ -183,18 +162,12 @@ namespace ve
         {
             FailTransparentScenePass("execution failed to allocate required frame or view uniforms.");
         }
-        commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *frameUniform.buffer, frameUniform.offset, frameUniform.size);
-        commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
-        commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
-
         VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
         const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
         if (!virtual_shadow_detail::IsValidVirtualShadowUniformAllocation(virtualShadowUniform))
         {
             FailTransparentScenePass("execution failed to allocate the required VSM uniform.");
         }
-        BindVirtualShadowSampling(commandList, virtualShadowSampling, virtualShadowUniform);
-
         for (SizeT itemIndex = 0; itemIndex < items.size(); ++itemIndex)
         {
             const std::shared_ptr<RTRenderItem>& item = items[itemIndex];
@@ -202,6 +175,20 @@ namespace ve
             {
                 FailTransparentSceneItem(itemIndex, "is null.");
             }
+
+            const auto materialResource = std::dynamic_pointer_cast<RTMaterialResource>(item->GetMaterialResource());
+            if (materialResource == nullptr || materialResource->GetShaderResource() == nullptr ||
+                !materialResource->GetShaderResource()->HasPass(ShaderPassType::TransparentForward))
+            {
+                continue;
+            }
+
+            EnsurePipeline(context, viewIndex, materialResource->GetShaderResource());
+            commandList.SetPipeline(*pipelineState_);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 0, *frameUniform.buffer, frameUniform.offset, frameUniform.size);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Vertex, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
+            commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 1, *viewUniform.buffer, viewUniform.offset, viewUniform.size);
+            BindVirtualShadowSampling(commandList, virtualShadowSampling, virtualShadowUniform);
 
             const auto meshResource = std::dynamic_pointer_cast<RTMeshResource>(item->GetMeshResource());
             if (meshResource == nullptr)
@@ -238,16 +225,18 @@ namespace ve
         }
     }
 
-    void TransparentSceneRenderPass::EnsurePipeline(RenderPassContext& context, UInt32 viewIndex)
+    void TransparentSceneRenderPass::EnsurePipeline(RenderPassContext& context,
+                                                    UInt32 viewIndex,
+                                                    const std::shared_ptr<RTShaderResource>& shaderResource)
     {
-        std::shared_ptr<RTShaderResource> shaderResource = FindFirstShaderResource(context.GetView(viewIndex).transparentItems);
         if (shaderResource == nullptr)
         {
             FailTransparentScenePass("queued draws require an initialized material shader resource.");
         }
 
-        rhi::RhiShaderModule* vertexShader = shaderResource->GetVertexShader();
-        rhi::RhiShaderModule* fragmentShader = shaderResource->GetFragmentShader();
+        RTShaderPass* shaderPass = shaderResource->GetPass(ShaderPassType::TransparentForward);
+        rhi::RhiShaderModule* vertexShader = shaderPass != nullptr ? shaderPass->GetVertexShader() : nullptr;
+        rhi::RhiShaderModule* fragmentShader = shaderPass != nullptr ? shaderPass->GetFragmentShader() : nullptr;
         if (vertexShader == nullptr || fragmentShader == nullptr)
         {
             FailTransparentScenePass("material shader resource is missing its vertex or fragment module.");

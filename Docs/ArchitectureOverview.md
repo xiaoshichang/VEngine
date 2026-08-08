@@ -571,6 +571,7 @@ Responsibilities:
 - Mesh render queues.
 - Material binding.
 - Material render-queue classification into opaque and transparent draw lists.
+- Material/Shader/Pass selection for FrameGraph scene passes.
 - Frame Graph build, compile, culling, resource lifetime, and ordered pass execution.
 - Viewport rendering.
 - ViewportClient ownership and viewport binding.
@@ -993,6 +994,24 @@ HLSL Source
 - Generate shader variants when needed.
 
 Runtime should load compiled shader artifacts and reflection metadata. The Player should not rely on runtime shader cross-compilation for normal execution.
+
+The material system uses three explicit layers:
+
+```text
+Material
+  -> references one Shader
+  -> stores parameter values and texture asset references
+Shader
+  -> defines the material parameter layout and HLSL source
+  -> owns one or more Pass declarations
+Pass
+  -> identifies a FrameGraph participation point
+  -> selects the compiled shader stages used by that point
+```
+
+Stable first-stage pass types are `DepthOnly`, `OpaqueForward`, `TransparentForward`, and `ShadowCaster`. `RenderQueue`
+continues to classify and sort render items; a FrameGraph scene pass additionally requires the material's Shader to
+declare the matching pass type. A Shader that omits a pass does not participate in that pass.
 
 Recommended generated layout:
 

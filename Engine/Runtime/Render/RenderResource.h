@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/MaterialUniformPool.h"
 #include "Engine/Runtime/Render/Renderer/RenderQueue.h"
+#include "Engine/Runtime/Resource/ShaderPass.h"
 
 #include <cstddef>
 #include <memory>
@@ -75,10 +76,37 @@ namespace ve
         std::string debugName;
     };
 
+    struct RTShaderPassResourceDesc
+    {
+        ShaderPassType type = ShaderPassType::OpaqueForward;
+        std::string name;
+        std::vector<RTShaderStageResourceDesc> stages;
+    };
+
     struct RTShaderResourceDesc
     {
         std::string name = "ShaderResource";
-        std::vector<RTShaderStageResourceDesc> stages;
+        std::vector<RTShaderPassResourceDesc> passes;
+    };
+
+    class RTShaderPass final : public NonCopyable
+    {
+    public:
+        RTShaderPass(ShaderPassType type, std::string name) : type_(type), name_(std::move(name)) {}
+        [[nodiscard]] ShaderPassType GetType() const noexcept { return type_; }
+        [[nodiscard]] const std::string& GetName() const noexcept { return name_; }
+        [[nodiscard]] rhi::RhiShaderModule* GetVertexShader() noexcept { return vertexShader_.get(); }
+        [[nodiscard]] rhi::RhiShaderModule* GetFragmentShader() noexcept { return fragmentShader_.get(); }
+        [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept { return vertexShader_.get(); }
+        [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept { return fragmentShader_.get(); }
+        std::unique_ptr<rhi::RhiShaderModule>& VertexShader() noexcept { return vertexShader_; }
+        std::unique_ptr<rhi::RhiShaderModule>& FragmentShader() noexcept { return fragmentShader_; }
+
+    private:
+        ShaderPassType type_;
+        std::string name_;
+        std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
+        std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
     };
 
     class RTShaderResource final : public RHIResource
@@ -88,10 +116,9 @@ namespace ve
 
         [[nodiscard]] const RTShaderResourceDesc& GetDesc() const noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
-        [[nodiscard]] rhi::RhiShaderModule* GetVertexShader() noexcept;
-        [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept;
-        [[nodiscard]] rhi::RhiShaderModule* GetFragmentShader() noexcept;
-        [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept;
+        [[nodiscard]] RTShaderPass* GetPass(ShaderPassType type) noexcept;
+        [[nodiscard]] const RTShaderPass* GetPass(ShaderPassType type) const noexcept;
+        [[nodiscard]] bool HasPass(ShaderPassType type) const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
 
         void InitRenderResource(rhi::RhiDevice& device,
@@ -101,8 +128,7 @@ namespace ve
 
     private:
         RTShaderResourceDesc desc_;
-        std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
-        std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
+        std::vector<std::unique_ptr<RTShaderPass>> passes_;
         UInt64 revision_ = 0;
     };
 

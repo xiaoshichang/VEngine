@@ -686,36 +686,45 @@ namespace ve::editor
             }
 
             boost::json::object& object = json.GetValue().as_object();
-            boost::json::value* stagesValue = object.if_contains("stages");
-            if (stagesValue == nullptr || !stagesValue->is_array())
+            auto rewriteStages = [&projectRoot](boost::json::array& stages)
             {
-                return ErrorCode::InvalidArgument;
-            }
-
-            for (boost::json::value& stageValue : stagesValue->as_array())
-            {
-                if (!stageValue.is_object())
+                for (boost::json::value& stageValue : stages)
                 {
-                    continue;
-                }
-
-                boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
-                if (artifactsValue == nullptr || !artifactsValue->is_object())
-                {
-                    continue;
-                }
-
-                boost::json::object& artifacts = artifactsValue->as_object();
-                for (const char* key : {"d3d11", "d3d12", "metal", "reflection"})
-                {
-                    boost::json::value* artifactValue = artifacts.if_contains(key);
-                    if (artifactValue == nullptr || !artifactValue->is_string())
+                    if (!stageValue.is_object())
                     {
                         continue;
                     }
-
-                    artifacts[key] = MakeProjectRelativePath(projectRoot, Path(std::string(artifactValue->as_string()))).GetString();
+                    boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
+                    if (artifactsValue == nullptr || !artifactsValue->is_object())
+                    {
+                        continue;
+                    }
+                    boost::json::object& artifacts = artifactsValue->as_object();
+                    for (const char* key : {"d3d11", "d3d12", "metal", "reflection"})
+                    {
+                        boost::json::value* artifactValue = artifacts.if_contains(key);
+                        if (artifactValue == nullptr || !artifactValue->is_string()) continue;
+                        artifacts[key] = MakeProjectRelativePath(projectRoot, Path(std::string(artifactValue->as_string()))).GetString();
+                    }
                 }
+            };
+
+            if (boost::json::value* stagesValue = object.if_contains("stages"); stagesValue != nullptr && stagesValue->is_array())
+            {
+                rewriteStages(stagesValue->as_array());
+            }
+            else if (boost::json::value* passesValue = object.if_contains("passes"); passesValue != nullptr && passesValue->is_array())
+            {
+                for (boost::json::value& passValue : passesValue->as_array())
+                {
+                    if (!passValue.is_object()) continue;
+                    boost::json::value* passStagesValue = passValue.as_object().if_contains("stages");
+                    if (passStagesValue != nullptr && passStagesValue->is_array()) rewriteStages(passStagesValue->as_array());
+                }
+            }
+            else
+            {
+                return ErrorCode::InvalidArgument;
             }
 
             object["source"] = MakeProjectRelativePath(projectRoot, Path(ReadString(object, "source"))).GetString();
@@ -785,37 +794,37 @@ namespace ve::editor
                 return true;
             }
 
-            const boost::json::value* stagesValue = runtimeJson.GetValue().as_object().if_contains("stages");
-            if (stagesValue == nullptr || !stagesValue->is_array())
+            const boost::json::value* passesValue = runtimeJson.GetValue().as_object().if_contains("passes");
+            if (passesValue == nullptr || !passesValue->is_array())
             {
                 return true;
             }
 
-            for (const boost::json::value& stageValue : stagesValue->as_array())
+            for (const boost::json::value& passValue : passesValue->as_array())
             {
-                if (!stageValue.is_object())
+                if (!passValue.is_object())
                 {
                     continue;
                 }
-
-                const boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
-                if (artifactsValue == nullptr || !artifactsValue->is_object())
+                const boost::json::value* stagesValue = passValue.as_object().if_contains("stages");
+                if (stagesValue == nullptr || !stagesValue->is_array())
                 {
                     return true;
                 }
-
-                const boost::json::object& artifacts = artifactsValue->as_object();
-                const std::string metalPath = ReadString(artifacts, "metal");
-                if (metalPath.ends_with(".slang.metal"))
+                for (const boost::json::value& stageValue : stagesValue->as_array())
                 {
-                    return true;
+                    if (!stageValue.is_object()) continue;
+                    const boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
+                    if (artifactsValue == nullptr || !artifactsValue->is_object()) return true;
+                    const std::string metalPath = ReadString(artifactsValue->as_object(), "metal");
+                    if (metalPath.ends_with(".slang.metal")) return true;
                 }
             }
 
             return IsFileNewerThan(shaderDescriptorPhysicalPath, shaderRuntimePhysicalPath) || IsFileNewerThan(shaderSourcePhysicalPath, shaderRuntimePhysicalPath);
         }
 
-        [[nodiscard]] ErrorCode MergeShaderMaterialLayout(
+        [[nodiscard]] ErrorCode MergeShaderDescriptor(
             const boost::json::object& shaderDescriptor, const Path& shaderRuntimePhysicalPath)
         {
             Result<std::string> runtimeText = FileSystem::ReadTextFile(shaderRuntimePhysicalPath);
@@ -837,6 +846,61 @@ namespace ve::editor
             }
 
             runtimeJson.GetValue().as_object()["material"] = WriteShaderMaterialLayoutJson(layout.GetValue());
+            const boost::json::value* passesValue = shaderDescriptor.if_contains("passes");
+            if (passesValue == nullptr || !passesValue->is_array())
+            {
+                return ErrorCode::InvalidArgument;
+            }
+
+            const boost::json::value* stagesValue = runtimeJson.GetValue().as_object().if_contains("stages");
+            if (stagesValue == nullptr)
+            {
+                const boost::json::value* runtimePassesValue = runtimeJson.GetValue().as_object().if_contains("passes");
+                if (runtimePassesValue == nullptr || !runtimePassesValue->is_array()) return ErrorCode::InvalidArgument;
+                return FileSystem::WriteTextFile(shaderRuntimePhysicalPath, JsonUtils::SerializePretty(runtimeJson.GetValue()));
+            }
+            if (!stagesValue->is_array()) return ErrorCode::InvalidArgument;
+
+            boost::json::array runtimePasses;
+            for (const boost::json::value& passValue : passesValue->as_array())
+            {
+                if (!passValue.is_object())
+                {
+                    return ErrorCode::InvalidArgument;
+                }
+
+                boost::json::object runtimePass = passValue.as_object();
+                const boost::json::value* requestedStagesValue = runtimePass.if_contains("stages");
+                if (requestedStagesValue == nullptr || !requestedStagesValue->is_array())
+                {
+                    return ErrorCode::InvalidArgument;
+                }
+
+                boost::json::array passStages;
+                for (const boost::json::value& requestedStageValue : requestedStagesValue->as_array())
+                {
+                    if (!requestedStageValue.is_string())
+                    {
+                        return ErrorCode::InvalidArgument;
+                    }
+                    const std::string requestedStage(requestedStageValue.as_string());
+                    const auto stageIt = std::find_if(stagesValue->as_array().begin(),
+                                                      stagesValue->as_array().end(),
+                                                      [&requestedStage](const boost::json::value& stageValue)
+                                                      {
+                                                          return stageValue.is_object() && ReadString(stageValue.as_object(), "stage") == requestedStage;
+                                                      });
+                    if (stageIt == stagesValue->as_array().end())
+                    {
+                        return ErrorCode::NotFound;
+                    }
+                    passStages.emplace_back(*stageIt);
+                }
+                runtimePass["stages"] = std::move(passStages);
+                runtimePasses.emplace_back(std::move(runtimePass));
+            }
+            runtimeJson.GetValue().as_object().erase("stages");
+            runtimeJson.GetValue().as_object()["passes"] = std::move(runtimePasses);
             return FileSystem::WriteTextFile(shaderRuntimePhysicalPath, JsonUtils::SerializePretty(runtimeJson.GetValue()));
         }
 
@@ -1255,7 +1319,7 @@ namespace ve::editor
                 return rewriteResult;
             }
 
-            return MergeShaderMaterialLayout(descriptor, shaderRuntimePhysicalPath);
+            return MergeShaderDescriptor(descriptor, shaderRuntimePhysicalPath);
         }
 
         const Path outputDirectory = projectRoot_ / GetImportedShaderDirectory(guid);
@@ -1306,7 +1370,7 @@ namespace ve::editor
             return rewriteResult;
         }
 
-        return MergeShaderMaterialLayout(descriptor, shaderRuntimePhysicalPath);
+        return MergeShaderDescriptor(descriptor, shaderRuntimePhysicalPath);
     }
 
     ErrorCode EditorAssetDatabase::ResolveAssetDependencies()

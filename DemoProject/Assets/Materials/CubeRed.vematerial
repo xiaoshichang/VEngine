@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "name": "Cube Red",
     "shader": "Builtin/Shaders/BasicMesh",
     "properties": {

@@ -29,7 +29,7 @@ namespace ve
                   const VirtualShadowSamplingSnapshot& virtualShadowSampling,
                   UInt32 viewIndex,
                   RenderPassContext& context);
-        void EnsurePipeline(RenderPassContext& context, UInt32 viewIndex);
+        void EnsurePipeline(RenderPassContext& context, UInt32 viewIndex, const std::shared_ptr<RTShaderResource>& shaderResource);
         void BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
         OpaqueSceneRenderPassInitParam initParam_;
         rhi::RhiPipelineState* pipelineState_ = nullptr;

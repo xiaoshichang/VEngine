@@ -89,6 +89,7 @@ function(ve_add_engine)
             Engine/Runtime/Resource/AssetRef.cpp
             Engine/Runtime/Resource/AssetManifest.cpp
             Engine/Runtime/Resource/MaterialProperty.cpp
+            Engine/Runtime/Resource/ShaderPass.cpp
             Engine/Runtime/Resource/ResourceObject.cpp
             Engine/Runtime/Resource/ResourceSystem.cpp
             Engine/Runtime/Resource/RuntimeAssetLoader.cpp
@@ -210,6 +211,7 @@ function(ve_add_engine)
             Engine/Runtime/Resource/AssetRef.h
             Engine/Runtime/Resource/AssetManifest.h
             Engine/Runtime/Resource/MaterialProperty.h
+            Engine/Runtime/Resource/ShaderPass.h
             Engine/Runtime/Resource/ResourceObject.h
             Engine/Runtime/Resource/ResourceSystem.h
             Engine/Runtime/Resource/RuntimeAssetLoader.h

@@ -225,6 +225,12 @@ void PSMain(Output input)
                 {
                     continue;
                 }
+                const std::shared_ptr<RTMaterialResource> material = std::dynamic_pointer_cast<RTMaterialResource>(item->GetMaterialResource());
+                if (material == nullptr || material->GetShaderResource() == nullptr ||
+                    !material->GetShaderResource()->HasPass(ShaderPassType::ShadowCaster))
+                {
+                    continue;
+                }
 
                 const std::shared_ptr<RTMeshResource> mesh = std::dynamic_pointer_cast<RTMeshResource>(item->GetMeshResource());
                 if (mesh == nullptr)

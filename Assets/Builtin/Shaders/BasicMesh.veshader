@@ -2,6 +2,31 @@
     "schemaVersion": 1,
     "name": "BasicMesh",
     "source": "BasicMesh.hlsl",
+    "passes": [
+        {
+            "name": "DepthOnly",
+            "type": "DepthOnly",
+            "stages": [
+                "Vertex"
+            ]
+        },
+        {
+            "name": "OpaqueForward",
+            "type": "OpaqueForward",
+            "stages": [
+                "Vertex",
+                "Pixel"
+            ]
+        },
+        {
+            "name": "ShadowCaster",
+            "type": "ShadowCaster",
+            "stages": [
+                "Vertex",
+                "Pixel"
+            ]
+        }
+    ],
     "material": {
         "constantBuffer": "MaterialConstants",
         "constantBufferSize": 256,

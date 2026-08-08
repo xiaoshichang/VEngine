@@ -141,33 +141,40 @@ namespace ve
             RTShaderResourceDesc desc;
             desc.name = ReadString(object, "name", record.runtimePath.GetString());
 
-            const boost::json::value* stagesValue = object.if_contains("stages");
-            if (stagesValue == nullptr || !stagesValue->is_array())
+            const boost::json::value* passesValue = object.if_contains("passes");
+            if (passesValue == nullptr || !passesValue->is_array())
             {
-                return Result<RTShaderResourceDesc>::Failure(Error(ErrorCode::InvalidArgument, "Shader descriptor missing stages array."));
+                return Result<RTShaderResourceDesc>::Failure(Error(ErrorCode::InvalidArgument, "Shader descriptor missing passes array."));
             }
 
-            for (const boost::json::value& stageValue : stagesValue->as_array())
+            for (const boost::json::value& passValue : passesValue->as_array())
             {
-                if (!stageValue.is_object())
+                if (!passValue.is_object()) continue;
+                const boost::json::object& passObject = passValue.as_object();
+                const boost::json::value* stagesValue = passObject.if_contains("stages");
+                if (stagesValue == nullptr || !stagesValue->is_array())
                 {
                     continue;
                 }
+                Result<ShaderPassType> passType = ParseShaderPassType(ReadString(passObject, "type"));
+                if (!passType) return Result<RTShaderResourceDesc>::Failure(passType.GetError());
+                RTShaderPassResourceDesc passDesc;
+                passDesc.type = passType.GetValue();
+                passDesc.name = ReadString(passObject, "name", ToString(passDesc.type));
 
-                const boost::json::object& stageObject = stageValue.as_object();
-                const boost::json::value* artifactsValue = stageObject.if_contains("artifacts");
-                if (artifactsValue == nullptr || !artifactsValue->is_object())
+                for (const boost::json::value& stageValue : stagesValue->as_array())
                 {
-                    continue;
-                }
+                    if (!stageValue.is_object()) continue;
+                    const boost::json::object& stageObject = stageValue.as_object();
+                    const boost::json::value* artifactsValue = stageObject.if_contains("artifacts");
+                    if (artifactsValue == nullptr || !artifactsValue->is_object()) continue;
+                    const boost::json::object& artifacts = artifactsValue->as_object();
+                    RTShaderStageResourceDesc stageDesc;
+                    stageDesc.stage = ParseShaderStage(ReadString(stageObject, "stage"));
+                    stageDesc.entryPoint = ReadString(stageObject, "entry", stageDesc.stage == rhi::RhiShaderStage::Vertex ? "VSMain" : "PSMain");
+                    stageDesc.debugName = desc.name + "." + passDesc.name + (stageDesc.stage == rhi::RhiShaderStage::Vertex ? ".Vertex" : ".Fragment");
 
-                const boost::json::object& artifacts = artifactsValue->as_object();
-                RTShaderStageResourceDesc stageDesc;
-                stageDesc.stage = ParseShaderStage(ReadString(stageObject, "stage"));
-                stageDesc.entryPoint = ReadString(stageObject, "entry", stageDesc.stage == rhi::RhiShaderStage::Vertex ? "VSMain" : "PSMain");
-                stageDesc.debugName = desc.name + (stageDesc.stage == rhi::RhiShaderStage::Vertex ? ".Vertex" : ".Fragment");
-
-#if VE_PLATFORM_WINDOWS
+ #if VE_PLATFORM_WINDOWS
                 Result<std::vector<std::byte>> d3d11Bytes = ReadShaderBinaryArtifact(artifacts, "d3d11", "D3D11", record, projectRoot);
                 if (!d3d11Bytes)
                 {
@@ -191,8 +198,9 @@ namespace ve
 #else
                 return Result<RTShaderResourceDesc>::Failure(Error(ErrorCode::Unsupported, "Unsupported platform for shader artifact loading."));
 #endif
-
-                desc.stages.push_back(std::move(stageDesc));
+                    passDesc.stages.push_back(std::move(stageDesc));
+                }
+                desc.passes.push_back(std::move(passDesc));
             }
 
             return Result<RTShaderResourceDesc>::Success(std::move(desc));
