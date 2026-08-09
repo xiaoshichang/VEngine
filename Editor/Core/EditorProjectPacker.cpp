@@ -57,41 +57,68 @@ namespace ve::editor
                 return Result<std::vector<Path>>::Failure(Error(ErrorCode::InvalidArgument, "Shader descriptor root must be a JSON object."));
             }
 
-            const boost::json::value* stagesValue = json.GetValue().as_object().if_contains("stages");
-            if (stagesValue == nullptr || !stagesValue->is_array())
+            std::vector<Path> paths;
+            const auto collectStageArtifacts = [&paths](const boost::json::array& stages)
             {
-                return Result<std::vector<Path>>::Failure(Error(ErrorCode::InvalidArgument, "Shader descriptor missing stages array."));
+                for (const boost::json::value& stageValue : stages)
+                {
+                    if (!stageValue.is_object())
+                    {
+                        continue;
+                    }
+
+                    const boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
+                    if (artifactsValue == nullptr || !artifactsValue->is_object())
+                    {
+                        continue;
+                    }
+
+                    const boost::json::object& artifacts = artifactsValue->as_object();
+                    const auto collectArtifactPath = [&artifacts, &paths](const char* key)
+                    {
+                        const std::string artifactPath = ReadString(artifacts, key);
+                        if (!artifactPath.empty())
+                        {
+                            paths.emplace_back(artifactPath);
+                        }
+                    };
+#if VE_PLATFORM_WINDOWS
+                    collectArtifactPath("d3d11");
+                    collectArtifactPath("d3d12");
+#elif VE_PLATFORM_MACOS
+                    collectArtifactPath("metal");
+#endif
+                }
+            };
+
+            const boost::json::object& descriptor = json.GetValue().as_object();
+            const boost::json::value* passesValue = descriptor.if_contains("passes");
+            if (passesValue == nullptr || !passesValue->is_array())
+            {
+                return Result<std::vector<Path>>::Failure(Error(ErrorCode::InvalidArgument, "Shader descriptor missing passes array."));
             }
 
-            std::vector<Path> paths;
-            for (const boost::json::value& stageValue : stagesValue->as_array())
+            bool foundStages = false;
+            for (const boost::json::value& passValue : passesValue->as_array())
             {
-                if (!stageValue.is_object())
+                if (!passValue.is_object())
                 {
                     continue;
                 }
 
-                const boost::json::value* artifactsValue = stageValue.as_object().if_contains("artifacts");
-                if (artifactsValue == nullptr || !artifactsValue->is_object())
+                const boost::json::value* stagesValue = passValue.as_object().if_contains("stages");
+                if (stagesValue == nullptr || !stagesValue->is_array())
                 {
                     continue;
                 }
 
-                const boost::json::object& artifacts = artifactsValue->as_object();
-                const auto collectArtifactPath = [&artifacts, &paths](const char* key)
-                {
-                    const std::string artifactPath = ReadString(artifacts, key);
-                    if (!artifactPath.empty())
-                    {
-                        paths.emplace_back(artifactPath);
-                    }
-                };
-#if VE_PLATFORM_WINDOWS
-                collectArtifactPath("d3d11");
-                collectArtifactPath("d3d12");
-#elif VE_PLATFORM_MACOS
-                collectArtifactPath("metal");
-#endif
+                foundStages = true;
+                collectStageArtifacts(stagesValue->as_array());
+            }
+            if (!foundStages)
+            {
+                return Result<std::vector<Path>>::Failure(
+                    Error(ErrorCode::InvalidArgument, "Shader descriptor passes do not contain any stages arrays."));
             }
 
             return Result<std::vector<Path>>::Success(std::move(paths));
@@ -340,7 +367,8 @@ namespace ve::editor
                 continue;
             }
 
-            const Path sourcePath = !pair.second.asset.sourcePathOverride.IsEmpty() ? pair.second.asset.sourcePathOverride : ResolveEditorContentPath(projectRoot_, runtimePath);
+            const Path sourcePath = !pair.second.asset.sourcePathOverride.IsEmpty() ? pair.second.asset.sourcePathOverride
+                                                                                       : ResolveEditorContentPath(projectRoot_, runtimePath);
             const Path destinationPath = packageDataRoot_ / runtimePath;
             ErrorCode result = CopyFileWithDirectories(sourcePath, destinationPath);
             if (result != ErrorCode::None)

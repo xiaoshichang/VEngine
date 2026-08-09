@@ -234,23 +234,12 @@ namespace ve
             return;
         }
 
-        ResourceSystem& resourceSystem = GetRuntime().GetResourceSystem();
-        Error builtInShaderResult = resourceSystem.InitializeBuiltInShaderLibrary(BuiltInShaderLibraryInitParam{
-            runtimeAssetLoader_, GetRuntime().GetRenderSystem(), BuiltInShaderEnvironment::Player, false});
-        if (!builtInShaderResult.IsOk())
-        {
-            VE_LOG_ERROR_CATEGORY("Player", "Failed to initialize BuiltInShaderLibrary: {}", builtInShaderResult.GetMessage());
-            return;
-        }
-        GetRuntime().GetSceneSystem().SetBuiltInShaderResources(resourceSystem.GetBuiltInShaderResources());
-
-        (void)InitializePackagedScripts(dataRoot);
-
-        // 5. Record the start scene for a one-shot Scene Thread load once the main loop starts.
+        // 5. Record package state for one-shot Scene Thread resource initialization and scene loading.
+        packagedDataRoot_ = dataRoot;
         SchedulePackagedStartupSceneLoad(descriptor.GetValue().startScene);
 
         VE_LOG_INFO_CATEGORY("Player",
-                             "Packaged project data root initialized: '{}', project '{}', start scene '{}', manifest asset count {}.",
+                             "Packaged project data root discovered: '{}', project '{}', start scene '{}', manifest asset count {}.",
                              dataRoot.GetString(),
                              descriptor.GetValue().name,
                              packagedStartScene_,
@@ -327,10 +316,24 @@ namespace ve
             return;
         }
 
+        ResourceSystem& resourceSystem = GetRuntime().GetResourceSystem();
+        Error builtInShaderResult = resourceSystem.InitializeBuiltInShaderLibrary(BuiltInShaderLibraryInitParam{
+            runtimeAssetLoader_, GetRuntime().GetRenderSystem(), BuiltInShaderEnvironment::Player, false});
+        if (!builtInShaderResult.IsOk())
+        {
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to initialize BuiltInShaderLibrary: {}", builtInShaderResult.GetMessage());
+            return;
+        }
+        GetRuntime().GetSceneSystem().SetBuiltInShaderResources(resourceSystem.GetBuiltInShaderResources());
+        (void)InitializePackagedScripts(packagedDataRoot_);
+
         Result<AssetID> sceneAssetID = runtimeAssetLoader_.FindAssetIDByRuntimePath(Path(packagedStartScene_));
         if (!sceneAssetID)
         {
-            VE_LOG_ERROR_CATEGORY("Player", "Packaged start scene '{}' was not found in AssetManifest: {}", packagedStartScene_, sceneAssetID.GetError().GetMessage());
+            VE_LOG_ERROR_CATEGORY("Player",
+                                  "Packaged start scene '{}' was not found in AssetManifest: {}",
+                                  packagedStartScene_,
+                                  sceneAssetID.GetError().GetMessage());
             return;
         }
 

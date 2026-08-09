@@ -1216,7 +1216,7 @@ namespace ve::editor
         if (!resourceSystem.IsBuiltInShaderLibraryInitialized())
         {
             Error builtInShaderResult = resourceSystem.InitializeBuiltInShaderLibrary(BuiltInShaderLibraryInitParam{
-                assetDatabase_, runtime_->GetRenderSystem(), BuiltInShaderEnvironment::Editor, false});
+                assetDatabase_, runtime_->GetRenderSystem(), BuiltInShaderEnvironment::Editor, true});
             if (!builtInShaderResult.IsOk())
             {
                 VE_LOG_ERROR_CATEGORY("Editor", "Failed to initialize BuiltInShaderLibrary: {}", builtInShaderResult.GetMessage());

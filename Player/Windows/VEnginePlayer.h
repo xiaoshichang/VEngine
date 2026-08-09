@@ -32,6 +32,7 @@ namespace ve
 
         ViewportClient viewportClient_;
         RuntimeAssetLoader runtimeAssetLoader_;
+        Path packagedDataRoot_;
         std::string packagedStartScene_;
         bool pendingPackagedStartupSceneLoad_ = false;
     };
