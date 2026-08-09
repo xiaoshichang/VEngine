@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -18,209 +19,9 @@ namespace ve
 {
     namespace
     {
-        inline constexpr const char* PreviewVertexHlsl = R"(
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-VSOutput VSMain(uint vertexID : SV_VertexID)
-{
-    VSOutput output;
-    output.uv = float2((vertexID << 1u) & 2u, vertexID & 2u);
-    output.position = float4(output.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), 0.0f, 1.0f);
-    return output;
-}
-)";
-
-        inline constexpr const char* PreviewColorFragmentHlsl = R"(
-Texture2D<float4> SourceTexture : register(t0);
-
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-uint2 SourceCoordinate(float2 uv)
-{
-    uint width;
-    uint height;
-    SourceTexture.GetDimensions(width, height);
-    const uint2 dimensions = uint2(width, height);
-    return min(uint2(uv * float2(dimensions)), dimensions - 1u);
-}
-
-float4 PSColor(VSOutput input) : SV_TARGET
-{
-    return SourceTexture.Load(int3(SourceCoordinate(input.uv), 0));
-}
-)";
-
-        inline constexpr const char* PreviewDepthFragmentHlsl = R"(
-Texture2D<float> SourceTexture : register(t0);
-
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-uint2 SourceCoordinate(float2 uv)
-{
-    uint width;
-    uint height;
-    SourceTexture.GetDimensions(width, height);
-    const uint2 dimensions = uint2(width, height);
-    return min(uint2(uv * float2(dimensions)), dimensions - 1u);
-}
-
-float4 PSDepth(VSOutput input) : SV_TARGET
-{
-    const float depth = saturate(SourceTexture.Load(int3(SourceCoordinate(input.uv), 0)));
-    const float visualDepth = 1.0f - pow(depth, 64.0f);
-    return float4(visualDepth, visualDepth, visualDepth, 1.0f);
-}
-)";
-
-        inline constexpr const char* PreviewUnsignedIntegerFragmentHlsl = R"(
-Texture2D<uint> SourceTexture : register(t0);
-
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-uint2 SourceCoordinate(float2 uv)
-{
-    uint width;
-    uint height;
-    SourceTexture.GetDimensions(width, height);
-    const uint2 dimensions = uint2(width, height);
-    return min(uint2(uv * float2(dimensions)), dimensions - 1u);
-}
-
-uint HashInteger(uint value)
-{
-    value ^= value >> 16u;
-    value *= 0x7feb352du;
-    value ^= value >> 15u;
-    value *= 0x846ca68bu;
-    value ^= value >> 16u;
-    return value;
-}
-
-float4 PSUnsignedInteger(VSOutput input) : SV_TARGET
-{
-    const uint value = SourceTexture.Load(int3(SourceCoordinate(input.uv), 0));
-    if (value == 0u)
-    {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
-    }
-
-    const uint hash = HashInteger(value);
-    const float3 color = float3(hash & 0xffu, (hash >> 8u) & 0xffu, (hash >> 16u) & 0xffu) / 255.0f;
-    return float4(color, 1.0f);
-}
-)";
-
-        inline constexpr const char* PreviewMetalSource = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct VSOutput
-{
-    float4 position [[position]];
-    float2 uv;
-};
-
-vertex VSOutput VSMain(uint vertexID [[vertex_id]])
-{
-    VSOutput output;
-    output.uv = float2((vertexID << 1u) & 2u, vertexID & 2u);
-    output.position = float4(output.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), 0.0f, 1.0f);
-    return output;
-}
-
-uint2 SourceCoordinate(float2 uv, uint width, uint height)
-{
-    const uint2 dimensions = uint2(width, height);
-    return min(uint2(uv * float2(dimensions)), dimensions - 1u);
-}
-
-fragment float4 PSColor(VSOutput input [[stage_in]], texture2d<float, access::read> source [[texture(0)]])
-{
-    return source.read(SourceCoordinate(input.uv, source.get_width(), source.get_height()));
-}
-
-fragment float4 PSDepth(VSOutput input [[stage_in]], texture2d<float, access::read> source [[texture(0)]])
-{
-    const float depth = saturate(source.read(SourceCoordinate(input.uv, source.get_width(), source.get_height())).r);
-    const float visualDepth = 1.0f - pow(depth, 64.0f);
-    return float4(visualDepth, visualDepth, visualDepth, 1.0f);
-}
-
-uint HashInteger(uint value)
-{
-    value ^= value >> 16u;
-    value *= 0x7feb352du;
-    value ^= value >> 15u;
-    value *= 0x846ca68bu;
-    value ^= value >> 16u;
-    return value;
-}
-
-fragment float4 PSUnsignedInteger(VSOutput input [[stage_in]], texture2d<uint, access::read> source [[texture(0)]])
-{
-    const uint value = source.read(SourceCoordinate(input.uv, source.get_width(), source.get_height())).r;
-    if (value == 0u)
-    {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
-    }
-
-    const uint hash = HashInteger(value);
-    const float3 color = float3(hash & 0xffu, (hash >> 8u) & 0xffu, (hash >> 16u) & 0xffu) / 255.0f;
-    return float4(color, 1.0f);
-}
-)";
-
         [[nodiscard]] Int32 PreviewModeVariant(FrameGraphDebugPreviewMode mode) noexcept
         {
             return static_cast<Int32>(mode);
-        }
-
-        [[nodiscard]] const char* PreviewFragmentEntryPoint(FrameGraphDebugPreviewMode mode) noexcept
-        {
-            switch (mode)
-            {
-            case FrameGraphDebugPreviewMode::Color:
-                return "PSColor";
-            case FrameGraphDebugPreviewMode::Depth:
-                return "PSDepth";
-            case FrameGraphDebugPreviewMode::UnsignedInteger:
-                return "PSUnsignedInteger";
-            case FrameGraphDebugPreviewMode::Unsupported:
-                return nullptr;
-            }
-            return nullptr;
-        }
-
-        [[nodiscard]] const char* PreviewFragmentHlsl(FrameGraphDebugPreviewMode mode) noexcept
-        {
-            switch (mode)
-            {
-            case FrameGraphDebugPreviewMode::Color:
-                return PreviewColorFragmentHlsl;
-            case FrameGraphDebugPreviewMode::Depth:
-                return PreviewDepthFragmentHlsl;
-            case FrameGraphDebugPreviewMode::UnsignedInteger:
-                return PreviewUnsignedIntegerFragmentHlsl;
-            case FrameGraphDebugPreviewMode::Unsupported:
-                return nullptr;
-            }
-            return nullptr;
         }
 
         [[nodiscard]] ErrorCode FailPreviewConversion(ErrorCode errorCode, const char* message)
@@ -364,40 +165,20 @@ fragment float4 PSUnsignedInteger(VSOutput input [[stage_in]], texture2d<uint, a
         }
 
         const bool metal = context.device.GetBackend() == rhi::RhiBackend::Metal;
-        const char* fragmentEntryPoint = PreviewFragmentEntryPoint(mode);
-        const char* fragmentSource = metal ? PreviewMetalSource : PreviewFragmentHlsl(mode);
-        if (fragmentEntryPoint == nullptr || fragmentSource == nullptr)
-        {
-            return FailPreviewConversion(ErrorCode::Unsupported, "the conversion shader variant is unavailable.");
-        }
-
-        const rhi::RhiShaderModuleDesc vertexShaderDesc = {
-            rhi::RhiShaderStage::Vertex,
-            rhi::RhiShaderCodeFormat::Source,
-            metal ? PreviewMetalSource : PreviewVertexHlsl,
-            nullptr,
-            0,
-            "VSMain",
-            "FrameGraphDebugPreviewVS",
-        };
-        rhi::RhiShaderModule* vertexShader =
-            shaderManager->TryGetOrCompileShader(context.device, ShaderID{"FrameGraphDebugPreview.Vertex", metal ? 1 : 0}, vertexShaderDesc);
+        const std::string passName = mode == FrameGraphDebugPreviewMode::Color ? "Color" : mode == FrameGraphDebugPreviewMode::Depth ? "Depth" : "UnsignedInteger";
+        rhi::RhiShaderModule* vertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
+                                                                           ShaderID{"FrameGraphDebugPreview.Vertex", metal ? 1 : 0},
+                                                                           "FrameGraphDebugPreview", passName, rhi::RhiShaderStage::Vertex,
+                                                                           "FrameGraphDebugPreviewVS");
         if (vertexShader == nullptr)
         {
             return FailPreviewConversion(ErrorCode::PlatformError, "the fullscreen vertex shader could not be compiled.");
         }
 
-        const rhi::RhiShaderModuleDesc fragmentShaderDesc = {
-            rhi::RhiShaderStage::Fragment,
-            rhi::RhiShaderCodeFormat::Source,
-            fragmentSource,
-            nullptr,
-            0,
-            fragmentEntryPoint,
-            "FrameGraphDebugPreviewPS",
-        };
-        rhi::RhiShaderModule* fragmentShader = shaderManager->TryGetOrCompileShader(
-            context.device, ShaderID{"FrameGraphDebugPreview.Fragment", PreviewModeVariant(mode) | (metal ? (1 << 8) : 0)}, fragmentShaderDesc);
+        rhi::RhiShaderModule* fragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
+                                                                            ShaderID{"FrameGraphDebugPreview.Fragment", PreviewModeVariant(mode) | (metal ? (1 << 8) : 0)},
+                                                                            "FrameGraphDebugPreview", passName, rhi::RhiShaderStage::Fragment,
+                                                                            "FrameGraphDebugPreviewPS");
         if (fragmentShader == nullptr)
         {
             return FailPreviewConversion(ErrorCode::PlatformError, "the typed fragment shader could not be compiled.");

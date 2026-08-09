@@ -14,31 +14,6 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step1_ClearSceneComputeHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-RWStructuredBuffer<PhysicalPage> PhysicalPages : register(u0);
-RWStructuredBuffer<uint> Statistics : register(u1);
-[numthreads(64, 1, 1)]
-void CSMain(uint index : SV_DispatchThreadID)
-{
-    if (index < 6u) Statistics[index] = 0u;
-    if (index >= physicalCapacity) return;
-    PhysicalPage page = PhysicalPages[index];
-    if (resetCache != 0u)
-    {
-        page.key0 = 0xFFFFFFFFu;
-        page.key1 = 0xFFFFFFFFu;
-        page.lastUsedFrame = 0u;
-        page.lastRenderedFrame = 0u;
-        page.flags = 0u;
-    }
-    else
-    {
-        page.flags &= ~12u;
-    }
-    PhysicalPages[index] = page;
-}
-)";
-
         struct Step1_ClearScenePassData
         {
             VirtualShadowSceneCache* sceneCache = nullptr;
@@ -71,7 +46,6 @@ void CSMain(uint index : SV_DispatchThreadID)
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(frameData,
                                                                                                             "VirtualShadowStep1_ClearScene",
                                                                                                             "VirtualShadow.Step1_ClearScene.Compute",
-                                                                                                            Step1_ClearSceneComputeHlsl.c_str(),
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

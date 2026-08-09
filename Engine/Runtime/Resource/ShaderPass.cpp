@@ -18,6 +18,8 @@ namespace ve
             return "TransparentForward";
         case ShaderPassType::ShadowCaster:
             return "ShadowCaster";
+        case ShaderPassType::Internal:
+            return "Internal";
         }
         return "Unknown";
     }
@@ -39,6 +41,10 @@ namespace ve
         if (value == "ShadowCaster")
         {
             return Result<ShaderPassType>::Success(ShaderPassType::ShadowCaster);
+        }
+        if (value == "Internal")
+        {
+            return Result<ShaderPassType>::Success(ShaderPassType::Internal);
         }
         return Result<ShaderPassType>::Failure(Error(ErrorCode::InvalidArgument, "Unknown shader pass '" + std::string(value) + "'."));
     }

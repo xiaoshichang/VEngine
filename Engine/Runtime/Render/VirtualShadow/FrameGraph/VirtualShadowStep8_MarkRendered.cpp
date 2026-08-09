@@ -13,25 +13,6 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step8_MarkRenderedComputeHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-RWStructuredBuffer<PhysicalPage> PhysicalPages : register(u0);
-RWStructuredBuffer<uint> Statistics : register(u1);
-[numthreads(64, 1, 1)]
-void CSMain(uint index : SV_DispatchThreadID)
-{
-    if (index >= physicalCapacity) return;
-    PhysicalPage page = PhysicalPages[index];
-    bool matchesView = ((page.key1 >> 8u) & 0x00FFFFFFu) == (viewID & 0x00FFFFFFu);
-    if ((page.flags & 6u) == 6u && matchesView)
-    {
-        page.flags |= 8u;
-        page.lastRenderedFrame = frameIndex;
-        PhysicalPages[index] = page;
-        InterlockedAdd(Statistics[4], 1u);
-    }
-}
-)";
-
         void RecordStep8_MarkRendered(const VirtualShadowPageRecordingContext& context, rhi::RhiBuffer& physicalPages, rhi::RhiBuffer& statistics)
         {
             const rhi::RhiPipelineResourceBindingDesc bindings[] = {
@@ -42,7 +23,6 @@ void CSMain(uint index : SV_DispatchThreadID)
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(context.frameData,
                                                                                                             "VirtualShadowStep8_MarkRendered",
                                                                                                             "VirtualShadow.Step8_MarkRendered.Compute",
-                                                                                                            Step8_MarkRenderedComputeHlsl.c_str(),
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

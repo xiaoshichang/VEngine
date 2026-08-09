@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -30,155 +31,6 @@ namespace ve
         const ShaderID EditorGizmoLineFragmentShaderID{EditorGizmoLineFragmentShaderName, 0};
         const ShaderID EditorGizmoIconVertexShaderID{EditorGizmoIconVertexShaderName, 0};
         const ShaderID EditorGizmoIconFragmentShaderID{EditorGizmoIconFragmentShaderName, 0};
-
-        const char* EditorGizmoLineShaderSource = R"(
-cbuffer ViewConstants : register(b1)
-{
-    float4x4 viewProjection;
-    float4 cameraWorldPosition;
-};
-
-struct VSInput
-{
-    float3 position : POSITION;
-    float3 color : COLOR;
-};
-
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float3 color : COLOR0;
-};
-
-VSOutput VSMain(VSInput input)
-{
-    VSOutput output;
-    output.position = mul(viewProjection, float4(input.position, 1.0f));
-    output.color = input.color;
-    return output;
-}
-
-float4 PSMain(VSOutput input) : SV_TARGET
-{
-    return float4(saturate(input.color), 1.0f);
-}
-)";
-
-        const char* EditorGizmoLineMetalShaderSource = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct ViewConstants
-{
-    float4x4 viewProjection;
-    float4 cameraWorldPosition;
-};
-
-struct VSInput
-{
-    float3 position [[attribute(0)]];
-    float3 color [[attribute(1)]];
-};
-
-struct VSOutput
-{
-    float4 position [[position]];
-    float3 color;
-};
-
-[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant ViewConstants* constants [[buffer(1)]])
-{
-    VSOutput output;
-    output.position = constants->viewProjection * float4(input.position, 1.0f);
-    output.color = input.color;
-    return output;
-}
-
-[[fragment]] float4 PSMain(VSOutput input [[stage_in]])
-{
-    return float4(clamp(input.color, 0.0f, 1.0f), 1.0f);
-}
-)";
-
-        const char* EditorGizmoIconShaderSource = R"(
-cbuffer ViewConstants : register(b1)
-{
-    float4x4 viewProjection;
-    float4 cameraWorldPosition;
-};
-
-Texture2D IconAtlasTexture : register(t0);
-SamplerState IconAtlasSampler : register(s0);
-
-struct VSInput
-{
-    float3 position : POSITION;
-    float3 uv : TEXCOORD0;
-    float3 color : COLOR;
-};
-
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
-    float3 color : COLOR0;
-};
-
-VSOutput VSMain(VSInput input)
-{
-    VSOutput output;
-    output.position = mul(viewProjection, float4(input.position, 1.0f));
-    output.uv = input.uv.xy;
-    output.color = input.color;
-    return output;
-}
-
-float4 PSMain(VSOutput input) : SV_TARGET
-{
-    float4 atlas = IconAtlasTexture.Sample(IconAtlasSampler, input.uv);
-    return float4(saturate(input.color), atlas.a);
-}
-)";
-
-        const char* EditorGizmoIconMetalShaderSource = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct ViewConstants
-{
-    float4x4 viewProjection;
-    float4 cameraWorldPosition;
-};
-
-struct VSInput
-{
-    float3 position [[attribute(0)]];
-    float3 uv [[attribute(1)]];
-    float3 color [[attribute(2)]];
-};
-
-struct VSOutput
-{
-    float4 position [[position]];
-    float2 uv;
-    float3 color;
-};
-
-[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant ViewConstants* constants [[buffer(1)]])
-{
-    VSOutput output;
-    output.position = constants->viewProjection * float4(input.position, 1.0f);
-    output.uv = input.uv.xy;
-    output.color = input.color;
-    return output;
-}
-
-[[fragment]] float4 PSMain(VSOutput input [[stage_in]], texture2d<float> iconAtlasTexture [[texture(0)]], sampler iconAtlasSampler [[sampler(0)]])
-{
-    float4 atlas = iconAtlasTexture.sample(iconAtlasSampler, input.uv);
-    return float4(clamp(input.color, 0.0f, 1.0f), atlas.a);
-}
-)";
 
         [[nodiscard]] UInt64 GrowBufferCapacity(UInt64 currentCapacity, UInt64 requiredCapacity) noexcept
         {
@@ -203,11 +55,6 @@ struct VSOutput
             desc.memoryUsage = rhi::RhiBufferMemoryUsage::CpuToGpu;
             desc.debugName = debugName;
             return desc;
-        }
-
-        [[nodiscard]] const char* SelectShaderSource(const rhi::RhiDevice& device, const char* hlslSource, const char* metalSource) noexcept
-        {
-            return device.GetBackend() == rhi::RhiBackend::Metal ? metalSource : hlslSource;
         }
 
         [[nodiscard]] std::string BuildDeviceFailureMessage(const rhi::RhiDevice& device, const char* message)
@@ -348,49 +195,29 @@ struct VSOutput
             FailEditorGizmoPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        rhi::RhiShaderModuleDesc lineVertexShaderDesc = {};
-        lineVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-        lineVertexShaderDesc.source = SelectShaderSource(context.device, EditorGizmoLineShaderSource, EditorGizmoLineMetalShaderSource);
-        lineVertexShaderDesc.entryPoint = "VSMain";
-        lineVertexShaderDesc.debugName = "EditorGizmoLineVertexShader";
-
-        rhi::RhiShaderModule* lineVertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoLineVertexShaderID, lineVertexShaderDesc);
+        rhi::RhiShaderModule* lineVertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoLineVertexShaderID,
+                                                                               "EditorGizmoLine", "Internal", rhi::RhiShaderStage::Vertex, "EditorGizmoLineVertexShader");
         if (lineVertexShader == nullptr)
         {
             FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the line vertex shader."));
         }
 
-        rhi::RhiShaderModuleDesc lineFragmentShaderDesc = {};
-        lineFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-        lineFragmentShaderDesc.source = SelectShaderSource(context.device, EditorGizmoLineShaderSource, EditorGizmoLineMetalShaderSource);
-        lineFragmentShaderDesc.entryPoint = "PSMain";
-        lineFragmentShaderDesc.debugName = "EditorGizmoLineFragmentShader";
-
-        rhi::RhiShaderModule* lineFragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoLineFragmentShaderID, lineFragmentShaderDesc);
+        rhi::RhiShaderModule* lineFragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoLineFragmentShaderID,
+                                                                                 "EditorGizmoLine", "Internal", rhi::RhiShaderStage::Fragment, "EditorGizmoLineFragmentShader");
         if (lineFragmentShader == nullptr)
         {
             FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the line fragment shader."));
         }
 
-        rhi::RhiShaderModuleDesc iconVertexShaderDesc = {};
-        iconVertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-        iconVertexShaderDesc.source = SelectShaderSource(context.device, EditorGizmoIconShaderSource, EditorGizmoIconMetalShaderSource);
-        iconVertexShaderDesc.entryPoint = "VSMain";
-        iconVertexShaderDesc.debugName = "EditorGizmoIconVertexShader";
-
-        rhi::RhiShaderModule* iconVertexShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoIconVertexShaderID, iconVertexShaderDesc);
+        rhi::RhiShaderModule* iconVertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoIconVertexShaderID,
+                                                                               "EditorGizmoIcon", "Internal", rhi::RhiShaderStage::Vertex, "EditorGizmoIconVertexShader");
         if (iconVertexShader == nullptr)
         {
             FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the icon vertex shader."));
         }
 
-        rhi::RhiShaderModuleDesc iconFragmentShaderDesc = {};
-        iconFragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-        iconFragmentShaderDesc.source = SelectShaderSource(context.device, EditorGizmoIconShaderSource, EditorGizmoIconMetalShaderSource);
-        iconFragmentShaderDesc.entryPoint = "PSMain";
-        iconFragmentShaderDesc.debugName = "EditorGizmoIconFragmentShader";
-
-        rhi::RhiShaderModule* iconFragmentShader = shaderManager->GetOrCompileShader(context.device, EditorGizmoIconFragmentShaderID, iconFragmentShaderDesc);
+        rhi::RhiShaderModule* iconFragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoIconFragmentShaderID,
+                                                                                 "EditorGizmoIcon", "Internal", rhi::RhiShaderStage::Fragment, "EditorGizmoIconFragmentShader");
         if (iconFragmentShader == nullptr)
         {
             FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the icon fragment shader."));

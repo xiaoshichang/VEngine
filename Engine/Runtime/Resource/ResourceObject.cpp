@@ -121,6 +121,10 @@ namespace ve
 
         [[nodiscard]] rhi::RhiShaderStage ParseShaderStage(std::string_view text) noexcept
         {
+            if (text == "Compute")
+            {
+                return rhi::RhiShaderStage::Compute;
+            }
             if (text == "Pixel" || text == "Fragment")
             {
                 return rhi::RhiShaderStage::Fragment;
@@ -171,8 +175,14 @@ namespace ve
                     const boost::json::object& artifacts = artifactsValue->as_object();
                     RTShaderStageResourceDesc stageDesc;
                     stageDesc.stage = ParseShaderStage(ReadString(stageObject, "stage"));
-                    stageDesc.entryPoint = ReadString(stageObject, "entry", stageDesc.stage == rhi::RhiShaderStage::Vertex ? "VSMain" : "PSMain");
-                    stageDesc.debugName = desc.name + "." + passDesc.name + (stageDesc.stage == rhi::RhiShaderStage::Vertex ? ".Vertex" : ".Fragment");
+                    const char* defaultEntryPoint = stageDesc.stage == rhi::RhiShaderStage::Vertex
+                                                        ? "VSMain"
+                                                        : stageDesc.stage == rhi::RhiShaderStage::Fragment ? "PSMain" : "CSMain";
+                    const char* stageSuffix = stageDesc.stage == rhi::RhiShaderStage::Vertex
+                                                  ? ".Vertex"
+                                                  : stageDesc.stage == rhi::RhiShaderStage::Fragment ? ".Fragment" : ".Compute";
+                    stageDesc.entryPoint = ReadString(stageObject, "entry", defaultEntryPoint);
+                    stageDesc.debugName = desc.name + "." + passDesc.name + stageSuffix;
 
  #if VE_PLATFORM_WINDOWS
                 Result<std::vector<std::byte>> d3d11Bytes = ReadShaderBinaryArtifact(artifacts, "d3d11", "D3D11", record, projectRoot);

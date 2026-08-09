@@ -1,0 +1,20 @@
+{
+    "schemaVersion": 3,
+    "name": "FrameGraphDebugPreview",
+    "source": "RenderPasses/FrameGraphDebugPreview.hlsl",
+    "passes": [
+        {"name": "Color", "type": "Internal", "stages": [
+            {"stage": "Vertex", "entry": "VSMain"},
+            {"stage": "Pixel", "entry": "PSColor", "defines": ["VE_FRAME_GRAPH_PREVIEW_COLOR"]}
+        ]},
+        {"name": "Depth", "type": "Internal", "stages": [
+            {"stage": "Vertex", "entry": "VSMain"},
+            {"stage": "Pixel", "entry": "PSDepth", "defines": ["VE_FRAME_GRAPH_PREVIEW_DEPTH"]}
+        ]},
+        {"name": "UnsignedInteger", "type": "Internal", "stages": [
+            {"stage": "Vertex", "entry": "VSMain"},
+            {"stage": "Pixel", "entry": "PSUnsignedInteger", "defines": ["VE_FRAME_GRAPH_PREVIEW_UNSIGNED_INTEGER"]}
+        ]}
+    ],
+    "material": {"constantBuffer": "", "constantBufferSize": 0, "properties": []}
+}

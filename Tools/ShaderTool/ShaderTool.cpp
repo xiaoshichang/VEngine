@@ -1,5 +1,7 @@
 #include "Engine/Runtime/Core/Version.h"
 
+#include <boost/json.hpp>
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -18,21 +20,32 @@ namespace
     struct CompileOptions
     {
         std::filesystem::path sourcePath;
+        std::filesystem::path descriptorPath;
         std::filesystem::path outputDirectory;
         std::string shaderName;
         std::filesystem::path dxcExecutable = "dxc";
         std::filesystem::path fxcExecutable = "fxc";
         std::filesystem::path slangExecutable = "slangc";
+        std::vector<std::filesystem::path> includeDirectories;
     };
 
     struct ShaderStage
     {
-        std::string_view displayName;
-        std::string_view shortName;
-        std::string_view entryPoint;
-        std::string_view slangStage;
-        std::string_view d3d11Profile;
-        std::string_view dxcProfile;
+        std::string displayName;
+        std::string shortName;
+        std::string entryPoint;
+        std::string slangStage;
+        std::string d3d11Profile;
+        std::string dxcProfile;
+        std::string passName;
+        std::vector<std::string> defines;
+    };
+
+    struct ShaderPass
+    {
+        std::string name;
+        std::string type;
+        std::vector<ShaderStage> stages;
     };
 
     struct BindingInfo
@@ -45,18 +58,13 @@ namespace
         int metalIndex = 0;
     };
 
-    constexpr ShaderStage ShaderStages[] = {
-        {"Vertex", "VS", "VSMain", "vertex", "vs_5_0", "vs_6_0"},
-        {"Pixel", "PS", "PSMain", "pixel", "ps_5_0", "ps_6_0"},
-    };
-
     void PrintHelp()
     {
         std::cout << "VEngineShaderTool\n"
                   << "\n"
                   << "Commands:\n"
-                  << "  compile --source <file> --output <dir> --name <shader> [--dxc <path>] [--fxc <path>] "
-                     "[--slang <path>]\n"
+                  << "  compile --descriptor <file> --source <file> --output <dir> --name <shader> "
+                     "[--include <dir>] [--dxc <path>] [--fxc <path>] [--slang <path>]\n"
                   << "  --help\n";
         std::cout << "Shader flow: HLSL -> Slang/FXC/DXC -> DXBC, DXIL, Metal MSL, reflection\n";
     }
@@ -152,6 +160,136 @@ namespace
         return content.str();
     }
 
+    std::optional<std::string> ReadJsonString(const boost::json::object& object, std::string_view key)
+    {
+        const boost::json::value* value = object.if_contains(key);
+        if (value == nullptr || !value->is_string())
+        {
+            return std::nullopt;
+        }
+        return std::string(value->as_string());
+    }
+
+    std::optional<ShaderStage> ParseShaderStage(const boost::json::object& stageObject, std::string_view passName)
+    {
+        const std::optional<std::string> stageName = ReadJsonString(stageObject, "stage");
+        const std::optional<std::string> entryPoint = ReadJsonString(stageObject, "entry");
+        if (!stageName || !entryPoint || entryPoint->empty())
+        {
+            return std::nullopt;
+        }
+
+        ShaderStage stage;
+        stage.displayName = *stageName;
+        stage.entryPoint = *entryPoint;
+        stage.passName = passName;
+        if (*stageName == "Vertex")
+        {
+            stage.shortName = "VS";
+            stage.slangStage = "vertex";
+            stage.d3d11Profile = "vs_5_0";
+            stage.dxcProfile = "vs_6_0";
+        }
+        else if (*stageName == "Pixel" || *stageName == "Fragment")
+        {
+            stage.displayName = "Pixel";
+            stage.shortName = "PS";
+            stage.slangStage = "pixel";
+            stage.d3d11Profile = "ps_5_0";
+            stage.dxcProfile = "ps_6_0";
+        }
+        else if (*stageName == "Compute")
+        {
+            stage.shortName = "CS";
+            stage.slangStage = "compute";
+            stage.d3d11Profile = "cs_5_0";
+            stage.dxcProfile = "cs_6_0";
+        }
+        else
+        {
+            return std::nullopt;
+        }
+
+        if (const boost::json::value* definesValue = stageObject.if_contains("defines"); definesValue != nullptr)
+        {
+            if (!definesValue->is_array())
+            {
+                return std::nullopt;
+            }
+            for (const boost::json::value& defineValue : definesValue->as_array())
+            {
+                if (!defineValue.is_string())
+                {
+                    return std::nullopt;
+                }
+                stage.defines.emplace_back(defineValue.as_string());
+            }
+        }
+        return stage;
+    }
+
+    std::optional<std::vector<ShaderPass>> ParseShaderPasses(const std::filesystem::path& descriptorPath)
+    {
+        const std::optional<std::string> text = ReadTextFile(descriptorPath);
+        if (!text)
+        {
+            return std::nullopt;
+        }
+
+        boost::system::error_code errorCode;
+        boost::json::value root = boost::json::parse(*text, errorCode);
+        if (errorCode || !root.is_object())
+        {
+            return std::nullopt;
+        }
+
+        const boost::json::value* passesValue = root.as_object().if_contains("passes");
+        if (passesValue == nullptr || !passesValue->is_array())
+        {
+            return std::nullopt;
+        }
+
+        std::vector<ShaderPass> passes;
+        for (const boost::json::value& passValue : passesValue->as_array())
+        {
+            if (!passValue.is_object())
+            {
+                return std::nullopt;
+            }
+            const boost::json::object& passObject = passValue.as_object();
+            const std::optional<std::string> passName = ReadJsonString(passObject, "name");
+            const std::optional<std::string> passType = ReadJsonString(passObject, "type");
+            const boost::json::value* stagesValue = passObject.if_contains("stages");
+            if (!passName || passName->empty() || !passType || stagesValue == nullptr || !stagesValue->is_array())
+            {
+                return std::nullopt;
+            }
+
+            ShaderPass pass;
+            pass.name = *passName;
+            pass.type = *passType;
+            for (const boost::json::value& stageValue : stagesValue->as_array())
+            {
+                if (!stageValue.is_object())
+                {
+                    return std::nullopt;
+                }
+                std::optional<ShaderStage> stage = ParseShaderStage(stageValue.as_object(), pass.name);
+                if (!stage)
+                {
+                    return std::nullopt;
+                }
+                pass.stages.push_back(std::move(*stage));
+            }
+            if (pass.stages.empty())
+            {
+                return std::nullopt;
+            }
+            passes.push_back(std::move(pass));
+        }
+        return passes;
+    }
+
     bool WriteTextFile(const std::filesystem::path& path, std::string_view content)
     {
         std::ofstream output(path, std::ios::binary);
@@ -204,10 +342,6 @@ namespace
                 return "Bindable shader resource on line " + std::to_string(lineNumber) + " must declare an explicit register.";
             }
 
-            if (strippedLine.find("space") == std::string::npos)
-            {
-                return "Bindable shader resource on line " + std::to_string(lineNumber) + " must declare an explicit register space.";
-            }
         }
 
         return std::nullopt;
@@ -225,7 +359,7 @@ namespace
         binding.kind = std::move(kind);
         binding.name = match[1].str();
         binding.binding = std::stoi(match[2].str());
-        binding.bindGroup = std::stoi(match[3].str());
+        binding.bindGroup = match[3].matched ? std::stoi(match[3].str()) : 0;
         binding.hlslRegister = registerPrefix + std::to_string(binding.binding);
         bindings.push_back(std::move(binding));
     }
@@ -235,9 +369,9 @@ namespace
         std::vector<BindingInfo> bindings;
         const std::string sourceText(source);
 
-        const std::regex cbufferRegex(R"(\bcbuffer\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*b([0-9]+)\s*,\s*space([0-9]+)\s*\))");
-        const std::regex textureRegex(R"(\bTexture[A-Za-z0-9_<>]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*t([0-9]+)\s*,\s*space([0-9]+)\s*\))");
-        const std::regex samplerRegex(R"(\bSamplerState\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*s([0-9]+)\s*,\s*space([0-9]+)\s*\))");
+        const std::regex cbufferRegex(R"(\bcbuffer\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*b([0-9]+)(?:\s*,\s*space([0-9]+))?\s*\))");
+        const std::regex textureRegex(R"(\bTexture[A-Za-z0-9_<>]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*t([0-9]+)(?:\s*,\s*space([0-9]+))?\s*\))");
+        const std::regex samplerRegex(R"(\bSamplerState\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*register\s*\(\s*s([0-9]+)(?:\s*,\s*space([0-9]+))?\s*\))");
 
         for (std::sregex_iterator it(sourceText.begin(), sourceText.end(), cbufferRegex), end; it != end; ++it)
         {
@@ -277,7 +411,21 @@ namespace
 
     std::filesystem::path BuildArtifactPath(const CompileOptions& options, const ShaderStage& stage, std::string_view extension)
     {
-        return options.outputDirectory / (options.shaderName + "." + std::string(stage.shortName) + "." + std::string(extension));
+        return options.outputDirectory / (options.shaderName + "." + stage.passName + "." + stage.shortName + "." + std::string(extension));
+    }
+
+    void AppendCompilerOptions(std::vector<std::string>& arguments, const CompileOptions& options, const ShaderStage& stage, bool fxc)
+    {
+        for (const std::filesystem::path& includeDirectory : options.includeDirectories)
+        {
+            arguments.push_back(fxc ? "/I" : "-I");
+            arguments.push_back(includeDirectory.string());
+        }
+        for (const std::string& define : stage.defines)
+        {
+            arguments.push_back(fxc ? "/D" : "-D");
+            arguments.push_back(define);
+        }
     }
 
 #if defined(_WIN32)
@@ -288,52 +436,40 @@ namespace
         const std::filesystem::path metalPath = BuildArtifactPath(options, stage, "metal");
         const std::filesystem::path reflectionPath = BuildArtifactPath(options, stage, "reflect.json");
 
-        if (RunProcess({
-                options.fxcExecutable.string(),
-                "/nologo",
-                "/T",
-                std::string(stage.d3d11Profile),
-                "/E",
-                std::string(stage.entryPoint),
-                "/Fo",
-                dxbcPath.string(),
-                d3d11SourcePath.string(),
-            }) != 0)
+        std::vector<std::string> fxcArguments = {
+            options.fxcExecutable.string(), "/nologo", "/T", stage.d3d11Profile, "/E", stage.entryPoint, "/Fo", dxbcPath.string()};
+        AppendCompilerOptions(fxcArguments, options, stage, true);
+        fxcArguments.push_back(d3d11SourcePath.string());
+        if (RunProcess(fxcArguments) != 0)
         {
             return false;
         }
 
-        if (RunProcess({
-                options.dxcExecutable.string(),
-                "-nologo",
-                "-T",
-                std::string(stage.dxcProfile),
-                "-E",
-                std::string(stage.entryPoint),
-                "-Fo",
-                dxilPath.string(),
-                options.sourcePath.string(),
-            }) != 0)
+        std::vector<std::string> dxcArguments = {
+            options.dxcExecutable.string(), "-nologo", "-T", stage.dxcProfile, "-E", stage.entryPoint, "-Fo", dxilPath.string()};
+        AppendCompilerOptions(dxcArguments, options, stage, false);
+        dxcArguments.push_back(options.sourcePath.string());
+        if (RunProcess(dxcArguments) != 0)
         {
             return false;
         }
 
-        if (RunProcess({
-                options.slangExecutable.string(),
-                "-stage",
-                std::string(stage.slangStage),
-                "-entry",
-                std::string(stage.entryPoint),
-                "-profile",
-                std::string(stage.dxcProfile),
-                "-target",
-                "metal",
-                "-o",
-                metalPath.string(),
-                "-reflection-json",
-                reflectionPath.string(),
-                options.sourcePath.string(),
-            }) != 0)
+        std::vector<std::string> slangArguments = {options.slangExecutable.string(),
+                                                   "-stage",
+                                                   stage.slangStage,
+                                                   "-entry",
+                                                   stage.entryPoint,
+                                                   "-profile",
+                                                   stage.dxcProfile,
+                                                   "-target",
+                                                   "metal",
+                                                   "-o",
+                                                   metalPath.string(),
+                                                   "-reflection-json",
+                                                   reflectionPath.string()};
+        AppendCompilerOptions(slangArguments, options, stage, false);
+        slangArguments.push_back(options.sourcePath.string());
+        if (RunProcess(slangArguments) != 0)
         {
             return false;
         }
@@ -347,22 +483,22 @@ namespace
         const std::filesystem::path metalPath = BuildArtifactPath(options, stage, "metal");
         const std::filesystem::path reflectionPath = BuildArtifactPath(options, stage, "reflect.json");
 
-        if (RunProcess({
-                options.slangExecutable.string(),
-                "-stage",
-                std::string(stage.slangStage),
-                "-entry",
-                std::string(stage.entryPoint),
-                "-profile",
-                std::string(stage.dxcProfile),
-                "-target",
-                "metal",
-                "-o",
-                metalPath.string(),
-                "-reflection-json",
-                reflectionPath.string(),
-                options.sourcePath.string(),
-            }) != 0)
+        std::vector<std::string> arguments = {options.slangExecutable.string(),
+                                              "-stage",
+                                              stage.slangStage,
+                                              "-entry",
+                                              stage.entryPoint,
+                                              "-profile",
+                                              stage.dxcProfile,
+                                              "-target",
+                                              "metal",
+                                              "-o",
+                                              metalPath.string(),
+                                              "-reflection-json",
+                                              reflectionPath.string()};
+        AppendCompilerOptions(arguments, options, stage, false);
+        arguments.push_back(options.sourcePath.string());
+        if (RunProcess(arguments) != 0)
         {
             return false;
         }
@@ -373,7 +509,7 @@ namespace
         return true;
     }
 
-    bool WriteNormalizedReflection(const CompileOptions& options, const std::vector<BindingInfo>& bindings)
+    bool WriteNormalizedReflection(const CompileOptions& options, const std::vector<ShaderPass>& passes, const std::vector<BindingInfo>& bindings)
     {
         const std::filesystem::path reflectionPath = options.outputDirectory / (options.shaderName + ".veshader.json");
         std::ofstream output(reflectionPath, std::ios::binary);
@@ -388,27 +524,40 @@ namespace
         output << "  \"schemaVersion\": 1,\n";
         output << "  \"name\": \"" << EscapeJson(options.shaderName) << "\",\n";
         output << "  \"source\": \"" << EscapeJson(options.sourcePath.generic_string()) << "\",\n";
-        output << "  \"stages\": [\n";
-
-        for (size_t index = 0; index < std::size(ShaderStages); ++index)
+        output << "  \"passes\": [\n";
+        for (size_t passIndex = 0; passIndex < passes.size(); ++passIndex)
         {
-            const ShaderStage& stage = ShaderStages[index];
+            const ShaderPass& pass = passes[passIndex];
             output << "    {\n";
-            output << "      \"stage\": \"" << stage.displayName << "\",\n";
-            output << "      \"entry\": \"" << stage.entryPoint << "\",\n";
-            output << "      \"artifacts\": {\n";
-            output << "        \"d3d11\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxbc").generic_string()) << "\",\n";
-            output << "        \"d3d12\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxil").generic_string()) << "\",\n";
-            output << "        \"metal\": \"" << EscapeJson(BuildArtifactPath(options, stage, "metal").generic_string()) << "\",\n";
-            output << "        \"reflection\": \"" << EscapeJson(BuildArtifactPath(options, stage, "reflect.json").generic_string()) << "\"\n";
-            output << "      }\n";
-            output << "    }";
-
-            if (index + 1 < std::size(ShaderStages))
+            output << "      \"name\": \"" << EscapeJson(pass.name) << "\",\n";
+            output << "      \"type\": \"" << EscapeJson(pass.type) << "\",\n";
+            output << "      \"stages\": [\n";
+            for (size_t stageIndex = 0; stageIndex < pass.stages.size(); ++stageIndex)
             {
-                output << ',';
+                const ShaderStage& stage = pass.stages[stageIndex];
+                output << "        {\n";
+                output << "          \"stage\": \"" << stage.displayName << "\",\n";
+                output << "          \"entry\": \"" << EscapeJson(stage.entryPoint) << "\",\n";
+                output << "          \"defines\": [";
+                for (size_t defineIndex = 0; defineIndex < stage.defines.size(); ++defineIndex)
+                {
+                    if (defineIndex > 0) output << ", ";
+                    output << "\"" << EscapeJson(stage.defines[defineIndex]) << "\"";
+                }
+                output << "],\n";
+                output << "          \"artifacts\": {\n";
+                output << "            \"d3d11\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxbc").generic_string()) << "\",\n";
+                output << "            \"d3d12\": \"" << EscapeJson(BuildArtifactPath(options, stage, "dxil").generic_string()) << "\",\n";
+                output << "            \"metal\": \"" << EscapeJson(BuildArtifactPath(options, stage, "metal").generic_string()) << "\",\n";
+                output << "            \"reflection\": \"" << EscapeJson(BuildArtifactPath(options, stage, "reflect.json").generic_string()) << "\"\n";
+                output << "          }\n";
+                output << "        }";
+                if (stageIndex + 1 < pass.stages.size()) output << ',';
+                output << '\n';
             }
-
+            output << "      ]\n";
+            output << "    }";
+            if (passIndex + 1 < passes.size()) output << ',';
             output << '\n';
         }
 
@@ -471,6 +620,12 @@ namespace
 
                 options.sourcePath = *value;
             }
+            else if (argument == "--descriptor")
+            {
+                value = ReadOptionValue(index, argc, argv);
+                if (!value) return std::nullopt;
+                options.descriptorPath = *value;
+            }
             else if (argument == "--output")
             {
                 value = ReadOptionValue(index, argc, argv);
@@ -521,6 +676,12 @@ namespace
 
                 options.slangExecutable = *value;
             }
+            else if (argument == "--include")
+            {
+                value = ReadOptionValue(index, argc, argv);
+                if (!value) return std::nullopt;
+                options.includeDirectories.emplace_back(*value);
+            }
             else
             {
                 std::cerr << "Unknown argument: " << argument << '\n';
@@ -528,7 +689,7 @@ namespace
             }
         }
 
-        if (options.sourcePath.empty() || options.outputDirectory.empty() || options.shaderName.empty())
+        if (options.sourcePath.empty() || options.descriptorPath.empty() || options.outputDirectory.empty() || options.shaderName.empty())
         {
             return std::nullopt;
         }
@@ -543,6 +704,13 @@ namespace
         if (!source)
         {
             std::cerr << "Failed to read shader source: " << options.sourcePath << '\n';
+            return 1;
+        }
+
+        const std::optional<std::vector<ShaderPass>> passes = ParseShaderPasses(options.descriptorPath);
+        if (!passes)
+        {
+            std::cerr << "Failed to parse shader passes: " << options.descriptorPath << '\n';
             return 1;
         }
 
@@ -569,26 +737,29 @@ namespace
             return 1;
         }
 
-        for (const ShaderStage& stage : ShaderStages)
+        for (const ShaderPass& pass : *passes)
         {
-#if defined(_WIN32)
-            if (!CompileStageWindows(options, stage, d3d11SourcePath))
+            for (const ShaderStage& stage : pass.stages)
             {
-                std::cerr << "Failed to compile " << options.shaderName << " " << stage.displayName << " shader" << '\n';
+#if defined(_WIN32)
+                if (!CompileStageWindows(options, stage, d3d11SourcePath))
+            {
+                std::cerr << "Failed to compile " << options.shaderName << " " << pass.name << " " << stage.displayName << " shader" << '\n';
                 return 1;
             }
 #else
-            if (!CompileStageApple(options, stage))
+                if (!CompileStageApple(options, stage))
             {
-                std::cerr << "Failed to compile " << options.shaderName << " " << stage.displayName << " shader" << '\n';
+                std::cerr << "Failed to compile " << options.shaderName << " " << pass.name << " " << stage.displayName << " shader" << '\n';
                 return 1;
             }
 #endif
+            }
         }
 
         const std::vector<BindingInfo> bindings = ExtractBindings(*source);
 
-        if (!WriteNormalizedReflection(options, bindings))
+        if (!WriteNormalizedReflection(options, *passes, bindings))
         {
             return 1;
         }

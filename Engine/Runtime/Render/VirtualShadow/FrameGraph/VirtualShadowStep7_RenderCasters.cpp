@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPasses.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
@@ -18,131 +19,32 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step7_RenderCastersHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-cbuffer ObjectConstants : register(b2)
-{
-    float4x4 localToWorld;
-    uint receiveShadows;
-    uint3 objectPadding;
-};
-
-StructuredBuffer<uint> PageTable : register(t5);
-StructuredBuffer<PhysicalPage> PhysicalPages : register(t2);
-RWTexture2D<uint> PhysicalAtlas : register(u0);
-
-struct Input
-{
-    float3 position : POSITION;
-};
-
-struct Output
-{
-    float4 position : SV_POSITION;
-    nointerpolation uint level : TEXCOORD0;
-    float normalizedDepth : TEXCOORD1;
-};
-
-Output VSMain(Input input, uint instanceID : SV_InstanceID)
-{
-    Output output;
-    uint level = instanceID;
-    float4 world = mul(localToWorld, float4(input.position, 1.0f));
-    float3 light = float3(
-        dot(world.xyz, lightRight.xyz),
-        dot(world.xyz, lightUp.xyz),
-        dot(world.xyz, lightForward.xyz));
-
-    float pageWorldSize = clipmaps[level].originAndPageSize.w;
-    float2 workingRegionMinimum =
-        float2(clipmaps[level].pageData.xy - int2(64, 64)) * pageWorldSize;
-    float2 virtualUv = (light.xy - workingRegionMinimum) /
-                       (pageWorldSize * 128.0f);
-
-    float depthRange = clipmaps[level].radiusAndDepth.z -
-                       clipmaps[level].radiusAndDepth.y;
-    output.position = float4(
-        virtualUv.x * 2.0f - 1.0f,
-        1.0f - virtualUv.y * 2.0f,
-        0.0f,
-        1.0f);
-    output.level = level;
-    output.normalizedDepth =
-        (light.z - clipmaps[level].radiusAndDepth.y) / depthRange;
-    return output;
-}
-
-void PSMain(Output input)
-{
-    if (input.level >= clipmapCount ||
-        input.normalizedDepth < 0.0f ||
-        input.normalizedDepth > 1.0f)
-    {
-        discard;
-    }
-
-    uint2 virtualPixel = uint2(input.position.xy);
-    if (any(virtualPixel >= uint2(16384u, 16384u)))
-    {
-        discard;
-    }
-
-    uint2 localPage = virtualPixel / physicalPageSize;
-    uint2 pagePixel = virtualPixel % physicalPageSize;
-    int2 absolutePage =
-        clipmaps[input.level].pageData.xy - int2(64, 64) +
-        int2(localPage);
-    uint expectedKey0 =
-        (uint(absolutePage.x) & 0xFFFFu) |
-        ((uint(absolutePage.y) & 0xFFFFu) << 16u);
-    uint logicalIndex =
-        input.level * 16384u + localPage.y * 128u + localPage.x;
-    uint denseEntry = PageTable[logicalIndex];
-    if (denseEntry == 0u)
-    {
-        discard;
-    }
-
-    uint physicalIndex = denseEntry - 1u;
-    if (physicalIndex >= physicalCapacity)
-    {
-        discard;
-    }
-
-    PhysicalPage page = PhysicalPages[physicalIndex];
-    bool matchesView =
-        ((page.key1 >> 8u) & 0x00FFFFFFu) ==
-        (viewID & 0x00FFFFFFu);
-    bool matchesLevel = (page.key1 & 0xFFu) == input.level;
-    if ((page.flags & 7u) != 7u ||
-        page.key0 != expectedKey0 ||
-        !matchesView ||
-        !matchesLevel)
-    {
-        discard;
-    }
-
-    uint pagesPerRow = atlasExtent / physicalPageSize;
-    uint2 slotOrigin =
-        uint2(physicalIndex % pagesPerRow, physicalIndex / pagesPerRow) *
-        physicalPageSize;
-    float reversedDepth = max(
-        1.0f - saturate(input.normalizedDepth),
-        asfloat(1u));
-    InterlockedMax(
-        PhysicalAtlas[slotOrigin + pagePixel],
-        asuint(reversedDepth));
-}
-)";
-
         [[nodiscard]] rhi::RhiPipelineState* GetStep7_RenderCastersPipeline(const FrameRenderPipelineData& frameData)
         {
-            rhi::RhiShaderModuleDesc vertexShaderDesc = {rhi::RhiShaderStage::Vertex,
-                                                         rhi::RhiShaderCodeFormat::Source,
-                                                         Step7_RenderCastersHlsl.c_str(),
-                                                         nullptr,
-                                                         0,
-                                                         "VSMain",
-                                                         "VirtualShadowStep7_RenderCastersVS"};
+            if (rhi::RhiPipelineState* cached = frameData.shaderManager->GetGraphicsPipeline(GraphicsPipelineID{"VirtualShadowStep7_RenderCasters", 0}); cached != nullptr)
+            {
+                return cached;
+            }
+            const Result<ShaderArtifactModule> vertexModuleResult =
+                LoadShaderArtifact("VirtualShadow", "VirtualShadowStep7_RenderCasters", rhi::RhiShaderStage::Vertex);
+            const Result<ShaderArtifactModule> fragmentModuleResult =
+                LoadShaderArtifact("VirtualShadow", "VirtualShadowStep7_RenderCasters", rhi::RhiShaderStage::Fragment);
+            if (!vertexModuleResult || !fragmentModuleResult)
+            {
+                const std::string message = "VSM Step7 shader module could not be loaded.";
+                FailVirtualShadow(message.c_str());
+            }
+            const ShaderArtifactModule& vertexModule = vertexModuleResult.GetValue();
+            const ShaderArtifactModule& fragmentModule = fragmentModuleResult.GetValue();
+            const bool bytecode = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 || frameData.device->GetBackend() == rhi::RhiBackend::D3D12;
+            rhi::RhiShaderModuleDesc vertexShaderDesc = {};
+            vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
+            vertexShaderDesc.codeFormat = bytecode ? rhi::RhiShaderCodeFormat::Bytecode : rhi::RhiShaderCodeFormat::Source;
+            vertexShaderDesc.bytecode = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? vertexModule.d3d11Bytecode.data() : vertexModule.d3d12Bytecode.data();
+            vertexShaderDesc.bytecodeSize = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? vertexModule.d3d11Bytecode.size() : vertexModule.d3d12Bytecode.size();
+            vertexShaderDesc.source = vertexModule.metalSource.c_str();
+            vertexShaderDesc.entryPoint = vertexModule.entryPoint.c_str();
+            vertexShaderDesc.debugName = "VirtualShadowStep7_RenderCastersVS";
             rhi::RhiShaderModule* vertexShader =
                 frameData.shaderManager->GetOrCompileShader(*frameData.device, ShaderID{"VirtualShadow.Step7_RenderCasters.Vertex", 0}, vertexShaderDesc);
             if (vertexShader == nullptr)
@@ -150,13 +52,14 @@ void PSMain(Output input)
                 return nullptr;
             }
 
-            rhi::RhiShaderModuleDesc fragmentShaderDesc = {rhi::RhiShaderStage::Fragment,
-                                                           rhi::RhiShaderCodeFormat::Source,
-                                                           Step7_RenderCastersHlsl.c_str(),
-                                                           nullptr,
-                                                           0,
-                                                           "PSMain",
-                                                           "VirtualShadowStep7_RenderCastersPS"};
+            rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
+            fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
+            fragmentShaderDesc.codeFormat = bytecode ? rhi::RhiShaderCodeFormat::Bytecode : rhi::RhiShaderCodeFormat::Source;
+            fragmentShaderDesc.bytecode = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? fragmentModule.d3d11Bytecode.data() : fragmentModule.d3d12Bytecode.data();
+            fragmentShaderDesc.bytecodeSize = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? fragmentModule.d3d11Bytecode.size() : fragmentModule.d3d12Bytecode.size();
+            fragmentShaderDesc.source = fragmentModule.metalSource.c_str();
+            fragmentShaderDesc.entryPoint = fragmentModule.entryPoint.c_str();
+            fragmentShaderDesc.debugName = "VirtualShadowStep7_RenderCastersPS";
             rhi::RhiShaderModule* fragmentShader =
                 frameData.shaderManager->GetOrCompileShader(*frameData.device, ShaderID{"VirtualShadow.Step7_RenderCasters.Fragment", 0}, fragmentShaderDesc);
             if (fragmentShader == nullptr)

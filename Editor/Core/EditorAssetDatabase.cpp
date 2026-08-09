@@ -774,8 +774,27 @@ namespace ve::editor
             return leftWriteTime > rightWriteTime;
         }
 
-        [[nodiscard]] bool ShouldImportShader(
-            const Path& shaderDescriptorPhysicalPath, const Path& shaderSourcePhysicalPath, const Path& shaderRuntimePhysicalPath, bool force)
+        [[nodiscard]] bool HasNewerShaderInclude(const Path& directory, const Path& shaderRuntimePhysicalPath)
+        {
+            namespace fs = std::filesystem;
+            std::error_code errorCode;
+            if (!fs::is_directory(fs::path(directory.GetString()), errorCode)) return false;
+            for (fs::recursive_directory_iterator it(fs::path(directory.GetString()), errorCode), end; it != end && !errorCode; it.increment(errorCode))
+            {
+                if (it->is_regular_file(errorCode) && it->path().extension() == ".hlsli" &&
+                    IsFileNewerThan(Path(it->path().generic_string()), shaderRuntimePhysicalPath))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        [[nodiscard]] bool ShouldImportShader(const Path& projectRoot,
+                                              const Path& shaderDescriptorPhysicalPath,
+                                              const Path& shaderSourcePhysicalPath,
+                                              const Path& shaderRuntimePhysicalPath,
+                                              bool force)
         {
             if (force || !FileSystem::IsFile(shaderRuntimePhysicalPath))
             {
@@ -821,7 +840,10 @@ namespace ve::editor
                 }
             }
 
-            return IsFileNewerThan(shaderDescriptorPhysicalPath, shaderRuntimePhysicalPath) || IsFileNewerThan(shaderSourcePhysicalPath, shaderRuntimePhysicalPath);
+            return IsFileNewerThan(shaderDescriptorPhysicalPath, shaderRuntimePhysicalPath) ||
+                   IsFileNewerThan(shaderSourcePhysicalPath, shaderRuntimePhysicalPath) ||
+                   HasNewerShaderInclude(projectRoot / "Assets" / "Shaders" / "Includes", shaderRuntimePhysicalPath) ||
+                   HasNewerShaderInclude(projectRoot.GetParentPath() / "Assets" / "Builtin" / "Shaders" / "Includes", shaderRuntimePhysicalPath);
         }
 
         [[nodiscard]] ErrorCode MergeShaderDescriptor(
@@ -1012,6 +1034,15 @@ namespace ve::editor
                 return builtinResult;
             }
         }
+        const Path editorAssetsRoot = ::ve::editor::GetEditorAssetsRootPath(projectRoot_);
+        if (FileSystem::IsDirectory(editorAssetsRoot))
+        {
+            const ErrorCode editorResult = ScanAndImportDirectory(editorAssetsRoot, false, true);
+            if (editorResult != ErrorCode::None)
+            {
+                return editorResult;
+            }
+        }
         const ErrorCode dependencyResult = ResolveAssetDependencies();
         if (dependencyResult != ErrorCode::None)
         {
@@ -1049,6 +1080,15 @@ namespace ve::editor
             if (builtinResult != ErrorCode::None)
             {
                 return builtinResult;
+            }
+        }
+        const Path editorAssetsRoot = ::ve::editor::GetEditorAssetsRootPath(projectRoot_);
+        if (FileSystem::IsDirectory(editorAssetsRoot))
+        {
+            const ErrorCode editorResult = ScanAndImportDirectory(editorAssetsRoot, true, true);
+            if (editorResult != ErrorCode::None)
+            {
+                return editorResult;
             }
         }
         const ErrorCode dependencyResult = ResolveAssetDependencies();
@@ -1311,7 +1351,7 @@ namespace ve::editor
             return ErrorCode::NotFound;
         }
 
-        if (!ShouldImportShader(shaderDescriptorPhysicalPath, sourcePath, shaderRuntimePhysicalPath, force))
+        if (!ShouldImportShader(projectRoot_, shaderDescriptorPhysicalPath, sourcePath, shaderRuntimePhysicalPath, force))
         {
             const ErrorCode rewriteResult = RewriteShaderArtifactPaths(projectRoot_, shaderRuntimePhysicalPath);
             if (rewriteResult != ErrorCode::None)
@@ -1333,6 +1373,8 @@ namespace ve::editor
         std::vector<std::string> arguments = {
             toolchain.shaderTool.GetString(),
             "compile",
+            "--descriptor",
+            shaderDescriptorPhysicalPath.GetString(),
             "--source",
             sourcePath.GetString(),
             "--output",
@@ -1340,6 +1382,13 @@ namespace ve::editor
             "--name",
             shaderName,
         };
+
+        arguments.push_back("--include");
+        arguments.push_back(sourcePath.GetParentPath().GetString());
+        arguments.push_back("--include");
+        arguments.push_back((projectRoot_ / "Assets" / "Shaders" / "Includes").GetString());
+        arguments.push_back("--include");
+        arguments.push_back((projectRoot_.GetParentPath() / "Assets" / "Builtin" / "Shaders" / "Includes").GetString());
 
 #if VE_PLATFORM_WINDOWS
         arguments.push_back("--dxc");

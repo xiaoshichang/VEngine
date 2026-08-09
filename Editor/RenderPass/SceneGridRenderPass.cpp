@@ -10,6 +10,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -28,156 +29,6 @@ namespace ve
         const ShaderID SceneGridFragmentShaderID{SceneGridFragmentShaderName, 0};
 
         constexpr Float32 GridExtent = 1000.0f;
-
-        const char* SceneGridShaderSource = R"(
-cbuffer SceneGridFrameConstants : register(b0)
-{
-    float4 gridParams;
-    float4 minorColor;
-    float4 majorColor;
-    float4 xAxisColor;
-    float4 zAxisColor;
-};
-
-cbuffer ViewConstants : register(b1)
-{
-    float4x4 viewProjection;
-    float4 cameraWorldPosition;
-};
-
-struct VSInput
-{
-    float3 position : POSITION;
-    float3 normal : NORMAL;
-};
-
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float3 worldPosition : TEXCOORD0;
-};
-
-VSOutput VSMain(VSInput input)
-{
-    VSOutput output;
-    output.position = mul(viewProjection, float4(input.position, 1.0f));
-    output.worldPosition = input.position;
-    return output;
-}
-
-float GridLine(float coordinate, float spacing, float width)
-{
-    float scaledCoordinate = coordinate / spacing;
-    float distanceToLine = abs(frac(scaledCoordinate - 0.5f) - 0.5f);
-    float antiAlias = max(fwidth(scaledCoordinate), 0.0001f);
-    return 1.0f - smoothstep(0.0f, antiAlias * width, distanceToLine);
-}
-
-float AxisLine(float coordinate, float width)
-{
-    float antiAlias = max(fwidth(coordinate), 0.0001f);
-    return 1.0f - smoothstep(0.0f, antiAlias * width, abs(coordinate));
-}
-
-float4 PSMain(VSOutput input) : SV_TARGET
-{
-    float unitSize = max(gridParams.x, 0.001f);
-    float opacity = saturate(gridParams.y);
-    float lineWidth = max(gridParams.z, 0.5f);
-    float majorEvery = max(gridParams.w, 1.0f);
-    float distanceFade = 1.0f - saturate(length(input.worldPosition.xz) / 600.0f);
-
-    float minorLine = max(GridLine(input.worldPosition.x, unitSize, lineWidth), GridLine(input.worldPosition.z, unitSize, lineWidth));
-    float majorSpacing = unitSize * majorEvery;
-    float majorLine = max(GridLine(input.worldPosition.x, majorSpacing, lineWidth * 1.35f), GridLine(input.worldPosition.z, majorSpacing, lineWidth * 1.35f));
-    float xAxis = AxisLine(input.worldPosition.z, lineWidth * 1.8f);
-    float zAxis = AxisLine(input.worldPosition.x, lineWidth * 1.8f);
-
-    float4 color = minorColor;
-    color = lerp(color, majorColor, saturate(majorLine));
-    color = lerp(color, xAxisColor, saturate(xAxis));
-    color = lerp(color, zAxisColor, saturate(zAxis));
-    color.a *= saturate(max(max(minorLine, majorLine), max(xAxis, zAxis)) * opacity * (0.25f + distanceFade * 0.75f));
-    return color;
-}
-)";
-
-        const char* SceneGridMetalShaderSource = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct SceneGridFrameConstants
-{
-    float4 gridParams;
-    float4 minorColor;
-    float4 majorColor;
-    float4 xAxisColor;
-    float4 zAxisColor;
-};
-
-struct ViewConstants
-{
-    float4x4 viewProjection;
-    float4 cameraWorldPosition;
-};
-
-struct VSInput
-{
-    float3 position [[attribute(0)]];
-    float3 normal [[attribute(1)]];
-};
-
-struct VSOutput
-{
-    float4 position [[position]];
-    float3 worldPosition;
-};
-
-[[vertex]] VSOutput VSMain(VSInput input [[stage_in]], constant ViewConstants* viewConstants [[buffer(1)]])
-{
-    VSOutput output;
-    output.position = viewConstants->viewProjection * float4(input.position, 1.0f);
-    output.worldPosition = input.position;
-    return output;
-}
-
-float GridLine(float coordinate, float spacing, float width)
-{
-    float scaledCoordinate = coordinate / spacing;
-    float distanceToLine = fabs(fract(scaledCoordinate - 0.5f) - 0.5f);
-    float antiAlias = max(fwidth(scaledCoordinate), 0.0001f);
-    return 1.0f - smoothstep(0.0f, antiAlias * width, distanceToLine);
-}
-
-float AxisLine(float coordinate, float width)
-{
-    float antiAlias = max(fwidth(coordinate), 0.0001f);
-    return 1.0f - smoothstep(0.0f, antiAlias * width, fabs(coordinate));
-}
-
-[[fragment]] float4 PSMain(VSOutput input [[stage_in]], constant SceneGridFrameConstants* constants [[buffer(0)]])
-{
-    float unitSize = max(constants->gridParams.x, 0.001f);
-    float opacity = clamp(constants->gridParams.y, 0.0f, 1.0f);
-    float lineWidth = max(constants->gridParams.z, 0.5f);
-    float majorEvery = max(constants->gridParams.w, 1.0f);
-    float distanceFade = 1.0f - clamp(length(input.worldPosition.xz) / 600.0f, 0.0f, 1.0f);
-
-    float minorLine = max(GridLine(input.worldPosition.x, unitSize, lineWidth), GridLine(input.worldPosition.z, unitSize, lineWidth));
-    float majorSpacing = unitSize * majorEvery;
-    float majorLine =
-        max(GridLine(input.worldPosition.x, majorSpacing, lineWidth * 1.35f), GridLine(input.worldPosition.z, majorSpacing, lineWidth * 1.35f));
-    float xAxis = AxisLine(input.worldPosition.z, lineWidth * 1.8f);
-    float zAxis = AxisLine(input.worldPosition.x, lineWidth * 1.8f);
-
-    float4 color = constants->minorColor;
-    color = mix(color, constants->majorColor, clamp(majorLine, 0.0f, 1.0f));
-    color = mix(color, constants->xAxisColor, clamp(xAxis, 0.0f, 1.0f));
-    color = mix(color, constants->zAxisColor, clamp(zAxis, 0.0f, 1.0f));
-    color.a *= clamp(max(max(minorLine, majorLine), max(xAxis, zAxis)) * opacity * (0.25f + distanceFade * 0.75f), 0.0f, 1.0f);
-    return color;
-}
-)";
 
         struct SceneGridUniformData
         {
@@ -198,11 +49,6 @@ float AxisLine(float coordinate, float width)
             desc.initialData = initialData;
             desc.debugName = debugName;
             return desc;
-        }
-
-        [[nodiscard]] const char* SelectShaderSource(const rhi::RhiDevice& device, const char* hlslSource, const char* metalSource) noexcept
-        {
-            return device.GetBackend() == rhi::RhiBackend::Metal ? metalSource : hlslSource;
         }
 
         [[nodiscard]] std::string BuildDeviceFailureMessage(const rhi::RhiDevice& device, const char* message)
@@ -374,25 +220,15 @@ float AxisLine(float coordinate, float width)
             FailSceneGridPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        rhi::RhiShaderModuleDesc vertexShaderDesc = {};
-        vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-        vertexShaderDesc.source = SelectShaderSource(context.device, SceneGridShaderSource, SceneGridMetalShaderSource);
-        vertexShaderDesc.entryPoint = "VSMain";
-        vertexShaderDesc.debugName = "SceneGridVertexShader";
-
-        rhi::RhiShaderModule* vertexShader = shaderManager->GetOrCompileShader(context.device, SceneGridVertexShaderID, vertexShaderDesc);
+        rhi::RhiShaderModule* vertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device, SceneGridVertexShaderID,
+                                                                          "SceneGrid", "Internal", rhi::RhiShaderStage::Vertex, "SceneGridVertexShader");
         if (vertexShader == nullptr)
         {
             FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to get the grid vertex shader."));
         }
 
-        rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
-        fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-        fragmentShaderDesc.source = SelectShaderSource(context.device, SceneGridShaderSource, SceneGridMetalShaderSource);
-        fragmentShaderDesc.entryPoint = "PSMain";
-        fragmentShaderDesc.debugName = "SceneGridFragmentShader";
-
-        rhi::RhiShaderModule* fragmentShader = shaderManager->GetOrCompileShader(context.device, SceneGridFragmentShaderID, fragmentShaderDesc);
+        rhi::RhiShaderModule* fragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device, SceneGridFragmentShaderID,
+                                                                            "SceneGrid", "Internal", rhi::RhiShaderStage::Fragment, "SceneGridFragmentShader");
         if (fragmentShader == nullptr)
         {
             FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to get the grid fragment shader."));

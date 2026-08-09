@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 2,
+    "schemaVersion": 3,
     "name": "UnlitBasicColor",
     "source": "UnlitBasicColor.hlsl",
     "passes": [
@@ -7,23 +7,38 @@
             "name": "DepthOnly",
             "type": "DepthOnly",
             "stages": [
-                "Vertex"
+                {
+                    "stage": "Vertex",
+                    "entry": "VSMain"
+                }
             ]
         },
         {
             "name": "OpaqueForward",
             "type": "OpaqueForward",
             "stages": [
-                "Vertex",
-                "Pixel"
+                {
+                    "stage": "Vertex",
+                    "entry": "VSMain"
+                },
+                {
+                    "stage": "Pixel",
+                    "entry": "PSMain"
+                }
             ]
         },
         {
             "name": "ShadowCaster",
             "type": "ShadowCaster",
             "stages": [
-                "Vertex",
-                "Pixel"
+                {
+                    "stage": "Vertex",
+                    "entry": "VSMain"
+                },
+                {
+                    "stage": "Pixel",
+                    "entry": "PSMain"
+                }
             ]
         }
     ],

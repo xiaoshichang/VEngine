@@ -13,59 +13,6 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step4_ResolvePageHitsComputeHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-StructuredBuffer<uint> RequestList : register(t0);
-StructuredBuffer<uint> RequestCounts : register(t1);
-RWStructuredBuffer<uint> PageTable : register(u0);
-RWStructuredBuffer<PhysicalPage> PhysicalPages : register(u1);
-RWStructuredBuffer<uint> Statistics : register(u2);
-[numthreads(64, 1, 1)]
-void CSMain(uint requestIndex : SV_DispatchThreadID)
-{
-    if (requestIndex >= 16384u) return;
-    for (uint level = 0u; level < clipmapCount; ++level)
-    {
-        if (requestIndex >= min(RequestCounts[level], 16384u)) continue;
-        if (passLevel != 0u) InterlockedAdd(Statistics[1], 1u);
-
-        uint logical = RequestList[level * 16384u + requestIndex];
-        uint levelIndex = logical - level * 16384u;
-        int2 localPage = int2(levelIndex & 127u, levelIndex >> 7u);
-        int2 absolutePage = clipmaps[level].pageData.xy - int2(64, 64) + localPage;
-        uint key0 = (uint(absolutePage.x) & 0xFFFFu) | ((uint(absolutePage.y) & 0xFFFFu) << 16u);
-        uint key1 = level | ((viewID & 0x00FFFFFFu) << 8u);
-
-        uint mappedPhysicalPlusOne = PageTable[logical];
-        if (mappedPhysicalPlusOne != 0u && mappedPhysicalPlusOne <= physicalCapacity)
-        {
-            uint mappedPhysical = mappedPhysicalPlusOne - 1u;
-            PhysicalPage mappedPage = PhysicalPages[mappedPhysical];
-            if ((mappedPage.flags & 1u) != 0u && mappedPage.key0 == key0 && mappedPage.key1 == key1)
-            {
-                InterlockedMax(PhysicalPages[mappedPhysical].lastUsedFrame, frameIndex);
-                InterlockedOr(PhysicalPages[mappedPhysical].flags, 4u);
-                InterlockedAdd(Statistics[2], 1u);
-                continue;
-            }
-        }
-        PageTable[logical] = 0u;
-
-        for (uint physical = 0u; physical < physicalCapacity; ++physical)
-        {
-            PhysicalPage page = PhysicalPages[physical];
-            if ((page.flags & 1u) != 0u && page.key0 == key0 && page.key1 == key1)
-            {
-                InterlockedMax(PhysicalPages[physical].lastUsedFrame, frameIndex);
-                InterlockedOr(PhysicalPages[physical].flags, 4u);
-                PageTable[logical] = physical + 1u;
-                InterlockedAdd(Statistics[2], 1u);
-                break;
-            }
-        }
-    }
-}
-)";
-
         void RecordStep4_ResolvePageHits(const VirtualShadowRequestRecordingContext& context,
                                          bool countPersistedRequests,
                                          rhi::RhiBuffer& requestList,
@@ -85,7 +32,6 @@ void CSMain(uint requestIndex : SV_DispatchThreadID)
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(context.frameData,
                                                                                                             "VirtualShadowStep4_ResolvePageHits",
                                                                                                             "VirtualShadow.Step4_ResolvePageHits.Compute",
-                                                                                                            Step4_ResolvePageHitsComputeHlsl.c_str(),
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ve
@@ -97,16 +98,20 @@ namespace ve
         [[nodiscard]] const std::string& GetName() const noexcept { return name_; }
         [[nodiscard]] rhi::RhiShaderModule* GetVertexShader() noexcept { return vertexShader_.get(); }
         [[nodiscard]] rhi::RhiShaderModule* GetFragmentShader() noexcept { return fragmentShader_.get(); }
+        [[nodiscard]] rhi::RhiShaderModule* GetComputeShader() noexcept { return computeShader_.get(); }
         [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept { return vertexShader_.get(); }
         [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept { return fragmentShader_.get(); }
+        [[nodiscard]] const rhi::RhiShaderModule* GetComputeShader() const noexcept { return computeShader_.get(); }
         std::unique_ptr<rhi::RhiShaderModule>& VertexShader() noexcept { return vertexShader_; }
         std::unique_ptr<rhi::RhiShaderModule>& FragmentShader() noexcept { return fragmentShader_; }
+        std::unique_ptr<rhi::RhiShaderModule>& ComputeShader() noexcept { return computeShader_; }
 
     private:
         ShaderPassType type_;
         std::string name_;
         std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
         std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
+        std::unique_ptr<rhi::RhiShaderModule> computeShader_;
     };
 
     class RTShaderResource final : public RHIResource
@@ -118,6 +123,8 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] RTShaderPass* GetPass(ShaderPassType type) noexcept;
         [[nodiscard]] const RTShaderPass* GetPass(ShaderPassType type) const noexcept;
+        [[nodiscard]] RTShaderPass* GetPass(std::string_view name) noexcept;
+        [[nodiscard]] const RTShaderPass* GetPass(std::string_view name) const noexcept;
         [[nodiscard]] bool HasPass(ShaderPassType type) const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
 

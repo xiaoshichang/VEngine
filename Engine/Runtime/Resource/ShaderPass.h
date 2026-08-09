@@ -13,6 +13,7 @@ namespace ve
         OpaqueForward,
         TransparentForward,
         ShadowCaster,
+        Internal,
     };
 
     [[nodiscard]] const char* ToString(ShaderPassType type) noexcept;

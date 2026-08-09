@@ -146,6 +146,24 @@ namespace ve
         return nullptr;
     }
 
+    RTShaderPass* RTShaderResource::GetPass(std::string_view name) noexcept
+    {
+        for (const auto& pass : passes_)
+        {
+            if (pass->GetName() == name) return pass.get();
+        }
+        return nullptr;
+    }
+
+    const RTShaderPass* RTShaderResource::GetPass(std::string_view name) const noexcept
+    {
+        for (const auto& pass : passes_)
+        {
+            if (pass->GetName() == name) return pass.get();
+        }
+        return nullptr;
+    }
+
     bool RTShaderResource::HasPass(ShaderPassType type) const noexcept
     {
         return GetPass(type) != nullptr;
@@ -206,6 +224,7 @@ namespace ve
 
                 if (stageDesc.stage == rhi::RhiShaderStage::Vertex) pass->VertexShader() = std::move(shader);
                 else if (stageDesc.stage == rhi::RhiShaderStage::Fragment) pass->FragmentShader() = std::move(shader);
+                else if (stageDesc.stage == rhi::RhiShaderStage::Compute) pass->ComputeShader() = std::move(shader);
                 createdArtifact = true;
             }
             passes_.push_back(std::move(pass));
@@ -228,6 +247,7 @@ namespace ve
         {
             if (pass->GetFragmentShader() != nullptr) retiredResources.push_back(std::move(pass->FragmentShader()));
             if (pass->GetVertexShader() != nullptr) retiredResources.push_back(std::move(pass->VertexShader()));
+            if (pass->GetComputeShader() != nullptr) retiredResources.push_back(std::move(pass->ComputeShader()));
         }
         passes_.clear();
     }

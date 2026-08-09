@@ -12,19 +12,6 @@ namespace ve
 {
     namespace
     {
-        inline constexpr const char* Step10_ReuseStatisticsComputeHlsl = R"(
-RWStructuredBuffer<uint> Statistics : register(u0);
-[numthreads(1, 1, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
-{
-    uint retainedRequested = Statistics[1];
-    Statistics[2] = retainedRequested;
-    Statistics[3] = 0u;
-    Statistics[4] = 0u;
-    Statistics[5] = 0u;
-}
-)";
-
         struct Step10_ReuseStatisticsPassData
         {
             FrameGraphBufferHandle statistics;
@@ -43,7 +30,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(frameData,
                                                                                                             "VirtualShadowStep10_ReuseStatistics",
                                                                                                             "VirtualShadow.Step10_ReuseStatistics.Compute",
-                                                                                                            Step10_ReuseStatisticsComputeHlsl,
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

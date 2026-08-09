@@ -1,0 +1,83 @@
+{
+    "schemaVersion": 3,
+    "name": "VirtualShadow",
+    "source": "RenderPasses/VirtualShadow.hlsl",
+    "passes": [
+        {
+            "name": "VirtualShadowStep1_ClearScene",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep1_ClearSceneCS", "defines": ["VE_VSM_STEP_1"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep2_ClearViewRequests",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep2_ClearViewRequestsCS", "defines": ["VE_VSM_STEP_2"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep3_MarkRequests",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep3_MarkRequestsCS", "defines": ["VE_VSM_STEP_3"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep4_ResolvePageHits",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep4_ResolvePageHitsCS", "defines": ["VE_VSM_STEP_4"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep5_AllocatePages",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep5_AllocatePagesCS", "defines": ["VE_VSM_STEP_5"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep6_ClearPhysicalPages",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep6_ClearPhysicalPagesCS", "defines": ["VE_VSM_STEP_6"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep7_RenderCasters",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Vertex", "entry": "VirtualShadowStep7_RenderCastersVS", "defines": ["VE_VSM_STEP_7"]},
+                {"stage": "Pixel", "entry": "VirtualShadowStep7_RenderCastersPS", "defines": ["VE_VSM_STEP_7"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep8_MarkRendered",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep8_MarkRenderedCS", "defines": ["VE_VSM_STEP_8"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep9_FinalizeScene",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep9_FinalizeSceneCS", "defines": ["VE_VSM_STEP_9"]}
+            ]
+        },
+        {
+            "name": "VirtualShadowStep10_ReuseStatistics",
+            "type": "Internal",
+            "stages": [
+                {"stage": "Compute", "entry": "VirtualShadowStep10_ReuseStatisticsCS", "defines": ["VE_VSM_STEP_10"]}
+            ]
+        }
+    ],
+    "material": {
+        "constantBuffer": "",
+        "constantBufferSize": 0,
+        "properties": []
+    }
+}

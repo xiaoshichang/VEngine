@@ -14,38 +14,6 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step6_ClearPhysicalPagesComputeHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-StructuredBuffer<PhysicalPage> PhysicalPages : register(t2);
-RWTexture2D<uint> PhysicalAtlas : register(u0);
-
-[numthreads(8, 8, 1)]
-void CSMain(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID)
-{
-    uint physicalIndex = groupID.x;
-    if (physicalIndex >= physicalCapacity)
-    {
-        return;
-    }
-
-    PhysicalPage page = PhysicalPages[physicalIndex];
-    bool matchesView = ((page.key1 >> 8u) & 0x00FFFFFFu) == (viewID & 0x00FFFFFFu);
-    if ((page.flags & 7u) != 7u || !matchesView)
-    {
-        return;
-    }
-
-    uint pagesPerRow = atlasExtent / physicalPageSize;
-    uint2 slotOrigin = uint2(physicalIndex % pagesPerRow, physicalIndex / pagesPerRow) * physicalPageSize;
-    for (uint y = groupThreadID.y; y < physicalPageSize; y += 8u)
-    {
-        for (uint x = groupThreadID.x; x < physicalPageSize; x += 8u)
-        {
-            PhysicalAtlas[slotOrigin + uint2(x, y)] = 0u;
-        }
-    }
-}
-)";
-
         [[nodiscard]] rhi::RhiComputePipelineState* GetStep6_ClearPhysicalPagesPipeline(const FrameRenderPipelineData& frameData)
         {
             const rhi::RhiPipelineResourceBindingDesc bindings[] = {
@@ -56,7 +24,6 @@ void CSMain(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID)
             return virtual_shadow_detail::GetVirtualShadowComputePipeline(frameData,
                                                                           "VirtualShadowStep6_ClearPhysicalPages",
                                                                           "VirtualShadow.Step6_ClearPhysicalPages.Compute",
-                                                                          Step6_ClearPhysicalPagesComputeHlsl.c_str(),
                                                                           bindings,
                                                                           static_cast<UInt32>(std::size(bindings)));
         }

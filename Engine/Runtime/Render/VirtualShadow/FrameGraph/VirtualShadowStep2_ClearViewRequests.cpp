@@ -13,38 +13,6 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step2_ClearViewRequestsComputeHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-RWStructuredBuffer<uint> PageMarks : register(u0);
-RWStructuredBuffer<uint> RequestCounts : register(u1);
-RWStructuredBuffer<PhysicalPage> PhysicalPages : register(u2);
-[numthreads(64, 1, 1)]
-void CSMain(uint index : SV_DispatchThreadID)
-{
-    if (resetCache != 0u && index < clipmapCount * 16384u)
-    {
-        PageMarks[index] = 0u;
-    }
-    if (index < clipmapCount) RequestCounts[index] = 0u;
-    if (index >= physicalCapacity) return;
-
-    PhysicalPage page = PhysicalPages[index];
-    if ((page.flags & 1u) == 0u) return;
-    bool invalidated = invalidationCount == 0xFFFFFFFFu &&
-                       (((page.key1 >> 8u) & 0x00FFFFFFu) == (viewID & 0x00FFFFFFu));
-    [loop]
-    for (uint invalidationIndex = 0u; !invalidated && invalidationIndex < min(invalidationCount, 2048u); ++invalidationIndex)
-    {
-        invalidated = invalidatedPages[invalidationIndex].data.x == page.key0 &&
-                      invalidatedPages[invalidationIndex].data.y == page.key1;
-    }
-    if (invalidated)
-    {
-        page.flags |= 2u;
-        PhysicalPages[index] = page;
-    }
-}
-)";
-
         void RecordStep2_ClearViewRequests(const VirtualShadowRequestRecordingContext& context,
                                            rhi::RhiBuffer& pageMarks,
                                            rhi::RhiBuffer& requestCounts,
@@ -59,7 +27,6 @@ void CSMain(uint index : SV_DispatchThreadID)
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(context.frameData,
                                                                                                             "VirtualShadowStep2_ClearViewRequests",
                                                                                                             "VirtualShadow.Step2_ClearViewRequests.Compute",
-                                                                                                            Step2_ClearViewRequestsComputeHlsl.c_str(),
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

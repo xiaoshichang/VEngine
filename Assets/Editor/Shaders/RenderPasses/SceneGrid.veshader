@@ -1,0 +1,1 @@
+{"schemaVersion":3,"name":"SceneGrid","source":"SceneGrid.hlsl","passes":[{"name":"Internal","type":"Internal","stages":[{"stage":"Vertex","entry":"VSMain"},{"stage":"Pixel","entry":"PSMain"}]}],"material":{"constantBuffer":"","constantBufferSize":0,"properties":[]}}

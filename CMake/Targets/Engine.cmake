@@ -65,6 +65,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.cpp
             Engine/Runtime/Render/Renderer/StandaloneRenderer.cpp
             Engine/Runtime/Render/ShaderManager.cpp
+            Engine/Runtime/Render/ShaderArtifactLoader.cpp
             Engine/Runtime/Render/ViewportClient.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.cpp
             Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowFrameGraph.cpp
@@ -194,6 +195,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.h
             Engine/Runtime/Render/Renderer/StandaloneRenderer.h
             Engine/Runtime/Render/ShaderManager.h
+            Engine/Runtime/Render/ShaderArtifactLoader.h
             Engine/Runtime/Render/ViewportClient.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h

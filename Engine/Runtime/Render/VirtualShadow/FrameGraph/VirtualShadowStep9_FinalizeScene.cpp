@@ -14,25 +14,6 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step9_FinalizeSceneComputeHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-RWStructuredBuffer<PhysicalPage> PhysicalPages : register(u0);
-RWStructuredBuffer<uint> Statistics : register(u1);
-[numthreads(64, 1, 1)]
-void CSMain(uint index : SV_DispatchThreadID)
-{
-    if (index >= physicalCapacity) return;
-    PhysicalPage page = PhysicalPages[index];
-    if ((page.flags & 4u) != 0u)
-    {
-        if ((page.flags & 8u) != 0u) page.flags &= ~2u;
-        page.flags &= ~4u;
-    }
-    page.flags &= ~8u;
-    PhysicalPages[index] = page;
-    if ((page.flags & 1u) != 0u) InterlockedAdd(Statistics[0], 1u);
-}
-)";
-
         struct Step9_FinalizeScenePassData
         {
             UInt32 atlasExtent = 0;
@@ -55,7 +36,6 @@ void CSMain(uint index : SV_DispatchThreadID)
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(frameData,
                                                                                                             "VirtualShadowStep9_FinalizeScene",
                                                                                                             "VirtualShadow.Step9_FinalizeScene.Compute",
-                                                                                                            Step9_FinalizeSceneComputeHlsl.c_str(),
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

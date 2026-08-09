@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "guid": "99999999-9999-9999-9999-999999999995",
+    "assetType": "Shader",
+    "sourcePath": "Builtin/Shaders/FrameGraphDebugPreview.veshader",
+    "importer": "ShaderImporter",
+    "importSettings": {}
+}

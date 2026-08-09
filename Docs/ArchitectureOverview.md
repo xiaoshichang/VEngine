@@ -578,6 +578,15 @@ Responsibilities:
 - RenderTarget description for window and texture-backed outputs.
 - Editor viewport support.
 
+Shader source assets use a descriptor-driven module layout:
+
+- A `.veshader` descriptor owns one HLSL source and declares its passes.
+- Every pass contains explicit stage objects with `stage`, `entry`, and optional `defines`; one HLSL file can therefore expose many vertex, pixel, and compute modules.
+- Engine headers live under `Assets/Builtin/Shaders/Includes/VEngine` and are included as `<VEngine/...>`.
+- Project headers live under `<ProjectRoot>/Assets/Shaders/Includes/Project` and are included as `<Project/...>`.
+- The shader importer passes both include roots to FXC, DXC, and Slang. Runtime source compilation resolves the same roots before creating an RHI shader module.
+- `VirtualShadow.veshader` is the built-in example: all VSM FrameGraph modules are defined in one `VirtualShadow.hlsl`, while shared declarations and functions remain in `.hlsli` files.
+
 Viewport clients model one active binding at a time:
 
 - Window surface binding for Player or on-screen editor panes.

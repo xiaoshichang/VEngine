@@ -13,70 +13,6 @@ namespace ve
 {
     namespace
     {
-        inline const std::string Step5_AllocatePagesComputeHlsl = std::string(virtual_shadow_detail::VirtualShadowCommonHlsl) + R"(
-StructuredBuffer<uint> RequestList : register(t0);
-StructuredBuffer<uint> RequestCounts : register(t1);
-RWStructuredBuffer<uint> PageTable : register(u0);
-RWStructuredBuffer<PhysicalPage> PhysicalPages : register(u1);
-RWStructuredBuffer<uint> Statistics : register(u2);
-[numthreads(1, 1, 1)]
-void CSMain(uint3 id : SV_DispatchThreadID)
-{
-    for (uint coarseIteration = 0u; coarseIteration < clipmapCount; ++coarseIteration)
-    {
-        uint level = clipmapCount - 1u - coarseIteration;
-        uint requestCount = min(RequestCounts[level], 16384u);
-        for (uint requestIndex = 0u; requestIndex < requestCount; ++requestIndex)
-        {
-            uint logical = RequestList[level * 16384u + requestIndex];
-            if (PageTable[logical] != 0u) continue;
-            uint localIndex = logical - level * 16384u;
-            int2 localPage = int2(localIndex & 127u, localIndex >> 7u);
-            int2 absolutePage = clipmaps[level].pageData.xy - int2(64, 64) + localPage;
-            uint key0 = (uint(absolutePage.x) & 0xFFFFu) | ((uint(absolutePage.y) & 0xFFFFu) << 16u);
-            uint key1 = level | ((viewID & 0x00FFFFFFu) << 8u);
-
-            uint selected = 0xFFFFFFFFu;
-            uint oldestFrame = 0xFFFFFFFFu;
-            uint oldestPage = 0xFFFFFFFFu;
-            for (uint physical = 0u; physical < physicalCapacity; ++physical)
-            {
-                PhysicalPage page = PhysicalPages[physical];
-                if ((page.flags & 4u) != 0u) continue;
-                if ((page.flags & 1u) != 0u && page.key0 == key0 && page.key1 == key1)
-                {
-                    selected = physical;
-                    break;
-                }
-                if ((page.flags & 1u) == 0u && selected == 0xFFFFFFFFu) selected = physical;
-                if ((page.flags & 1u) != 0u && page.lastUsedFrame < oldestFrame)
-                {
-                    oldestFrame = page.lastUsedFrame;
-                    oldestPage = physical;
-                }
-            }
-            if (selected == 0xFFFFFFFFu) selected = oldestPage;
-            if (selected == 0xFFFFFFFFu)
-            {
-                InterlockedAdd(Statistics[5], 1u);
-                continue;
-            }
-
-            PhysicalPage selectedPage = PhysicalPages[selected];
-            bool cacheHit = (selectedPage.flags & 1u) != 0u && selectedPage.key0 == key0 && selectedPage.key1 == key1;
-            InterlockedAdd(Statistics[cacheHit ? 2u : 3u], 1u);
-            selectedPage.key0 = key0;
-            selectedPage.key1 = key1;
-            selectedPage.lastUsedFrame = frameIndex;
-            if (!cacheHit) selectedPage.lastRenderedFrame = 0u;
-            selectedPage.flags = 1u | 4u | (cacheHit ? (selectedPage.flags & 2u) : 2u);
-            PhysicalPages[selected] = selectedPage;
-            PageTable[logical] = selected + 1u;
-        }
-    }
-}
-)";
-
         void RecordStep5_AllocatePages(const VirtualShadowRequestRecordingContext& context,
                                        rhi::RhiBuffer& requestList,
                                        rhi::RhiBuffer& requestCounts,
@@ -95,7 +31,6 @@ void CSMain(uint3 id : SV_DispatchThreadID)
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(context.frameData,
                                                                                                             "VirtualShadowStep5_AllocatePages",
                                                                                                             "VirtualShadow.Step5_AllocatePages.Compute",
-                                                                                                            Step5_AllocatePagesComputeHlsl.c_str(),
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

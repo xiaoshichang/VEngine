@@ -9,6 +9,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -38,175 +39,6 @@ namespace ve
             FrameGraphBufferHandle virtualShadowPageTable;
             VirtualShadowSamplingSnapshot virtualShadowSampling;
         };
-
-        inline const char* DebugShaderSource = R"(
-cbuffer FrameConstants : register(b0)
-{
-    float4 directionalLightDirection;
-    float4 directionalLightColorAndIntensity;
-    float4 ambientColor;
-};
-
-cbuffer ViewConstants : register(b1)
-{
-    float4x4 viewProjection;
-    float4 cameraWorldPosition;
-    float4 cameraWorldForward;
-};
-
-cbuffer ObjectConstants : register(b2)
-{
-    float4x4 localToWorld;
-    uint receiveShadows;
-    uint3 objectPadding;
-};
-
-struct VirtualShadowClipmapConstants
-{
-    float4 lightOriginAndPageWorldSize;
-    float4 radiusAndDepthRange;
-    int4 pageData;
-};
-
-cbuffer VirtualShadowConstants : register(b4)
-{
-    float4 virtualShadowLightRight;
-    float4 virtualShadowLightUp;
-    float4 virtualShadowLightDirection;
-    float4 virtualShadowAtlasAndBias;
-    VirtualShadowClipmapConstants virtualShadowClipmaps[24];
-    uint virtualShadowAtlasExtent;
-    uint virtualShadowPhysicalPageSize;
-    uint virtualShadowClipmapLevelCount;
-    uint virtualShadowAtlasPadding;
-};
-
-cbuffer DebugObjectConstants : register(b6)
-{
-    uint shadowCasterDirty;
-    uint3 debugObjectPadding;
-};
-
-Texture2D<uint> VirtualShadowAtlas : register(t1);
-StructuredBuffer<uint> VirtualShadowDensePageTable : register(t5);
-
-struct VSInput
-{
-    float3 position : POSITION;
-    float3 normal : NORMAL;
-};
-
-struct VSOutput
-{
-    float4 position : SV_POSITION;
-    float3 worldNormal : NORMAL0;
-    float3 worldPosition : TEXCOORD0;
-    nointerpolation uint receiveShadows : TEXCOORD1;
-};
-
-VSOutput VSMain(VSInput input)
-{
-    VSOutput output;
-    float4 worldPosition = mul(localToWorld, float4(input.position, 1.0f));
-    output.position = mul(viewProjection, worldPosition);
-    output.worldNormal = mul((float3x3)localToWorld, input.normal);
-    output.worldPosition = worldPosition.xyz;
-    output.receiveShadows = receiveShadows;
-    return output;
-}
-
-uint FindVirtualShadowPhysicalPage(uint level, int2 pageCoordinate)
-{
-    int2 localPage = pageCoordinate - (virtualShadowClipmaps[level].pageData.xy - int2(64, 64));
-    if (any(localPage < 0) || any(localPage >= 128))
-    {
-        return 0xFFFFFFFFu;
-    }
-
-    uint logicalIndex = level * 16384u + uint(localPage.y) * 128u + uint(localPage.x);
-    uint denseEntry = VirtualShadowDensePageTable[logicalIndex];
-    return denseEntry == 0u ? 0xFFFFFFFFu : denseEntry - 1u;
-}
-
-float SampleVirtualShadowPage(uint physicalPageIndex, float2 pagePosition, float receiverDepth)
-{
-    uint pagesPerRow = virtualShadowAtlasExtent / virtualShadowPhysicalPageSize;
-    uint2 physicalPage = uint2(physicalPageIndex % pagesPerRow, physicalPageIndex / pagesPerRow);
-    uint2 pageOrigin = physicalPage * virtualShadowPhysicalPageSize;
-    uint2 pagePixel = min(uint2(saturate(pagePosition) * virtualShadowPhysicalPageSize),
-                          uint2(virtualShadowPhysicalPageSize - 1u, virtualShadowPhysicalPageSize - 1u));
-    uint encodedDepth = VirtualShadowAtlas.Load(int3(pageOrigin + pagePixel, 0));
-    if (encodedDepth == 0u)
-    {
-        return 1.0f;
-    }
-
-    float casterDepth = 1.0f - asfloat(encodedDepth);
-    return receiverDepth <= casterDepth ? 1.0f : 0.0f;
-}
-
-float ComputeVirtualShadowVisibility(float3 worldPosition, float3 worldNormal, uint objectReceivesShadows)
-{
-    if (objectReceivesShadows == 0u)
-    {
-        return 1.0f;
-    }
-
-    float cameraDepth = max(dot(worldPosition - cameraWorldPosition.xyz, cameraWorldForward.xyz), 0.0f);
-    uint firstLevel = virtualShadowClipmapLevelCount - 1u;
-    [loop]
-    for (uint levelIndex = 0u; levelIndex < virtualShadowClipmapLevelCount; ++levelIndex)
-    {
-        if (cameraDepth <= virtualShadowClipmaps[levelIndex].radiusAndDepthRange.x)
-        {
-            firstLevel = levelIndex;
-            break;
-        }
-    }
-
-    float3 biasedWorldPosition = worldPosition + normalize(worldNormal) * virtualShadowAtlasAndBias.z;
-    float3 lightPosition = float3(dot(biasedWorldPosition, virtualShadowLightRight.xyz),
-                                  dot(biasedWorldPosition, virtualShadowLightUp.xyz),
-                                  dot(biasedWorldPosition, virtualShadowLightDirection.xyz));
-    [loop]
-    for (uint sampleLevel = firstLevel; sampleLevel < virtualShadowClipmapLevelCount; ++sampleLevel)
-    {
-        VirtualShadowClipmapConstants clipmap = virtualShadowClipmaps[sampleLevel];
-        float pageWorldSize = clipmap.lightOriginAndPageWorldSize.w;
-        int2 pageCoordinate = int2(floor(lightPosition.xy / pageWorldSize));
-        uint physicalPageIndex = FindVirtualShadowPhysicalPage(sampleLevel, pageCoordinate);
-        if (physicalPageIndex == 0xFFFFFFFFu)
-        {
-            continue;
-        }
-
-        float depthRange = clipmap.radiusAndDepthRange.z - clipmap.radiusAndDepthRange.y;
-        float depthReference = (lightPosition.z - clipmap.radiusAndDepthRange.y) / depthRange - virtualShadowAtlasAndBias.y;
-        if (depthReference < 0.0f || depthReference > 1.0f)
-        {
-            continue;
-        }
-
-        float2 pagePosition = lightPosition.xy / pageWorldSize - float2(pageCoordinate);
-        return SampleVirtualShadowPage(physicalPageIndex, pagePosition, depthReference);
-    }
-
-    return 1.0f;
-}
-
-float4 PSMain(VSOutput input) : SV_TARGET
-{
-    float3 normal = normalize(input.worldNormal);
-    float3 lightDirection = normalize(directionalLightDirection.xyz);
-    float diffuse = saturate(dot(normal, -lightDirection));
-    float shadowVisibility = ComputeVirtualShadowVisibility(input.worldPosition, normal, input.receiveShadows);
-    float3 directLight = directionalLightColorAndIntensity.rgb * directionalLightColorAndIntensity.w * diffuse * shadowVisibility;
-    float3 lighting = ambientColor.rgb + directLight;
-    float3 debugColor = shadowCasterDirty != 0u ? float3(1.0f, 0.04f, 0.02f) : float3(0.04f, 0.9f, 0.12f);
-    float3 debugBaseColor = lerp(float3(0.25f, 0.25f, 0.25f), debugColor, 0.8f);
-    return float4(saturate(debugBaseColor * lighting), 1.0f);
-}
-)";
 
         [[noreturn]] void FailDebugPass(const std::string& message)
         {
@@ -397,29 +229,19 @@ float4 PSMain(VSOutput input) : SV_TARGET
             FailDebugPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        const rhi::RhiShaderModuleDesc vertexShaderDesc = {rhi::RhiShaderStage::Vertex,
-                                                           rhi::RhiShaderCodeFormat::Source,
-                                                           DebugShaderSource,
-                                                           nullptr,
-                                                           0,
-                                                           "VSMain",
-                                                           "ShadowCasterDirtyDebugVS"};
-        rhi::RhiShaderModule* vertexShader =
-            shaderManager->GetOrCompileShader(context.device, ShaderID{"VirtualShadow.ShadowCasterDirty.Vertex", 0}, vertexShaderDesc);
+        rhi::RhiShaderModule* vertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
+                                                                          ShaderID{"VirtualShadow.ShadowCasterDirty.Vertex", 0},
+                                                                          "ShadowCasterDirtyDebug", "Internal", rhi::RhiShaderStage::Vertex,
+                                                                          "ShadowCasterDirtyDebugVS");
         if (vertexShader == nullptr)
         {
             FailDebugPass("failed to compile the vertex shader.");
         }
 
-        const rhi::RhiShaderModuleDesc fragmentShaderDesc = {rhi::RhiShaderStage::Fragment,
-                                                             rhi::RhiShaderCodeFormat::Source,
-                                                             DebugShaderSource,
-                                                             nullptr,
-                                                             0,
-                                                             "PSMain",
-                                                             "ShadowCasterDirtyDebugPS"};
-        rhi::RhiShaderModule* fragmentShader =
-            shaderManager->GetOrCompileShader(context.device, ShaderID{"VirtualShadow.ShadowCasterDirty.Fragment", 0}, fragmentShaderDesc);
+        rhi::RhiShaderModule* fragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
+                                                                            ShaderID{"VirtualShadow.ShadowCasterDirty.Fragment", 0},
+                                                                            "ShadowCasterDirtyDebug", "Internal", rhi::RhiShaderStage::Fragment,
+                                                                            "ShadowCasterDirtyDebugPS");
         if (fragmentShader == nullptr)
         {
             FailDebugPass("failed to compile the fragment shader.");

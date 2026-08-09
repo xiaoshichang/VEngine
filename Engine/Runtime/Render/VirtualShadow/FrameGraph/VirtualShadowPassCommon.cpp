@@ -4,6 +4,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
 
 namespace ve::virtual_shadow_detail
@@ -11,15 +12,40 @@ namespace ve::virtual_shadow_detail
     rhi::RhiComputePipelineState* GetVirtualShadowComputePipeline(const FrameRenderPipelineData& frameData,
                                                                   const char* name,
                                                                   const char* shaderName,
-                                                                  const char* source,
                                                                   const rhi::RhiPipelineResourceBindingDesc* bindings,
                                                                   UInt32 bindingCount)
     {
+        if (rhi::RhiComputePipelineState* cached = frameData.shaderManager->GetComputePipeline(ComputePipelineID{name, 0}); cached != nullptr)
+        {
+            return cached;
+        }
+        const Result<ShaderArtifactModule> moduleResult = LoadShaderArtifact("VirtualShadow", name, rhi::RhiShaderStage::Compute);
+        if (!moduleResult)
+        {
+            const std::string message = "VSM shader module could not be loaded: " + moduleResult.GetError().GetMessage();
+            FailVirtualShadow(message.c_str());
+        }
+        const ShaderArtifactModule& module = moduleResult.GetValue();
         rhi::RhiShaderModuleDesc shaderDesc = {};
         shaderDesc.stage = rhi::RhiShaderStage::Compute;
-        shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Source;
-        shaderDesc.source = source;
-        shaderDesc.entryPoint = "CSMain";
+        shaderDesc.entryPoint = module.entryPoint.c_str();
+        if (frameData.device->GetBackend() == rhi::RhiBackend::D3D11)
+        {
+            shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
+            shaderDesc.bytecode = module.d3d11Bytecode.data();
+            shaderDesc.bytecodeSize = module.d3d11Bytecode.size();
+        }
+        else if (frameData.device->GetBackend() == rhi::RhiBackend::D3D12)
+        {
+            shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
+            shaderDesc.bytecode = module.d3d12Bytecode.data();
+            shaderDesc.bytecodeSize = module.d3d12Bytecode.size();
+        }
+        else
+        {
+            shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Source;
+            shaderDesc.source = module.metalSource.c_str();
+        }
         shaderDesc.debugName = name;
         rhi::RhiShaderModule* shader = frameData.shaderManager->GetOrCompileShader(*frameData.device, ShaderID{shaderName, 0}, shaderDesc);
         if (shader == nullptr)

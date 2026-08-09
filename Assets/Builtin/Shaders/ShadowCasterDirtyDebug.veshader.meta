@@ -1,0 +1,8 @@
+{
+    "version": 1,
+    "guid": "99999999-9999-9999-9999-999999999996",
+    "assetType": "Shader",
+    "sourcePath": "Builtin/Shaders/ShadowCasterDirtyDebug.veshader",
+    "importer": "ShaderImporter",
+    "importSettings": {}
+}
