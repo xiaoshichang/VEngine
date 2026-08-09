@@ -22,6 +22,7 @@ namespace ve
         std::string name = "RenderTexture";
         WindowExtent extent = {};
         rhi::RhiFormat colorFormat = rhi::RhiFormat::Bgra8Unorm;
+        bool createDepthTexture = true;
     };
 
     /// Scene Thread object for a texture that can be both rendered into and sampled from.

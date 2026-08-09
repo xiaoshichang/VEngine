@@ -32,7 +32,8 @@ namespace ve::editor
         void Init(Editor& editor);
         [[nodiscard]] bool Shutdown();
         void Render(Editor& editor, Float32 contentBottom);
-        [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewHdrTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTRenderTexture> GetSceneViewPreviewTexture() const noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetSceneViewFillMode() const noexcept;
         [[nodiscard]] RenderDebugMode GetSceneViewRenderDebugMode() const noexcept;
@@ -41,7 +42,8 @@ namespace ve::editor
         [[nodiscard]] Float32 GetSceneViewGridUnitSize() const noexcept;
         [[nodiscard]] const Gizmos& GetSceneViewGizmos() const noexcept;
         [[nodiscard]] Matrix44 GetSceneViewCameraLocalToWorld() const noexcept;
-        [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewHdrTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTRenderTexture> GetGameViewPreviewTexture() const noexcept;
         [[nodiscard]] std::shared_ptr<RenderViewState> GetSceneRenderViewState() const noexcept;
         [[nodiscard]] std::shared_ptr<RenderViewState> GetGameRenderViewState() const noexcept;
 

@@ -22,8 +22,8 @@ namespace ve::editor
 
         void Init(Editor& editor) override;
 
-        [[nodiscard]] const RenderTexture& GetSceneViewTexture() const noexcept;
-        [[nodiscard]] RenderTexture& GetSceneViewTexture() noexcept;
+        [[nodiscard]] const RenderTexture& GetSceneViewHdrTexture() const noexcept;
+        [[nodiscard]] const RenderTexture& GetSceneViewPreviewTexture() const noexcept;
         [[nodiscard]] RTCameraInitParam GetSceneViewCameraInitParam() const noexcept;
         [[nodiscard]] rhi::RhiFillMode GetFillMode() const noexcept;
         [[nodiscard]] RenderDebugMode GetRenderDebugMode() const noexcept;
@@ -81,7 +81,7 @@ namespace ve::editor
         void UpdateCameraFromInput(bool viewportHovered, bool viewportClicked, bool viewportRightClicked);
         [[nodiscard]] bool ApplyCameraLookSmoothing(Float32 deltaSeconds) noexcept;
         void UpdateSceneViewCamera();
-        void RebuildSceneViewTexture(Editor& editor, WindowExtent extent);
+        void RebuildSceneViewTextures(Editor& editor, WindowExtent extent);
         [[nodiscard]] RTCameraInitParam BuildCameraInitParam() const noexcept;
         [[nodiscard]] RTCameraUpdateParam BuildCameraUpdateParam() const noexcept;
         [[nodiscard]] Matrix44 BuildCameraLocalToWorld() const noexcept;
@@ -89,7 +89,8 @@ namespace ve::editor
         [[nodiscard]] Vector3 GetRightDirection() const noexcept;
         [[nodiscard]] static WindowExtent ToRenderTargetExtent(const ImVec2& size) noexcept;
 
-        std::shared_ptr<RenderTexture> sceneViewTexture_;
+        std::shared_ptr<RenderTexture> sceneViewHdrTexture_;
+        std::shared_ptr<RenderTexture> sceneViewPreviewTexture_;
         std::shared_ptr<RTCamera> sceneViewCamera_;
         std::shared_ptr<RenderViewState> sceneViewState_;
         WindowExtent renderTargetExtent_ = {};

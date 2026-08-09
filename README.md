@@ -34,7 +34,8 @@ captured depth resource.
 - GPU-driven directional-light Virtual Shadow Maps on D3D11 and D3D12, including clipmaps, persistent physical-page
   caching, request compaction, and bounds-local caster invalidation.
 - Metallic-roughness Cook-Torrance PBR using GGX distribution, Smith geometry, and Schlick Fresnel.
-- `RGBA16F` Player scene color, exposure control, ACES/Reinhard tone mapping, and linear-to-sRGB presentation.
+- `RGBA16F` Player and Editor Scene/Game scene color, exposure control, ACES/Reinhard tone mapping, and linear-to-sRGB presentation.
+- Editor Scene/Game views tone map into dedicated `BGRA8` preview textures before Dear ImGui composition.
 - Builtin shader preloading for internal rendering, PBR direct lighting, HDR tone mapping, virtual shadows, and Editor passes.
 
 ### Scene, Assets, And Editor
@@ -60,7 +61,8 @@ captured depth resource.
 
 - The current PBR shader supports direct Directional Light only. Point Lights, Spot Lights, IBL, PBR texture inputs,
   normal mapping, and BRDF LUT generation are not implemented yet.
-- HDR tone mapping is integrated into the Player presentation path. Editor Scene/Game render textures still use their existing display-oriented preview path.
+- Player and Editor rendering preserve HDR scene color through tone mapping, but their final swapchains remain SDR;
+  hardware HDR display output is not implemented.
 - GPU-driven Virtual Shadow Maps currently require D3D11 or D3D12. The Metal VSM path is not implemented.
 - macOS targets and packaging exist, but the platform path is less mature than Windows.
 - The iOS target is an initial UIKit/Metal and NativeAOT packaging slice; touch input, full runtime scene loading, shared

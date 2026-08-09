@@ -1,6 +1,7 @@
 #include "Editor/Panels/SceneViewPanel/SceneViewPanel.h"
 
 #include "Editor/Core/Editor.h"
+#include "Engine/Render/PBR/HdrColorPipeline.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Math.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
@@ -16,6 +17,8 @@ namespace ve::editor
     namespace
     {
         constexpr UInt32 MinSceneViewExtent = 1;
+        constexpr const char* SceneViewHdrTextureName = "EditorSceneViewHdr";
+        constexpr const char* SceneViewPreviewTextureName = "EditorSceneViewPreview";
         constexpr float ControlButtonWidth = 82.0f;
         constexpr float ControlButtonHeight = 0.0f;
         constexpr float PopupWidth = 320.0f;
@@ -91,7 +94,8 @@ namespace ve::editor
     } // namespace
 
     SceneViewPanel::SceneViewPanel()
-        : sceneViewTexture_(nullptr)
+        : sceneViewHdrTexture_(nullptr)
+        , sceneViewPreviewTexture_(nullptr)
         , sceneViewCamera_(nullptr)
         , sceneViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorSceneView"}))
     {
@@ -106,25 +110,30 @@ namespace ve::editor
             sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
         }
 
-        if (sceneViewTexture_ == nullptr)
+        if (sceneViewHdrTexture_ == nullptr)
+        {
+            sceneViewHdrTexture_ = std::make_shared<RenderTexture>(pbr::BuildHdrSceneColorDesc({}, SceneViewHdrTextureName));
+        }
+        if (sceneViewPreviewTexture_ == nullptr)
         {
             RenderTextureDesc desc = {};
-            desc.name = "EditorSceneViewTexture";
+            desc.name = SceneViewPreviewTextureName;
             desc.colorFormat = rhi::RhiFormat::Bgra8Unorm;
-            sceneViewTexture_ = std::make_shared<RenderTexture>(desc);
+            desc.createDepthTexture = false;
+            sceneViewPreviewTexture_ = std::make_shared<RenderTexture>(std::move(desc));
         }
 
         UpdateSceneViewCamera();
     }
 
-    const RenderTexture& SceneViewPanel::GetSceneViewTexture() const noexcept
+    const RenderTexture& SceneViewPanel::GetSceneViewHdrTexture() const noexcept
     {
-        return *sceneViewTexture_;
+        return *sceneViewHdrTexture_;
     }
 
-    RenderTexture& SceneViewPanel::GetSceneViewTexture() noexcept
+    const RenderTexture& SceneViewPanel::GetSceneViewPreviewTexture() const noexcept
     {
-        return *sceneViewTexture_;
+        return *sceneViewPreviewTexture_;
     }
 
     RTCameraInitParam SceneViewPanel::GetSceneViewCameraInitParam() const noexcept
@@ -185,22 +194,23 @@ namespace ve::editor
     void SceneViewPanel::RenderContent()
     {
         VE_ASSERT_MESSAGE(editor_ != nullptr, "SceneViewPanel requires Init before Render.");
-        VE_ASSERT_MESSAGE(sceneViewTexture_ != nullptr, "SceneViewPanel requires Init before Render.");
+        VE_ASSERT_MESSAGE(sceneViewHdrTexture_ != nullptr && sceneViewPreviewTexture_ != nullptr, "SceneViewPanel requires Init before Render.");
 
         RenderControlBar();
         ImGui::Separator();
 
         const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
         const WindowExtent desiredExtent = ToRenderTargetExtent(canvasSize);
-        if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !sceneViewTexture_->IsValid())
+        if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !sceneViewHdrTexture_->IsValid() ||
+            !sceneViewPreviewTexture_->IsValid())
         {
-            RebuildSceneViewTexture(*editor_, desiredExtent);
+            RebuildSceneViewTextures(*editor_, desiredExtent);
         }
 
         UpdateSceneViewCamera();
 
         const ImVec2 imageSize(static_cast<float>(desiredExtent.width), static_cast<float>(desiredExtent.height));
-        void* resourceView = sceneViewTexture_->GetRenderResourceViewHandle();
+        void* resourceView = sceneViewPreviewTexture_->GetRenderResourceViewHandle();
         if (resourceView == nullptr)
         {
             ImGui::Button("Scene View texture pending", imageSize);
@@ -561,18 +571,23 @@ namespace ve::editor
         }
     }
 
-    void SceneViewPanel::RebuildSceneViewTexture(Editor& editor, WindowExtent extent)
+    void SceneViewPanel::RebuildSceneViewTextures(Editor& editor, WindowExtent extent)
     {
         VE_ASSERT_SCENE_THREAD();
 
-        RenderTextureDesc desc = {};
-        desc.name = sceneViewTexture_->GetName();
-        desc.extent = extent;
-        desc.colorFormat = sceneViewTexture_->GetColorFormat();
+        auto hdrTexture = std::make_shared<RenderTexture>(pbr::BuildHdrSceneColorDesc(extent, SceneViewHdrTextureName));
+        hdrTexture->InitRenderResource(editor.GetRenderSystem());
 
-        auto renderTexture = std::make_shared<RenderTexture>(std::move(desc));
-        renderTexture->InitRenderResource(editor.GetRenderSystem());
-        sceneViewTexture_ = std::move(renderTexture);
+        RenderTextureDesc previewDesc = {};
+        previewDesc.name = SceneViewPreviewTextureName;
+        previewDesc.extent = extent;
+        previewDesc.colorFormat = rhi::RhiFormat::Bgra8Unorm;
+        previewDesc.createDepthTexture = false;
+        auto previewTexture = std::make_shared<RenderTexture>(std::move(previewDesc));
+        previewTexture->InitRenderResource(editor.GetRenderSystem());
+
+        sceneViewHdrTexture_ = std::move(hdrTexture);
+        sceneViewPreviewTexture_ = std::move(previewTexture);
         renderTargetExtent_ = extent;
     }
 

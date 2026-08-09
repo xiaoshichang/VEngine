@@ -138,9 +138,14 @@ namespace ve::editor
         ImGui::End();
     }
 
-    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewTexture() const noexcept
+    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewHdrTexture() const noexcept
     {
-        return sceneViewPanel_.GetSceneViewTexture().GetRTRenderTexture();
+        return sceneViewPanel_.GetSceneViewHdrTexture().GetRTRenderTexture();
+    }
+
+    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetSceneViewPreviewTexture() const noexcept
+    {
+        return sceneViewPanel_.GetSceneViewPreviewTexture().GetRTRenderTexture();
     }
 
     RTCameraInitParam ProjectEditingView::GetSceneViewCameraInitParam() const noexcept
@@ -183,9 +188,14 @@ namespace ve::editor
         return sceneViewPanel_.GetSceneViewCameraLocalToWorld();
     }
 
-    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewTexture() const noexcept
+    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewHdrTexture() const noexcept
     {
-        return gameViewPanel_.GetGameViewTexture().GetRTRenderTexture();
+        return gameViewPanel_.GetGameViewHdrTexture().GetRTRenderTexture();
+    }
+
+    std::shared_ptr<RTRenderTexture> ProjectEditingView::GetGameViewPreviewTexture() const noexcept
+    {
+        return gameViewPanel_.GetGameViewPreviewTexture().GetRTRenderTexture();
     }
 
     std::shared_ptr<RenderViewState> ProjectEditingView::GetSceneRenderViewState() const noexcept

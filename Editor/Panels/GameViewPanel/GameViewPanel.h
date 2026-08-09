@@ -20,19 +20,20 @@ namespace ve::editor
 
         void Init(Editor& editor) override;
 
-        [[nodiscard]] const RenderTexture& GetGameViewTexture() const noexcept;
-        [[nodiscard]] RenderTexture& GetGameViewTexture() noexcept;
+        [[nodiscard]] const RenderTexture& GetGameViewHdrTexture() const noexcept;
+        [[nodiscard]] const RenderTexture& GetGameViewPreviewTexture() const noexcept;
         [[nodiscard]] std::shared_ptr<RenderViewState> GetRenderViewState() const noexcept;
 
     private:
         [[nodiscard]] const char* GetName() const noexcept override;
         void RenderContent() override;
 
-        void RebuildGameViewTexture(Editor& editor, WindowExtent extent);
+        void RebuildGameViewTextures(Editor& editor, WindowExtent extent);
         [[nodiscard]] static WindowExtent ToRenderTargetExtent(const ImVec2& imageSize) noexcept;
         [[nodiscard]] static ImVec2 CalculateFittedImageSize(const ImVec2& canvasSize, float aspectRatio) noexcept;
 
-        std::shared_ptr<RenderTexture> gameViewTexture_;
+        std::shared_ptr<RenderTexture> gameViewHdrTexture_;
+        std::shared_ptr<RenderTexture> gameViewPreviewTexture_;
         std::shared_ptr<RenderViewState> gameViewState_;
         WindowExtent renderTargetExtent_ = {};
         Editor* editor_ = nullptr;

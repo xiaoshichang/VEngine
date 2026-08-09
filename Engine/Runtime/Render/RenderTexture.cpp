@@ -39,8 +39,8 @@ namespace ve
             textureDesc.depth = 1;
             textureDesc.mipLevelCount = 1;
             textureDesc.format = rhi::RhiFormat::Depth32Float;
-            textureDesc.usage = static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) |
-                                                                  static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
+            textureDesc.usage =
+                static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::DepthStencil) | static_cast<UInt32>(rhi::RhiTextureUsage::Sampled));
             textureDesc.debugName = desc.name.c_str();
             return textureDesc;
         }
@@ -180,9 +180,13 @@ namespace ve
 
         const bool textureMatchesDesc = texture_ != nullptr && texture_->GetWidth() == desc.extent.width && texture_->GetHeight() == desc.extent.height &&
                                         texture_->GetFormat() == desc.colorFormat;
+        const bool depthTextureMatchesDesc = desc.createDepthTexture ? depthTexture_ != nullptr && depthTexture_->GetWidth() == desc.extent.width &&
+                                                                           depthTexture_->GetHeight() == desc.extent.height &&
+                                                                           depthTexture_->GetFormat() == rhi::RhiFormat::Depth32Float
+                                                                     : depthTexture_ == nullptr;
 
         desc_ = std::move(desc);
-        if (!textureMatchesDesc)
+        if (!textureMatchesDesc || !depthTextureMatchesDesc)
         {
             if (texture_ != nullptr)
             {
@@ -197,7 +201,7 @@ namespace ve
 
         VE_ASSERT_MESSAGE(desc_.extent.width != 0 && desc_.extent.height != 0, "RTRenderTexture::InitRenderResource requires a valid extent.");
 
-        if (IsInitialized() && depthTexture_ != nullptr)
+        if (IsInitialized() && (!desc_.createDepthTexture || depthTexture_ != nullptr))
         {
             return;
         }
@@ -209,7 +213,7 @@ namespace ve
             nativeSampledViewHandle_.store(texture_->GetNativeSampledViewHandle(), std::memory_order_release);
         }
 
-        if (depthTexture_ == nullptr)
+        if (desc_.createDepthTexture && depthTexture_ == nullptr)
         {
             depthTexture_ = device.CreateTexture(MakeDepthTextureDesc(desc_));
             VE_ASSERT_MESSAGE(depthTexture_ != nullptr, "RTRenderTexture failed to create depth texture.");

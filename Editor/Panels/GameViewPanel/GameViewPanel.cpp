@@ -1,6 +1,7 @@
 #include "Editor/Panels/GameViewPanel/GameViewPanel.h"
 
 #include "Editor/Core/Editor.h"
+#include "Engine/Render/PBR/HdrColorPipeline.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -16,6 +17,9 @@ namespace ve::editor
     namespace
     {
         constexpr UInt32 MinGameViewExtent = 1;
+        constexpr const char* GameViewHdrTextureName = "EditorGameViewHdr";
+        constexpr const char* GameViewPreviewTextureName = "EditorGameViewPreview";
+
         [[nodiscard]] const CameraComponent* GetGameViewCamera(const Editor& editor) noexcept
         {
             const Scene* scene = editor.GetSceneSystem().GetScene();
@@ -24,7 +28,8 @@ namespace ve::editor
     } // namespace
 
     GameViewPanel::GameViewPanel()
-        : gameViewTexture_(nullptr)
+        : gameViewHdrTexture_(nullptr)
+        , gameViewPreviewTexture_(nullptr)
         , gameViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorGameView"}))
     {
     }
@@ -32,25 +37,28 @@ namespace ve::editor
     void GameViewPanel::Init(Editor& editor)
     {
         editor_ = &editor;
-        if (gameViewTexture_ == nullptr)
+        if (gameViewHdrTexture_ == nullptr)
         {
-            auto desc = RenderTextureDesc{
-                .name = "EditorGameViewTexture",
-                .extent = {},
-                .colorFormat = rhi::RhiFormat::Bgra8Unorm,
-            };
-            gameViewTexture_ = std::make_shared<RenderTexture>(desc);
+            gameViewHdrTexture_ = std::make_shared<RenderTexture>(pbr::BuildHdrSceneColorDesc({}, GameViewHdrTextureName));
+        }
+        if (gameViewPreviewTexture_ == nullptr)
+        {
+            RenderTextureDesc desc = {};
+            desc.name = GameViewPreviewTextureName;
+            desc.colorFormat = rhi::RhiFormat::Bgra8Unorm;
+            desc.createDepthTexture = false;
+            gameViewPreviewTexture_ = std::make_shared<RenderTexture>(std::move(desc));
         }
     }
 
-    const RenderTexture& GameViewPanel::GetGameViewTexture() const noexcept
+    const RenderTexture& GameViewPanel::GetGameViewHdrTexture() const noexcept
     {
-        return *gameViewTexture_;
+        return *gameViewHdrTexture_;
     }
 
-    RenderTexture& GameViewPanel::GetGameViewTexture() noexcept
+    const RenderTexture& GameViewPanel::GetGameViewPreviewTexture() const noexcept
     {
-        return *gameViewTexture_;
+        return *gameViewPreviewTexture_;
     }
 
     std::shared_ptr<RenderViewState> GameViewPanel::GetRenderViewState() const noexcept
@@ -72,9 +80,10 @@ namespace ve::editor
         const ImVec2 fittedImageSize =
             camera != nullptr && !camera->IsAspectRatioAutomatic() ? CalculateFittedImageSize(canvasSize, camera->GetAspectRatio()) : canvasSize;
         const WindowExtent desiredExtent = ToRenderTargetExtent(fittedImageSize);
-        if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !gameViewTexture_->IsValid())
+        if (desiredExtent.width != renderTargetExtent_.width || desiredExtent.height != renderTargetExtent_.height || !gameViewHdrTexture_->IsValid() ||
+            !gameViewPreviewTexture_->IsValid())
         {
-            RebuildGameViewTexture(*editor_, desiredExtent);
+            RebuildGameViewTextures(*editor_, desiredExtent);
         }
 
         const ImVec2 imageSize(static_cast<float>(desiredExtent.width), static_cast<float>(desiredExtent.height));
@@ -82,7 +91,7 @@ namespace ve::editor
         const ImVec2 imageOffset((std::max)(0.0f, (canvasSize.x - imageSize.x) * 0.5f), (std::max)(0.0f, (canvasSize.y - imageSize.y) * 0.5f));
         ImGui::SetCursorPos(ImVec2(cursorPosition.x + imageOffset.x, cursorPosition.y + imageOffset.y));
 
-        void* resourceView = gameViewTexture_->GetRenderResourceViewHandle();
+        void* resourceView = gameViewPreviewTexture_->GetRenderResourceViewHandle();
         if (resourceView == nullptr)
         {
             ImGui::Button("Game View texture pending", imageSize);
@@ -92,18 +101,23 @@ namespace ve::editor
         ImGui::Image(ImTextureRef(static_cast<ImTextureID>(reinterpret_cast<intptr_t>(resourceView))), imageSize);
     }
 
-    void GameViewPanel::RebuildGameViewTexture(Editor& editor, WindowExtent extent)
+    void GameViewPanel::RebuildGameViewTextures(Editor& editor, WindowExtent extent)
     {
         VE_ASSERT_SCENE_THREAD();
 
-        RenderTextureDesc desc = {};
-        desc.name = gameViewTexture_->GetName();
-        desc.extent = extent;
-        desc.colorFormat = gameViewTexture_->GetColorFormat();
+        auto hdrTexture = std::make_shared<RenderTexture>(pbr::BuildHdrSceneColorDesc(extent, GameViewHdrTextureName));
+        hdrTexture->InitRenderResource(editor.GetRenderSystem());
 
-        auto renderTexture = std::make_shared<RenderTexture>(std::move(desc));
-        renderTexture->InitRenderResource(editor.GetRenderSystem());
-        gameViewTexture_ = std::move(renderTexture);
+        RenderTextureDesc previewDesc = {};
+        previewDesc.name = GameViewPreviewTextureName;
+        previewDesc.extent = extent;
+        previewDesc.colorFormat = rhi::RhiFormat::Bgra8Unorm;
+        previewDesc.createDepthTexture = false;
+        auto previewTexture = std::make_shared<RenderTexture>(std::move(previewDesc));
+        previewTexture->InitRenderResource(editor.GetRenderSystem());
+
+        gameViewHdrTexture_ = std::move(hdrTexture);
+        gameViewPreviewTexture_ = std::move(previewTexture);
 
         renderTargetExtent_ = extent;
     }

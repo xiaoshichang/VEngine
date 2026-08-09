@@ -7,6 +7,7 @@
 #include "Editor/Core/EditorToolchain.h"
 #include "Editor/RenderPass/EditorGizmoRenderPass.h"
 #include "Editor/RenderPass/SceneGridRenderPass.h"
+#include "Engine/Render/PBR/HdrToneMappingPass.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Platform.h"
 #include "Engine/Runtime/Core/Result.h"
@@ -147,7 +148,8 @@ namespace ve::editor
 
     struct EditorFrameRenderViews
     {
-        std::shared_ptr<RTRenderTexture> sceneViewTexture;
+        std::shared_ptr<RTRenderTexture> sceneViewHdrTexture;
+        std::shared_ptr<RTRenderTexture> sceneViewPreviewTexture;
         std::shared_ptr<RTCamera> sceneViewCameraSnapshot;
         std::shared_ptr<RTRenderViewState> sceneViewState;
         std::shared_ptr<RTCamera> gameViewCameraSnapshot;
@@ -158,7 +160,8 @@ namespace ve::editor
         Float32 sceneViewGridOpacity = 0.45f;
         Float32 sceneViewGridUnitSize = 1.0f;
         std::shared_ptr<EditorGizmoDrawList> sceneViewGizmoDrawList;
-        std::shared_ptr<RTRenderTexture> gameViewTexture;
+        std::shared_ptr<RTRenderTexture> gameViewHdrTexture;
+        std::shared_ptr<RTRenderTexture> gameViewPreviewTexture;
     };
 
     namespace
@@ -267,7 +270,8 @@ namespace ve::editor
             .onStartFrame = [this]() { StartFrame(); },
             .onOSEvent = [this](const OSEvent& event) { return HandleOSEvent(event); },
             .onRender = [this]() { return Render(); },
-            .onShutdown = [this]()
+            .onShutdown =
+                [this]()
             {
                 ShutdownSceneThreadState();
                 if (runtime_ != nullptr)
@@ -328,13 +332,21 @@ namespace ve::editor
         EditorRenderFramePipelineInitParam pipelineInitParam = {};
         pipelineInitParam.renderer.viewFamily.scene = renderScene;
         pipelineInitParam.builtInShaderResources = sceneSystem_ != nullptr ? sceneSystem_->GetBuiltInShaderResources() : nullptr;
-        if (views.sceneViewTexture != nullptr)
+        if (views.sceneViewHdrTexture != nullptr)
         {
-            pipelineInitParam.retainedRenderTextures.push_back(views.sceneViewTexture);
+            pipelineInitParam.retainedRenderTextures.push_back(views.sceneViewHdrTexture);
         }
-        if (views.gameViewTexture != nullptr)
+        if (views.sceneViewPreviewTexture != nullptr)
         {
-            pipelineInitParam.retainedRenderTextures.push_back(views.gameViewTexture);
+            pipelineInitParam.retainedRenderTextures.push_back(views.sceneViewPreviewTexture);
+        }
+        if (views.gameViewHdrTexture != nullptr)
+        {
+            pipelineInitParam.retainedRenderTextures.push_back(views.gameViewHdrTexture);
+        }
+        if (views.gameViewPreviewTexture != nullptr)
+        {
+            pipelineInitParam.retainedRenderTextures.push_back(views.gameViewPreviewTexture);
         }
         AddSceneViewRenderer(pipelineInitParam, views, renderScene);
         AddGameViewRenderer(pipelineInitParam, views, renderScene);
@@ -405,7 +417,8 @@ namespace ve::editor
             return views;
         }
 
-        views.sceneViewTexture = projectEditingView_->GetSceneViewTexture();
+        views.sceneViewHdrTexture = projectEditingView_->GetSceneViewHdrTexture();
+        views.sceneViewPreviewTexture = projectEditingView_->GetSceneViewPreviewTexture();
         views.sceneViewCameraSnapshot = std::make_shared<RTCamera>(projectEditingView_->GetSceneViewCameraInitParam());
         views.sceneViewState = projectEditingView_->GetSceneRenderViewState()->GetRTRenderViewState();
         views.sceneViewFillMode = projectEditingView_->GetSceneViewFillMode();
@@ -420,7 +433,8 @@ namespace ve::editor
             GetSelectedGameObject(),
             projectEditingView_->GetSceneViewCameraLocalToWorld(),
         });
-        views.gameViewTexture = projectEditingView_->GetGameViewTexture();
+        views.gameViewHdrTexture = projectEditingView_->GetGameViewHdrTexture();
+        views.gameViewPreviewTexture = projectEditingView_->GetGameViewPreviewTexture();
         CameraComponent* camera = scene != nullptr ? scene->GetCamera() : nullptr;
         views.gameViewCameraSnapshot = camera != nullptr ? camera->GetRTCamera() : nullptr;
         views.gameViewState = projectEditingView_->GetGameRenderViewState()->GetRTRenderViewState();
@@ -451,7 +465,7 @@ namespace ve::editor
                                       const EditorFrameRenderViews& views,
                                       const std::shared_ptr<RTScene>& renderScene) const
     {
-        if (views.sceneViewTexture == nullptr || renderScene == nullptr)
+        if (views.sceneViewHdrTexture == nullptr || views.sceneViewPreviewTexture == nullptr || renderScene == nullptr)
         {
             return;
         }
@@ -463,7 +477,7 @@ namespace ve::editor
         RenderView sceneView = {};
         sceneView.camera = views.sceneViewCameraSnapshot;
         sceneView.viewState = views.sceneViewState;
-        sceneView.target.colorTexture = views.sceneViewTexture;
+        sceneView.target.colorTexture = views.sceneViewHdrTexture;
         sceneView.fillMode = views.sceneViewFillMode;
         sceneView.target.colorLoadAction = rhi::RhiLoadAction::Clear;
         rendererInitParam.viewFamily.views.push_back(std::move(sceneView));
@@ -471,6 +485,9 @@ namespace ve::editor
 
         RendererViewPassExtension viewExtension = {};
         viewExtension.viewIndex = sceneViewIndex;
+        pbr::HdrViewToneMappingPassInitParam toneMappingInitParam = {};
+        toneMappingInitParam.destination = views.sceneViewPreviewTexture;
+        viewExtension.passes.push_back(std::make_unique<pbr::HdrViewToneMappingPass>(std::move(toneMappingInitParam)));
         if (views.sceneViewGridEnabled)
         {
             SceneGridRenderPassInitParam gridPassInitParam = {};
@@ -497,7 +514,7 @@ namespace ve::editor
                                      const EditorFrameRenderViews& views,
                                      const std::shared_ptr<RTScene>& renderScene) const
     {
-        if (views.gameViewTexture == nullptr || renderScene == nullptr)
+        if (views.gameViewHdrTexture == nullptr || views.gameViewPreviewTexture == nullptr || renderScene == nullptr)
         {
             return;
         }
@@ -505,12 +522,21 @@ namespace ve::editor
         // Game View intentionally stays free of editor gizmo/grid passes.
         StandaloneRendererInitParam& rendererInitParam = pipelineInitParam.renderer;
         VE_ASSERT(rendererInitParam.viewFamily.scene == renderScene);
+        VE_ASSERT(rendererInitParam.viewFamily.views.size() < static_cast<SizeT>(std::numeric_limits<UInt32>::max()));
+        const UInt32 gameViewIndex = static_cast<UInt32>(rendererInitParam.viewFamily.views.size());
         RenderView gameView = {};
         gameView.camera = views.gameViewCameraSnapshot;
         gameView.viewState = views.gameViewState;
-        gameView.target.colorTexture = views.gameViewTexture;
+        gameView.target.colorTexture = views.gameViewHdrTexture;
         rendererInitParam.viewFamily.views.push_back(std::move(gameView));
         rendererInitParam.viewDebugModes.push_back(RenderDebugMode::None);
+
+        RendererViewPassExtension viewExtension = {};
+        viewExtension.viewIndex = gameViewIndex;
+        pbr::HdrViewToneMappingPassInitParam toneMappingInitParam = {};
+        toneMappingInitParam.destination = views.gameViewPreviewTexture;
+        viewExtension.passes.push_back(std::make_unique<pbr::HdrViewToneMappingPass>(std::move(toneMappingInitParam)));
+        rendererInitParam.viewExtensions.push_back(std::move(viewExtension));
     }
 
     std::shared_ptr<RTScene> Editor::GetActiveRenderScene() const
@@ -1215,8 +1241,8 @@ namespace ve::editor
         ResourceSystem& resourceSystem = runtime_->GetResourceSystem();
         if (!resourceSystem.IsBuiltInShaderLibraryInitialized())
         {
-            Error builtInShaderResult = resourceSystem.InitializeBuiltInShaderLibrary(BuiltInShaderLibraryInitParam{
-                assetDatabase_, runtime_->GetRenderSystem(), BuiltInShaderEnvironment::Editor, true});
+            Error builtInShaderResult = resourceSystem.InitializeBuiltInShaderLibrary(
+                BuiltInShaderLibraryInitParam{assetDatabase_, runtime_->GetRenderSystem(), BuiltInShaderEnvironment::Editor, true});
             if (!builtInShaderResult.IsOk())
             {
                 VE_LOG_ERROR_CATEGORY("Editor", "Failed to initialize BuiltInShaderLibrary: {}", builtInShaderResult.GetMessage());
