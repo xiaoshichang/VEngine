@@ -10,8 +10,7 @@
 namespace ve
 {
     FrameContext::FrameContext(std::pmr::memory_resource* retentionMemoryResource)
-        : transientResources_(retentionMemoryResource != nullptr ? retentionMemoryResource : std::pmr::get_default_resource())
-        , submittedFrameObjects_(retentionMemoryResource != nullptr ? retentionMemoryResource : std::pmr::get_default_resource())
+        : inFlightGpuFrameObjects_(retentionMemoryResource != nullptr ? retentionMemoryResource : std::pmr::get_default_resource())
     {
     }
 
@@ -37,8 +36,6 @@ namespace ve
 
         uniformAllocator_.Initialize(device);
         uniformCache_.Initialize(uniformAllocator_);
-        transientResourcePool_.Initialize(device);
-
         return true;
     }
 
@@ -53,8 +50,7 @@ namespace ve
             return false;
         }
 
-        submittedFrameObjects_.clear();
-        transientResources_.clear();
+        inFlightGpuFrameObjects_.clear();
         uniformCache_.Reset();
         uniformAllocator_.Reset();
         submittedFenceValue_ = 0;
@@ -72,8 +68,7 @@ namespace ve
             return false;
         }
 
-        submittedFrameObjects_.clear();
-        transientResources_.clear();
+        inFlightGpuFrameObjects_.clear();
         uniformCache_.Reset();
         uniformAllocator_.Reset();
         submittedFenceValue_ = 0;
@@ -93,7 +88,6 @@ namespace ve
             return false;
         }
 
-        transientResourcePool_.Shutdown();
         uniformCache_.Shutdown();
         uniformAllocator_.Shutdown();
         commandList_.reset();
@@ -107,53 +101,20 @@ namespace ve
         return commandList_ != nullptr && completionFence_ != nullptr;
     }
 
-    void FrameContext::RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource)
-    {
-        VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT(resource != nullptr);
-        transientResources_.push_back(std::move(resource));
-    }
-
-    void FrameContext::RetainSubmittedFrameObject(std::shared_ptr<const void> object)
+    void FrameContext::RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object)
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(object != nullptr);
-        submittedFrameObjects_.push_back(std::move(object));
+        inFlightGpuFrameObjects_.push_back(std::move(object));
     }
 
-    ErrorCode FrameContext::SubmitWithRetainedResources(std::shared_ptr<const void> frameOwner,
-                                                        std::vector<std::unique_ptr<rhi::RhiObject>>& pendingRetiredResources,
-                                                        SubmitCallback submit,
-                                                        void* submitContext) noexcept
+    ErrorCode FrameContext::Submit(SubmitCallback submit, void* submitContext) noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        if (frameOwner == nullptr || submit == nullptr)
+        if (submit == nullptr)
         {
             return ErrorCode::InvalidArgument;
         }
-        if (submittedFrameObjects_.size() == submittedFrameObjects_.max_size() ||
-            pendingRetiredResources.size() > transientResources_.max_size() - transientResources_.size())
-        {
-            return ErrorCode::OutOfMemory;
-        }
-
-        try
-        {
-            submittedFrameObjects_.reserve(submittedFrameObjects_.size() + 1);
-            transientResources_.reserve(transientResources_.size() + pendingRetiredResources.size());
-        }
-        catch (...)
-        {
-            return ErrorCode::OutOfMemory;
-        }
-
-        submittedFrameObjects_.push_back(std::move(frameOwner));
-        for (std::unique_ptr<rhi::RhiObject>& resource : pendingRetiredResources)
-        {
-            transientResources_.push_back(std::move(resource));
-        }
-        pendingRetiredResources.clear();
-
         const UInt64 submissionFenceValue = GetNextSubmissionFenceValue();
         if (!submit(submitContext, submissionFenceValue))
         {
@@ -189,12 +150,6 @@ namespace ve
         return *commandList_;
     }
 
-    FrameGraphTransientResourcePool& FrameContext::GetFrameGraphTransientResourcePool() noexcept
-    {
-        VE_ASSERT(commandList_ != nullptr);
-        return transientResourcePool_;
-    }
-
     rhi::RhiFence& FrameContext::GetCompletionFence() noexcept
     {
         VE_ASSERT(completionFence_ != nullptr);
@@ -220,28 +175,16 @@ namespace ve
         ++nextFenceValue_;
     }
 
-    void FrameRenderPipelineData::RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource) const
+    void FrameRenderPipelineData::RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object) const
     {
         VE_ASSERT(frameContext != nullptr);
-        frameContext->RetainTransientResource(std::move(resource));
-    }
-
-    void FrameRenderPipelineData::RetainSubmittedFrameObject(std::shared_ptr<const void> object) const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        frameContext->RetainSubmittedFrameObject(std::move(object));
+        frameContext->RetainInFlightGpuFrameObject(std::move(object));
     }
 
     rhi::RhiCommandList& FrameRenderPipelineData::GetCommandList() const
     {
         VE_ASSERT(frameContext != nullptr);
         return frameContext->GetCommandList();
-    }
-
-    FrameGraphTransientResourcePool& FrameRenderPipelineData::GetFrameGraphTransientResourcePool() const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetFrameGraphTransientResourcePool();
     }
 
     UniformBufferAllocation FrameRenderPipelineData::UploadUniform(const void* data, UInt64 size) const

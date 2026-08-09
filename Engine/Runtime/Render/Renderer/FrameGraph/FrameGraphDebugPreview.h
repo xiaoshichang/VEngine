@@ -42,11 +42,12 @@ namespace ve
         [[nodiscard]] ErrorCode Initialize(rhi::RhiDevice& device, rhi::RhiExtent2D extent, std::string debugName);
         [[nodiscard]] rhi::RhiTexture* GetTexture() noexcept;
         [[nodiscard]] const rhi::RhiTexture* GetTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<rhi::RhiTexture> GetTextureShared() const noexcept;
         [[nodiscard]] void* GetNativeSampledViewHandle() const noexcept;
-        void Reset(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
+        void Reset();
 
     private:
-        std::unique_ptr<rhi::RhiTexture> texture_;
+        std::shared_ptr<rhi::RhiTexture> texture_;
         std::atomic<void*> nativeSampledViewHandle_{nullptr};
     };
 

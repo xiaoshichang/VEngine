@@ -52,7 +52,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphResource.cpp
-            Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphTransientResourcePool.cpp
             Engine/Runtime/Render/Renderer/MobileRenderer.cpp
             Engine/Runtime/Render/Renderer/RendererFactory.cpp
             Engine/Runtime/Render/Renderer/RenderQueue.cpp
@@ -182,7 +181,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphResource.h
-            Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphTransientResourcePool.h
             Engine/Runtime/Render/Renderer/MobileRenderer.h
             Engine/Runtime/Render/Renderer/RendererFactory.h
             Engine/Runtime/Render/Renderer/RenderQueue.h

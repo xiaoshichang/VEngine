@@ -4,7 +4,6 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
-#include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphTransientResourcePool.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -12,6 +11,7 @@
 #include <optional>
 #include <queue>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 #include <vector>
@@ -82,7 +82,7 @@ namespace ve
     {
         struct TransientTextureBacking
         {
-            std::unique_ptr<rhi::RhiTexture> texture;
+            std::shared_ptr<rhi::RhiTexture> texture;
         };
 
         using TextureBacking = std::variant<TransientTextureBacking, ImportedFrameGraphTexture>;
@@ -207,11 +207,12 @@ namespace ve
         void AnalyzeTransientResourceLifetimes();
 
         [[nodiscard]] ResolvedFrameGraphTexture ResolveTexture(FrameGraphTextureHandle handle) const noexcept;
-        [[nodiscard]] ErrorCode AcquirePassTextures(UInt32 orderIndex, FrameGraphTransientResourcePool& transientPool);
+        [[nodiscard]] ErrorCode AcquirePassTextures(UInt32 orderIndex);
         [[nodiscard]] rhi::RhiRenderPassBeginInfo BuildRenderPassBeginInfo(const PassNode& pass) const;
         [[nodiscard]] RenderPassExecutionInfo BuildRenderPassExecutionInfo(const PassNode& pass) const;
-        void ReleasePassTextures(UInt32 orderIndex, FrameGraphTransientResourcePool& transientPool);
-        void ReleaseAllTextures(FrameGraphTransientResourcePool& transientPool);
+        void ReleasePassTextures(UInt32 orderIndex);
+        void ReleaseAllTextures();
+        void RetainReleasedTextures();
 
         FrameGraphExecuteContext context;
         std::vector<TextureResourceNode> textures;
@@ -224,6 +225,10 @@ namespace ve
         std::vector<std::unordered_set<UInt32>> reverseDependencies;
         std::vector<UInt32> compiledPassOrder;
         std::vector<std::string> lastExecutionPassNames;
+        std::unordered_map<FrameGraphTextureDesc,
+                           std::vector<std::shared_ptr<rhi::RhiTexture>>,
+                           FrameGraphTextureDescHash>
+            availableTransientTextures;
         FrameGraphStage stage = FrameGraphStage::Initial;
     };
 
@@ -1304,7 +1309,7 @@ namespace ve
         return ResolvedFrameGraphTexture{transientBacking->texture.get(), false};
     }
 
-    ErrorCode FrameGraph::Impl::AcquirePassTextures(UInt32 orderIndex, FrameGraphTransientResourcePool& transientPool)
+    ErrorCode FrameGraph::Impl::AcquirePassTextures(UInt32 orderIndex)
     {
         for (TextureResourceNode& resource : textures)
         {
@@ -1314,7 +1319,16 @@ namespace ve
                 continue;
             }
 
-            transientBacking->texture = transientPool.AcquireTexture(resource.desc, resource.name.c_str());
+            auto availableIt = availableTransientTextures.find(resource.desc);
+            if (availableIt != availableTransientTextures.end() && !availableIt->second.empty())
+            {
+                transientBacking->texture = std::move(availableIt->second.back());
+                availableIt->second.pop_back();
+            }
+            else
+            {
+                transientBacking->texture = context.frameData.device->CreateTexture(BuildRhiTextureDesc(resource.desc, resource.name.c_str()));
+            }
             if (transientBacking->texture == nullptr)
             {
                 if (resource.internal && resource.debugPreview != nullptr)
@@ -1379,28 +1393,41 @@ namespace ve
         return executionInfo;
     }
 
-    void FrameGraph::Impl::ReleasePassTextures(UInt32 orderIndex, FrameGraphTransientResourcePool& transientPool)
+    void FrameGraph::Impl::ReleasePassTextures(UInt32 orderIndex)
     {
         for (TextureResourceNode& resource : textures)
         {
             TransientTextureBacking* transientBacking = resource.GetTransientBacking();
             if (transientBacking != nullptr && resource.lastUse == orderIndex && transientBacking->texture != nullptr)
             {
-                transientPool.ReleaseTexture(resource.desc, std::move(transientBacking->texture));
+                availableTransientTextures[resource.desc].push_back(std::move(transientBacking->texture));
             }
         }
     }
 
-    void FrameGraph::Impl::ReleaseAllTextures(FrameGraphTransientResourcePool& transientPool)
+    void FrameGraph::Impl::ReleaseAllTextures()
     {
         for (TextureResourceNode& resource : textures)
         {
             TransientTextureBacking* transientBacking = resource.GetTransientBacking();
             if (transientBacking != nullptr && transientBacking->texture != nullptr)
             {
-                transientPool.ReleaseTexture(resource.desc, std::move(transientBacking->texture));
+                availableTransientTextures[resource.desc].push_back(std::move(transientBacking->texture));
             }
         }
+    }
+
+    void FrameGraph::Impl::RetainReleasedTextures()
+    {
+        for (auto& [desc, texturesForDesc] : availableTransientTextures)
+        {
+            static_cast<void>(desc);
+            for (std::shared_ptr<rhi::RhiTexture>& texture : texturesForDesc)
+            {
+                context.frameData.RetainInFlightGpuFrameObject(std::move(texture));
+            }
+        }
+        availableTransientTextures.clear();
     }
 
     Error FrameGraph::PrepareDebugCapture(FrameGraphDebugFrameCapture& capture)
@@ -1584,6 +1611,7 @@ namespace ve
             previewDesc.format = rhi::RhiFormat::Rgba8Unorm;
             previewDesc.usage = addUsage(rhi::RhiTextureUsage::Sampled, rhi::RhiTextureUsage::RenderTarget);
             const FrameGraphTextureHandle previewTarget = ImportTexture(previewName, previewDesc, ImportedFrameGraphTexture{previewOwner->GetTexture(), false});
+            impl_->context.frameData.RetainInFlightGpuFrameObject(previewOwner->GetTextureShared());
             impl_->textures[previewTarget.index].internal = true;
             impl_->textures[previewTarget.index].debugPreview = &preview;
 
@@ -1751,17 +1779,17 @@ namespace ve
             return ErrorCode::InvalidState;
         }
 
-        FrameGraphTransientResourcePool& transientPool = impl_->context.frameData.GetFrameGraphTransientResourcePool();
         rhi::RhiCommandList& commandList = impl_->context.frameData.GetCommandList();
         impl_->lastExecutionPassNames.clear();
 
         for (UInt32 orderIndex = 0; orderIndex < impl_->compiledPassOrder.size(); ++orderIndex)
         {
             // Step 1: materialize graph-owned textures at the first pass that needs them.
-            const ErrorCode acquireResult = impl_->AcquirePassTextures(orderIndex, transientPool);
+            const ErrorCode acquireResult = impl_->AcquirePassTextures(orderIndex);
             if (acquireResult != ErrorCode::None)
             {
-                impl_->ReleaseAllTextures(transientPool);
+                impl_->ReleaseAllTextures();
+                impl_->RetainReleasedTextures();
                 impl_->stage = FrameGraphStage::Failed;
                 return acquireResult;
             }
@@ -1790,7 +1818,7 @@ namespace ve
                         pass.debugPreview->message = "debug capture texture unavailable";
                     }
                 }
-                impl_->ReleasePassTextures(orderIndex, transientPool);
+                impl_->ReleasePassTextures(orderIndex);
                 continue;
             }
 
@@ -1830,10 +1858,11 @@ namespace ve
                             pass.debugPreview->message = "preview render pass could not begin";
                         }
                     }
-                    impl_->ReleasePassTextures(orderIndex, transientPool);
+                    impl_->ReleasePassTextures(orderIndex);
                     continue;
                 }
-                impl_->ReleaseAllTextures(transientPool);
+                impl_->ReleaseAllTextures();
+                impl_->RetainReleasedTextures();
                 impl_->stage = FrameGraphStage::Failed;
                 return ErrorCode::PlatformError;
             }
@@ -1856,9 +1885,10 @@ namespace ve
             }
 
             // Step 6: return graph-owned textures immediately after their last compiled use.
-            impl_->ReleasePassTextures(orderIndex, transientPool);
+            impl_->ReleasePassTextures(orderIndex);
         }
 
+        impl_->RetainReleasedTextures();
         impl_->stage = FrameGraphStage::Executed;
         return ErrorCode::None;
     }

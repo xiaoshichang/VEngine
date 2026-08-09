@@ -611,8 +611,10 @@ render work is assembled for the Render Thread.
 Renderer-owned code lives under `Engine/Runtime/Render/Renderer`. `StandaloneRenderer` is selected for Windows and
 macOS host products, while `MobileRenderer` owns the iOS topology. Both build scene work through typed, versioned Frame
 Graph texture handles; opaque and transparent passes consume only their preclassified queue lists. Each in-flight
-`FrameContext` owns one transient Frame Graph texture pool and retains the submitted frame pipeline so transient
-allocations and render proxies referenced by that frame remain alive through the context's completion fence.
+`FrameContext` owns its command list and completion fence for one reusable GPU frame slot. It also retains exactly the
+`shared_ptr<rhi::RhiObject>` instances referenced by that submission. Those references are cleared only after the slot's
+completion fence has finished. Frame Graph transient textures are allocated and reused within one graph execution, then
+transferred to the current FrameContext's generic in-flight GPU object list; FrameContext has no Frame Graph dependency.
 
 Render-facing resource ownership follows an Unreal-style split between the Scene Thread and Render Thread:
 

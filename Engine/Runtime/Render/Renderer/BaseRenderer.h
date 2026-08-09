@@ -51,6 +51,7 @@ namespace ve
 
     private:
         void UpdateRenderWorld();
+        void RetainInFlightGpuFrameObjects() const;
         void ImportViewRenderTargets(FrameGraph& frameGraph, UInt32 viewIndex, RendererViewFrameGraphData& graphData) const;
         void ImportMainSwapchainColor(FrameGraph& frameGraph, RendererFrameGraphData& graphData) const;
 

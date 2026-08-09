@@ -58,7 +58,6 @@ namespace ve
         MaterialUniformPool materialUniformPool;
         ShaderManager shaderManager;
         std::unique_ptr<VirtualShadowManager> virtualShadowManager;
-        std::vector<std::unique_ptr<rhi::RhiObject>> pendingRetiredResources;
         FrameGraphDebugCaptureExchange frameGraphDebugCapture;
         Atomic<UInt64> pendingMainSwapchainExtent{0};
         AtomicBool mainSwapchainResizeCommandQueued{false};
@@ -301,7 +300,7 @@ namespace ve
 
             FrameContext& frameContext = *frameData.frameContext;
             MainSwapchainSubmitContext submitContext{impl.device.get(), &frameContext};
-            return frameContext.SubmitWithRetainedResources(framePipeline, impl.pendingRetiredResources, &SubmitMainSwapchainFrameCallback, &submitContext);
+            return frameContext.Submit(&SubmitMainSwapchainFrameCallback, &submitContext);
         }
 
         [[nodiscard]] ErrorCode PresentMainSwapchainFrame(RenderSystemImpl& impl)
@@ -311,7 +310,7 @@ namespace ve
             return impl.mainSwapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
         }
 
-        void RetireFrameGraphDebugDataOnRenderThread(RenderSystemImpl& impl, std::shared_ptr<const FrameGraphDebugData> data)
+        void RetireFrameGraphDebugDataOnRenderThread(std::shared_ptr<const FrameGraphDebugData> data)
         {
             VE_ASSERT_RENDER_THREAD();
             if (data == nullptr)
@@ -322,7 +321,7 @@ namespace ve
             std::vector<std::shared_ptr<FrameGraphDebugPreviewTexture>> previewTextures = CollectFrameGraphDebugPreviewTextures(*data);
             for (const std::shared_ptr<FrameGraphDebugPreviewTexture>& previewTexture : previewTextures)
             {
-                previewTexture->Reset(impl.pendingRetiredResources);
+                previewTexture->Reset();
             }
 
             // Both the immutable snapshot and the temporary owner list are released on the Render Thread. Every
@@ -369,7 +368,7 @@ namespace ve
             {
                 FrameGraphDebugCapturePublishResult completion = CompleteFrameGraphDebugCapture(
                     impl.frameGraphDebugCapture, submitResult, *debugRequest, std::move(debugCapture.data), std::move(debugCapture.failureMessage));
-                RetireFrameGraphDebugDataOnRenderThread(impl, std::move(completion.dataToRetire));
+                RetireFrameGraphDebugDataOnRenderThread(std::move(completion.dataToRetire));
             }
             if (frameData.virtualShadowManager != nullptr && statisticsSceneIdentity != 0)
             {
@@ -442,8 +441,7 @@ namespace ve
                 impl.device->WaitIdle();
             }
 
-            RetireFrameGraphDebugDataOnRenderThread(impl, impl.frameGraphDebugCapture.Reset());
-            impl.pendingRetiredResources.clear();
+            RetireFrameGraphDebugDataOnRenderThread(impl.frameGraphDebugCapture.Reset());
             impl.submittedFrameIndices.fill(0);
             impl.performanceStatistics.Reset();
             impl.pendingMainSwapchainExtent.store(0, std::memory_order_release);
@@ -780,7 +778,7 @@ namespace ve
         {
             RenderCommand retireCommand{
                 "RenderSystemRetireFrameGraphDebugData",
-                [this, queuedData = data]() mutable { RetireFrameGraphDebugDataOnRenderThread(*impl_, std::move(queuedData)); },
+                [queuedData = data]() mutable { RetireFrameGraphDebugDataOnRenderThread(std::move(queuedData)); },
             };
             pushResult = impl_->commandQueue.Push(std::move(retireCommand));
         }
@@ -885,7 +883,7 @@ namespace ve
                        [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           renderTexture->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
+                           renderTexture->InitRenderResource(*impl_->device, std::move(desc));
                        });
     }
 
@@ -898,7 +896,7 @@ namespace ve
                        [this, meshResource = std::move(meshResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           meshResource->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
+                           meshResource->InitRenderResource(*impl_->device, std::move(desc));
                        });
     }
 
@@ -911,7 +909,7 @@ namespace ve
                        [this, shaderResource = std::move(shaderResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           shaderResource->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
+                           shaderResource->InitRenderResource(*impl_->device, std::move(desc));
                        });
     }
 
@@ -924,7 +922,7 @@ namespace ve
                        [this, textureResource = std::move(textureResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
-                           textureResource->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
+                           textureResource->InitRenderResource(*impl_->device, std::move(desc));
                        });
     }
 
@@ -977,7 +975,7 @@ namespace ve
         VE_ASSERT_MESSAGE(meshResource != nullptr, "RenderSystem::ReleaseRenderResource requires a mesh resource.");
 
         EnqueueCommand("RenderSystemReleaseMeshResource",
-                       [this, meshResource = std::move(meshResource)]() { meshResource->ResetRenderResource(impl_->pendingRetiredResources); });
+                       [meshResource = std::move(meshResource)]() { meshResource->ResetRenderResource(); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource)
@@ -986,7 +984,7 @@ namespace ve
         VE_ASSERT_MESSAGE(shaderResource != nullptr, "RenderSystem::ReleaseRenderResource requires a shader resource.");
 
         EnqueueCommand("RenderSystemReleaseShaderResource",
-                       [this, shaderResource = std::move(shaderResource)]() { shaderResource->ResetRenderResource(impl_->pendingRetiredResources); });
+                       [shaderResource = std::move(shaderResource)]() { shaderResource->ResetRenderResource(); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTTextureResource> textureResource)
@@ -995,8 +993,7 @@ namespace ve
         VE_ASSERT_MESSAGE(textureResource != nullptr, "RenderSystem::ReleaseRenderResource requires a texture resource.");
 
         EnqueueCommand("RenderSystemReleaseTextureResource",
-                       [this, textureResource = std::move(textureResource)]()
-                       { textureResource->ResetRenderResource(impl_->pendingRetiredResources); });
+                       [textureResource = std::move(textureResource)]() { textureResource->ResetRenderResource(); });
     }
 
     void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline)

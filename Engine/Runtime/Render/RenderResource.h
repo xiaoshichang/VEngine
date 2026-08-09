@@ -50,21 +50,22 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] rhi::RhiBuffer* GetVertexBuffer() noexcept;
         [[nodiscard]] const rhi::RhiBuffer* GetVertexBuffer() const noexcept;
+        [[nodiscard]] std::shared_ptr<rhi::RhiBuffer> GetVertexBufferShared() const noexcept;
         [[nodiscard]] rhi::RhiBuffer* GetIndexBuffer() noexcept;
         [[nodiscard]] const rhi::RhiBuffer* GetIndexBuffer() const noexcept;
+        [[nodiscard]] std::shared_ptr<rhi::RhiBuffer> GetIndexBufferShared() const noexcept;
         [[nodiscard]] UInt32 GetVertexStride() const noexcept;
         [[nodiscard]] UInt32 GetVertexCount() const noexcept;
         [[nodiscard]] UInt32 GetIndexCount() const noexcept;
+        void AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const;
 
-        void InitRenderResource(rhi::RhiDevice& device,
-                                RTMeshResourceDesc desc,
-                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
-        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
+        void InitRenderResource(rhi::RhiDevice& device, RTMeshResourceDesc desc);
+        void ResetRenderResource() noexcept;
 
     private:
         RTMeshResourceDesc desc_;
-        std::unique_ptr<rhi::RhiBuffer> vertexBuffer_;
-        std::unique_ptr<rhi::RhiBuffer> indexBuffer_;
+        std::shared_ptr<rhi::RhiBuffer> vertexBuffer_;
+        std::shared_ptr<rhi::RhiBuffer> indexBuffer_;
     };
 
     struct RTTextureResourceDesc
@@ -90,15 +91,14 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] rhi::RhiTexture* GetTexture() noexcept;
         [[nodiscard]] const rhi::RhiTexture* GetTexture() const noexcept;
+        void AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const;
 
-        void InitRenderResource(rhi::RhiDevice& device,
-                                RTTextureResourceDesc desc,
-                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
-        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
+        void InitRenderResource(rhi::RhiDevice& device, RTTextureResourceDesc desc);
+        void ResetRenderResource() noexcept;
 
     private:
         RTTextureResourceDesc desc_;
-        std::unique_ptr<rhi::RhiTexture> texture_;
+        std::shared_ptr<rhi::RhiTexture> texture_;
     };
 
     struct RTShaderStageResourceDesc
@@ -136,16 +136,19 @@ namespace ve
         [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept { return vertexShader_.get(); }
         [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept { return fragmentShader_.get(); }
         [[nodiscard]] const rhi::RhiShaderModule* GetComputeShader() const noexcept { return computeShader_.get(); }
-        std::unique_ptr<rhi::RhiShaderModule>& VertexShader() noexcept { return vertexShader_; }
-        std::unique_ptr<rhi::RhiShaderModule>& FragmentShader() noexcept { return fragmentShader_; }
-        std::unique_ptr<rhi::RhiShaderModule>& ComputeShader() noexcept { return computeShader_; }
+        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetVertexShaderShared() const noexcept { return vertexShader_; }
+        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetFragmentShaderShared() const noexcept { return fragmentShader_; }
+        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetComputeShaderShared() const noexcept { return computeShader_; }
+        std::shared_ptr<rhi::RhiShaderModule>& VertexShader() noexcept { return vertexShader_; }
+        std::shared_ptr<rhi::RhiShaderModule>& FragmentShader() noexcept { return fragmentShader_; }
+        std::shared_ptr<rhi::RhiShaderModule>& ComputeShader() noexcept { return computeShader_; }
 
     private:
         ShaderPassType type_;
         std::string name_;
-        std::unique_ptr<rhi::RhiShaderModule> vertexShader_;
-        std::unique_ptr<rhi::RhiShaderModule> fragmentShader_;
-        std::unique_ptr<rhi::RhiShaderModule> computeShader_;
+        std::shared_ptr<rhi::RhiShaderModule> vertexShader_;
+        std::shared_ptr<rhi::RhiShaderModule> fragmentShader_;
+        std::shared_ptr<rhi::RhiShaderModule> computeShader_;
     };
 
     class RTShaderResource final : public RTResource
@@ -161,11 +164,10 @@ namespace ve
         [[nodiscard]] const RTShaderPass* GetPass(std::string_view name) const noexcept;
         [[nodiscard]] bool HasPass(ShaderPassType type) const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
+        void AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const;
 
-        void InitRenderResource(rhi::RhiDevice& device,
-                                RTShaderResourceDesc desc,
-                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
-        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
+        void InitRenderResource(rhi::RhiDevice& device, RTShaderResourceDesc desc);
+        void ResetRenderResource() noexcept;
 
     private:
         RTShaderResourceDesc desc_;

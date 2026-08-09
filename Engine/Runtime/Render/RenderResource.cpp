@@ -47,6 +47,11 @@ namespace ve
         return vertexBuffer_.get();
     }
 
+    std::shared_ptr<rhi::RhiBuffer> RTMeshResource::GetVertexBufferShared() const noexcept
+    {
+        return vertexBuffer_;
+    }
+
     rhi::RhiBuffer* RTMeshResource::GetIndexBuffer() noexcept
     {
         return indexBuffer_.get();
@@ -55,6 +60,11 @@ namespace ve
     const rhi::RhiBuffer* RTMeshResource::GetIndexBuffer() const noexcept
     {
         return indexBuffer_.get();
+    }
+
+    std::shared_ptr<rhi::RhiBuffer> RTMeshResource::GetIndexBufferShared() const noexcept
+    {
+        return indexBuffer_;
     }
 
     UInt32 RTMeshResource::GetVertexStride() const noexcept
@@ -72,13 +82,23 @@ namespace ve
         return static_cast<UInt32>(desc_.indices.size());
     }
 
-    void RTMeshResource::InitRenderResource(rhi::RhiDevice& device,
-                                            RTMeshResourceDesc desc,
-                                            std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
+    void RTMeshResource::AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const
+    {
+        if (vertexBuffer_ != nullptr)
+        {
+            objects.push_back(vertexBuffer_);
+        }
+        if (indexBuffer_ != nullptr)
+        {
+            objects.push_back(indexBuffer_);
+        }
+    }
+
+    void RTMeshResource::InitRenderResource(rhi::RhiDevice& device, RTMeshResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource(retiredResources);
+        ResetRenderResource();
         desc_ = std::move(desc);
 
         if (desc_.vertices.empty())
@@ -100,17 +120,11 @@ namespace ve
         VE_ASSERT_MESSAGE(indexBuffer_ != nullptr, "RTMeshResource failed to create index buffer.");
     }
 
-    void RTMeshResource::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
+    void RTMeshResource::ResetRenderResource() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        if (indexBuffer_ != nullptr)
-        {
-            retiredResources.push_back(std::move(indexBuffer_));
-        }
-        if (vertexBuffer_ != nullptr)
-        {
-            retiredResources.push_back(std::move(vertexBuffer_));
-        }
+        indexBuffer_.reset();
+        vertexBuffer_.reset();
     }
 
     RTTextureResource::RTTextureResource(RTTextureResourceDesc desc)
@@ -138,13 +152,19 @@ namespace ve
         return texture_.get();
     }
 
-    void RTTextureResource::InitRenderResource(rhi::RhiDevice& device,
-                                               RTTextureResourceDesc desc,
-                                               std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
+    void RTTextureResource::AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const
+    {
+        if (texture_ != nullptr)
+        {
+            objects.push_back(texture_);
+        }
+    }
+
+    void RTTextureResource::InitRenderResource(rhi::RhiDevice& device, RTTextureResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource(retiredResources);
+        ResetRenderResource();
         desc_ = std::move(desc);
         if (desc_.width == 0 || desc_.height == 0)
         {
@@ -171,13 +191,10 @@ namespace ve
         VE_ASSERT_MESSAGE(texture_ != nullptr, "RTTextureResource failed to create texture.");
     }
 
-    void RTTextureResource::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
+    void RTTextureResource::ResetRenderResource() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        if (texture_ != nullptr)
-        {
-            retiredResources.push_back(std::move(texture_));
-        }
+        texture_.reset();
     }
 
     RTShaderResource::RTShaderResource(RTShaderResourceDesc desc)
@@ -241,13 +258,30 @@ namespace ve
         return revision_;
     }
 
-    void RTShaderResource::InitRenderResource(rhi::RhiDevice& device,
-                                              RTShaderResourceDesc desc,
-                                              std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
+    void RTShaderResource::AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const
+    {
+        for (const std::unique_ptr<RTShaderPass>& pass : passes_)
+        {
+            if (pass->GetVertexShader() != nullptr)
+            {
+                objects.push_back(pass->GetVertexShaderShared());
+            }
+            if (pass->GetFragmentShader() != nullptr)
+            {
+                objects.push_back(pass->GetFragmentShaderShared());
+            }
+            if (pass->GetComputeShader() != nullptr)
+            {
+                objects.push_back(pass->GetComputeShaderShared());
+            }
+        }
+    }
+
+    void RTShaderResource::InitRenderResource(rhi::RhiDevice& device, RTShaderResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource(retiredResources);
+        ResetRenderResource();
         desc_ = std::move(desc);
         bool createdArtifact = false;
 
@@ -285,7 +319,7 @@ namespace ve
                     continue;
                 }
 
-                std::unique_ptr<rhi::RhiShaderModule> shader = device.CreateShaderModule(shaderDesc);
+                std::shared_ptr<rhi::RhiShaderModule> shader = device.CreateShaderModule(shaderDesc);
                 VE_ASSERT_MESSAGE(shader != nullptr, "RTShaderResource failed to create shader module.");
                 if (shader == nullptr) continue;
 
@@ -307,15 +341,9 @@ namespace ve
         }
     }
 
-    void RTShaderResource::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
+    void RTShaderResource::ResetRenderResource() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        for (const auto& pass : passes_)
-        {
-            if (pass->GetFragmentShader() != nullptr) retiredResources.push_back(std::move(pass->FragmentShader()));
-            if (pass->GetVertexShader() != nullptr) retiredResources.push_back(std::move(pass->VertexShader()));
-            if (pass->GetComputeShader() != nullptr) retiredResources.push_back(std::move(pass->ComputeShader()));
-        }
         passes_.clear();
     }
 

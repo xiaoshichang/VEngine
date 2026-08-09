@@ -8,6 +8,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -203,6 +204,7 @@ namespace ve
 
         UpdateRenderWorld();
         BuildRendererQueues(rendererData_);
+        RetainInFlightGpuFrameObjects();
         for (RendererViewData& viewData : rendererData_.views)
         {
             viewData.virtualShadowSampling = {};
@@ -283,10 +285,6 @@ namespace ve
             FailRenderer("Renderer family frame graph execution failed.");
         }
 
-        // The renderer is frame-local and may be destroyed before its command list is submitted. Keep the exact
-        // scene, render items, cameras, view states, and render targets referenced while recording alive until this
-        // FrameContext's submission fence completes.
-        frameRenderData_->RetainSubmittedFrameObject(std::make_shared<RendererData>(rendererData_));
     }
 
     const std::vector<FrameGraphPassDiagnostics>& BaseRenderer::GetLastFrameGraphPassDiagnostics() const noexcept
@@ -323,6 +321,69 @@ namespace ve
         VE_ASSERT_RENDER_THREAD();
     }
 
+    void BaseRenderer::RetainInFlightGpuFrameObjects() const
+    {
+        std::vector<std::shared_ptr<rhi::RhiObject>> objects;
+        const auto appendRenderItemObjects = [&objects](const std::shared_ptr<RTRenderItem>& item)
+        {
+            if (item == nullptr)
+            {
+                return;
+            }
+            if (const auto mesh = std::dynamic_pointer_cast<RTMeshResource>(item->GetMeshResource()); mesh != nullptr)
+            {
+                mesh->AppendRhiObjects(objects);
+            }
+            if (const auto material = std::dynamic_pointer_cast<RTMaterialResource>(item->GetMaterialResource()); material != nullptr)
+            {
+                if (const std::shared_ptr<RTShaderResource> shader = material->GetShaderResource(); shader != nullptr)
+                {
+                    shader->AppendRhiObjects(objects);
+                }
+            }
+        };
+
+        for (const std::shared_ptr<RTRenderItem>& item : rendererData_.opaqueItems)
+        {
+            appendRenderItemObjects(item);
+        }
+        for (const RendererViewData& view : rendererData_.views)
+        {
+            for (const std::shared_ptr<RTRenderItem>& item : view.transparentItems)
+            {
+                appendRenderItemObjects(item);
+            }
+        }
+
+        if (frameRenderData_->builtInShaderResources != nullptr)
+        {
+            const BuiltInShaderResources& shaders = *frameRenderData_->builtInShaderResources;
+            const std::shared_ptr<RTShaderResource> builtInShaders[] = {
+                shaders.virtualShadow,
+                shaders.frameGraphDebugPreview,
+                shaders.shadowCasterDirtyDebug,
+                shaders.virtualShadowRedrawPageDebug,
+                shaders.sceneGrid,
+                shaders.editorGizmoLine,
+                shaders.editorGizmoIcon,
+            };
+            for (const std::shared_ptr<RTShaderResource>& shader : builtInShaders)
+            {
+                if (shader != nullptr)
+                {
+                    shader->AppendRhiObjects(objects);
+                }
+            }
+        }
+
+        std::ranges::sort(objects, {}, [](const std::shared_ptr<rhi::RhiObject>& object) { return object.get(); });
+        objects.erase(std::ranges::unique(objects, {}, [](const std::shared_ptr<rhi::RhiObject>& object) { return object.get(); }).begin(), objects.end());
+        for (std::shared_ptr<rhi::RhiObject>& object : objects)
+        {
+            frameRenderData_->RetainInFlightGpuFrameObject(std::move(object));
+        }
+    }
+
     void BaseRenderer::ImportViewRenderTargets(FrameGraph& frameGraph, UInt32 viewIndex, RendererViewFrameGraphData& graphData) const
     {
         if (viewIndex >= rendererData_.views.size())
@@ -340,6 +401,7 @@ namespace ve
             graphData.color = frameGraph.ImportTexture(BuildIndexedResourceName("RendererColor", viewIndex),
                                                        MakeTextureDesc(*colorTexture, MakeColorTargetUsage()),
                                                        ImportedFrameGraphTexture{colorTexture, false});
+            frameRenderData_->RetainInFlightGpuFrameObject(target.colorTexture->GetTextureShared());
 
             rhi::RhiTexture* depthTexture = target.colorTexture->GetDepthTexture();
             if (depthTexture != nullptr)
@@ -347,6 +409,7 @@ namespace ve
                 graphData.depth = frameGraph.ImportTexture(BuildIndexedResourceName("RendererDepth", viewIndex),
                                                            MakeTextureDesc(*depthTexture, MakeSampledDepthUsage()),
                                                            ImportedFrameGraphTexture{depthTexture, false});
+                frameRenderData_->RetainInFlightGpuFrameObject(target.colorTexture->GetDepthTextureShared());
             }
             else
             {

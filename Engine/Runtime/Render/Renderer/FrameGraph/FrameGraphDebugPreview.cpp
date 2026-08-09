@@ -99,7 +99,7 @@ namespace ve
             static_cast<rhi::RhiTextureUsage>(static_cast<UInt32>(rhi::RhiTextureUsage::Sampled) | static_cast<UInt32>(rhi::RhiTextureUsage::RenderTarget));
         textureDesc.debugName = debugName.c_str();
 
-        std::unique_ptr<rhi::RhiTexture> texture = device.CreateTexture(textureDesc);
+        std::shared_ptr<rhi::RhiTexture> texture = device.CreateTexture(textureDesc);
         if (texture == nullptr)
         {
             VE_LOG_ERROR("Failed to allocate frame graph debug preview texture '{}': {}",
@@ -123,18 +123,23 @@ namespace ve
         return texture_.get();
     }
 
+    std::shared_ptr<rhi::RhiTexture> FrameGraphDebugPreviewTexture::GetTextureShared() const noexcept
+    {
+        return texture_;
+    }
+
     void* FrameGraphDebugPreviewTexture::GetNativeSampledViewHandle() const noexcept
     {
         return nativeSampledViewHandle_.load(std::memory_order_acquire);
     }
 
-    void FrameGraphDebugPreviewTexture::Reset(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
+    void FrameGraphDebugPreviewTexture::Reset()
     {
         VE_ASSERT_RENDER_THREAD();
         nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
         if (texture_ != nullptr)
         {
-            retiredResources.push_back(std::move(texture_));
+            texture_.reset();
         }
     }
 
@@ -165,7 +170,8 @@ namespace ve
             return FailPreviewConversion(ErrorCode::InvalidState, "the frame ShaderManager is unavailable.");
         }
 
-        const std::string passName = mode == FrameGraphDebugPreviewMode::Color ? "Color" : mode == FrameGraphDebugPreviewMode::Depth ? "Depth" : "UnsignedInteger";
+        const std::string passName =
+            mode == FrameGraphDebugPreviewMode::Color ? "Color" : mode == FrameGraphDebugPreviewMode::Depth ? "Depth" : "UnsignedInteger";
         if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->frameGraphDebugPreview == nullptr)
         {
             return FailPreviewConversion(ErrorCode::InvalidState, "the frame graph preview shader resource is unavailable.");

@@ -118,13 +118,8 @@ namespace ve
 
         VE_ASSERT(frameData.device != nullptr);
         VE_ASSERT(frameData.mainSwapchain != nullptr);
-        std::vector<std::unique_ptr<rhi::RhiObject>> retiredResources;
         RenderTextureDesc desc = BuildSceneColorTextureDesc(*frameData.mainSwapchain);
-        sceneColorTexture_->InitRenderResource(*frameData.device, std::move(desc), retiredResources);
-        for (std::unique_ptr<rhi::RhiObject>& resource : retiredResources)
-        {
-            frameData.RetainTransientResource(std::move(resource));
-        }
+        sceneColorTexture_->InitRenderResource(*frameData.device, std::move(desc));
     }
 
 } // namespace ve

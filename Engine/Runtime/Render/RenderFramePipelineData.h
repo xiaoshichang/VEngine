@@ -9,7 +9,6 @@ namespace ve
 {
     class ShaderManager;
     class FrameContext;
-    class FrameGraphTransientResourcePool;
     struct FrameGraphDebugFrameCapture;
     class RTCamera;
     class RTRenderItem;
@@ -42,9 +41,7 @@ namespace ve
         const BuiltInShaderResources* builtInShaderResources = nullptr;
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
-        [[nodiscard]] FrameGraphTransientResourcePool& GetFrameGraphTransientResourcePool() const;
-        void RetainTransientResource(std::unique_ptr<rhi::RhiObject> resource) const;
-        void RetainSubmittedFrameObject(std::shared_ptr<const void> object) const;
+        void RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object) const;
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size) const;
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene) const;
         [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const;

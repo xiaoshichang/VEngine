@@ -70,19 +70,19 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] rhi::RhiTexture* GetTexture() noexcept;
         [[nodiscard]] const rhi::RhiTexture* GetTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<rhi::RhiTexture> GetTextureShared() const noexcept;
         [[nodiscard]] rhi::RhiTexture* GetDepthTexture() noexcept;
         [[nodiscard]] const rhi::RhiTexture* GetDepthTexture() const noexcept;
+        [[nodiscard]] std::shared_ptr<rhi::RhiTexture> GetDepthTextureShared() const noexcept;
         [[nodiscard]] void* GetRenderResourceViewHandle() const noexcept;
 
-        void InitRenderResource(rhi::RhiDevice& device,
-                                RenderTextureDesc desc,
-                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
-        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
+        void InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc);
+        void ResetRenderResource() noexcept;
 
     private:
         RenderTextureDesc desc_;
-        std::unique_ptr<rhi::RhiTexture> texture_;
-        std::unique_ptr<rhi::RhiTexture> depthTexture_;
+        std::shared_ptr<rhi::RhiTexture> texture_;
+        std::shared_ptr<rhi::RhiTexture> depthTexture_;
         std::atomic<void*> nativeSampledViewHandle_{nullptr};
     };
 } // namespace ve

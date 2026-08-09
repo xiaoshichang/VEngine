@@ -149,6 +149,11 @@ namespace ve
         return texture_.get();
     }
 
+    std::shared_ptr<rhi::RhiTexture> RTRenderTexture::GetTextureShared() const noexcept
+    {
+        return texture_;
+    }
+
     rhi::RhiTexture* RTRenderTexture::GetDepthTexture() noexcept
     {
         return depthTexture_.get();
@@ -159,14 +164,17 @@ namespace ve
         return depthTexture_.get();
     }
 
+    std::shared_ptr<rhi::RhiTexture> RTRenderTexture::GetDepthTextureShared() const noexcept
+    {
+        return depthTexture_;
+    }
+
     void* RTRenderTexture::GetRenderResourceViewHandle() const noexcept
     {
         return nativeSampledViewHandle_.load(std::memory_order_acquire);
     }
 
-    void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device,
-                                             RenderTextureDesc desc,
-                                             std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
+    void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
@@ -178,11 +186,11 @@ namespace ve
         {
             if (texture_ != nullptr)
             {
-                retiredResources.push_back(std::move(texture_));
+                texture_.reset();
             }
             if (depthTexture_ != nullptr)
             {
-                retiredResources.push_back(std::move(depthTexture_));
+                depthTexture_.reset();
             }
             nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
         }
@@ -208,16 +216,16 @@ namespace ve
         }
     }
 
-    void RTRenderTexture::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
+    void RTRenderTexture::ResetRenderResource() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
         if (texture_ != nullptr)
         {
-            retiredResources.push_back(std::move(texture_));
+            texture_.reset();
         }
         if (depthTexture_ != nullptr)
         {
-            retiredResources.push_back(std::move(depthTexture_));
+            depthTexture_.reset();
         }
         nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
     }

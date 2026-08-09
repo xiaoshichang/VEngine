@@ -186,7 +186,7 @@ namespace ve
         commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(RTMeshVertex), 0);
         commandList.Draw(12, 0);
 
-        context.frameData.RetainTransientResource(std::move(vertexBuffer_));
+        context.frameData.RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject>(std::move(vertexBuffer_)));
     }
 
     void SceneGridRenderPass::EnsureResources(RenderPassContext& context)
