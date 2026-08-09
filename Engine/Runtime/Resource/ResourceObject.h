@@ -5,6 +5,7 @@
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Resource/AssetRecord.h"
 #include "Engine/Runtime/Resource/MaterialProperty.h"
+#include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/Renderer/RenderQueue.h"
 
 #include <cstddef>
@@ -17,9 +18,6 @@ namespace ve
     class RenderSystem;
     class ResourceLoadContext;
     class RTMaterialResource;
-    struct RTMaterialResourceDesc;
-    class RTMeshResource;
-    class RTShaderResource;
 
     class ResourceObject : public NonMovable
     {
@@ -100,6 +98,7 @@ namespace ve
         std::shared_ptr<RTShaderResource> rtShaderResource_;
     };
 
+    /// Scene Thread shader asset that owns the CPU description and directly references its RTShaderResource mapping.
     class ShaderResource final : public ResourceObject
     {
     public:
@@ -118,6 +117,7 @@ namespace ve
         std::string text_;
         std::string reflectionText_;
         ShaderMaterialLayout materialLayout_;
+        RTShaderResourceDesc renderResourceDesc_;
         std::shared_ptr<RTShaderResource> rtShaderResource_;
     };
 
@@ -138,9 +138,14 @@ namespace ve
         TextureResource(AssetRecord record, std::vector<std::byte> bytes);
 
         [[nodiscard]] const std::vector<std::byte>& GetBytes() const noexcept;
+        [[nodiscard]] std::shared_ptr<RTTextureResource> GetRTTextureResource() const noexcept;
+
+        void InitRenderResource(RenderSystem& renderSystem) override;
+        void ReleaseRenderResource(RenderSystem& renderSystem) noexcept override;
 
     private:
         std::vector<std::byte> bytes_;
+        std::shared_ptr<RTTextureResource> rtTextureResource_;
     };
 
     template<typename TResource>

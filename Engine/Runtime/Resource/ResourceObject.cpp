@@ -631,13 +631,14 @@ namespace ve
         }
 
         materialLayout_ = materialLayout.MoveValue();
-        rtShaderResource_ = std::make_shared<RTShaderResource>(desc.MoveValue());
+        renderResourceDesc_ = desc.MoveValue();
+        rtShaderResource_ = std::make_shared<RTShaderResource>(renderResourceDesc_);
         return Error();
     }
 
     void ShaderResource::InitRenderResource(RenderSystem& renderSystem)
     {
-        renderSystem.InitRenderResource(rtShaderResource_, rtShaderResource_->GetDesc());
+        renderSystem.InitRenderResource(rtShaderResource_, renderResourceDesc_);
     }
 
     void ShaderResource::ReleaseRenderResource(RenderSystem& renderSystem) noexcept
@@ -666,11 +667,37 @@ namespace ve
     TextureResource::TextureResource(AssetRecord record, std::vector<std::byte> bytes)
         : ResourceObject(std::move(record))
         , bytes_(std::move(bytes))
+        , rtTextureResource_(std::make_shared<RTTextureResource>(RTTextureResourceDesc{}))
     {
     }
 
     const std::vector<std::byte>& TextureResource::GetBytes() const noexcept
     {
         return bytes_;
+    }
+
+    std::shared_ptr<RTTextureResource> TextureResource::GetRTTextureResource() const noexcept
+    {
+        return rtTextureResource_;
+    }
+
+    void TextureResource::InitRenderResource(RenderSystem& renderSystem)
+    {
+        RTTextureResourceDesc desc;
+        desc.name = GetRuntimePath().GetString();
+        desc.initialData = bytes_;
+        renderSystem.InitRenderResource(rtTextureResource_, std::move(desc));
+    }
+
+    void TextureResource::ReleaseRenderResource(RenderSystem& renderSystem) noexcept
+    {
+        try
+        {
+            renderSystem.ReleaseRenderResource(rtTextureResource_);
+        }
+        catch (...)
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "TextureResource failed to enqueue render resource release.");
+        }
     }
 } // namespace ve

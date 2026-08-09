@@ -527,6 +527,8 @@ Responsibilities:
 - Storing the `AssetRecord` on each loaded `ResourceObject` so dependencies remain visible to resource lifetime logic.
 - Resource object caching, request/release reference counting, and root-reachability collection.
 - Preserving render-thread resource creation hooks through the Render command queue when a resource needs GPU state.
+- Owning `BuiltInShaderLibrary`, which keeps the engine's builtin `AssetRef<ShaderResource>` handles alive for the
+  engine runtime and releases them from the Scene Thread shutdown hook immediately before `ResourceSystem` shuts down.
 
 Asset indexing and manifest ownership live above the loaded-resource layer:
 
@@ -551,6 +553,17 @@ explicitly through `ResourceSystem::EnsureRenderResource(assetRef, renderSystem)
 path, such as during Scene construction for mesh and material components. `ResourceSystem` initializes dependency render
 resources before the requested resource, tracks whether init commands have been queued, and releases a resource's render
 state before releasing its dependency references when the CPU reference count reaches zero.
+
+`ShaderResource` is the Scene Thread representation of a shader asset. It owns the CPU-side shader description and
+directly holds `shared_ptr<RTShaderResource>`; materials may reference that mapping, but a ShaderResource does not depend
+on a MaterialResource. `BuiltInShaderLibrary` is a ResourceSystem submodule that requests the builtin ShaderResources
+through the active editor or player `IAssetRecordProvider`, initializes their RT mappings, and publishes an immutable
+`BuiltInShaderResources` set to frame pipelines. Editor shells include editor-only shaders, while Player shells load only
+runtime shaders. The library is initialized after ResourceSystem and the environment-specific asset provider are ready,
+before a scene that consumes those shaders enters its render loop, and its AssetRefs remain alive until ResourceSystem
+shutdown begins. The Scene Thread shutdown hook releases those AssetRefs, queues their RT resource release commands,
+and flushes the Render Thread before the Scene Thread identity is unregistered; `ResourceSystem::Shutdown()` then
+verifies that the library has already been shut down.
 
 Editor resource lifetime follows root-reachability collection using active root `AssetID` values from the active scene,
 selection state, previews, thumbnails, and importer views. Player resource lifetime is normally expressed by owning
@@ -605,7 +618,8 @@ Render-facing resource ownership follows an Unreal-style split between the Scene
 
 - Scene Thread owns CPU-side render objects such as `RenderTarget`, `RenderTexture`, future mesh render data, material
   state, texture resources, and viewport state.
-- Render Thread owns matching render proxies whose type names use an `RT` prefix, such as `RTRenderTexture`.
+- Render Thread owns matching render proxies whose type names use an `RT` prefix, such as `RTRenderTexture` and
+  `RTTextureResource`.
 - CPU-side render objects may keep a `std::shared_ptr` to their RT proxy so the Render Thread can finish already
   queued work after the Scene Thread object is destroyed.
 - Objects with RT proxies must not call RHI directly from the Scene Thread. They initialize or update render-side state
@@ -624,10 +638,18 @@ Scene Thread:
     Holds shared_ptr<RTRenderTexture>.
     Calls InitRenderResource(RenderSystem&) when RHI-backed state is needed.
 
+  TextureResource
+    Holds source texture bytes and shared_ptr<RTTextureResource>.
+    Calls InitRenderResource(RenderSystem&) when the texture needs an RHI mapping.
+
 Render Thread:
   RTRenderTexture
     Owns RHI texture, render target view, and sampled/resource view references.
     Receives initialization and release commands.
+
+  RTTextureResource
+    Owns the RHI texture for a TextureResource.
+    Receives initialization and release commands through RenderSystem.
 ```
 
 This model lets Scene Thread code keep ordinary CPU descriptions while Render Thread code owns the backend-specific

@@ -44,7 +44,7 @@ namespace ve
         std::function<void(const OSEvent& event)> runtimeOSEventCallback;
         std::shared_ptr<RTRenderTexture> playerSceneColorTexture;
         std::shared_ptr<RenderViewState> playerViewState;
-        std::shared_ptr<const RenderShaderResources> renderShaderResources;
+        std::shared_ptr<const BuiltInShaderResources> builtInShaderResources;
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
@@ -200,7 +200,7 @@ namespace ve
             PlayerRenderFramePipelineInitParam pipelineInitParam = {};
             pipelineInitParam.sceneRenderer = std::move(rendererInitParam);
             pipelineInitParam.sceneColorTexture = impl.playerSceneColorTexture;
-            pipelineInitParam.shaderResources = impl.renderShaderResources;
+            pipelineInitParam.builtInShaderResources = impl.builtInShaderResources;
             return std::make_shared<PlayerRenderFramePipeline>(std::move(pipelineInitParam));
         }
 
@@ -285,7 +285,7 @@ namespace ve
                 impl.scene->Clear();
             }
             impl.scene = nullptr;
-            impl.renderShaderResources.reset();
+            impl.builtInShaderResources.reset();
             if (impl.runtimeShutdownCallback != nullptr)
             {
                 impl.runtimeShutdownCallback();
@@ -741,14 +741,14 @@ namespace ve
         impl_->runtimeOSEventCallback = std::move(callback);
     }
 
-    void SceneSystem::SetRenderShaderResources(std::shared_ptr<const RenderShaderResources> resources) noexcept
+    void SceneSystem::SetBuiltInShaderResources(std::shared_ptr<const BuiltInShaderResources> resources) noexcept
     {
-        impl_->renderShaderResources = std::move(resources);
+        impl_->builtInShaderResources = std::move(resources);
     }
 
-    std::shared_ptr<const RenderShaderResources> SceneSystem::GetRenderShaderResources() const noexcept
+    std::shared_ptr<const BuiltInShaderResources> SceneSystem::GetBuiltInShaderResources() const noexcept
     {
-        return impl_->renderShaderResources;
+        return impl_->builtInShaderResources;
     }
 
     void SceneSystem::StartLoop() noexcept

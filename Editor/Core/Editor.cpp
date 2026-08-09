@@ -12,7 +12,7 @@
 #include "Engine/Runtime/Core/Result.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Render/RenderShaderResources.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
 #include "Engine/Runtime/Scene/MeshRenderComponent.h"
 #include "Engine/Runtime/Scene/SceneSerialization.h"
@@ -270,7 +270,10 @@ namespace ve::editor
             .onShutdown = [this]()
             {
                 ShutdownSceneThreadState();
-                renderShaderResourceLibrary_.Shutdown();
+                if (runtime_ != nullptr)
+                {
+                    runtime_->GetResourceSystem().ShutdownBuiltInShaderLibrary();
+                }
             },
         });
 
@@ -324,7 +327,7 @@ namespace ve::editor
 
         EditorRenderFramePipelineInitParam pipelineInitParam = {};
         pipelineInitParam.renderer.viewFamily.scene = renderScene;
-        pipelineInitParam.shaderResources = sceneSystem_ != nullptr ? sceneSystem_->GetRenderShaderResources() : nullptr;
+        pipelineInitParam.builtInShaderResources = sceneSystem_ != nullptr ? sceneSystem_->GetBuiltInShaderResources() : nullptr;
         if (views.sceneViewTexture != nullptr)
         {
             pipelineInitParam.retainedRenderTextures.push_back(views.sceneViewTexture);
@@ -555,7 +558,6 @@ namespace ve::editor
             renderSystem_->WaitIdle();
         }
         gizmoRenderResources_.reset();
-        renderShaderResourceLibrary_.Shutdown();
 
         for (std::shared_ptr<EditorFrameDrawData>& snapshot : imguiDrawDataSnapshots_)
         {
@@ -920,11 +922,9 @@ namespace ve::editor
         if (sceneSystem_ != nullptr)
         {
             sceneSystem_->UnloadActiveScene();
-            sceneSystem_->SetRenderShaderResources(nullptr);
         }
 
         resourceLoader_.Shutdown();
-        renderShaderResourceLibrary_.Shutdown();
         assetDatabase_.Shutdown();
         scriptDatabase_.Clear();
         currentProjectPath_.clear();
@@ -1212,15 +1212,19 @@ namespace ve::editor
         // 4. Activate project roots after asset services are valid and before ResourceSystem reads scene payloads.
         ActivateOpenProjectContext(std::move(projectPath), projectRoot, descriptorResult.GetValue());
 
-        Error renderShaderResult = renderShaderResourceLibrary_.Initialize(RenderShaderResourceLibraryInitParam{
-            runtime_->GetResourceSystem(), assetDatabase_, runtime_->GetRenderSystem(), true, false});
-        if (!renderShaderResult.IsOk())
+        ResourceSystem& resourceSystem = runtime_->GetResourceSystem();
+        if (!resourceSystem.IsBuiltInShaderLibraryInitialized())
         {
-            VE_LOG_ERROR_CATEGORY("Editor", "Failed to initialize builtin render shaders: {}", renderShaderResult.GetMessage());
-            ShutdownOpenProjectState();
-            return;
+            Error builtInShaderResult = resourceSystem.InitializeBuiltInShaderLibrary(BuiltInShaderLibraryInitParam{
+                assetDatabase_, runtime_->GetRenderSystem(), BuiltInShaderEnvironment::Editor, false});
+            if (!builtInShaderResult.IsOk())
+            {
+                VE_LOG_ERROR_CATEGORY("Editor", "Failed to initialize BuiltInShaderLibrary: {}", builtInShaderResult.GetMessage());
+                ShutdownOpenProjectState();
+                return;
+            }
         }
-        sceneSystem_->SetRenderShaderResources(renderShaderResourceLibrary_.GetResources());
+        sceneSystem_->SetBuiltInShaderResources(resourceSystem.GetBuiltInShaderResources());
 
         // 5. Compile and load C# scripts before scene construction so DotnetScriptableComponent can bind instances.
         RecompileScripts();

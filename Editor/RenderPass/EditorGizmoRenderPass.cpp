@@ -8,7 +8,7 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Render/RenderShaderResources.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -195,13 +195,13 @@ namespace ve
             FailEditorGizmoPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        if (context.frameData.shaderResources == nullptr || context.frameData.shaderResources->editorGizmoLine == nullptr ||
-            context.frameData.shaderResources->editorGizmoIcon == nullptr)
+        if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->editorGizmoLine == nullptr ||
+            context.frameData.builtInShaderResources->editorGizmoIcon == nullptr)
         {
             FailEditorGizmoPass("the editor gizmo shader resources are unavailable.");
         }
-        const RTShaderPass* lineShaderPass = context.frameData.shaderResources->editorGizmoLine->GetPass("Internal");
-        const RTShaderPass* iconShaderPass = context.frameData.shaderResources->editorGizmoIcon->GetPass("Internal");
+        const RTShaderPass* lineShaderPass = context.frameData.builtInShaderResources->editorGizmoLine->GetPass("Internal");
+        const RTShaderPass* iconShaderPass = context.frameData.builtInShaderResources->editorGizmoIcon->GetPass("Internal");
         if (lineShaderPass == nullptr || iconShaderPass == nullptr || lineShaderPass->GetVertexShader() == nullptr ||
             lineShaderPass->GetFragmentShader() == nullptr || iconShaderPass->GetVertexShader() == nullptr || iconShaderPass->GetFragmentShader() == nullptr)
         {

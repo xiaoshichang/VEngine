@@ -113,6 +113,73 @@ namespace ve
         }
     }
 
+    RTTextureResource::RTTextureResource(RTTextureResourceDesc desc)
+        : desc_(std::move(desc))
+    {
+    }
+
+    const RTTextureResourceDesc& RTTextureResource::GetDesc() const noexcept
+    {
+        return desc_;
+    }
+
+    bool RTTextureResource::IsInitialized() const noexcept
+    {
+        return texture_ != nullptr;
+    }
+
+    rhi::RhiTexture* RTTextureResource::GetTexture() noexcept
+    {
+        return texture_.get();
+    }
+
+    const rhi::RhiTexture* RTTextureResource::GetTexture() const noexcept
+    {
+        return texture_.get();
+    }
+
+    void RTTextureResource::InitRenderResource(rhi::RhiDevice& device,
+                                               RTTextureResourceDesc desc,
+                                               std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources)
+    {
+        VE_ASSERT_RENDER_THREAD();
+
+        ResetRenderResource(retiredResources);
+        desc_ = std::move(desc);
+        if (desc_.width == 0 || desc_.height == 0)
+        {
+            return;
+        }
+
+        rhi::RhiTextureDesc textureDesc = {};
+        textureDesc.dimension = rhi::RhiTextureDimension::Texture2D;
+        textureDesc.width = desc_.width;
+        textureDesc.height = desc_.height;
+        textureDesc.depth = desc_.depth;
+        textureDesc.mipLevelCount = desc_.mipLevelCount;
+        textureDesc.format = desc_.format;
+        textureDesc.usage = desc_.usage;
+        textureDesc.debugName = desc_.name.c_str();
+        if (!desc_.initialData.empty() && desc_.initialDataRowPitch != 0)
+        {
+            textureDesc.initialData = desc_.initialData.data();
+            textureDesc.initialDataSize = desc_.initialData.size();
+            textureDesc.initialDataRowPitch = desc_.initialDataRowPitch;
+        }
+
+        texture_ = device.CreateTexture(textureDesc);
+        VE_ASSERT_MESSAGE(texture_ != nullptr, "RTTextureResource failed to create texture.");
+    }
+
+    void RTTextureResource::ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        if (texture_ != nullptr)
+        {
+            retiredResources.push_back(std::move(texture_));
+        }
+    }
+
     RTShaderResource::RTShaderResource(RTShaderResourceDesc desc)
         : desc_(std::move(desc))
     {

@@ -1,4 +1,4 @@
-#include "Engine/Runtime/Render/RenderShaderResources.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 
 #include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Resource/AssetRecord.h"
@@ -31,7 +31,7 @@ namespace ve
             if (!result)
             {
                 return Error(result.GetError().GetCode(),
-                             "Failed to load render shader resource '" + std::string(runtimePath) + "': " + result.GetError().GetMessage());
+                             "Failed to load builtin shader resource '" + std::string(runtimePath) + "': " + result.GetError().GetMessage());
             }
 
             assetRef = result.MoveValue();
@@ -39,40 +39,60 @@ namespace ve
             renderResource = assetRef.Get()->GetRTShaderResource();
             if (renderResource == nullptr)
             {
-                return Error(ErrorCode::InvalidState, "Render shader resource has no render-thread proxy: " + std::string(runtimePath));
+                return Error(ErrorCode::InvalidState, "Builtin ShaderResource has no render-thread proxy: " + std::string(runtimePath));
             }
 
             return Error();
         }
     } // namespace
 
-    RenderShaderResourceLibrary::~RenderShaderResourceLibrary()
+    BuiltInShaderLibrary::~BuiltInShaderLibrary()
     {
         Shutdown();
     }
 
-    Error RenderShaderResourceLibrary::Initialize(const RenderShaderResourceLibraryInitParam& initParam)
+    Error BuiltInShaderLibrary::Initialize(ResourceSystem& resourceSystem, const BuiltInShaderLibraryInitParam& initParam)
     {
         if (IsInitialized())
         {
-            return Error(ErrorCode::InvalidState, "RenderShaderResourceLibrary is already initialized.");
+            return Error(ErrorCode::InvalidState, "BuiltInShaderLibrary is already initialized.");
         }
 
-        auto resources = std::make_shared<RenderShaderResources>();
-        const auto loadShader = [&initParam](const char* runtimePath,
-                                             AssetRef<ShaderResource>& assetRef,
-                                             std::shared_ptr<RTShaderResource>& renderResource)
+        auto resources = std::make_shared<BuiltInShaderResources>();
+        const auto loadShader = [&resourceSystem, &initParam](const char* runtimePath,
+                                                              AssetRef<ShaderResource>& assetRef,
+                                                              std::shared_ptr<RTShaderResource>& renderResource)
         {
-            return LoadShader(initParam.resourceSystem, initParam.assetProvider, initParam.renderSystem, runtimePath, assetRef, renderResource);
+            return LoadShader(resourceSystem, initParam.assetProvider, initParam.renderSystem, runtimePath, assetRef, renderResource);
         };
 
         Error result = loadShader(VirtualShadowPath, virtualShadow_, resources->virtualShadow);
-        if (result.IsOk() && initParam.includeDebugShaders) result = loadShader(FrameGraphDebugPreviewPath, frameGraphDebugPreview_, resources->frameGraphDebugPreview);
-        if (result.IsOk() && initParam.includeDebugShaders) result = loadShader(ShadowCasterDirtyDebugPath, shadowCasterDirtyDebug_, resources->shadowCasterDirtyDebug);
-        if (result.IsOk() && initParam.includeDebugShaders) result = loadShader(VirtualShadowRedrawPageDebugPath, virtualShadowRedrawPageDebug_, resources->virtualShadowRedrawPageDebug);
-        if (result.IsOk() && initParam.includeEditorShaders) result = loadShader(SceneGridPath, sceneGrid_, resources->sceneGrid);
-        if (result.IsOk() && initParam.includeEditorShaders) result = loadShader(EditorGizmoLinePath, editorGizmoLine_, resources->editorGizmoLine);
-        if (result.IsOk() && initParam.includeEditorShaders) result = loadShader(EditorGizmoIconPath, editorGizmoIcon_, resources->editorGizmoIcon);
+        if (result.IsOk() && initParam.includeDebugShaders)
+        {
+            result = loadShader(FrameGraphDebugPreviewPath, frameGraphDebugPreview_, resources->frameGraphDebugPreview);
+        }
+        if (result.IsOk() && initParam.includeDebugShaders)
+        {
+            result = loadShader(ShadowCasterDirtyDebugPath, shadowCasterDirtyDebug_, resources->shadowCasterDirtyDebug);
+        }
+        if (result.IsOk() && initParam.includeDebugShaders)
+        {
+            result = loadShader(VirtualShadowRedrawPageDebugPath, virtualShadowRedrawPageDebug_, resources->virtualShadowRedrawPageDebug);
+        }
+
+        const bool includeEditorShaders = initParam.environment == BuiltInShaderEnvironment::Editor;
+        if (result.IsOk() && includeEditorShaders)
+        {
+            result = loadShader(SceneGridPath, sceneGrid_, resources->sceneGrid);
+        }
+        if (result.IsOk() && includeEditorShaders)
+        {
+            result = loadShader(EditorGizmoLinePath, editorGizmoLine_, resources->editorGizmoLine);
+        }
+        if (result.IsOk() && includeEditorShaders)
+        {
+            result = loadShader(EditorGizmoIconPath, editorGizmoIcon_, resources->editorGizmoIcon);
+        }
         if (!result.IsOk())
         {
             Shutdown();
@@ -83,7 +103,7 @@ namespace ve
         return Error();
     }
 
-    void RenderShaderResourceLibrary::Shutdown() noexcept
+    void BuiltInShaderLibrary::Shutdown() noexcept
     {
         resources_.reset();
         editorGizmoIcon_.Reset();
@@ -95,12 +115,12 @@ namespace ve
         virtualShadow_.Reset();
     }
 
-    bool RenderShaderResourceLibrary::IsInitialized() const noexcept
+    bool BuiltInShaderLibrary::IsInitialized() const noexcept
     {
         return resources_ != nullptr;
     }
 
-    std::shared_ptr<const RenderShaderResources> RenderShaderResourceLibrary::GetResources() const noexcept
+    std::shared_ptr<const BuiltInShaderResources> BuiltInShaderLibrary::GetResources() const noexcept
     {
         return resources_;
     }

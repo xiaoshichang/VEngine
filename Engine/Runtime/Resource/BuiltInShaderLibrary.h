@@ -14,7 +14,7 @@ namespace ve
     class RTShaderResource;
     class ShaderResource;
 
-    struct RenderShaderResources
+    struct BuiltInShaderResources
     {
         std::shared_ptr<RTShaderResource> virtualShadow;
         std::shared_ptr<RTShaderResource> frameGraphDebugPreview;
@@ -25,27 +25,32 @@ namespace ve
         std::shared_ptr<RTShaderResource> editorGizmoIcon;
     };
 
-    struct RenderShaderResourceLibraryInitParam
+    enum class BuiltInShaderEnvironment
     {
-        ResourceSystem& resourceSystem;
+        Player,
+        Editor,
+    };
+
+    struct BuiltInShaderLibraryInitParam
+    {
         const IAssetRecordProvider& assetProvider;
         RenderSystem& renderSystem;
-        bool includeEditorShaders = false;
+        BuiltInShaderEnvironment environment = BuiltInShaderEnvironment::Player;
         bool includeDebugShaders = false;
     };
 
-    /// Owns the AssetRefs that keep engine render-pass shaders loaded while frames use their RT resources.
-    class RenderShaderResourceLibrary final : public NonMovable
+    /// ResourceSystem-owned library that keeps builtin ShaderResources alive for the engine lifetime.
+    class BuiltInShaderLibrary final : public NonMovable
     {
     public:
-        RenderShaderResourceLibrary() = default;
-        ~RenderShaderResourceLibrary();
+        BuiltInShaderLibrary() = default;
+        ~BuiltInShaderLibrary();
 
-        [[nodiscard]] Error Initialize(const RenderShaderResourceLibraryInitParam& initParam);
+        [[nodiscard]] Error Initialize(ResourceSystem& resourceSystem, const BuiltInShaderLibraryInitParam& initParam);
         void Shutdown() noexcept;
 
         [[nodiscard]] bool IsInitialized() const noexcept;
-        [[nodiscard]] std::shared_ptr<const RenderShaderResources> GetResources() const noexcept;
+        [[nodiscard]] std::shared_ptr<const BuiltInShaderResources> GetResources() const noexcept;
 
     private:
         AssetRef<ShaderResource> virtualShadow_;
@@ -55,6 +60,6 @@ namespace ve
         AssetRef<ShaderResource> sceneGrid_;
         AssetRef<ShaderResource> editorGizmoLine_;
         AssetRef<ShaderResource> editorGizmoIcon_;
-        std::shared_ptr<RenderShaderResources> resources_;
+        std::shared_ptr<BuiltInShaderResources> resources_;
     };
 } // namespace ve

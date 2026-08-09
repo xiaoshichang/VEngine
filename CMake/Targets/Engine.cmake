@@ -65,7 +65,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.cpp
             Engine/Runtime/Render/Renderer/StandaloneRenderer.cpp
             Engine/Runtime/Render/ShaderManager.cpp
-            Engine/Runtime/Render/RenderShaderResources.cpp
             Engine/Runtime/Render/ViewportClient.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.cpp
             Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowFrameGraph.cpp
@@ -89,6 +88,7 @@ function(ve_add_engine)
             Engine/Runtime/Resource/AssetID.cpp
             Engine/Runtime/Resource/AssetRef.cpp
             Engine/Runtime/Resource/AssetManifest.cpp
+            Engine/Runtime/Resource/BuiltInShaderLibrary.cpp
             Engine/Runtime/Resource/MaterialProperty.cpp
             Engine/Runtime/Resource/ShaderPass.cpp
             Engine/Runtime/Resource/ResourceObject.cpp
@@ -195,7 +195,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/Renderer/RenderPass/VirtualShadowRedrawPageDebugPass.h
             Engine/Runtime/Render/Renderer/StandaloneRenderer.h
             Engine/Runtime/Render/ShaderManager.h
-            Engine/Runtime/Render/RenderShaderResources.h
             Engine/Runtime/Render/ViewportClient.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowClipmap.h
             Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h
@@ -212,6 +211,7 @@ function(ve_add_engine)
             Engine/Runtime/Resource/AssetRecord.h
             Engine/Runtime/Resource/AssetRef.h
             Engine/Runtime/Resource/AssetManifest.h
+            Engine/Runtime/Resource/BuiltInShaderLibrary.h
             Engine/Runtime/Resource/MaterialProperty.h
             Engine/Runtime/Resource/ShaderPass.h
             Engine/Runtime/Resource/ResourceObject.h

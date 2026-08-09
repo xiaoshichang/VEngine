@@ -5,7 +5,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
-#include "Engine/Runtime/Render/RenderShaderResources.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPasses.h"
@@ -25,11 +25,11 @@ namespace ve
             {
                 return cached;
             }
-            if (frameData.shaderResources == nullptr || frameData.shaderResources->virtualShadow == nullptr)
+            if (frameData.builtInShaderResources == nullptr || frameData.builtInShaderResources->virtualShadow == nullptr)
             {
                 FailVirtualShadow("VSM render shader resource is unavailable.");
             }
-            const RTShaderPass* shaderPass = frameData.shaderResources->virtualShadow->GetPass("VirtualShadowStep7_RenderCasters");
+            const RTShaderPass* shaderPass = frameData.builtInShaderResources->virtualShadow->GetPass("VirtualShadowStep7_RenderCasters");
             if (shaderPass == nullptr || shaderPass->GetVertexShader() == nullptr || shaderPass->GetFragmentShader() == nullptr)
             {
                 FailVirtualShadow("VSM Step7_RenderCasters shader pass is unavailable.");

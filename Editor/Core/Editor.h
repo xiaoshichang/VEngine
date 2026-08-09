@@ -15,7 +15,6 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
-#include "Engine/Runtime/Render/RenderShaderResources.h"
 
 #include <array>
 #include <atomic>
@@ -167,7 +166,6 @@ namespace ve::editor
         std::unique_ptr<EditorRenderBackend> editorRenderBackend_;
         std::array<std::shared_ptr<EditorFrameDrawData>, 2> imguiDrawDataSnapshots_;
         std::shared_ptr<ve::EditorGizmoRenderResources> gizmoRenderResources_;
-        RenderShaderResourceLibrary renderShaderResourceLibrary_;
         mutable std::mutex imguiContextMutex_;
         UInt32 nextImGuiDrawDataSnapshotIndex_ = 0;
         bool waitForImGuiTextureUpdates_ = false;

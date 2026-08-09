@@ -351,7 +351,7 @@ namespace ve
             {
                 frameData.frameGraphDebugCapture = &debugCapture;
             }
-            frameData.shaderResources = framePipeline->GetShaderResources();
+            frameData.builtInShaderResources = framePipeline->GetBuiltInShaderResources();
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
             framePipeline->RenderFrame(frameData);
             impl.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);
@@ -915,6 +915,19 @@ namespace ve
                        });
     }
 
+    void RenderSystem::InitRenderResource(std::shared_ptr<RTTextureResource> textureResource, RTTextureResourceDesc desc)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(textureResource != nullptr, "RenderSystem::InitRenderResource requires a texture resource.");
+
+        EnqueueCommand("RenderSystemInitTextureResource",
+                       [this, textureResource = std::move(textureResource), desc = std::move(desc)]() mutable
+                       {
+                           VE_ASSERT(impl_->device != nullptr);
+                           textureResource->InitRenderResource(*impl_->device, std::move(desc), impl_->pendingRetiredResources);
+                       });
+    }
+
     void RenderSystem::InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource, RTMaterialResourceDesc desc)
     {
         VE_ASSERT_SCENE_THREAD();
@@ -974,6 +987,16 @@ namespace ve
 
         EnqueueCommand("RenderSystemReleaseShaderResource",
                        [this, shaderResource = std::move(shaderResource)]() { shaderResource->ResetRenderResource(impl_->pendingRetiredResources); });
+    }
+
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTTextureResource> textureResource)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(textureResource != nullptr, "RenderSystem::ReleaseRenderResource requires a texture resource.");
+
+        EnqueueCommand("RenderSystemReleaseTextureResource",
+                       [this, textureResource = std::move(textureResource)]()
+                       { textureResource->ResetRenderResource(impl_->pendingRetiredResources); });
     }
 
     void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline)

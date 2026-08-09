@@ -31,7 +31,9 @@ Recommended naming:
 
 - Scene Thread CPU description: `RenderTarget`
 - Scene Thread texture-backed resource object: `RenderTexture`
+- Scene Thread asset resource object: `TextureResource`
 - Render Thread texture proxy object: `RTRenderTexture`
+- Render Thread asset texture proxy object: `RTTextureResource`
 - Any Render Thread proxy class should use an `RT` prefix to make the ownership boundary obvious in code review and
   debugging.
 
@@ -39,6 +41,8 @@ Ownership rules:
 
 - Scene Thread objects describe logical render state such as binding kind, extent, format, and editor-facing metadata.
 - RT proxy objects own live RHI resources and any render-thread-only handles.
+- Each asset-side `ResourceObject` with render data owns or references its matching `RTResource`; for example,
+  `TextureResource` owns an `RTTextureResource` that owns one `RhiTexture`.
 - Scene Thread objects may hold `std::shared_ptr` to their RT proxy so render commands already in flight can keep the RT
   proxy alive after the CPU object is destroyed.
 - RT proxy destruction must be safe after the Scene Thread object has been released.
@@ -218,7 +222,7 @@ The command queue is a lock-free MPSC queue:
 ```text
 Many producers:
   Game Thread
-  ResourceSystem
+  ResourceSystem and BuiltInShaderLibrary
   JobSystem worker jobs
   tests
 

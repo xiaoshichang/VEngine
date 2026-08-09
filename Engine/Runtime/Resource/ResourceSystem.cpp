@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/Render/RenderSystem.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
 #include <memory>
@@ -24,6 +25,7 @@ namespace ve
 
     void ResourceSystem::Shutdown() noexcept
     {
+        VE_ASSERT_MESSAGE(!builtInShaderLibrary_.IsInitialized(), "BuiltInShaderLibrary must be shut down on the Scene Thread before ResourceSystem.");
         ClearCache();
         projectRoot_ = Path();
         initialized_ = false;
@@ -42,6 +44,32 @@ namespace ve
     const Path& ResourceSystem::GetProjectRoot() const noexcept
     {
         return projectRoot_;
+    }
+
+    Error ResourceSystem::InitializeBuiltInShaderLibrary(const BuiltInShaderLibraryInitParam& initParam)
+    {
+        if (!initialized_)
+        {
+            return Error(ErrorCode::InvalidState, "ResourceSystem must be initialized before BuiltInShaderLibrary.");
+        }
+
+        return builtInShaderLibrary_.Initialize(*this, initParam);
+    }
+
+    void ResourceSystem::ShutdownBuiltInShaderLibrary() noexcept
+    {
+        VE_ASSERT_SCENE_THREAD();
+        builtInShaderLibrary_.Shutdown();
+    }
+
+    bool ResourceSystem::IsBuiltInShaderLibraryInitialized() const noexcept
+    {
+        return builtInShaderLibrary_.IsInitialized();
+    }
+
+    std::shared_ptr<const BuiltInShaderResources> ResourceSystem::GetBuiltInShaderResources() const noexcept
+    {
+        return builtInShaderLibrary_.GetResources();
     }
 
     void ResourceSystem::EnsureRenderResource(const AssetRefBase& assetRef, RenderSystem& renderSystem)

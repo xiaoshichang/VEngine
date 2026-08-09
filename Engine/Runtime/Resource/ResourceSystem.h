@@ -5,6 +5,7 @@
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Resource/AssetRecord.h"
 #include "Engine/Runtime/Resource/AssetRef.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Resource/ResourceObject.h"
 
 #include <memory>
@@ -58,6 +59,10 @@ namespace ve
 
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] const Path& GetProjectRoot() const noexcept;
+        [[nodiscard]] Error InitializeBuiltInShaderLibrary(const BuiltInShaderLibraryInitParam& initParam);
+        void ShutdownBuiltInShaderLibrary() noexcept;
+        [[nodiscard]] bool IsBuiltInShaderLibraryInitialized() const noexcept;
+        [[nodiscard]] std::shared_ptr<const BuiltInShaderResources> GetBuiltInShaderResources() const noexcept;
 
         template<typename TResource>
         [[nodiscard]] Result<AssetRef<TResource>> Request(const AssetID& id, const IAssetRecordProvider& provider);
@@ -97,6 +102,7 @@ namespace ve
 
         Path projectRoot_;
         std::unordered_map<AssetID, LoadedResourceEntry> cache_;
+        BuiltInShaderLibrary builtInShaderLibrary_;
         bool initialized_ = false;
     };
 

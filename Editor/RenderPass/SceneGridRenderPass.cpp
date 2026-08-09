@@ -9,7 +9,7 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Render/RenderShaderResources.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -220,11 +220,11 @@ namespace ve
             FailSceneGridPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        if (context.frameData.shaderResources == nullptr || context.frameData.shaderResources->sceneGrid == nullptr)
+        if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->sceneGrid == nullptr)
         {
             FailSceneGridPass("the SceneGrid shader resource is unavailable.");
         }
-        const RTShaderPass* shaderPass = context.frameData.shaderResources->sceneGrid->GetPass("Internal");
+        const RTShaderPass* shaderPass = context.frameData.builtInShaderResources->sceneGrid->GetPass("Internal");
         if (shaderPass == nullptr || shaderPass->GetVertexShader() == nullptr || shaderPass->GetFragmentShader() == nullptr)
         {
             FailSceneGridPass("the SceneGrid shader pass is unavailable.");

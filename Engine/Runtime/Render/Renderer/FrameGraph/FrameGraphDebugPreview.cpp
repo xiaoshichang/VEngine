@@ -6,7 +6,7 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/RenderResource.h"
-#include "Engine/Runtime/Render/RenderShaderResources.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -166,11 +166,11 @@ namespace ve
         }
 
         const std::string passName = mode == FrameGraphDebugPreviewMode::Color ? "Color" : mode == FrameGraphDebugPreviewMode::Depth ? "Depth" : "UnsignedInteger";
-        if (context.frameData.shaderResources == nullptr || context.frameData.shaderResources->frameGraphDebugPreview == nullptr)
+        if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->frameGraphDebugPreview == nullptr)
         {
             return FailPreviewConversion(ErrorCode::InvalidState, "the frame graph preview shader resource is unavailable.");
         }
-        const RTShaderPass* shaderPass = context.frameData.shaderResources->frameGraphDebugPreview->GetPass(passName);
+        const RTShaderPass* shaderPass = context.frameData.builtInShaderResources->frameGraphDebugPreview->GetPass(passName);
         if (shaderPass == nullptr || shaderPass->GetVertexShader() == nullptr || shaderPass->GetFragmentShader() == nullptr)
         {
             return FailPreviewConversion(ErrorCode::InvalidState, "the frame graph preview shader pass is unavailable.");

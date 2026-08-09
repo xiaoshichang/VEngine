@@ -37,8 +37,8 @@ namespace ve
 
     struct RTRenderItemInitParam
     {
-        std::shared_ptr<RHIResource> meshResource;
-        std::shared_ptr<RHIResource> materialResource;
+        std::shared_ptr<RTResource> meshResource;
+        std::shared_ptr<RTResource> materialResource;
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
         Matrix44 localToWorld = Matrix44::Identity();
@@ -51,8 +51,8 @@ namespace ve
     struct RTRenderItemUpdateParam
     {
         RTRenderItemDirtyFlags dirtyFlags = RTRenderItemDirtyFlags::None;
-        std::shared_ptr<RHIResource> meshResource;
-        std::shared_ptr<RHIResource> materialResource;
+        std::shared_ptr<RTResource> meshResource;
+        std::shared_ptr<RTResource> materialResource;
         Vector3 boundsCenter = Vector3::Zero();
         Vector3 boundsExtents = Vector3::One();
         Matrix44 localToWorld = Matrix44::Identity();
@@ -186,11 +186,11 @@ namespace ve
 
         void ApplyUpdateParam(RTRenderItemUpdateParam updateParam);
 
-        [[nodiscard]] const std::shared_ptr<RHIResource>& GetMeshResource() const noexcept;
-        void SetMeshResource(std::shared_ptr<RHIResource> resource) noexcept;
+        [[nodiscard]] const std::shared_ptr<RTResource>& GetMeshResource() const noexcept;
+        void SetMeshResource(std::shared_ptr<RTResource> resource) noexcept;
 
-        [[nodiscard]] const std::shared_ptr<RHIResource>& GetMaterialResource() const noexcept;
-        void SetMaterialResource(std::shared_ptr<RHIResource> resource) noexcept;
+        [[nodiscard]] const std::shared_ptr<RTResource>& GetMaterialResource() const noexcept;
+        void SetMaterialResource(std::shared_ptr<RTResource> resource) noexcept;
         [[nodiscard]] const Vector3& GetBoundsCenter() const noexcept;
         [[nodiscard]] const Vector3& GetBoundsExtents() const noexcept;
         [[nodiscard]] const Matrix44& GetLocalToWorld() const noexcept;
@@ -200,8 +200,8 @@ namespace ve
         [[nodiscard]] UInt64 GetRevision() const noexcept;
 
     private:
-        std::shared_ptr<RHIResource> meshResource_;
-        std::shared_ptr<RHIResource> materialResource_;
+        std::shared_ptr<RTResource> meshResource_;
+        std::shared_ptr<RTResource> materialResource_;
         Vector3 boundsCenter_ = Vector3::Zero();
         Vector3 boundsExtents_ = Vector3::One();
         Matrix44 localToWorld_ = Matrix44::Identity();
@@ -232,8 +232,8 @@ namespace ve
         [[nodiscard]] const rhi::RhiColor& GetClearColor() const noexcept;
         [[nodiscard]] const Matrix44& GetLocalToWorld() const noexcept;
 
-        [[nodiscard]] const std::shared_ptr<RHIResource>& GetUniformBufferResource() const noexcept;
-        void SetUniformBufferResource(std::shared_ptr<RHIResource> resource) noexcept;
+        [[nodiscard]] const std::shared_ptr<RTResource>& GetUniformBufferResource() const noexcept;
+        void SetUniformBufferResource(std::shared_ptr<RTResource> resource) noexcept;
 
     private:
         RTCameraProjectionMode projectionMode_ = RTCameraProjectionMode::Perspective;
@@ -245,7 +245,7 @@ namespace ve
         Float32 farClipPlane_ = 1000.0f;
         rhi::RhiColor clearColor_{0.05f, 0.07f, 0.10f, 1.0f};
         Matrix44 localToWorld_ = Matrix44::Identity();
-        std::shared_ptr<RHIResource> uniformBufferResource_;
+        std::shared_ptr<RTResource> uniformBufferResource_;
     };
 
     /// Render-thread representation of one LightComponent.
@@ -273,8 +273,8 @@ namespace ve
         [[nodiscard]] UInt64 GetShadowRevision() const noexcept;
         [[nodiscard]] const Matrix44& GetLocalToWorld() const noexcept;
 
-        [[nodiscard]] const std::shared_ptr<RHIResource>& GetUniformBufferResource() const noexcept;
-        void SetUniformBufferResource(std::shared_ptr<RHIResource> resource) noexcept;
+        [[nodiscard]] const std::shared_ptr<RTResource>& GetUniformBufferResource() const noexcept;
+        void SetUniformBufferResource(std::shared_ptr<RTResource> resource) noexcept;
 
     private:
         RTLightType type_ = RTLightType::Directional;
@@ -290,7 +290,7 @@ namespace ve
         Float32 normalBias_ = 0.05f;
         UInt64 shadowRevision_ = 1;
         Matrix44 localToWorld_ = Matrix44::Identity();
-        std::shared_ptr<RHIResource> uniformBufferResource_;
+        std::shared_ptr<RTResource> uniformBufferResource_;
     };
 
     /// Render-thread scene owned by a Scene and later consumed by renderer/viewports/render textures.

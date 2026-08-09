@@ -37,13 +37,13 @@ namespace ve
     EditorRenderFramePipeline::EditorRenderFramePipeline(EditorRenderFramePipelineInitParam initParam)
         : rendererInitParam_(std::move(initParam.renderer))
         , retainedRenderTextures_(std::move(initParam.retainedRenderTextures))
-        , shaderResources_(std::move(initParam.shaderResources))
+        , builtInShaderResources_(std::move(initParam.builtInShaderResources))
     {
     }
 
-    const RenderShaderResources* EditorRenderFramePipeline::GetShaderResources() const noexcept
+    const BuiltInShaderResources* EditorRenderFramePipeline::GetBuiltInShaderResources() const noexcept
     {
-        return shaderResources_.get();
+        return builtInShaderResources_.get();
     }
 
     void EditorRenderFramePipeline::RenderFrame(const FrameRenderPipelineData& frameData)
@@ -69,14 +69,14 @@ namespace ve
     PlayerRenderFramePipeline::PlayerRenderFramePipeline(PlayerRenderFramePipelineInitParam initParam)
         : sceneRenderer_(std::move(initParam.sceneRenderer))
         , sceneColorTexture_(std::move(initParam.sceneColorTexture))
-        , shaderResources_(std::move(initParam.shaderResources))
+        , builtInShaderResources_(std::move(initParam.builtInShaderResources))
     {
         sceneRenderer_.outputPasses.push_back(std::make_unique<ViewColorToSwapchainCopyPass>(0));
     }
 
-    const RenderShaderResources* PlayerRenderFramePipeline::GetShaderResources() const noexcept
+    const BuiltInShaderResources* PlayerRenderFramePipeline::GetBuiltInShaderResources() const noexcept
     {
-        return shaderResources_.get();
+        return builtInShaderResources_.get();
     }
 
     void PlayerRenderFramePipeline::RenderFrame(const FrameRenderPipelineData& frameData)

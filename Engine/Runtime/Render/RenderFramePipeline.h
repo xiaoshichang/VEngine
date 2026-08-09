@@ -15,7 +15,7 @@
 namespace ve
 {
     class ShaderManager;
-    struct RenderShaderResources;
+    struct BuiltInShaderResources;
     namespace rhi
     {
         class RhiCommandList;
@@ -28,7 +28,7 @@ namespace ve
     {
         StandaloneRendererInitParam renderer;
         std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures;
-        std::shared_ptr<const RenderShaderResources> shaderResources;
+        std::shared_ptr<const BuiltInShaderResources> builtInShaderResources;
     };
 
     /// Describes the player frame flow: render the scene to an intermediate color texture, then present it.
@@ -36,7 +36,7 @@ namespace ve
     {
         BaseRendererInitParam sceneRenderer;
         std::shared_ptr<RTRenderTexture> sceneColorTexture;
-        std::shared_ptr<const RenderShaderResources> shaderResources;
+        std::shared_ptr<const BuiltInShaderResources> builtInShaderResources;
     };
 
     /// Abstracts how a product surface records one frame.
@@ -51,7 +51,7 @@ namespace ve
         virtual ~FrameRenderPipeline() = default;
 
         virtual void RenderFrame(const FrameRenderPipelineData& frameData) = 0;
-        [[nodiscard]] virtual const RenderShaderResources* GetShaderResources() const noexcept = 0;
+        [[nodiscard]] virtual const BuiltInShaderResources* GetBuiltInShaderResources() const noexcept = 0;
     };
 
     class EditorRenderFramePipeline final : public FrameRenderPipeline
@@ -60,12 +60,12 @@ namespace ve
         explicit EditorRenderFramePipeline(EditorRenderFramePipelineInitParam initParam);
 
         void RenderFrame(const FrameRenderPipelineData& frameData) override;
-        [[nodiscard]] const RenderShaderResources* GetShaderResources() const noexcept override;
+        [[nodiscard]] const BuiltInShaderResources* GetBuiltInShaderResources() const noexcept override;
 
     private:
         StandaloneRendererInitParam rendererInitParam_;
         std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures_;
-        std::shared_ptr<const RenderShaderResources> shaderResources_;
+        std::shared_ptr<const BuiltInShaderResources> builtInShaderResources_;
     };
 
     class PlayerRenderFramePipeline final : public FrameRenderPipeline
@@ -74,13 +74,13 @@ namespace ve
         explicit PlayerRenderFramePipeline(PlayerRenderFramePipelineInitParam initParam);
 
         void RenderFrame(const FrameRenderPipelineData& frameData) override;
-        [[nodiscard]] const RenderShaderResources* GetShaderResources() const noexcept override;
+        [[nodiscard]] const BuiltInShaderResources* GetBuiltInShaderResources() const noexcept override;
 
     private:
         void EnsureSceneColorTexture(const FrameRenderPipelineData& frameData);
 
         BaseRendererInitParam sceneRenderer_;
         std::shared_ptr<RTRenderTexture> sceneColorTexture_;
-        std::shared_ptr<const RenderShaderResources> shaderResources_;
+        std::shared_ptr<const BuiltInShaderResources> builtInShaderResources_;
     };
 } // namespace ve

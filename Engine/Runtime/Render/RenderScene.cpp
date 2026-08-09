@@ -54,22 +54,22 @@ namespace ve
         }
     }
 
-    const std::shared_ptr<RHIResource>& RTRenderItem::GetMeshResource() const noexcept
+    const std::shared_ptr<RTResource>& RTRenderItem::GetMeshResource() const noexcept
     {
         return meshResource_;
     }
 
-    void RTRenderItem::SetMeshResource(std::shared_ptr<RHIResource> resource) noexcept
+    void RTRenderItem::SetMeshResource(std::shared_ptr<RTResource> resource) noexcept
     {
         meshResource_ = std::move(resource);
     }
 
-    const std::shared_ptr<RHIResource>& RTRenderItem::GetMaterialResource() const noexcept
+    const std::shared_ptr<RTResource>& RTRenderItem::GetMaterialResource() const noexcept
     {
         return materialResource_;
     }
 
-    void RTRenderItem::SetMaterialResource(std::shared_ptr<RHIResource> resource) noexcept
+    void RTRenderItem::SetMaterialResource(std::shared_ptr<RTResource> resource) noexcept
     {
         materialResource_ = std::move(resource);
     }
@@ -191,12 +191,12 @@ namespace ve
         return localToWorld_;
     }
 
-    const std::shared_ptr<RHIResource>& RTCamera::GetUniformBufferResource() const noexcept
+    const std::shared_ptr<RTResource>& RTCamera::GetUniformBufferResource() const noexcept
     {
         return uniformBufferResource_;
     }
 
-    void RTCamera::SetUniformBufferResource(std::shared_ptr<RHIResource> resource) noexcept
+    void RTCamera::SetUniformBufferResource(std::shared_ptr<RTResource> resource) noexcept
     {
         uniformBufferResource_ = std::move(resource);
     }
@@ -327,12 +327,12 @@ namespace ve
         return localToWorld_;
     }
 
-    const std::shared_ptr<RHIResource>& RTLight::GetUniformBufferResource() const noexcept
+    const std::shared_ptr<RTResource>& RTLight::GetUniformBufferResource() const noexcept
     {
         return uniformBufferResource_;
     }
 
-    void RTLight::SetUniformBufferResource(std::shared_ptr<RHIResource> resource) noexcept
+    void RTLight::SetUniformBufferResource(std::shared_ptr<RTResource> resource) noexcept
     {
         uniformBufferResource_ = std::move(resource);
     }

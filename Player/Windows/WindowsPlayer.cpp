@@ -177,7 +177,7 @@ namespace ve
         SceneSystem& sceneSystem = GetRuntime().GetSceneSystem();
         sceneSystem.SetRuntimeOSEventCallback([this](const OSEvent& event) { HandleSceneThreadOSEvent(event); });
         sceneSystem.SetRuntimeStartFrameCallback([this]() { LoadPendingPackagedStartupScene(); });
-        sceneSystem.SetRuntimeShutdownCallback([this]() { renderShaderResourceLibrary_.Shutdown(); });
+        sceneSystem.SetRuntimeShutdownCallback([this]() { GetRuntime().GetResourceSystem().ShutdownBuiltInShaderLibrary(); });
     }
 
     void WindowsPlayer::HandleSceneThreadOSEvent(const OSEvent& event)
@@ -228,14 +228,15 @@ namespace ve
             return;
         }
 
-        Error renderShaderResult = renderShaderResourceLibrary_.Initialize(RenderShaderResourceLibraryInitParam{
-            GetRuntime().GetResourceSystem(), runtimeAssetLoader_, GetRuntime().GetRenderSystem(), false, false});
-        if (!renderShaderResult.IsOk())
+        ResourceSystem& resourceSystem = GetRuntime().GetResourceSystem();
+        Error builtInShaderResult = resourceSystem.InitializeBuiltInShaderLibrary(BuiltInShaderLibraryInitParam{
+            runtimeAssetLoader_, GetRuntime().GetRenderSystem(), BuiltInShaderEnvironment::Player, false});
+        if (!builtInShaderResult.IsOk())
         {
-            VE_LOG_ERROR_CATEGORY("Player", "Failed to initialize builtin render shaders: {}", renderShaderResult.GetMessage());
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to initialize BuiltInShaderLibrary: {}", builtInShaderResult.GetMessage());
             return;
         }
-        GetRuntime().GetSceneSystem().SetRenderShaderResources(renderShaderResourceLibrary_.GetResources());
+        GetRuntime().GetSceneSystem().SetBuiltInShaderResources(resourceSystem.GetBuiltInShaderResources());
 
         (void)InitializePackagedScripts(dataRoot);
 

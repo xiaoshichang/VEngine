@@ -17,11 +17,11 @@
 namespace ve
 {
     /// Base type for render-thread resources referenced by RT scene objects.
-    class RHIResource : public NonCopyable
+    class RTResource : public NonCopyable
     {
     public:
-        RHIResource() = default;
-        virtual ~RHIResource() = default;
+        RTResource() = default;
+        virtual ~RTResource() = default;
     };
 
     struct RTMeshVertex
@@ -41,7 +41,7 @@ namespace ve
     ///
     /// The proxy owns backend buffers and can be safely captured by render commands after the Scene Thread releases the
     /// CPU-side MeshResource.
-    class RTMeshResource final : public RHIResource
+    class RTMeshResource final : public RTResource
     {
     public:
         explicit RTMeshResource(RTMeshResourceDesc desc);
@@ -65,6 +65,40 @@ namespace ve
         RTMeshResourceDesc desc_;
         std::unique_ptr<rhi::RhiBuffer> vertexBuffer_;
         std::unique_ptr<rhi::RhiBuffer> indexBuffer_;
+    };
+
+    struct RTTextureResourceDesc
+    {
+        std::string name = "TextureResource";
+        UInt32 width = 0;
+        UInt32 height = 0;
+        UInt32 depth = 1;
+        UInt32 mipLevelCount = 1;
+        rhi::RhiFormat format = rhi::RhiFormat::Rgba8Unorm;
+        rhi::RhiTextureUsage usage = rhi::RhiTextureUsage::Sampled;
+        std::vector<std::byte> initialData;
+        UInt32 initialDataRowPitch = 0;
+    };
+
+    /// Render Thread proxy for a texture resource.
+    class RTTextureResource final : public RTResource
+    {
+    public:
+        explicit RTTextureResource(RTTextureResourceDesc desc);
+
+        [[nodiscard]] const RTTextureResourceDesc& GetDesc() const noexcept;
+        [[nodiscard]] bool IsInitialized() const noexcept;
+        [[nodiscard]] rhi::RhiTexture* GetTexture() noexcept;
+        [[nodiscard]] const rhi::RhiTexture* GetTexture() const noexcept;
+
+        void InitRenderResource(rhi::RhiDevice& device,
+                                RTTextureResourceDesc desc,
+                                std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources);
+        void ResetRenderResource(std::vector<std::unique_ptr<rhi::RhiObject>>& retiredResources) noexcept;
+
+    private:
+        RTTextureResourceDesc desc_;
+        std::unique_ptr<rhi::RhiTexture> texture_;
     };
 
     struct RTShaderStageResourceDesc
@@ -114,7 +148,7 @@ namespace ve
         std::unique_ptr<rhi::RhiShaderModule> computeShader_;
     };
 
-    class RTShaderResource final : public RHIResource
+    class RTShaderResource final : public RTResource
     {
     public:
         explicit RTShaderResource(RTShaderResourceDesc desc);
@@ -149,7 +183,7 @@ namespace ve
     };
 
     /// Render Thread proxy for a material resource.
-    class RTMaterialResource final : public RHIResource
+    class RTMaterialResource final : public RTResource
     {
     public:
         explicit RTMaterialResource(RTMaterialResourceDesc desc);

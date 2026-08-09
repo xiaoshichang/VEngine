@@ -4,7 +4,7 @@
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
-#include "Engine/Runtime/Render/RenderShaderResources.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
 
@@ -19,11 +19,11 @@ namespace ve::virtual_shadow_detail
         {
             return cached;
         }
-        if (frameData.shaderResources == nullptr || frameData.shaderResources->virtualShadow == nullptr)
+        if (frameData.builtInShaderResources == nullptr || frameData.builtInShaderResources->virtualShadow == nullptr)
         {
             FailVirtualShadow("VSM render shader resource is unavailable.");
         }
-        const RTShaderPass* shaderPass = frameData.shaderResources->virtualShadow->GetPass(name);
+        const RTShaderPass* shaderPass = frameData.builtInShaderResources->virtualShadow->GetPass(name);
         if (shaderPass == nullptr || shaderPass->GetComputeShader() == nullptr)
         {
             FailVirtualShadow((std::string("VSM shader pass is unavailable: ") + name).c_str());
