@@ -23,7 +23,6 @@ namespace ve
             };
             return virtual_shadow_detail::GetVirtualShadowComputePipeline(frameData,
                                                                           "VirtualShadowStep6_ClearPhysicalPages",
-                                                                          "VirtualShadow.Step6_ClearPhysicalPages.Compute",
                                                                           bindings,
                                                                           static_cast<UInt32>(std::size(bindings)));
         }

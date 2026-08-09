@@ -1,17 +1,17 @@
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h"
 
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
+#include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
+#include "Engine/Runtime/Render/RenderShaderResources.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
-#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
 
 namespace ve::virtual_shadow_detail
 {
     rhi::RhiComputePipelineState* GetVirtualShadowComputePipeline(const FrameRenderPipelineData& frameData,
                                                                   const char* name,
-                                                                  const char* shaderName,
                                                                   const rhi::RhiPipelineResourceBindingDesc* bindings,
                                                                   UInt32 bindingCount)
     {
@@ -19,42 +19,18 @@ namespace ve::virtual_shadow_detail
         {
             return cached;
         }
-        const Result<ShaderArtifactModule> moduleResult = LoadShaderArtifact("VirtualShadow", name, rhi::RhiShaderStage::Compute);
-        if (!moduleResult)
+        if (frameData.shaderResources == nullptr || frameData.shaderResources->virtualShadow == nullptr)
         {
-            const std::string message = "VSM shader module could not be loaded: " + moduleResult.GetError().GetMessage();
-            FailVirtualShadow(message.c_str());
+            FailVirtualShadow("VSM render shader resource is unavailable.");
         }
-        const ShaderArtifactModule& module = moduleResult.GetValue();
-        rhi::RhiShaderModuleDesc shaderDesc = {};
-        shaderDesc.stage = rhi::RhiShaderStage::Compute;
-        shaderDesc.entryPoint = module.entryPoint.c_str();
-        if (frameData.device->GetBackend() == rhi::RhiBackend::D3D11)
+        const RTShaderPass* shaderPass = frameData.shaderResources->virtualShadow->GetPass(name);
+        if (shaderPass == nullptr || shaderPass->GetComputeShader() == nullptr)
         {
-            shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
-            shaderDesc.bytecode = module.d3d11Bytecode.data();
-            shaderDesc.bytecodeSize = module.d3d11Bytecode.size();
-        }
-        else if (frameData.device->GetBackend() == rhi::RhiBackend::D3D12)
-        {
-            shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
-            shaderDesc.bytecode = module.d3d12Bytecode.data();
-            shaderDesc.bytecodeSize = module.d3d12Bytecode.size();
-        }
-        else
-        {
-            shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Source;
-            shaderDesc.source = module.metalSource.c_str();
-        }
-        shaderDesc.debugName = name;
-        rhi::RhiShaderModule* shader = frameData.shaderManager->GetOrCompileShader(*frameData.device, ShaderID{shaderName, 0}, shaderDesc);
-        if (shader == nullptr)
-        {
-            return nullptr;
+            FailVirtualShadow((std::string("VSM shader pass is unavailable: ") + name).c_str());
         }
 
         rhi::RhiComputePipelineDesc desc = {};
-        desc.computeShader = shader;
+        desc.computeShader = shaderPass->GetComputeShader();
         desc.resourceLayout = {bindings, bindingCount};
         desc.debugName = name;
         return frameData.shaderManager->GetOrCreateComputePipeline(*frameData.device, ComputePipelineID{name, 0}, desc);

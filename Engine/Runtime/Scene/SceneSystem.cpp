@@ -40,9 +40,11 @@ namespace ve
         SceneSystemEditorCallback editorCallback;
         std::function<void()> runtimeStartFrameCallback;
         std::function<void()> runtimeFrameEndCallback;
+        std::function<void()> runtimeShutdownCallback;
         std::function<void(const OSEvent& event)> runtimeOSEventCallback;
         std::shared_ptr<RTRenderTexture> playerSceneColorTexture;
         std::shared_ptr<RenderViewState> playerViewState;
+        std::shared_ptr<const RenderShaderResources> renderShaderResources;
 
         AtomicBool initialized{false};
         AtomicBool stopRequested{false};
@@ -198,6 +200,7 @@ namespace ve
             PlayerRenderFramePipelineInitParam pipelineInitParam = {};
             pipelineInitParam.sceneRenderer = std::move(rendererInitParam);
             pipelineInitParam.sceneColorTexture = impl.playerSceneColorTexture;
+            pipelineInitParam.shaderResources = impl.renderShaderResources;
             return std::make_shared<PlayerRenderFramePipeline>(std::move(pipelineInitParam));
         }
 
@@ -282,6 +285,11 @@ namespace ve
                 impl.scene->Clear();
             }
             impl.scene = nullptr;
+            impl.renderShaderResources.reset();
+            if (impl.runtimeShutdownCallback != nullptr)
+            {
+                impl.runtimeShutdownCallback();
+            }
             if (impl.editorCallback.onShutdown != nullptr)
             {
                 impl.editorCallback.onShutdown();
@@ -586,6 +594,7 @@ namespace ve
         impl_->physicsSystem = nullptr;
         impl_->runtimeStartFrameCallback = nullptr;
         impl_->runtimeFrameEndCallback = nullptr;
+        impl_->runtimeShutdownCallback = nullptr;
         impl_->runtimeOSEventCallback = nullptr;
         impl_->playerSceneColorTexture.reset();
         impl_->playerViewState.reset();
@@ -722,9 +731,24 @@ namespace ve
         impl_->runtimeFrameEndCallback = std::move(callback);
     }
 
+    void SceneSystem::SetRuntimeShutdownCallback(std::function<void()> callback) noexcept
+    {
+        impl_->runtimeShutdownCallback = std::move(callback);
+    }
+
     void SceneSystem::SetRuntimeOSEventCallback(std::function<void(const OSEvent& event)> callback) noexcept
     {
         impl_->runtimeOSEventCallback = std::move(callback);
+    }
+
+    void SceneSystem::SetRenderShaderResources(std::shared_ptr<const RenderShaderResources> resources) noexcept
+    {
+        impl_->renderShaderResources = std::move(resources);
+    }
+
+    std::shared_ptr<const RenderShaderResources> SceneSystem::GetRenderShaderResources() const noexcept
+    {
+        return impl_->renderShaderResources;
     }
 
     void SceneSystem::StartLoop() noexcept

@@ -351,6 +351,7 @@ namespace ve
             {
                 frameData.frameGraphDebugCapture = &debugCapture;
             }
+            frameData.shaderResources = framePipeline->GetShaderResources();
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
             framePipeline->RenderFrame(frameData);
             impl.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);

@@ -86,7 +86,6 @@ namespace ve
 
         [[nodiscard]] rhi::RhiComputePipelineState* GetVirtualShadowComputePipeline(const FrameRenderPipelineData& frameData,
                                                                                     const char* name,
-                                                                                    const char* shaderName,
                                                                                     const rhi::RhiPipelineResourceBindingDesc* bindings,
                                                                                     UInt32 bindingCount);
 

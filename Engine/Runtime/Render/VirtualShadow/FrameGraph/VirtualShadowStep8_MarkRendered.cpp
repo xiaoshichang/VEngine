@@ -22,7 +22,6 @@ namespace ve
             };
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(context.frameData,
                                                                                                             "VirtualShadowStep8_MarkRendered",
-                                                                                                            "VirtualShadow.Step8_MarkRendered.Compute",
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

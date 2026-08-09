@@ -8,8 +8,8 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
+#include "Engine/Runtime/Render/RenderShaderResources.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
-#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -229,22 +229,14 @@ namespace ve
             FailDebugPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        rhi::RhiShaderModule* vertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
-                                                                          ShaderID{"VirtualShadow.ShadowCasterDirty.Vertex", 0},
-                                                                          "ShadowCasterDirtyDebug", "Internal", rhi::RhiShaderStage::Vertex,
-                                                                          "ShadowCasterDirtyDebugVS");
-        if (vertexShader == nullptr)
+        if (context.frameData.shaderResources == nullptr || context.frameData.shaderResources->shadowCasterDirtyDebug == nullptr)
         {
-            FailDebugPass("failed to compile the vertex shader.");
+            FailDebugPass("the ShadowCasterDirtyDebug shader resource is unavailable.");
         }
-
-        rhi::RhiShaderModule* fragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
-                                                                            ShaderID{"VirtualShadow.ShadowCasterDirty.Fragment", 0},
-                                                                            "ShadowCasterDirtyDebug", "Internal", rhi::RhiShaderStage::Fragment,
-                                                                            "ShadowCasterDirtyDebugPS");
-        if (fragmentShader == nullptr)
+        const RTShaderPass* shaderPass = context.frameData.shaderResources->shadowCasterDirtyDebug->GetPass("Internal");
+        if (shaderPass == nullptr || shaderPass->GetVertexShader() == nullptr || shaderPass->GetFragmentShader() == nullptr)
         {
-            FailDebugPass("failed to compile the fragment shader.");
+            FailDebugPass("the ShadowCasterDirtyDebug shader pass is unavailable.");
         }
 
         const rhi::RhiVertexAttributeDesc attributes[] = {
@@ -266,8 +258,8 @@ namespace ve
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
         pipelineDesc.rasterizerState.fillMode = fillMode;
         pipelineDesc.depthStencilState = depthEnabled ? rhi::StaticRenderStates::DepthReadOnlyLessEqual : rhi::StaticRenderStates::DepthDisabled;
-        pipelineDesc.boundShaderState.vertexShader = vertexShader;
-        pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
+        pipelineDesc.boundShaderState.vertexShader = shaderPass->GetVertexShader();
+        pipelineDesc.boundShaderState.fragmentShader = shaderPass->GetFragmentShader();
         pipelineDesc.boundShaderState.vertexDeclaration = {attributes, static_cast<UInt32>(std::size(attributes)), sizeof(RTMeshVertex)};
         pipelineDesc.resourceLayout = {bindings, static_cast<UInt32>(std::size(bindings))};
         pipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;

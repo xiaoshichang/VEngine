@@ -5,8 +5,9 @@
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
+#include "Engine/Runtime/Render/RenderResource.h"
+#include "Engine/Runtime/Render/RenderShaderResources.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
-#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -164,24 +165,15 @@ namespace ve
             return FailPreviewConversion(ErrorCode::InvalidState, "the frame ShaderManager is unavailable.");
         }
 
-        const bool metal = context.device.GetBackend() == rhi::RhiBackend::Metal;
         const std::string passName = mode == FrameGraphDebugPreviewMode::Color ? "Color" : mode == FrameGraphDebugPreviewMode::Depth ? "Depth" : "UnsignedInteger";
-        rhi::RhiShaderModule* vertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
-                                                                           ShaderID{"FrameGraphDebugPreview.Vertex", metal ? 1 : 0},
-                                                                           "FrameGraphDebugPreview", passName, rhi::RhiShaderStage::Vertex,
-                                                                           "FrameGraphDebugPreviewVS");
-        if (vertexShader == nullptr)
+        if (context.frameData.shaderResources == nullptr || context.frameData.shaderResources->frameGraphDebugPreview == nullptr)
         {
-            return FailPreviewConversion(ErrorCode::PlatformError, "the fullscreen vertex shader could not be compiled.");
+            return FailPreviewConversion(ErrorCode::InvalidState, "the frame graph preview shader resource is unavailable.");
         }
-
-        rhi::RhiShaderModule* fragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device,
-                                                                            ShaderID{"FrameGraphDebugPreview.Fragment", PreviewModeVariant(mode) | (metal ? (1 << 8) : 0)},
-                                                                            "FrameGraphDebugPreview", passName, rhi::RhiShaderStage::Fragment,
-                                                                            "FrameGraphDebugPreviewPS");
-        if (fragmentShader == nullptr)
+        const RTShaderPass* shaderPass = context.frameData.shaderResources->frameGraphDebugPreview->GetPass(passName);
+        if (shaderPass == nullptr || shaderPass->GetVertexShader() == nullptr || shaderPass->GetFragmentShader() == nullptr)
         {
-            return FailPreviewConversion(ErrorCode::PlatformError, "the typed fragment shader could not be compiled.");
+            return FailPreviewConversion(ErrorCode::InvalidState, "the frame graph preview shader pass is unavailable.");
         }
 
         const rhi::RhiPipelineResourceBindingDesc bindings[] = {
@@ -191,8 +183,8 @@ namespace ve
         pipelineDesc.blendState = rhi::StaticRenderStates::OpaqueBlend;
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidNoCullRasterizer;
         pipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
-        pipelineDesc.boundShaderState.vertexShader = vertexShader;
-        pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
+        pipelineDesc.boundShaderState.vertexShader = shaderPass->GetVertexShader();
+        pipelineDesc.boundShaderState.fragmentShader = shaderPass->GetFragmentShader();
         pipelineDesc.boundShaderState.vertexDeclaration = {};
         pipelineDesc.resourceLayout = {bindings, static_cast<UInt32>(std::size(bindings))};
         pipelineDesc.primitiveType = rhi::RhiPrimitiveTopology::TriangleList;
@@ -202,7 +194,7 @@ namespace ve
         pipelineDesc.debugName = "FrameGraphDebugPreviewPipeline";
 
         rhi::RhiPipelineState* pipeline = shaderManager->TryGetOrCreateGraphicsPipeline(
-            context.device, GraphicsPipelineID{"FrameGraphDebugPreview.Pipeline", PreviewModeVariant(mode) | (metal ? (1 << 8) : 0)}, pipelineDesc);
+            context.device, GraphicsPipelineID{"FrameGraphDebugPreview.Pipeline", PreviewModeVariant(mode)}, pipelineDesc);
         if (pipeline == nullptr)
         {
             return FailPreviewConversion(ErrorCode::PlatformError, "the fullscreen graphics pipeline could not be created.");

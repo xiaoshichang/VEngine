@@ -980,6 +980,7 @@ namespace ve::editor
     {
         assetsByID_.clear();
         assetIDsByAssetPath_.clear();
+        assetIDsByRuntimePath_.clear();
         projectRoot_ = Path();
         initialized_ = false;
     }
@@ -1019,6 +1020,7 @@ namespace ve::editor
 
         assetsByID_.clear();
         assetIDsByAssetPath_.clear();
+        assetIDsByRuntimePath_.clear();
         const ErrorCode result = ScanAndImportDirectory(assetsRoot, false, false);
         if (result != ErrorCode::None)
         {
@@ -1067,6 +1069,7 @@ namespace ve::editor
 
         assetsByID_.clear();
         assetIDsByAssetPath_.clear();
+        assetIDsByRuntimePath_.clear();
         const ErrorCode result = ScanAndImportDirectory(assetsRoot, true, false);
         if (result != ErrorCode::None)
         {
@@ -1176,6 +1179,27 @@ namespace ve::editor
         return Result<AssetRecord>::Success(asset->asset);
     }
 
+    Result<AssetID> EditorAssetDatabase::FindAssetIDByRuntimePath(const Path& runtimePath) const
+    {
+        if (!initialized_)
+        {
+            return Result<AssetID>::Failure(Error(ErrorCode::InvalidState, "EditorAssetDatabase is not initialized."));
+        }
+
+        if (runtimePath.IsEmpty())
+        {
+            return Result<AssetID>::Failure(Error(ErrorCode::InvalidArgument, "Asset runtime path is empty."));
+        }
+
+        const auto asset = assetIDsByRuntimePath_.find(runtimePath.GetString());
+        if (asset == assetIDsByRuntimePath_.end())
+        {
+            return Result<AssetID>::Failure(Error(ErrorCode::NotFound, "Asset runtime path was not found in the editor asset database."));
+        }
+
+        return Result<AssetID>::Success(asset->second);
+    }
+
     const std::unordered_map<AssetID, EditorAssetRecord>& EditorAssetDatabase::GetAssetsByID() const noexcept
     {
         return assetsByID_;
@@ -1272,6 +1296,8 @@ namespace ve::editor
 
                     record.imported = true;
                     record.importedPath = GetImportedShaderPath(guid, shaderName.GetValue());
+                    record.asset.runtimePath = Path(record.path.GetString() + ".json");
+                    record.asset.sourcePathOverride = projectRoot_ / record.importedPath;
                 }
                 else if (builtin && record.type != EditorAssetType::ObjSource && record.type != EditorAssetType::Shader)
                 {
@@ -1473,7 +1499,10 @@ namespace ve::editor
 
             AddDependencyIfValid(record.asset.dependencies, shaderDependencyID);
 
-            Result<std::string> shaderText = FileSystem::ReadTextFile(ResolveEditorContentPath(projectRoot_, shaderAsset->asset.runtimePath));
+            const Path shaderDescriptorPath = !shaderAsset->asset.sourcePathOverride.IsEmpty()
+                                                  ? shaderAsset->asset.sourcePathOverride
+                                                  : ResolveEditorContentPath(projectRoot_, shaderAsset->asset.runtimePath);
+            Result<std::string> shaderText = FileSystem::ReadTextFile(shaderDescriptorPath);
             if (!shaderText)
             {
                 return shaderText.GetError().GetCode();
@@ -1647,6 +1676,7 @@ namespace ve::editor
     void EditorAssetDatabase::AddAssetRecord(EditorAssetRecord record)
     {
         const std::string pathKey = record.path.GetString();
+        const std::string runtimePathKey = record.asset.runtimePath.GetString();
         const AssetID idKey = record.asset.id;
 
         if (const auto existingID = assetIDsByAssetPath_.find(pathKey); existingID != assetIDsByAssetPath_.end() && existingID->second != idKey)
@@ -1657,9 +1687,14 @@ namespace ve::editor
         if (const auto existingAsset = assetsByID_.find(idKey); existingAsset != assetsByID_.end())
         {
             assetIDsByAssetPath_.erase(existingAsset->second.path.GetString());
+            assetIDsByRuntimePath_.erase(existingAsset->second.asset.runtimePath.GetString());
         }
 
         assetsByID_.insert_or_assign(idKey, std::move(record));
         assetIDsByAssetPath_.insert_or_assign(pathKey, idKey);
+        if (!runtimePathKey.empty())
+        {
+            assetIDsByRuntimePath_.insert_or_assign(runtimePathKey, idKey);
+        }
     }
 } // namespace ve::editor

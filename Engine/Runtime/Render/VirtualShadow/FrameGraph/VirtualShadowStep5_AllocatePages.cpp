@@ -30,7 +30,6 @@ namespace ve
             };
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(context.frameData,
                                                                                                             "VirtualShadowStep5_AllocatePages",
-                                                                                                            "VirtualShadow.Step5_AllocatePages.Compute",
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

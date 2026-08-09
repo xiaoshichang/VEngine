@@ -62,6 +62,9 @@ namespace ve
         template<typename TResource>
         [[nodiscard]] Result<AssetRef<TResource>> Request(const AssetID& id, const IAssetRecordProvider& provider);
 
+        template<typename TResource>
+        [[nodiscard]] Result<AssetRef<TResource>> Request(const Path& runtimePath, const IAssetRecordProvider& provider);
+
         /// Ensures render-thread resources for this AssetRef and its dependencies.
         ///
         /// ResourceSystem owns dependency ordering: dependencies are initialized first, while release happens when
@@ -128,5 +131,17 @@ namespace ve
         AssetRef<TResource> assetRef;
         assetRef.BindResource(*this, typedResource);
         return Result<AssetRef<TResource>>::Success(std::move(assetRef));
+    }
+
+    template<typename TResource>
+    Result<AssetRef<TResource>> ResourceSystem::Request(const Path& runtimePath, const IAssetRecordProvider& provider)
+    {
+        Result<AssetID> id = provider.FindAssetIDByRuntimePath(runtimePath);
+        if (!id)
+        {
+            return Result<AssetRef<TResource>>::Failure(id.GetError());
+        }
+
+        return Request<TResource>(id.GetValue(), provider);
     }
 } // namespace ve

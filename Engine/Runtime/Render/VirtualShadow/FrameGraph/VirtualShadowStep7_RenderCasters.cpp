@@ -5,8 +5,8 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
+#include "Engine/Runtime/Render/RenderShaderResources.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
-#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPasses.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
@@ -25,46 +25,14 @@ namespace ve
             {
                 return cached;
             }
-            const Result<ShaderArtifactModule> vertexModuleResult =
-                LoadShaderArtifact("VirtualShadow", "VirtualShadowStep7_RenderCasters", rhi::RhiShaderStage::Vertex);
-            const Result<ShaderArtifactModule> fragmentModuleResult =
-                LoadShaderArtifact("VirtualShadow", "VirtualShadowStep7_RenderCasters", rhi::RhiShaderStage::Fragment);
-            if (!vertexModuleResult || !fragmentModuleResult)
+            if (frameData.shaderResources == nullptr || frameData.shaderResources->virtualShadow == nullptr)
             {
-                const std::string message = "VSM Step7 shader module could not be loaded.";
-                FailVirtualShadow(message.c_str());
+                FailVirtualShadow("VSM render shader resource is unavailable.");
             }
-            const ShaderArtifactModule& vertexModule = vertexModuleResult.GetValue();
-            const ShaderArtifactModule& fragmentModule = fragmentModuleResult.GetValue();
-            const bool bytecode = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 || frameData.device->GetBackend() == rhi::RhiBackend::D3D12;
-            rhi::RhiShaderModuleDesc vertexShaderDesc = {};
-            vertexShaderDesc.stage = rhi::RhiShaderStage::Vertex;
-            vertexShaderDesc.codeFormat = bytecode ? rhi::RhiShaderCodeFormat::Bytecode : rhi::RhiShaderCodeFormat::Source;
-            vertexShaderDesc.bytecode = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? vertexModule.d3d11Bytecode.data() : vertexModule.d3d12Bytecode.data();
-            vertexShaderDesc.bytecodeSize = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? vertexModule.d3d11Bytecode.size() : vertexModule.d3d12Bytecode.size();
-            vertexShaderDesc.source = vertexModule.metalSource.c_str();
-            vertexShaderDesc.entryPoint = vertexModule.entryPoint.c_str();
-            vertexShaderDesc.debugName = "VirtualShadowStep7_RenderCastersVS";
-            rhi::RhiShaderModule* vertexShader =
-                frameData.shaderManager->GetOrCompileShader(*frameData.device, ShaderID{"VirtualShadow.Step7_RenderCasters.Vertex", 0}, vertexShaderDesc);
-            if (vertexShader == nullptr)
+            const RTShaderPass* shaderPass = frameData.shaderResources->virtualShadow->GetPass("VirtualShadowStep7_RenderCasters");
+            if (shaderPass == nullptr || shaderPass->GetVertexShader() == nullptr || shaderPass->GetFragmentShader() == nullptr)
             {
-                return nullptr;
-            }
-
-            rhi::RhiShaderModuleDesc fragmentShaderDesc = {};
-            fragmentShaderDesc.stage = rhi::RhiShaderStage::Fragment;
-            fragmentShaderDesc.codeFormat = bytecode ? rhi::RhiShaderCodeFormat::Bytecode : rhi::RhiShaderCodeFormat::Source;
-            fragmentShaderDesc.bytecode = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? fragmentModule.d3d11Bytecode.data() : fragmentModule.d3d12Bytecode.data();
-            fragmentShaderDesc.bytecodeSize = frameData.device->GetBackend() == rhi::RhiBackend::D3D11 ? fragmentModule.d3d11Bytecode.size() : fragmentModule.d3d12Bytecode.size();
-            fragmentShaderDesc.source = fragmentModule.metalSource.c_str();
-            fragmentShaderDesc.entryPoint = fragmentModule.entryPoint.c_str();
-            fragmentShaderDesc.debugName = "VirtualShadowStep7_RenderCastersPS";
-            rhi::RhiShaderModule* fragmentShader =
-                frameData.shaderManager->GetOrCompileShader(*frameData.device, ShaderID{"VirtualShadow.Step7_RenderCasters.Fragment", 0}, fragmentShaderDesc);
-            if (fragmentShader == nullptr)
-            {
-                return nullptr;
+                FailVirtualShadow("VSM Step7_RenderCasters shader pass is unavailable.");
             }
 
             rhi::RhiVertexAttributeDesc attribute = {"POSITION", 0, rhi::RhiFormat::Rgb32Float, 0};
@@ -80,8 +48,8 @@ namespace ve
             desc.blendState = rhi::StaticRenderStates::OpaqueBlend;
             desc.rasterizerState = rhi::StaticRenderStates::SolidNoCullRasterizer;
             desc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
-            desc.boundShaderState.vertexShader = vertexShader;
-            desc.boundShaderState.fragmentShader = fragmentShader;
+            desc.boundShaderState.vertexShader = shaderPass->GetVertexShader();
+            desc.boundShaderState.fragmentShader = shaderPass->GetFragmentShader();
             desc.boundShaderState.vertexDeclaration = {&attribute, 1, sizeof(RTMeshVertex)};
             desc.resourceLayout = {bindings, static_cast<UInt32>(std::size(bindings))};
             desc.colorAttachmentCount = 0;

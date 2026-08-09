@@ -177,6 +177,7 @@ namespace ve
         SceneSystem& sceneSystem = GetRuntime().GetSceneSystem();
         sceneSystem.SetRuntimeOSEventCallback([this](const OSEvent& event) { HandleSceneThreadOSEvent(event); });
         sceneSystem.SetRuntimeStartFrameCallback([this]() { LoadPendingPackagedStartupScene(); });
+        sceneSystem.SetRuntimeShutdownCallback([this]() { renderShaderResourceLibrary_.Shutdown(); });
     }
 
     void WindowsPlayer::HandleSceneThreadOSEvent(const OSEvent& event)
@@ -226,6 +227,15 @@ namespace ve
         {
             return;
         }
+
+        Error renderShaderResult = renderShaderResourceLibrary_.Initialize(RenderShaderResourceLibraryInitParam{
+            GetRuntime().GetResourceSystem(), runtimeAssetLoader_, GetRuntime().GetRenderSystem(), false, false});
+        if (!renderShaderResult.IsOk())
+        {
+            VE_LOG_ERROR_CATEGORY("Player", "Failed to initialize builtin render shaders: {}", renderShaderResult.GetMessage());
+            return;
+        }
+        GetRuntime().GetSceneSystem().SetRenderShaderResources(renderShaderResourceLibrary_.GetResources());
 
         (void)InitializePackagedScripts(dataRoot);
 

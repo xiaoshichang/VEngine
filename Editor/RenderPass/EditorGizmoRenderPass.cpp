@@ -8,8 +8,8 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
+#include "Engine/Runtime/Render/RenderShaderResources.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
-#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -195,32 +195,17 @@ namespace ve
             FailEditorGizmoPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        rhi::RhiShaderModule* lineVertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoLineVertexShaderID,
-                                                                               "EditorGizmoLine", "Internal", rhi::RhiShaderStage::Vertex, "EditorGizmoLineVertexShader");
-        if (lineVertexShader == nullptr)
+        if (context.frameData.shaderResources == nullptr || context.frameData.shaderResources->editorGizmoLine == nullptr ||
+            context.frameData.shaderResources->editorGizmoIcon == nullptr)
         {
-            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the line vertex shader."));
+            FailEditorGizmoPass("the editor gizmo shader resources are unavailable.");
         }
-
-        rhi::RhiShaderModule* lineFragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoLineFragmentShaderID,
-                                                                                 "EditorGizmoLine", "Internal", rhi::RhiShaderStage::Fragment, "EditorGizmoLineFragmentShader");
-        if (lineFragmentShader == nullptr)
+        const RTShaderPass* lineShaderPass = context.frameData.shaderResources->editorGizmoLine->GetPass("Internal");
+        const RTShaderPass* iconShaderPass = context.frameData.shaderResources->editorGizmoIcon->GetPass("Internal");
+        if (lineShaderPass == nullptr || iconShaderPass == nullptr || lineShaderPass->GetVertexShader() == nullptr ||
+            lineShaderPass->GetFragmentShader() == nullptr || iconShaderPass->GetVertexShader() == nullptr || iconShaderPass->GetFragmentShader() == nullptr)
         {
-            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the line fragment shader."));
-        }
-
-        rhi::RhiShaderModule* iconVertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoIconVertexShaderID,
-                                                                               "EditorGizmoIcon", "Internal", rhi::RhiShaderStage::Vertex, "EditorGizmoIconVertexShader");
-        if (iconVertexShader == nullptr)
-        {
-            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the icon vertex shader."));
-        }
-
-        rhi::RhiShaderModule* iconFragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device, EditorGizmoIconFragmentShaderID,
-                                                                                 "EditorGizmoIcon", "Internal", rhi::RhiShaderStage::Fragment, "EditorGizmoIconFragmentShader");
-        if (iconFragmentShader == nullptr)
-        {
-            FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to get the icon fragment shader."));
+            FailEditorGizmoPass("the editor gizmo shader passes are unavailable.");
         }
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
@@ -247,8 +232,8 @@ namespace ve
         linePipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
         linePipelineDesc.rasterizerState = lineRasterizer;
         linePipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
-        linePipelineDesc.boundShaderState.vertexShader = lineVertexShader;
-        linePipelineDesc.boundShaderState.fragmentShader = lineFragmentShader;
+        linePipelineDesc.boundShaderState.vertexShader = lineShaderPass->GetVertexShader();
+        linePipelineDesc.boundShaderState.fragmentShader = lineShaderPass->GetFragmentShader();
         linePipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
         linePipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
         linePipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoVertex);
@@ -295,8 +280,8 @@ namespace ve
         iconPipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
         iconPipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidNoCullRasterizer;
         iconPipelineDesc.depthStencilState = rhi::StaticRenderStates::DepthDisabled;
-        iconPipelineDesc.boundShaderState.vertexShader = iconVertexShader;
-        iconPipelineDesc.boundShaderState.fragmentShader = iconFragmentShader;
+        iconPipelineDesc.boundShaderState.vertexShader = iconShaderPass->GetVertexShader();
+        iconPipelineDesc.boundShaderState.fragmentShader = iconShaderPass->GetFragmentShader();
         iconPipelineDesc.boundShaderState.vertexDeclaration.attributes = iconVertexAttributes;
         iconPipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 3;
         iconPipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(EditorGizmoIconVertex);

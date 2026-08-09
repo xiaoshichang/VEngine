@@ -45,7 +45,6 @@ namespace ve
             };
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(frameData,
                                                                                                             "VirtualShadowStep1_ClearScene",
-                                                                                                            "VirtualShadow.Step1_ClearScene.Compute",
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

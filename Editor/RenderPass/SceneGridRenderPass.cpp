@@ -9,8 +9,8 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
+#include "Engine/Runtime/Render/RenderShaderResources.h"
 #include "Engine/Runtime/Render/ShaderManager.h"
-#include "Engine/Runtime/Render/ShaderArtifactLoader.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -220,18 +220,14 @@ namespace ve
             FailSceneGridPass("pipeline creation requires the frame ShaderManager.");
         }
 
-        rhi::RhiShaderModule* vertexShader = GetOrCompileShaderArtifact(*shaderManager, context.device, SceneGridVertexShaderID,
-                                                                          "SceneGrid", "Internal", rhi::RhiShaderStage::Vertex, "SceneGridVertexShader");
-        if (vertexShader == nullptr)
+        if (context.frameData.shaderResources == nullptr || context.frameData.shaderResources->sceneGrid == nullptr)
         {
-            FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to get the grid vertex shader."));
+            FailSceneGridPass("the SceneGrid shader resource is unavailable.");
         }
-
-        rhi::RhiShaderModule* fragmentShader = GetOrCompileShaderArtifact(*shaderManager, context.device, SceneGridFragmentShaderID,
-                                                                            "SceneGrid", "Internal", rhi::RhiShaderStage::Fragment, "SceneGridFragmentShader");
-        if (fragmentShader == nullptr)
+        const RTShaderPass* shaderPass = context.frameData.shaderResources->sceneGrid->GetPass("Internal");
+        if (shaderPass == nullptr || shaderPass->GetVertexShader() == nullptr || shaderPass->GetFragmentShader() == nullptr)
         {
-            FailSceneGridPass(BuildDeviceFailureMessage(context.device, "failed to get the grid fragment shader."));
+            FailSceneGridPass("the SceneGrid shader pass is unavailable.");
         }
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
@@ -256,8 +252,8 @@ namespace ve
         pipelineDesc.blendState = rhi::StaticRenderStates::AlphaBlend;
         pipelineDesc.rasterizerState = rhi::StaticRenderStates::SolidBackCullRasterizer;
         pipelineDesc.depthStencilState = depthEnabled ? rhi::StaticRenderStates::DepthReadOnlyLessEqual : rhi::StaticRenderStates::DepthDisabled;
-        pipelineDesc.boundShaderState.vertexShader = vertexShader;
-        pipelineDesc.boundShaderState.fragmentShader = fragmentShader;
+        pipelineDesc.boundShaderState.vertexShader = shaderPass->GetVertexShader();
+        pipelineDesc.boundShaderState.fragmentShader = shaderPass->GetFragmentShader();
         pipelineDesc.boundShaderState.vertexDeclaration.attributes = vertexAttributes;
         pipelineDesc.boundShaderState.vertexDeclaration.attributeCount = 2;
         pipelineDesc.boundShaderState.vertexDeclaration.stride = sizeof(RTMeshVertex);

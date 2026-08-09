@@ -29,7 +29,6 @@ namespace ve
             };
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(frameData,
                                                                                                             "VirtualShadowStep10_ReuseStatistics",
-                                                                                                            "VirtualShadow.Step10_ReuseStatistics.Compute",
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

@@ -43,5 +43,6 @@ namespace ve
         virtual ~IAssetRecordProvider() = default;
 
         [[nodiscard]] virtual Result<AssetRecord> FindAssetRecord(const AssetID& id) const = 0;
+        [[nodiscard]] virtual Result<AssetID> FindAssetIDByRuntimePath(const Path& runtimePath) const = 0;
     };
 } // namespace ve

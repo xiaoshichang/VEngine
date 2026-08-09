@@ -23,6 +23,7 @@ namespace ve
 {
     struct SceneSystemImpl;
     class PhysicsSystem;
+    struct RenderShaderResources;
     class ScriptingSystem;
 
     /// SceneThread callbacks supplied by Editor for per-frame event and render hooks.
@@ -131,6 +132,7 @@ namespace ve
         /// depending on Editor-only callbacks.
         void SetRuntimeStartFrameCallback(std::function<void()> callback) noexcept;
         void SetRuntimeFrameEndCallback(std::function<void()> callback) noexcept;
+        void SetRuntimeShutdownCallback(std::function<void()> callback) noexcept;
 
         /// Assigns the runtime OS-event hook executed on the Scene Thread before editor/input dispatch.
         ///
@@ -138,6 +140,8 @@ namespace ve
         /// on the Scene Thread. The callback is intentionally separate from editor callbacks so tools cannot
         /// accidentally replace player/runtime viewport maintenance.
         void SetRuntimeOSEventCallback(std::function<void(const OSEvent& event)> callback) noexcept;
+        void SetRenderShaderResources(std::shared_ptr<const RenderShaderResources> resources) noexcept;
+        [[nodiscard]] std::shared_ptr<const RenderShaderResources> GetRenderShaderResources() const noexcept;
 
         /// notify scene thread to start main loop.
         void StartLoop() noexcept;

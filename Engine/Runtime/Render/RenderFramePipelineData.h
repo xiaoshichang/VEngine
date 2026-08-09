@@ -14,6 +14,7 @@ namespace ve
     class RTCamera;
     class RTRenderItem;
     class RTScene;
+    struct RenderShaderResources;
     class VirtualShadowManager;
     struct UniformBufferAllocation;
 
@@ -38,6 +39,7 @@ namespace ve
         FrameContext* frameContext = nullptr;
         VirtualShadowManager* virtualShadowManager = nullptr;
         FrameGraphDebugFrameCapture* frameGraphDebugCapture = nullptr;
+        const RenderShaderResources* shaderResources = nullptr;
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
         [[nodiscard]] FrameGraphTransientResourcePool& GetFrameGraphTransientResourcePool() const;

@@ -28,7 +28,7 @@ namespace ve
 
         [[nodiscard]] Result<AssetRecord> FindAssetRecord(const AssetID& id) const override;
         [[nodiscard]] Result<ManifestAssetRecord> FindManifestAssetRecord(const AssetID& id) const;
-        [[nodiscard]] Result<AssetID> FindAssetIDByRuntimePath(const Path& runtimePath) const;
+        [[nodiscard]] Result<AssetID> FindAssetIDByRuntimePath(const Path& runtimePath) const override;
 
     private:
         Path assetManifestPath_;

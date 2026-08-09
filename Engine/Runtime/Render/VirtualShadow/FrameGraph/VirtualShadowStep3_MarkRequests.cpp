@@ -30,7 +30,6 @@ namespace ve
             };
             rhi::RhiComputePipelineState* pipeline = virtual_shadow_detail::GetVirtualShadowComputePipeline(context.frameData,
                                                                                                             "VirtualShadowStep3_MarkRequests",
-                                                                                                            "VirtualShadow.Step3_MarkRequests.Compute",
                                                                                                             bindings,
                                                                                                             static_cast<UInt32>(std::size(bindings)));
             if (pipeline == nullptr)

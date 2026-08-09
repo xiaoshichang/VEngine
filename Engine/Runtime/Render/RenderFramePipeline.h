@@ -15,6 +15,7 @@
 namespace ve
 {
     class ShaderManager;
+    struct RenderShaderResources;
     namespace rhi
     {
         class RhiCommandList;
@@ -27,6 +28,7 @@ namespace ve
     {
         StandaloneRendererInitParam renderer;
         std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures;
+        std::shared_ptr<const RenderShaderResources> shaderResources;
     };
 
     /// Describes the player frame flow: render the scene to an intermediate color texture, then present it.
@@ -34,6 +36,7 @@ namespace ve
     {
         BaseRendererInitParam sceneRenderer;
         std::shared_ptr<RTRenderTexture> sceneColorTexture;
+        std::shared_ptr<const RenderShaderResources> shaderResources;
     };
 
     /// Abstracts how a product surface records one frame.
@@ -48,6 +51,7 @@ namespace ve
         virtual ~FrameRenderPipeline() = default;
 
         virtual void RenderFrame(const FrameRenderPipelineData& frameData) = 0;
+        [[nodiscard]] virtual const RenderShaderResources* GetShaderResources() const noexcept = 0;
     };
 
     class EditorRenderFramePipeline final : public FrameRenderPipeline
@@ -56,10 +60,12 @@ namespace ve
         explicit EditorRenderFramePipeline(EditorRenderFramePipelineInitParam initParam);
 
         void RenderFrame(const FrameRenderPipelineData& frameData) override;
+        [[nodiscard]] const RenderShaderResources* GetShaderResources() const noexcept override;
 
     private:
         StandaloneRendererInitParam rendererInitParam_;
         std::vector<std::shared_ptr<RTRenderTexture>> retainedRenderTextures_;
+        std::shared_ptr<const RenderShaderResources> shaderResources_;
     };
 
     class PlayerRenderFramePipeline final : public FrameRenderPipeline
@@ -68,11 +74,13 @@ namespace ve
         explicit PlayerRenderFramePipeline(PlayerRenderFramePipelineInitParam initParam);
 
         void RenderFrame(const FrameRenderPipelineData& frameData) override;
+        [[nodiscard]] const RenderShaderResources* GetShaderResources() const noexcept override;
 
     private:
         void EnsureSceneColorTexture(const FrameRenderPipelineData& frameData);
 
         BaseRendererInitParam sceneRenderer_;
         std::shared_ptr<RTRenderTexture> sceneColorTexture_;
+        std::shared_ptr<const RenderShaderResources> shaderResources_;
     };
 } // namespace ve

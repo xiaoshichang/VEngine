@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Application/Application.h"
 #include "Engine/Runtime/Render/ViewportClient.h"
+#include "Engine/Runtime/Render/RenderShaderResources.h"
 #include "Engine/Runtime/Resource/RuntimeAssetLoader.h"
 
 #include <string>
@@ -32,6 +33,7 @@ namespace ve
 
         ViewportClient viewportClient_;
         RuntimeAssetLoader runtimeAssetLoader_;
+        RenderShaderResourceLibrary renderShaderResourceLibrary_;
         std::string packagedStartScene_;
         bool pendingPackagedStartupSceneLoad_ = false;
     };

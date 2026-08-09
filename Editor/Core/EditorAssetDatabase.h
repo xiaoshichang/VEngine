@@ -58,6 +58,7 @@ namespace ve::editor
         [[nodiscard]] const EditorAssetRecord* FindAsset(const Path& projectRelativePath) const noexcept;
         [[nodiscard]] const EditorAssetRecord* FindAssetByID(const AssetID& id) const noexcept;
         [[nodiscard]] Result<AssetRecord> FindAssetRecord(const AssetID& id) const override;
+        [[nodiscard]] Result<AssetID> FindAssetIDByRuntimePath(const Path& runtimePath) const override;
         [[nodiscard]] const std::unordered_map<AssetID, EditorAssetRecord>& GetAssetsByID() const noexcept;
         [[nodiscard]] const std::unordered_map<std::string, AssetID>& GetAssetIDsByAssetPath() const noexcept;
 
@@ -82,6 +83,7 @@ namespace ve::editor
         Path projectRoot_;
         std::unordered_map<AssetID, EditorAssetRecord> assetsByID_;
         std::unordered_map<std::string, AssetID> assetIDsByAssetPath_;
+        std::unordered_map<std::string, AssetID> assetIDsByRuntimePath_;
         bool initialized_ = false;
     };
 } // namespace ve::editor
