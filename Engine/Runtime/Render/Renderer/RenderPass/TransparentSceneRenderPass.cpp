@@ -8,7 +8,7 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -251,10 +251,10 @@ namespace ve
             return;
         }
 
-        ShaderManager* shaderManager = context.frameData.shaderManager;
-        if (shaderManager == nullptr)
+        RHIPipelineManager* pipelineManager = context.frameData.pipelineManager;
+        if (pipelineManager == nullptr)
         {
-            FailTransparentScenePass("pipeline creation requires the frame ShaderManager.");
+            FailTransparentScenePass("pipeline creation requires the frame RHIPipelineManager.");
         }
 
         rhi::RhiVertexAttributeDesc positionAttribute = {};
@@ -297,7 +297,7 @@ namespace ve
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = TransparentScenePassName;
 
-        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+        pipelineState_ = pipelineManager->GetOrCreateGraphicsPipeline(
             context.device,
             GraphicsPipelineID{BuildPipelineName(*shaderResource, *vertexShader, *fragmentShader), BuildPipelineVariant(targetFormat, fillMode, depthEnabled)},
             pipelineDesc);

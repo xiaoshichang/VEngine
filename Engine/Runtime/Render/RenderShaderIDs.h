@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIShaderModuleManager.h"
 
 namespace ve
 {

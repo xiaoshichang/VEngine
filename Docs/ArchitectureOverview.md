@@ -963,8 +963,9 @@ Swapchain
 Buffer
 Texture
 Sampler
-Shader
-PipelineState
+ShaderModule
+GraphicsPipelineState
+ComputePipelineState
 DescriptorSet / BindGroup
 RenderPass
 Framebuffer
@@ -976,6 +977,12 @@ Backend intent:
 - `D3D12RHI` maps naturally to the common RHI.
 - `MetalRHI` maps naturally to the common RHI.
 - `D3D11RHI` emulates missing explicit concepts internally.
+
+Render Thread RHI object caches are split by responsibility:
+
+- `RHIShaderModuleManager` owns only cached `RhiShaderModule` objects.
+- `RHIPipelineManager` owns cached `RhiGraphicsPipelineState` and `RhiComputePipelineState` objects.
+- `RenderSystem` owns both managers for the RHI device lifetime. Pipeline objects are cleared before shader modules after the device has become idle.
 
 First-stage rendering features:
 

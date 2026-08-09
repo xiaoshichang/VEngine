@@ -8,7 +8,7 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <cstdint>
@@ -57,11 +57,13 @@ namespace ve
             return name;
         }
 
-        [[nodiscard]] rhi::RhiPipelineState* GetDepthPipeline(RenderPassContext& context, RTShaderResource& shaderResource, rhi::RhiFillMode fillMode)
+        [[nodiscard]] rhi::RhiGraphicsPipelineState* GetDepthPipeline(RenderPassContext& context,
+                                                                      RTShaderResource& shaderResource,
+                                                                      rhi::RhiFillMode fillMode)
         {
             RTShaderPass* shaderPass = shaderResource.GetPass(ShaderPassType::DepthOnly);
             rhi::RhiShaderModule* vertexShader = shaderPass != nullptr ? shaderPass->GetVertexShader() : nullptr;
-            if (vertexShader == nullptr || context.frameData.shaderManager == nullptr)
+            if (vertexShader == nullptr || context.frameData.pipelineManager == nullptr)
             {
                 return nullptr;
             }
@@ -85,7 +87,7 @@ namespace ve
             pipelineDesc.colorFormat = rhi::RhiFormat::Unknown;
             pipelineDesc.depthFormat = rhi::RhiFormat::Depth32Float;
             pipelineDesc.debugName = DepthPrePassName;
-            return context.frameData.shaderManager->GetOrCreateGraphicsPipeline(
+            return context.frameData.pipelineManager->GetOrCreateGraphicsPipeline(
                 context.device,
                 GraphicsPipelineID{BuildPipelineName(shaderResource, *vertexShader), BuildPipelineVariant(fillMode)},
                 pipelineDesc);
@@ -173,7 +175,7 @@ namespace ve
             {
                 continue;
             }
-            rhi::RhiPipelineState* pipeline = GetDepthPipeline(context, *material->GetShaderResource(), viewData.view.fillMode);
+            rhi::RhiGraphicsPipelineState* pipeline = GetDepthPipeline(context, *material->GetShaderResource(), viewData.view.fillMode);
             if (pipeline == nullptr)
             {
                 FailDepthPrePassItem(itemIndex, "failed to resolve its depth pipeline.");

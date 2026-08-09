@@ -9,7 +9,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
@@ -223,10 +223,10 @@ namespace ve
             return;
         }
 
-        ShaderManager* shaderManager = context.frameData.shaderManager;
-        if (shaderManager == nullptr)
+        RHIPipelineManager* pipelineManager = context.frameData.pipelineManager;
+        if (pipelineManager == nullptr)
         {
-            FailDebugPass("pipeline creation requires the frame ShaderManager.");
+            FailDebugPass("pipeline creation requires the frame RHIPipelineManager.");
         }
 
         if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->shadowCasterDirtyDebug == nullptr)
@@ -268,7 +268,7 @@ namespace ve
         pipelineDesc.depthFormat = depthEnabled ? rhi::RhiFormat::Depth32Float : rhi::RhiFormat::Unknown;
         pipelineDesc.debugName = DebugPassName;
 
-        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+        pipelineState_ = pipelineManager->GetOrCreateGraphicsPipeline(
             context.device, GraphicsPipelineID{DebugPassName, BuildPipelineVariant(targetFormat, fillMode, depthEnabled)}, pipelineDesc);
         if (pipelineState_ == nullptr)
         {

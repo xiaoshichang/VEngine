@@ -7,8 +7,8 @@
 
 namespace ve
 {
-    class ShaderManager;
     class FrameContext;
+    class RHIPipelineManager;
     struct FrameGraphDebugFrameCapture;
     class RTCamera;
     class RTRenderItem;
@@ -34,7 +34,7 @@ namespace ve
         UInt64 frameIndex = 0;
         rhi::RhiDevice* device = nullptr;
         rhi::RhiSwapchain* mainSwapchain = nullptr;
-        ShaderManager* shaderManager = nullptr;
+        RHIPipelineManager* pipelineManager = nullptr;
         FrameContext* frameContext = nullptr;
         VirtualShadowManager* virtualShadowManager = nullptr;
         FrameGraphDebugFrameCapture* frameGraphDebugCapture = nullptr;

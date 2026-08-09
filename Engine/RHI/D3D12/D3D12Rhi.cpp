@@ -1165,10 +1165,10 @@ namespace ve::rhi
             uint32_t rootParameterIndex = 0;
         };
 
-        class D3D12PipelineState final : public RhiPipelineState
+        class D3D12GraphicsPipelineState final : public RhiGraphicsPipelineState
         {
         public:
-            D3D12PipelineState(RhiPrimitiveTopology topology,
+            D3D12GraphicsPipelineState(RhiPrimitiveTopology topology,
                                ComPtr<ID3D12RootSignature> rootSignature,
                                ComPtr<ID3D12PipelineState> pipelineState,
                                std::vector<D3D12RootBinding> rootBindings)
@@ -1747,9 +1747,9 @@ namespace ve::rhi
                 return true;
             }
 
-            void SetPipeline(const RhiPipelineState& pipelineState) override
+            void SetPipeline(const RhiGraphicsPipelineState& pipelineState) override
             {
-                const auto& d3dPipeline = static_cast<const D3D12PipelineState&>(pipelineState);
+                const auto& d3dPipeline = static_cast<const D3D12GraphicsPipelineState&>(pipelineState);
                 activePipeline_ = &d3dPipeline;
                 activeComputePipeline_ = nullptr;
                 activeResourceHeap_ = nullptr;
@@ -2142,7 +2142,7 @@ namespace ve::rhi
             bool activeDepthShouldTransitionToShaderRead_ = false;
             bool activeFragmentUavPass_ = false;
             bool recording_ = false;
-            const D3D12PipelineState* activePipeline_ = nullptr;
+            const D3D12GraphicsPipelineState* activePipeline_ = nullptr;
             const D3D12ComputePipelineState* activeComputePipeline_ = nullptr;
             ID3D12DescriptorHeap* activeResourceHeap_ = nullptr;
             ID3D12DescriptorHeap* activeSamplerHeap_ = nullptr;
@@ -2862,7 +2862,7 @@ namespace ve::rhi
                 return std::make_unique<D3D12ShaderModule>(desc.stage, bytecode);
             }
 
-            [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
+            [[nodiscard]] std::unique_ptr<RhiGraphicsPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
                 if (!IsPipelineResourceLayoutValid(desc.resourceLayout))
                 {
@@ -3103,7 +3103,7 @@ namespace ve::rhi
                     rootBindings.push_back(D3D12RootBinding{binding.kind, binding.stage, binding.slot, index});
                 }
 
-                return std::make_unique<D3D12PipelineState>(desc.primitiveType, rootSignature, pipelineState, std::move(rootBindings));
+                return std::make_unique<D3D12GraphicsPipelineState>(desc.primitiveType, rootSignature, pipelineState, std::move(rootBindings));
             }
 
             [[nodiscard]] std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc& desc) override

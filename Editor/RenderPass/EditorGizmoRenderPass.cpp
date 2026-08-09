@@ -9,7 +9,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -23,15 +23,6 @@ namespace ve
 {
     namespace
     {
-        inline constexpr const char* EditorGizmoLineVertexShaderName = "EditorGizmo.Line.Vertex";
-        inline constexpr const char* EditorGizmoLineFragmentShaderName = "EditorGizmo.Line.Fragment";
-        inline constexpr const char* EditorGizmoIconVertexShaderName = "EditorGizmo.Icon.Vertex";
-        inline constexpr const char* EditorGizmoIconFragmentShaderName = "EditorGizmo.Icon.Fragment";
-        const ShaderID EditorGizmoLineVertexShaderID{EditorGizmoLineVertexShaderName, 0};
-        const ShaderID EditorGizmoLineFragmentShaderID{EditorGizmoLineFragmentShaderName, 0};
-        const ShaderID EditorGizmoIconVertexShaderID{EditorGizmoIconVertexShaderName, 0};
-        const ShaderID EditorGizmoIconFragmentShaderID{EditorGizmoIconFragmentShaderName, 0};
-
         [[nodiscard]] UInt64 GrowBufferCapacity(UInt64 currentCapacity, UInt64 requiredCapacity) noexcept
         {
             constexpr UInt64 InitialCapacity = 4096;
@@ -189,10 +180,10 @@ namespace ve
             return;
         }
 
-        ShaderManager* shaderManager = context.frameData.shaderManager;
-        if (shaderManager == nullptr)
+        RHIPipelineManager* pipelineManager = context.frameData.pipelineManager;
+        if (pipelineManager == nullptr)
         {
-            FailEditorGizmoPass("pipeline creation requires the frame ShaderManager.");
+            FailEditorGizmoPass("pipeline creation requires the frame RHIPipelineManager.");
         }
 
         if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->editorGizmoLine == nullptr ||
@@ -244,7 +235,7 @@ namespace ve
         linePipelineDesc.colorFormat = targetFormat;
         linePipelineDesc.debugName = "EditorGizmoLinePipeline";
 
-        resources.linePipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+        resources.linePipelineState_ = pipelineManager->GetOrCreateGraphicsPipeline(
             context.device, GraphicsPipelineID{"EditorGizmoLinePipeline", BuildEditorGizmoPipelineVariant(targetFormat)}, linePipelineDesc);
         if (resources.linePipelineState_ == nullptr)
         {
@@ -292,7 +283,7 @@ namespace ve
         iconPipelineDesc.colorFormat = targetFormat;
         iconPipelineDesc.debugName = "EditorGizmoIconPipeline";
 
-        resources.iconPipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+        resources.iconPipelineState_ = pipelineManager->GetOrCreateGraphicsPipeline(
             context.device, GraphicsPipelineID{"EditorGizmoIconPipeline", BuildEditorGizmoPipelineVariant(targetFormat)}, iconPipelineDesc);
         if (resources.iconPipelineState_ == nullptr)
         {

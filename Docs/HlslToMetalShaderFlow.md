@@ -529,7 +529,7 @@ Negative tests:
 ### Phase 5: RHI Integration
 
 - Add `RhiShaderModule` artifact loading.
-- Add `RhiPipelineState` creation from generated artifacts.
+- Add `RhiGraphicsPipelineState` creation from generated artifacts.
 - Add bind group mapping from reflection metadata.
 - Replace hard-coded demo shaders with generated shader artifacts.
 

@@ -7,7 +7,7 @@
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -164,10 +164,10 @@ namespace ve
             return FailPreviewConversion(ErrorCode::InvalidState, "recording requires one Rgba8Unorm color attachment with depth disabled.");
         }
 
-        ShaderManager* shaderManager = context.frameData.shaderManager;
-        if (shaderManager == nullptr)
+        RHIPipelineManager* pipelineManager = context.frameData.pipelineManager;
+        if (pipelineManager == nullptr)
         {
-            return FailPreviewConversion(ErrorCode::InvalidState, "the frame ShaderManager is unavailable.");
+            return FailPreviewConversion(ErrorCode::InvalidState, "the frame RHIPipelineManager is unavailable.");
         }
 
         const std::string passName =
@@ -199,7 +199,7 @@ namespace ve
         pipelineDesc.depthFormat = rhi::RhiFormat::Unknown;
         pipelineDesc.debugName = "FrameGraphDebugPreviewPipeline";
 
-        rhi::RhiPipelineState* pipeline = shaderManager->TryGetOrCreateGraphicsPipeline(
+        rhi::RhiGraphicsPipelineState* pipeline = pipelineManager->TryGetOrCreateGraphicsPipeline(
             context.device, GraphicsPipelineID{"FrameGraphDebugPreview.Pipeline", PreviewModeVariant(mode)}, pipelineDesc);
         if (pipeline == nullptr)
         {

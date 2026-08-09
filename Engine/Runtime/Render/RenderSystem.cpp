@@ -20,7 +20,8 @@
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
+#include "Engine/Runtime/Render/RHIShaderModuleManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowManager.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
@@ -56,7 +57,8 @@ namespace ve
         RenderPerformanceStatisticsExchange performanceStatistics;
         Atomic<UInt64> recordedDrawCallCount{0};
         MaterialUniformPool materialUniformPool;
-        ShaderManager shaderManager;
+        RHIShaderModuleManager shaderModuleManager;
+        RHIPipelineManager pipelineManager;
         std::unique_ptr<VirtualShadowManager> virtualShadowManager;
         FrameGraphDebugCaptureExchange frameGraphDebugCapture;
         Atomic<UInt64> pendingMainSwapchainExtent{0};
@@ -258,7 +260,7 @@ namespace ve
             frameData.frameIndex = frameIndex;
             frameData.device = impl.device.get();
             frameData.mainSwapchain = impl.mainSwapchain.get();
-            frameData.shaderManager = &impl.shaderManager;
+            frameData.pipelineManager = &impl.pipelineManager;
             frameData.frameContext = &frameContext;
             frameData.virtualShadowManager = impl.virtualShadowManager.get();
             return ErrorCode::None;
@@ -447,7 +449,8 @@ namespace ve
             impl.pendingMainSwapchainExtent.store(0, std::memory_order_release);
             impl.mainSwapchainResizeCommandQueued.store(false, std::memory_order_release);
             impl.virtualShadowManager.reset();
-            impl.shaderManager.Clear();
+            impl.pipelineManager.Clear();
+            impl.shaderModuleManager.Clear();
             DestroyFrameResources(impl);
             impl.mainSwapchain.reset();
             impl.materialUniformPool.Shutdown();

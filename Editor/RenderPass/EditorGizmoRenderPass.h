@@ -54,8 +54,8 @@ namespace ve
         std::array<UInt64, RenderFrameContextCount> iconVertexBufferCapacities_{};
         std::unique_ptr<rhi::RhiTexture> iconAtlasTexture_;
         std::unique_ptr<rhi::RhiSampler> iconSampler_;
-        rhi::RhiPipelineState* linePipelineState_ = nullptr;
-        rhi::RhiPipelineState* iconPipelineState_ = nullptr;
+        rhi::RhiGraphicsPipelineState* linePipelineState_ = nullptr;
+        rhi::RhiGraphicsPipelineState* iconPipelineState_ = nullptr;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
     };
 

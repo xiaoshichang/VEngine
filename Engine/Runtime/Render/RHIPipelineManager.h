@@ -11,19 +11,6 @@
 
 namespace ve
 {
-    struct ShaderID
-    {
-        std::string name;
-        Int32 variant = 0;
-
-        [[nodiscard]] bool operator==(const ShaderID& other) const noexcept;
-    };
-
-    struct ShaderIDHash
-    {
-        [[nodiscard]] SizeT operator()(const ShaderID& id) const noexcept;
-    };
-
     struct GraphicsPipelineID
     {
         std::string name;
@@ -40,30 +27,26 @@ namespace ve
     using ComputePipelineID = GraphicsPipelineID;
     using ComputePipelineIDHash = GraphicsPipelineIDHash;
 
-    class ShaderManager final : public NonMovable
+    class RHIPipelineManager final : public NonMovable
     {
     public:
-        ShaderManager() = default;
-        ~ShaderManager() = default;
+        RHIPipelineManager() = default;
+        ~RHIPipelineManager() = default;
 
-        [[nodiscard]] rhi::RhiShaderModule* GetShader(ShaderID id) noexcept;
-        [[nodiscard]] const rhi::RhiShaderModule* GetShader(ShaderID id) const noexcept;
-        [[nodiscard]] rhi::RhiShaderModule* TryGetOrCompileShader(rhi::RhiDevice& device, ShaderID id, const rhi::RhiShaderModuleDesc& desc);
-        [[nodiscard]] rhi::RhiShaderModule* GetOrCompileShader(rhi::RhiDevice& device, ShaderID id, const rhi::RhiShaderModuleDesc& desc);
-        [[nodiscard]] rhi::RhiPipelineState* GetGraphicsPipeline(GraphicsPipelineID id) noexcept;
-        [[nodiscard]] const rhi::RhiPipelineState* GetGraphicsPipeline(GraphicsPipelineID id) const noexcept;
-        [[nodiscard]] rhi::RhiPipelineState*
+        [[nodiscard]] rhi::RhiGraphicsPipelineState* GetGraphicsPipeline(GraphicsPipelineID id) noexcept;
+        [[nodiscard]] const rhi::RhiGraphicsPipelineState* GetGraphicsPipeline(GraphicsPipelineID id) const noexcept;
+        [[nodiscard]] rhi::RhiGraphicsPipelineState*
         TryGetOrCreateGraphicsPipeline(rhi::RhiDevice& device, GraphicsPipelineID id, const rhi::RhiGraphicsPipelineDesc& desc);
-        [[nodiscard]] rhi::RhiPipelineState*
+        [[nodiscard]] rhi::RhiGraphicsPipelineState*
         GetOrCreateGraphicsPipeline(rhi::RhiDevice& device, GraphicsPipelineID id, const rhi::RhiGraphicsPipelineDesc& desc);
         [[nodiscard]] rhi::RhiComputePipelineState* GetComputePipeline(ComputePipelineID id) noexcept;
+        [[nodiscard]] const rhi::RhiComputePipelineState* GetComputePipeline(ComputePipelineID id) const noexcept;
         [[nodiscard]] rhi::RhiComputePipelineState*
         GetOrCreateComputePipeline(rhi::RhiDevice& device, ComputePipelineID id, const rhi::RhiComputePipelineDesc& desc);
         void Clear() noexcept;
 
     private:
-        std::unordered_map<ShaderID, std::unique_ptr<rhi::RhiShaderModule>, ShaderIDHash> shaders_;
-        std::unordered_map<GraphicsPipelineID, std::unique_ptr<rhi::RhiPipelineState>, GraphicsPipelineIDHash> graphicsPipelines_;
+        std::unordered_map<GraphicsPipelineID, std::unique_ptr<rhi::RhiGraphicsPipelineState>, GraphicsPipelineIDHash> graphicsPipelines_;
         std::unordered_map<ComputePipelineID, std::unique_ptr<rhi::RhiComputePipelineState>, ComputePipelineIDHash> computePipelines_;
     };
 } // namespace ve

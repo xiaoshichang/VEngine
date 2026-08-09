@@ -31,7 +31,7 @@ namespace ve
         void EnsurePipeline(RenderPassContext& context, UInt32 viewIndex, const std::shared_ptr<RTShaderResource>& shaderResource);
         void BindMaterialUniform(RenderPassContext& context, const RTRenderItem& item);
         TransparentSceneRenderPassInitParam initParam_;
-        rhi::RhiPipelineState* pipelineState_ = nullptr;
+        rhi::RhiGraphicsPipelineState* pipelineState_ = nullptr;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
         std::weak_ptr<RTShaderResource> pipelineShaderResource_;

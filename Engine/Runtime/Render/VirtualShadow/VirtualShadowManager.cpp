@@ -73,7 +73,7 @@ namespace ve
                                                    const RendererFrameGraphData& graphData)
         {
             RequireVirtualShadow(frameData.device != nullptr, "VSM requires an RHI device.");
-            RequireVirtualShadow(frameData.shaderManager != nullptr, "VSM requires a shader manager.");
+            RequireVirtualShadow(frameData.pipelineManager != nullptr, "VSM requires an RHI pipeline manager.");
             RequireVirtualShadow(frameData.device->GetBackend() != rhi::RhiBackend::Metal, "Metal VSM is not implemented.");
             RequireVirtualShadow(frameData.mainSwapchain != nullptr, "VSM requires the frame swapchain.");
             RequireVirtualShadow(frameData.frameContext != nullptr, "VSM requires a frame context.");

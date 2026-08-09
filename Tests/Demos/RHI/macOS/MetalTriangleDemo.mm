@@ -123,7 +123,7 @@ fragment float4 PSMain(VertexOutput input [[stage_in]])
         pipelineDesc.colorFormat = swapchain->GetColorFormat();
         pipelineDesc.debugName = "TrianglePipeline";
 
-        std::unique_ptr<ve::rhi::RhiPipelineState> pipelineState = device->CreateGraphicsPipeline(pipelineDesc);
+        std::unique_ptr<ve::rhi::RhiGraphicsPipelineState> pipelineState = device->CreateGraphicsPipeline(pipelineDesc);
         if (pipelineState == nullptr)
         {
             return false;

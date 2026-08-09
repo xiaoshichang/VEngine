@@ -85,7 +85,7 @@ namespace ve::rhi
     };
 
     /// Owns immutable graphics pipeline state for one render-pass shape.
-    class RhiPipelineState : public RhiObject
+    class RhiGraphicsPipelineState : public RhiObject
     {
     public:
         /// Returns the primitive topology used by this pipeline.
@@ -165,7 +165,7 @@ namespace ve::rhi
         [[nodiscard]] virtual bool CopyBuffer(RhiBuffer& source, uint64_t sourceOffset, RhiBuffer& destination, uint64_t destinationOffset, uint64_t size) = 0;
 
         /// Sets the active graphics pipeline.
-        virtual void SetPipeline(const RhiPipelineState& pipelineState) = 0;
+        virtual void SetPipeline(const RhiGraphicsPipelineState& pipelineState) = 0;
 
         /// Sets the active compute pipeline.
         virtual void SetComputePipeline(const RhiComputePipelineState& pipelineState) = 0;
@@ -291,7 +291,7 @@ namespace ve::rhi
         [[nodiscard]] virtual std::unique_ptr<RhiShaderModule> CreateShaderModule(const RhiShaderModuleDesc& desc) = 0;
 
         /// Creates immutable graphics pipeline state.
-        [[nodiscard]] virtual std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
+        [[nodiscard]] virtual std::unique_ptr<RhiGraphicsPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
 
         /// Creates immutable compute pipeline state.
         [[nodiscard]] virtual std::unique_ptr<RhiComputePipelineState> CreateComputePipeline(const RhiComputePipelineDesc& desc) = 0;

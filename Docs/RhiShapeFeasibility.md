@@ -55,7 +55,7 @@ RhiTexture
 RhiTextureView
 RhiSampler
 RhiShaderModule
-RhiPipelineState
+RhiGraphicsPipelineState
 RhiBindGroupLayout
 RhiBindGroup
 RhiRenderPass
@@ -218,7 +218,7 @@ Binding layouts should be derived from shader reflection where possible. The fir
 
 ## 9. Pipeline Model
 
-`RhiPipelineState` should be immutable after creation.
+`RhiGraphicsPipelineState` should be immutable after creation.
 
 First-stage pipeline description:
 

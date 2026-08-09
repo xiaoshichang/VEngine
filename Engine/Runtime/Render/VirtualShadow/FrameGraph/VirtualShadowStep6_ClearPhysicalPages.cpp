@@ -2,7 +2,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPasses.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"

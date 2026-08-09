@@ -14,7 +14,6 @@
 
 namespace ve
 {
-    class ShaderManager;
     struct BuiltInShaderResources;
     namespace rhi
     {

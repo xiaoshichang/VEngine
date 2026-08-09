@@ -718,10 +718,10 @@ namespace ve::rhi
             ComPtr<ID3DBlob> bytecode_;
         };
 
-        class D3D11PipelineState final : public RhiPipelineState
+        class D3D11GraphicsPipelineState final : public RhiGraphicsPipelineState
         {
         public:
-            D3D11PipelineState(RhiPrimitiveTopology topology,
+            D3D11GraphicsPipelineState(RhiPrimitiveTopology topology,
                                ComPtr<ID3D11VertexShader> vertexShader,
                                ComPtr<ID3D11PixelShader> pixelShader,
                                ComPtr<ID3D11InputLayout> inputLayout,
@@ -1151,9 +1151,9 @@ namespace ve::rhi
                 return true;
             }
 
-            void SetPipeline(const RhiPipelineState& pipelineState) override
+            void SetPipeline(const RhiGraphicsPipelineState& pipelineState) override
             {
-                const auto& d3dPipelineState = static_cast<const D3D11PipelineState&>(pipelineState);
+                const auto& d3dPipelineState = static_cast<const D3D11GraphicsPipelineState&>(pipelineState);
                 ClearShaderResourceBindings();
                 ClearUnorderedAccessBindings();
                 activePipeline_ = &d3dPipelineState;
@@ -1485,7 +1485,7 @@ namespace ve::rhi
 
             ComPtr<ID3D11DeviceContext> context_;
             ComPtr<ID3D11DeviceContext1> context1_;
-            const D3D11PipelineState* activePipeline_ = nullptr;
+            const D3D11GraphicsPipelineState* activePipeline_ = nullptr;
             const D3D11ComputePipelineState* activeComputePipeline_ = nullptr;
             ID3D11RenderTargetView* activeRenderTargetView_ = nullptr;
             const D3D11Texture* activeDepthTexture_ = nullptr;
@@ -1968,7 +1968,7 @@ namespace ve::rhi
                 return std::make_unique<D3D11ShaderModule>(desc.stage, bytecode);
             }
 
-            [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
+            [[nodiscard]] std::unique_ptr<RhiGraphicsPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
                 if (!IsPipelineResourceLayoutValid(desc.resourceLayout))
                 {
@@ -2166,7 +2166,7 @@ namespace ve::rhi
                 {
                     resourceBindings.assign(desc.resourceLayout.bindings, desc.resourceLayout.bindings + desc.resourceLayout.bindingCount);
                 }
-                return std::make_unique<D3D11PipelineState>(
+                return std::make_unique<D3D11GraphicsPipelineState>(
                     desc.primitiveType, vertexShader, pixelShader, inputLayout, rasterizerState, depthStencilState, blendState, std::move(resourceBindings));
             }
 

@@ -6,7 +6,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPasses.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
@@ -19,9 +19,10 @@ namespace ve
 {
     namespace
     {
-        [[nodiscard]] rhi::RhiPipelineState* GetStep7_RenderCastersPipeline(const FrameRenderPipelineData& frameData)
+        [[nodiscard]] rhi::RhiGraphicsPipelineState* GetStep7_RenderCastersPipeline(const FrameRenderPipelineData& frameData)
         {
-            if (rhi::RhiPipelineState* cached = frameData.shaderManager->GetGraphicsPipeline(GraphicsPipelineID{"VirtualShadowStep7_RenderCasters", 0}); cached != nullptr)
+            const GraphicsPipelineID pipelineID{"VirtualShadowStep7_RenderCasters", 0};
+            if (rhi::RhiGraphicsPipelineState* cached = frameData.pipelineManager->GetGraphicsPipeline(pipelineID); cached != nullptr)
             {
                 return cached;
             }
@@ -55,7 +56,7 @@ namespace ve
             desc.colorAttachmentCount = 0;
             desc.colorFormat = rhi::RhiFormat::Unknown;
             desc.depthFormat = rhi::RhiFormat::Unknown;
-            return frameData.shaderManager->GetOrCreateGraphicsPipeline(*frameData.device, GraphicsPipelineID{"VirtualShadowStep7_RenderCasters", 0}, desc);
+            return frameData.pipelineManager->GetOrCreateGraphicsPipeline(*frameData.device, pipelineID, desc);
         }
 
         void RecordStep7_RenderCasters(const VirtualShadowPageRecordingContext& context,
@@ -70,7 +71,7 @@ namespace ve
                 FailVirtualShadow("VSM Step7_RenderCasters requires one exact, UInt32-aligned page-table slice.");
             }
 
-            rhi::RhiPipelineState* pipeline = GetStep7_RenderCastersPipeline(context.frameData);
+            rhi::RhiGraphicsPipelineState* pipeline = GetStep7_RenderCastersPipeline(context.frameData);
             if (pipeline == nullptr)
             {
                 FailVirtualShadow("VSM Step7_RenderCasters failed to create its graphics pipeline.");

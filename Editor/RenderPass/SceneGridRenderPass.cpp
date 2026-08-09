@@ -10,7 +10,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -23,11 +23,6 @@ namespace ve
 {
     namespace
     {
-        inline constexpr const char* SceneGridVertexShaderName = "SceneGrid.Vertex";
-        inline constexpr const char* SceneGridFragmentShaderName = "SceneGrid.Fragment";
-        const ShaderID SceneGridVertexShaderID{SceneGridVertexShaderName, 0};
-        const ShaderID SceneGridFragmentShaderID{SceneGridFragmentShaderName, 0};
-
         constexpr Float32 GridExtent = 1000.0f;
 
         struct SceneGridUniformData
@@ -214,10 +209,10 @@ namespace ve
             return;
         }
 
-        ShaderManager* shaderManager = context.frameData.shaderManager;
-        if (shaderManager == nullptr)
+        RHIPipelineManager* pipelineManager = context.frameData.pipelineManager;
+        if (pipelineManager == nullptr)
         {
-            FailSceneGridPass("pipeline creation requires the frame ShaderManager.");
+            FailSceneGridPass("pipeline creation requires the frame RHIPipelineManager.");
         }
 
         if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->sceneGrid == nullptr)
@@ -264,7 +259,7 @@ namespace ve
         pipelineDesc.colorFormat = targetFormat;
         pipelineDesc.debugName = "SceneGridPipeline";
 
-        pipelineState_ = shaderManager->GetOrCreateGraphicsPipeline(
+        pipelineState_ = pipelineManager->GetOrCreateGraphicsPipeline(
             context.device, GraphicsPipelineID{"SceneGridPipeline", BuildSceneGridPipelineVariant(targetFormat, depthEnabled)}, pipelineDesc);
         if (pipelineState_ == nullptr)
         {

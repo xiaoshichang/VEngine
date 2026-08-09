@@ -158,7 +158,7 @@ namespace ve
         lastFrameGraphPassDiagnostics_.clear();
         lastFrameGraphExecutionPassNames_.clear();
         RequireRenderer(frameRenderData_ != nullptr && frameRenderData_->device != nullptr && frameRenderData_->frameContext != nullptr &&
-                            frameRenderData_->mainSwapchain != nullptr && frameRenderData_->shaderManager != nullptr,
+                            frameRenderData_->mainSwapchain != nullptr && frameRenderData_->pipelineManager != nullptr,
                         "Renderer family requires initialized frame services.");
         RequireRenderer(!rendererData_.views.empty() || !outputPasses_.empty(), "Renderer family requires at least one render view or output pass.");
         RequireRenderer(rendererData_.views.size() <= static_cast<SizeT>(std::numeric_limits<UInt32>::max()),

@@ -5,7 +5,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/ShaderManager.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
 
 namespace ve::virtual_shadow_detail
@@ -15,7 +15,7 @@ namespace ve::virtual_shadow_detail
                                                                   const rhi::RhiPipelineResourceBindingDesc* bindings,
                                                                   UInt32 bindingCount)
     {
-        if (rhi::RhiComputePipelineState* cached = frameData.shaderManager->GetComputePipeline(ComputePipelineID{name, 0}); cached != nullptr)
+        if (rhi::RhiComputePipelineState* cached = frameData.pipelineManager->GetComputePipeline(ComputePipelineID{name, 0}); cached != nullptr)
         {
             return cached;
         }
@@ -33,7 +33,7 @@ namespace ve::virtual_shadow_detail
         desc.computeShader = shaderPass->GetComputeShader();
         desc.resourceLayout = {bindings, bindingCount};
         desc.debugName = name;
-        return frameData.shaderManager->GetOrCreateComputePipeline(*frameData.device, ComputePipelineID{name, 0}, desc);
+        return frameData.pipelineManager->GetOrCreateComputePipeline(*frameData.device, ComputePipelineID{name, 0}, desc);
     }
 
     UniformBufferAllocation UploadVirtualShadowPassConstants(const FrameRenderPipelineData& frameData, const VirtualShadowGpuConstants& constants)

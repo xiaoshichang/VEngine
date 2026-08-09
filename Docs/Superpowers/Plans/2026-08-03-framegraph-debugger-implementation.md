@@ -665,7 +665,7 @@ float4 PSUint(VSOutput input) : SV_TARGET
 }
 ```
 
-Provide equivalent complete MSL entry points. Compile/cache shaders and three `Rgba8Unorm` graphics pipelines through `ShaderManager`; bind the source texture and a point-clamp sampler, then `Draw(3, 0)`.
+Provide equivalent complete MSL entry points. Compile/cache shaders and three `Rgba8Unorm` graphics pipelines through `RHIPipelineManager`; bind the source texture and a point-clamp sampler, then `Draw(3, 0)`.
 
 Expose conversion recording as `ErrorCode RecordConversion(...)`. Shader, pipeline, binding, or draw preparation failures return an error and update the affected `FrameGraphDebugPreview` to `Failed`; they do not assert, terminate, or change the normal frame result.
 

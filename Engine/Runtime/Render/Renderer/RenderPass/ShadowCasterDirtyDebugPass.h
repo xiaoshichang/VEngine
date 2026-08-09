@@ -23,7 +23,7 @@ namespace ve
                   RenderPassContext& context);
         void EnsurePipeline(RenderPassContext& context, UInt32 viewIndex);
 
-        rhi::RhiPipelineState* pipelineState_ = nullptr;
+        rhi::RhiGraphicsPipelineState* pipelineState_ = nullptr;
         rhi::RhiFormat pipelineColorFormat_ = rhi::RhiFormat::Unknown;
         rhi::RhiFillMode pipelineFillMode_ = rhi::RhiFillMode::Solid;
         bool pipelineDepthEnabled_ = false;

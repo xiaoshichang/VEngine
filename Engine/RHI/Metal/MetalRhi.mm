@@ -503,10 +503,10 @@ namespace ve::rhi
             id<MTLFunction> function_ = nil;
         };
 
-        class MetalPipelineState final : public RhiPipelineState
+        class MetalGraphicsPipelineState final : public RhiGraphicsPipelineState
         {
         public:
-            MetalPipelineState(RhiPrimitiveTopology topology,
+            MetalGraphicsPipelineState(RhiPrimitiveTopology topology,
                                RhiRasterizerStateDesc rasterizerState,
                                id<MTLRenderPipelineState> pipelineState,
                                id<MTLDepthStencilState> depthStencilState,
@@ -519,7 +519,7 @@ namespace ve::rhi
             {
             }
 
-            ~MetalPipelineState() override
+            ~MetalGraphicsPipelineState() override
             {
                 [depthStencilState_ release];
                 [pipelineState_ release];
@@ -934,9 +934,9 @@ namespace ve::rhi
                 return true;
             }
 
-            void SetPipeline(const RhiPipelineState& pipelineState) override
+            void SetPipeline(const RhiGraphicsPipelineState& pipelineState) override
             {
-                const auto& metalPipelineState = static_cast<const MetalPipelineState&>(pipelineState);
+                const auto& metalPipelineState = static_cast<const MetalGraphicsPipelineState&>(pipelineState);
                 activePipeline_ = &metalPipelineState;
                 [renderCommandEncoder_ setRenderPipelineState:metalPipelineState.GetNativePipelineState()];
                 [renderCommandEncoder_ setDepthStencilState:metalPipelineState.GetNativeDepthStencilState()];
@@ -1229,7 +1229,7 @@ namespace ve::rhi
             uint64_t indexBufferOffset_ = 0;
             MTLIndexType indexType_ = MTLIndexTypeUInt32;
             MTLPrimitiveType primitiveType_ = MTLPrimitiveTypeTriangle;
-            const MetalPipelineState* activePipeline_ = nullptr;
+            const MetalGraphicsPipelineState* activePipeline_ = nullptr;
         };
 
         class MetalDevice final : public RhiDevice
@@ -1463,7 +1463,7 @@ namespace ve::rhi
                 return std::make_unique<MetalShaderModule>(desc.stage, library, function);
             }
 
-            [[nodiscard]] std::unique_ptr<RhiPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
+            [[nodiscard]] std::unique_ptr<RhiGraphicsPipelineState> CreateGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override
             {
                 if (!IsPipelineResourceLayoutValid(desc.resourceLayout))
                 {
@@ -1567,7 +1567,7 @@ namespace ve::rhi
                 {
                     resourceBindings.assign(desc.resourceLayout.bindings, desc.resourceLayout.bindings + desc.resourceLayout.bindingCount);
                 }
-                return std::make_unique<MetalPipelineState>(
+                return std::make_unique<MetalGraphicsPipelineState>(
                     desc.primitiveType, desc.rasterizerState, pipelineState, depthStencilState, std::move(resourceBindings));
             }
 
