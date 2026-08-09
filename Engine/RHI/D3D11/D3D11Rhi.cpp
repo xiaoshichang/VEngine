@@ -42,6 +42,8 @@ namespace ve::rhi
                 return DXGI_FORMAT_B8G8R8A8_UNORM;
             case RhiFormat::Rgb32Float:
                 return DXGI_FORMAT_R32G32B32_FLOAT;
+            case RhiFormat::Rgba16Float:
+                return DXGI_FORMAT_R16G16B16A16_FLOAT;
             case RhiFormat::R32Uint:
                 return DXGI_FORMAT_R32_UINT;
             case RhiFormat::Depth32Float:

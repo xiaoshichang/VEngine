@@ -366,6 +366,8 @@ namespace ve
                 shaders.sceneGrid,
                 shaders.editorGizmoLine,
                 shaders.editorGizmoIcon,
+                shaders.pbrDirect,
+                shaders.hdrToneMapping,
             };
             for (const std::shared_ptr<RTShaderResource>& shader : builtInShaders)
             {

@@ -19,6 +19,8 @@ namespace ve
         constexpr const char* SceneGridPath = "Editor/Shaders/RenderPasses/SceneGrid.veshader.json";
         constexpr const char* EditorGizmoLinePath = "Editor/Shaders/RenderPasses/EditorGizmoLine.veshader.json";
         constexpr const char* EditorGizmoIconPath = "Editor/Shaders/RenderPasses/EditorGizmoIcon.veshader.json";
+        constexpr const char* PbrDirectPath = "Builtin/Shaders/PbrDirect.veshader.json";
+        constexpr const char* HdrToneMappingPath = "Builtin/Shaders/HdrToneMapping.veshader.json";
 
         [[nodiscard]] Error LoadShader(ResourceSystem& resourceSystem,
                                        const IAssetRecordProvider& assetProvider,
@@ -93,6 +95,14 @@ namespace ve
         {
             result = loadShader(EditorGizmoIconPath, editorGizmoIcon_, resources->editorGizmoIcon);
         }
+        if (result.IsOk())
+        {
+            result = loadShader(PbrDirectPath, pbrDirect_, resources->pbrDirect);
+        }
+        if (result.IsOk())
+        {
+            result = loadShader(HdrToneMappingPath, hdrToneMapping_, resources->hdrToneMapping);
+        }
         if (!result.IsOk())
         {
             Shutdown();
@@ -107,6 +117,8 @@ namespace ve
     {
         resources_.reset();
         editorGizmoIcon_.Reset();
+        hdrToneMapping_.Reset();
+        pbrDirect_.Reset();
         editorGizmoLine_.Reset();
         sceneGrid_.Reset();
         virtualShadowRedrawPageDebug_.Reset();

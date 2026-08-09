@@ -39,6 +39,7 @@ namespace ve
         case rhi::RhiFormat::Rgba8Unorm:
         case rhi::RhiFormat::Bgra8Unorm:
         case rhi::RhiFormat::Rgb32Float:
+        case rhi::RhiFormat::Rgba16Float:
             return FrameGraphDebugPreviewMode::Color;
         case rhi::RhiFormat::Depth32Float:
             return FrameGraphDebugPreviewMode::Depth;

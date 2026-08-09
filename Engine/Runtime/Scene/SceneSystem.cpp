@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Physics/PhysicsSystem.h"
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
+#include "Engine/Render/PBR/HdrColorPipeline.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"
@@ -182,8 +183,7 @@ namespace ve
 
             if (impl.playerSceneColorTexture == nullptr)
             {
-                RenderTextureDesc textureDesc = {};
-                textureDesc.name = "PlayerSceneColor";
+                RenderTextureDesc textureDesc = pbr::BuildHdrSceneColorDesc(WindowExtent{}, "PlayerSceneColor");
                 impl.playerSceneColorTexture = std::make_shared<RTRenderTexture>(std::move(textureDesc));
             }
 

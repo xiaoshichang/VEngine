@@ -1,0 +1,11 @@
+{
+    "schemaVersion": 2,
+    "name": "PBR Red M0.22 S0.33",
+    "shader": "Builtin/Shaders/PbrDirect",
+    "properties": {
+        "baseColor": [1, 0, 0, 1],
+        "metallic": 0.222222,
+        "roughness": 0.666667,
+        "emissive": [0, 0, 0, 1]
+    }
+}

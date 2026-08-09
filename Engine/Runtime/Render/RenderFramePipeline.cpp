@@ -3,6 +3,8 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/SwapchainOutputRenderPass.h"
+#include "Engine/Render/PBR/HdrColorPipeline.h"
+#include "Engine/Render/PBR/HdrToneMappingPass.h"
 #include "Engine/Runtime/Render/Renderer/RendererFactory.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -21,7 +23,7 @@ namespace ve
             RenderTextureDesc desc = {};
             desc.name = "PlayerSceneColor";
             desc.extent = WindowExtent{extent.width, extent.height};
-            desc.colorFormat = mainSwapchain.GetColorFormat();
+            desc.colorFormat = pbr::GetHdrColorFormat();
             return desc;
         }
 
@@ -71,7 +73,7 @@ namespace ve
         , sceneColorTexture_(std::move(initParam.sceneColorTexture))
         , builtInShaderResources_(std::move(initParam.builtInShaderResources))
     {
-        sceneRenderer_.outputPasses.push_back(std::make_unique<ViewColorToSwapchainCopyPass>(0));
+        sceneRenderer_.outputPasses.push_back(std::make_unique<pbr::HdrToneMappingPass>());
     }
 
     const BuiltInShaderResources* PlayerRenderFramePipeline::GetBuiltInShaderResources() const noexcept

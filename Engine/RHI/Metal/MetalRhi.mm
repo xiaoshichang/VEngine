@@ -30,6 +30,8 @@ namespace ve::rhi
                 return MTLPixelFormatRGBA8Unorm;
             case RhiFormat::Bgra8Unorm:
                 return MTLPixelFormatBGRA8Unorm;
+            case RhiFormat::Rgba16Float:
+                return MTLPixelFormatRGBA16Float;
             case RhiFormat::Depth32Float:
                 return MTLPixelFormatDepth32Float;
             case RhiFormat::Rgb32Float:

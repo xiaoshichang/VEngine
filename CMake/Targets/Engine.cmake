@@ -85,6 +85,9 @@ function(ve_add_engine)
             Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowSceneCache.cpp
             Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.cpp
+            Engine/Render/PBR/HdrColorPipeline.cpp
+            Engine/Render/PBR/HdrToneMappingPass.cpp
+            Engine/Render/PBR/PbrMath.cpp
             Engine/Runtime/Resource/AssetID.cpp
             Engine/Runtime/Resource/AssetRef.cpp
             Engine/Runtime/Resource/AssetManifest.cpp
@@ -247,6 +250,10 @@ function(ve_add_engine)
             Engine/RHI/Common/RhiStaticStates.h
             Engine/RHI/Common/RhiTypes.h
             Engine/RHI/Common/RhiUtils.h
+            Engine/Render/PBR/HdrColorPipeline.h
+            Engine/Render/PBR/HdrToneMappingPass.h
+            Engine/Render/PBR/PbrMath.h
+            Engine/Render/PBR/PbrTypes.h
     )
 
     target_include_directories(VEngine

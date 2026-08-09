@@ -1281,7 +1281,7 @@
                     "type": "TransformComponent",
                     "enabled": true,
                     "localPosition": [0, 8.45, 0],
-                    "localRotation": [0.7071068, 0, 0, 0.7071068],
+                    "localRotation": [0.40460476, 0, 0, 0.91449165],
                     "localScale": [1, 1, 1]
                 },
                 {
@@ -1300,6 +1300,3320 @@
                 }
             ],
             "children": []
+        },
+        {
+            "name": "PBR Sphere Grid",
+            "components": [
+                {
+                    "type": "TransformComponent",
+                    "enabled": true,
+                    "localPosition": [0, 0, -4.2],
+                    "localRotation": [0, 0, 0, 1],
+                    "localScale": [1, 1, 1]
+                }
+            ],
+            "children": [
+                {
+                    "name": "PBR Sphere M0.00 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000001",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000002",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000003",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000004",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000005",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000006",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000007",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000008",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000009",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 0.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000010",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000011",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000012",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000013",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000014",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000015",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000016",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000017",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000018",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000019",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.11",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 2, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000020",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000021",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000022",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000023",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000024",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000025",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000026",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000027",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000028",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000029",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.22",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 3.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000030",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000031",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000032",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000033",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000034",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000035",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000036",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000037",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000038",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000039",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.33",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 4.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000040",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000041",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000042",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000043",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000044",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000045",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000046",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000047",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000048",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000049",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.44",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 5.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000050",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000051",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000052",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000053",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000054",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000055",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000056",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000057",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000058",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000059",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.56",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 7, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000060",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000061",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000062",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000063",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000064",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000065",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000066",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000067",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000068",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000069",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.67",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 8.25, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000070",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000071",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000072",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000073",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000074",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000075",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000076",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000077",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000078",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000079",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.78",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 9.5, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000080",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000081",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000082",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000083",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000084",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000085",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000086",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000087",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000088",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000089",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S0.89",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 10.75, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000090",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.00 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-5.625, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000091",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.11 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-4.375, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000092",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.22 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-3.125, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000093",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.33 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-1.875, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000094",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.44 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [-0.625, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000095",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.56 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [0.625, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000096",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.67 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [1.875, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000097",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.78 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [3.125, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000098",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M0.89 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [4.375, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000099",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                },
+                {
+                    "name": "PBR Sphere M1.00 S1.00",
+                    "components": [
+                        {
+                            "type": "TransformComponent",
+                            "enabled": true,
+                            "localPosition": [5.625, 12, 0],
+                            "localRotation": [0, 0, 0, 1],
+                            "localScale": [1, 1, 1]
+                        },
+                        {
+                            "type": "MeshRenderComponent",
+                            "enabled": true,
+                            "mesh": {
+                                "assetID": {
+                                    "guid": "11111111-1111-1111-1111-111111111112",
+                                    "subID": 0
+                                }
+                            },
+                            "material": {
+                                "assetID": {
+                                    "guid": "5b719c00-0000-4a00-8b00-000000000100",
+                                    "subID": 0
+                                }
+                            },
+                            "boundsCenter": [0, 0, 0],
+                            "boundsExtents": [0.5, 0.5, 0.5],
+                            "castShadows": true,
+                            "receiveShadows": true
+                        }
+                    ],
+                    "children": []
+                }
+            ]
         }
     ]
 }

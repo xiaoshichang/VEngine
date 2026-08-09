@@ -1,0 +1,6 @@
+{
+    "schemaVersion": 3,
+    "name": "HdrToneMapping",
+    "source": "HdrToneMapping.hlsl",
+    "passes": [{"name": "Color", "type": "Internal", "stages": [{"stage": "Vertex", "entry": "VSMain"}, {"stage": "Pixel", "entry": "PSMain"}]}]
+}

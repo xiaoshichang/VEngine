@@ -1,0 +1,38 @@
+{
+    "schemaVersion": 3,
+    "name": "PbrDirect",
+    "source": "PbrDirect.hlsl",
+    "passes": [
+        {
+            "name": "DepthOnly",
+            "type": "DepthOnly",
+            "stages": [{"stage": "Vertex", "entry": "VSMain"}]
+        },
+        {
+            "name": "OpaqueForward",
+            "type": "OpaqueForward",
+            "stages": [
+                {"stage": "Vertex", "entry": "VSMain"},
+                {"stage": "Pixel", "entry": "PSMain"}
+            ]
+        },
+        {
+            "name": "ShadowCaster",
+            "type": "ShadowCaster",
+            "stages": [
+                {"stage": "Vertex", "entry": "VSMain"},
+                {"stage": "Pixel", "entry": "PSMain"}
+            ]
+        }
+    ],
+    "material": {
+        "constantBuffer": "MaterialConstants",
+        "constantBufferSize": 256,
+        "properties": [
+            {"name": "baseColor", "displayName": "Base Color", "type": "Color", "default": [1, 1, 1, 1], "binding": {"kind": "ConstantBuffer", "buffer": "MaterialConstants", "field": "baseColor", "offset": 0, "size": 16, "slot": 3, "space": 0}},
+            {"name": "metallic", "displayName": "Metallic", "type": "Float", "default": 0, "binding": {"kind": "ConstantBuffer", "buffer": "MaterialConstants", "field": "metallic", "offset": 16, "size": 4, "slot": 3, "space": 0}},
+            {"name": "roughness", "displayName": "Roughness", "type": "Float", "default": 0.5, "binding": {"kind": "ConstantBuffer", "buffer": "MaterialConstants", "field": "roughness", "offset": 20, "size": 4, "slot": 3, "space": 0}},
+            {"name": "emissive", "displayName": "Emissive", "type": "Color", "default": [0, 0, 0, 1], "binding": {"kind": "ConstantBuffer", "buffer": "MaterialConstants", "field": "emissive", "offset": 32, "size": 16, "slot": 3, "space": 0}}
+        ]
+    }
+}

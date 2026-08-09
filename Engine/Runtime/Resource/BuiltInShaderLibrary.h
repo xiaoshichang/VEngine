@@ -23,6 +23,8 @@ namespace ve
         std::shared_ptr<RTShaderResource> sceneGrid;
         std::shared_ptr<RTShaderResource> editorGizmoLine;
         std::shared_ptr<RTShaderResource> editorGizmoIcon;
+        std::shared_ptr<RTShaderResource> pbrDirect;
+        std::shared_ptr<RTShaderResource> hdrToneMapping;
     };
 
     enum class BuiltInShaderEnvironment
@@ -60,6 +62,8 @@ namespace ve
         AssetRef<ShaderResource> sceneGrid_;
         AssetRef<ShaderResource> editorGizmoLine_;
         AssetRef<ShaderResource> editorGizmoIcon_;
+        AssetRef<ShaderResource> pbrDirect_;
+        AssetRef<ShaderResource> hdrToneMapping_;
         std::shared_ptr<BuiltInShaderResources> resources_;
     };
 } // namespace ve

@@ -187,6 +187,8 @@ namespace ve::rhi
         Bgra8Unorm,
         /// Three 32-bit floating-point channels in red, green, blue order.
         Rgb32Float,
+        /// Four 16-bit floating-point channels in red, green, blue, alpha order. Used for HDR render targets.
+        Rgba16Float,
         /// One 32-bit unsigned integer channel.
         R32Uint,
         /// One 32-bit floating-point depth channel.
