@@ -40,6 +40,13 @@
 
 namespace ve
 {
+    struct MainSwapchainState
+    {
+        std::unique_ptr<rhi::RhiSwapchain> swapchain;
+        Atomic<UInt64> pendingResizeExtent{0};
+        AtomicBool resizeCommandQueued{false};
+    };
+
     struct RenderSystemImpl
     {
         Thread thread;
@@ -55,7 +62,7 @@ namespace ve
         AtomicSize activeSubmitCount{0};
         Atomic<int> backendValue{-1};
         std::unique_ptr<rhi::RhiDevice> device;
-        std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
+        MainSwapchainState mainSwapchainState;
         std::array<FrameContext, RenderFrameContextCount> frameContexts;
         RenderPerformanceStatisticsExchange performanceStatistics;
         Atomic<UInt64> recordedDrawCallCount{0};
@@ -63,8 +70,6 @@ namespace ve
         RHIPipelineManager pipelineManager;
         std::unique_ptr<VirtualShadowManager> virtualShadowManager;
         FrameGraphDebugCaptureExchange frameGraphDebugCapture;
-        Atomic<UInt64> pendingMainSwapchainExtent{0};
-        AtomicBool mainSwapchainResizeCommandQueued{false};
         bool recordingFrame = false;
         UInt32 recordingFrameSlotIndex = 0;
         UInt64 recordingSubmissionFenceValue = 0;
@@ -291,7 +296,7 @@ namespace ve
         {
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(impl.device != nullptr);
-            VE_ASSERT(impl.mainSwapchain != nullptr);
+            VE_ASSERT(impl.mainSwapchainState.swapchain != nullptr);
             completedStatistics.reset();
 
             // A FrameContext is a reusable in-flight GPU slot. Waiting here both makes its command resources reusable
@@ -299,7 +304,7 @@ namespace ve
             const UInt64 frameIndex = impl.nextFrameIndex++;
             const UInt32 frameSlotIndex = static_cast<UInt32>(frameIndex % RenderFrameContextCount);
             FrameContext& frameContext = impl.frameContexts[frameSlotIndex];
-            if (!frameContext.WaitForFrameStartAndReset(*impl.mainSwapchain))
+            if (!frameContext.WaitForFrameStartAndReset(*impl.mainSwapchainState.swapchain))
             {
                 return ErrorCode::PlatformError;
             }
@@ -322,7 +327,7 @@ namespace ve
             frameData.frameIndex = frameIndex;
             frameData.frameSlotIndex = frameSlotIndex;
             frameData.device = impl.device.get();
-            frameData.mainSwapchain = impl.mainSwapchain.get();
+            frameData.mainSwapchain = impl.mainSwapchainState.swapchain.get();
             frameData.pipelineManager = &impl.pipelineManager;
             frameData.frameContext = &frameContext;
             frameData.transientResourcePool = &frameContext.GetTransientResourcePool();
@@ -372,8 +377,8 @@ namespace ve
         [[nodiscard]] ErrorCode PresentMainSwapchainFrame(RenderSystemImpl& impl)
         {
             VE_ASSERT_RENDER_THREAD();
-            VE_ASSERT(impl.mainSwapchain != nullptr);
-            return impl.mainSwapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
+            VE_ASSERT(impl.mainSwapchainState.swapchain != nullptr);
+            return impl.mainSwapchainState.swapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
         }
 
         void RetireFrameGraphDebugDataOnRenderThread(RenderSystemImpl& impl, std::shared_ptr<const FrameGraphDebugData> data)
@@ -518,13 +523,13 @@ namespace ve
 
             RetireFrameGraphDebugDataOnRenderThread(impl, impl.frameGraphDebugCapture.Reset());
             impl.performanceStatistics.Reset();
-            impl.pendingMainSwapchainExtent.store(0, std::memory_order_release);
-            impl.mainSwapchainResizeCommandQueued.store(false, std::memory_order_release);
+            impl.mainSwapchainState.pendingResizeExtent.store(0, std::memory_order_release);
+            impl.mainSwapchainState.resizeCommandQueued.store(false, std::memory_order_release);
             impl.virtualShadowManager.reset();
             impl.pipelineManager.Clear();
             impl.shaderModuleManager.Clear();
             DestroyFrameResources(impl);
-            impl.mainSwapchain.reset();
+            impl.mainSwapchainState.swapchain.reset();
             if (impl.device != nullptr)
             {
                 impl.device.reset();
@@ -546,11 +551,11 @@ namespace ve
         {
             VE_ASSERT_RENDER_THREAD();
 
-            UInt64 packedExtent = impl.pendingMainSwapchainExtent.exchange(0, std::memory_order_acq_rel);
-            if (packedExtent != 0 && impl.mainSwapchain != nullptr)
+            UInt64 packedExtent = impl.mainSwapchainState.pendingResizeExtent.exchange(0, std::memory_order_acq_rel);
+            if (packedExtent != 0 && impl.mainSwapchainState.swapchain != nullptr)
             {
                 rhi::RhiExtent2D requestedExtent = UnpackExtent(packedExtent);
-                const rhi::RhiExtent2D currentExtent = impl.mainSwapchain->GetExtent();
+                const rhi::RhiExtent2D currentExtent = impl.mainSwapchainState.swapchain->GetExtent();
                 if (requestedExtent.width != currentExtent.width || requestedExtent.height != currentExtent.height)
                 {
                     if (impl.device != nullptr)
@@ -567,15 +572,15 @@ namespace ve
                     }
                     else
                     {
-                        const UInt64 newerPackedExtent = impl.pendingMainSwapchainExtent.exchange(0, std::memory_order_acq_rel);
+                        const UInt64 newerPackedExtent = impl.mainSwapchainState.pendingResizeExtent.exchange(0, std::memory_order_acq_rel);
                         if (newerPackedExtent != 0)
                         {
                             requestedExtent = UnpackExtent(newerPackedExtent);
                         }
 
-                        const rhi::RhiExtent2D resizedFromExtent = impl.mainSwapchain->GetExtent();
+                        const rhi::RhiExtent2D resizedFromExtent = impl.mainSwapchainState.swapchain->GetExtent();
                         if ((requestedExtent.width != resizedFromExtent.width || requestedExtent.height != resizedFromExtent.height) &&
-                            !impl.mainSwapchain->Resize(requestedExtent))
+                            !impl.mainSwapchainState.swapchain->Resize(requestedExtent))
                         {
                             const char* backendError = impl.device != nullptr ? impl.device->GetLastErrorMessage() : nullptr;
                             VE_LOG_ERROR_CATEGORY("Render",
@@ -588,14 +593,14 @@ namespace ve
                 }
             }
 
-            impl.mainSwapchainResizeCommandQueued.store(false, std::memory_order_release);
-            if (impl.pendingMainSwapchainExtent.load(std::memory_order_acquire) == 0 || !impl.acceptingCommands.load(std::memory_order_acquire))
+            impl.mainSwapchainState.resizeCommandQueued.store(false, std::memory_order_release);
+            if (impl.mainSwapchainState.pendingResizeExtent.load(std::memory_order_acquire) == 0 || !impl.acceptingCommands.load(std::memory_order_acquire))
             {
                 return;
             }
 
             bool expected = false;
-            if (impl.mainSwapchainResizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            if (impl.mainSwapchainState.resizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
             {
                 QueueMainSwapchainResizeCommand(impl);
             }
@@ -748,15 +753,15 @@ namespace ve
                                       }
 
                                       outHandles.backend = static_cast<RenderBackend>(impl_->backendValue.load(std::memory_order_acquire));
-                                      outHandles.hasMainSwapchain = impl_->mainSwapchain != nullptr;
+                                      outHandles.hasMainSwapchain = impl_->mainSwapchainState.swapchain != nullptr;
                                       outHandles.device = impl_->device->GetNativeDeviceHandle();
                                       outHandles.immediateContext = impl_->device->GetNativeImmediateContextHandle();
                                       outHandles.graphicsQueue = impl_->device->GetNativeGraphicsQueueHandle();
                                       outHandles.shaderResourceDescriptorAllocator = impl_->device->GetNativeShaderResourceDescriptorAllocator();
-                                      if (impl_->mainSwapchain != nullptr)
+                                      if (impl_->mainSwapchainState.swapchain != nullptr)
                                       {
-                                          outHandles.mainSwapchainBufferCount = impl_->mainSwapchain->GetBufferCount();
-                                          outHandles.mainSwapchainColorFormat = impl_->mainSwapchain->GetColorFormat();
+                                          outHandles.mainSwapchainBufferCount = impl_->mainSwapchainState.swapchain->GetBufferCount();
+                                          outHandles.mainSwapchainColorFormat = impl_->mainSwapchainState.swapchain->GetColorFormat();
                                       }
                                       return ErrorCode::None;
                                   });
@@ -885,7 +890,7 @@ namespace ve
                                           return ErrorCode::InvalidState;
                                       }
 
-                                      if (impl_->mainSwapchain != nullptr)
+                                      if (impl_->mainSwapchainState.swapchain != nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
@@ -896,11 +901,11 @@ namespace ve
                                           return ErrorCode::PlatformError;
                                       }
 
-                                      impl_->mainSwapchain = std::move(swapchain);
+                                      impl_->mainSwapchainState.swapchain = std::move(swapchain);
                                       ErrorCode frameResourceResult = CreateFrameResources(*impl_);
                                       if (frameResourceResult != ErrorCode::None)
                                       {
-                                          impl_->mainSwapchain.reset();
+                                          impl_->mainSwapchainState.swapchain.reset();
                                           return frameResourceResult;
                                       }
 
@@ -925,7 +930,7 @@ namespace ve
                                                   }
 
                                                   DestroyFrameResources(*impl_);
-                                                  impl_->mainSwapchain.reset();
+                                                  impl_->mainSwapchainState.swapchain.reset();
                                                   return ErrorCode::None;
                                               });
 
@@ -940,9 +945,9 @@ namespace ve
             return;
         }
 
-        impl_->pendingMainSwapchainExtent.store(PackExtent(extent), std::memory_order_release);
+        impl_->mainSwapchainState.pendingResizeExtent.store(PackExtent(extent), std::memory_order_release);
         bool expected = false;
-        if (impl_->mainSwapchainResizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        if (impl_->mainSwapchainState.resizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
         {
             QueueMainSwapchainResizeCommand(*impl_);
         }
