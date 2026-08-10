@@ -834,3 +834,137 @@ git commit -m "docs: record frame resource ownership verification"
 ```
 
 If `Docs/ArchitectureOverview.md` requires no edit and checkbox-only plan updates are not retained in the implementation branch, skip this commit and report the verified implementation commits instead.
+
+### Task 10: Move Single-Slot State Into FrameContext
+
+**Files:**
+- Modify: `Engine/Runtime/Render/RenderResourceLifetime.h`
+- Modify: `Engine/Runtime/Render/FrameContext.h`
+- Modify: `Engine/Runtime/Render/FrameContext.cpp`
+- Modify: `Engine/Runtime/Render/RenderSystem.cpp`
+- Modify: `Docs/ArchitectureOverview.md`
+- Modify: `Docs/Superpowers/Plans/2026-08-10-frame-context-resource-management.md`
+- Test: existing Windows configure, build, CTest, and Editor smoke paths
+
+- [ ] **Step 1: Move shared retirement entry types into the lifetime header**
+
+Add these definitions after `RhiObjectList` in `RenderResourceLifetime.h` so both `FrameContext` and `RenderSystem` use one complete type:
+
+```cpp
+struct PendingDeleteRTResourceBatch
+{
+    RhiObjectList resources;
+    UInt32 remainingFenceCount = 0;
+};
+
+struct PendingDeleteRTResourceEntry
+{
+    UInt64 fenceValue = 0;
+    std::shared_ptr<PendingDeleteRTResourceBatch> batch;
+};
+```
+
+Include `Engine/Runtime/Core/Types.h` explicitly. Remove the duplicate local struct definitions from `RenderSystem.cpp`.
+
+- [ ] **Step 2: Give FrameContext private ownership of its single-slot state**
+
+Add the pool, ordered queue, and submitted frame index to `FrameContext` as singular members:
+
+```cpp
+private:
+    void PrepareForReuse(UInt64 completedFenceValue) noexcept;
+    void CollectRetiredRhiObjects(UInt64 completedFenceValue) noexcept;
+
+    std::unique_ptr<rhi::RhiCommandList> commandList_;
+    std::unique_ptr<rhi::RhiFence> completionFence_;
+    FrameTransientResourcePool transientResourcePool_;
+    std::deque<PendingDeleteRTResourceEntry> pendingDeleteRTResourceQueue_;
+    UInt64 submittedFenceValue_ = 0;
+    UInt64 nextFenceValue_ = 1;
+    UInt64 submittedFrameIndex_ = 0;
+```
+
+Expose only these narrow slot operations; do not expose the deque:
+
+```cpp
+[[nodiscard]] FrameTransientResourcePool& GetTransientResourcePool() noexcept;
+void EnqueuePendingDeleteResource(UInt64 fenceValue, const std::shared_ptr<PendingDeleteRTResourceBatch>& batch);
+void ClearRetiredRhiObjectsAfterWaitIdle() noexcept;
+void SetSubmittedFrameIndex(UInt64 frameIndex) noexcept;
+[[nodiscard]] UInt64 TakeSubmittedFrameIndex() noexcept;
+```
+
+`Initialize()` initializes `transientResourcePool_` after the command list and fence exist. Both successful wait methods capture the old submitted fence value, clear it after the wait succeeds, then call:
+
+```cpp
+void FrameContext::PrepareForReuse(UInt64 completedFenceValue) noexcept
+{
+    CollectRetiredRhiObjects(completedFenceValue);
+    transientResourcePool_.BeginFrame();
+}
+```
+
+Move the existing ordered insertion and completed-prefix collection code from `RenderSystem.cpp` into `EnqueuePendingDeleteResource()` and `CollectRetiredRhiObjects()`. `Shutdown()` waits for the slot, shuts down and clears the transient pool objects, clears the retirement queue, resets `submittedFrameIndex_`, then destroys the command list and fence.
+
+- [ ] **Step 3: Remove the three parallel arrays from RenderSystemImpl**
+
+Delete:
+
+```cpp
+std::array<FrameTransientResourcePool, RenderFrameContextCount> transientResourcePools;
+std::array<std::deque<PendingDeleteRTResourceEntry>, RenderFrameContextCount> pendingDeleteRTResourceQueues;
+std::array<UInt64, RenderFrameContextCount> submittedFrameIndices{};
+```
+
+Redirect each use to the selected `FrameContext`:
+
+```cpp
+impl.frameContexts[frameSlotIndex].EnqueuePendingDeleteResource(fenceValue, batch);
+frameData.transientResourcePool = &frameContext.GetTransientResourcePool();
+const UInt64 completedFrameIndex = frameContext.TakeSubmittedFrameIndex();
+frameData.frameContext->SetSubmittedFrameIndex(frameData.frameIndex);
+```
+
+Delete the RenderSystem-local collection helper and the separate pool initialize/shutdown/begin-frame loops. `WaitForAllFrameContexts()` only calls `WaitAndReset()`, because successful waits now prepare the slot internally. `ClearRetiredRhiObjectsAfterWaitIdle()` iterates `frameContexts` and calls the matching FrameContext method. Remove the obsolete `<deque>` and direct `FrameTransientResourcePool.h` includes from `RenderSystem.cpp` when no longer used.
+
+- [ ] **Step 4: Format and run ownership scans**
+
+Format the changed `.h` and `.cpp` files with the repository `.clang-format`, then run:
+
+```text
+git diff --check
+rg -n "transientResourcePools|pendingDeleteRTResourceQueues|submittedFrameIndices" Engine/Runtime/Render
+rg -n "transientResourcePool_|pendingDeleteRTResourceQueue_|submittedFrameIndex_" Engine/Runtime/Render/FrameContext.h
+rg -n "inFlightGpuFrameObjects_|FrameUniformAllocator|RenderFrameUniformCache|RetainInFlightGpuFrameObject" Engine Editor Player Tests CMake
+```
+
+Expected: `git diff --check` has no errors; the old parallel-array names and removed legacy resource managers have no results; all three singular fields appear in `FrameContext.h`.
+
+- [ ] **Step 5: Update the architecture overview**
+
+Change the rendering ownership paragraph to state that each `FrameContext` owns its slot's transient pool and ordered retirement queue. Preserve the distinction that `RenderSystem` owns cross-slot dependency discovery, active-recording state, and shared retirement batches. Do not reintroduce generic in-flight resource retention.
+
+- [ ] **Step 6: Run existing regression verification**
+
+Run through the MSVC environment wrapper:
+
+```text
+CMake/Scripts/WithMsvc.bat cmake --preset windows-msvc-tests
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-tests
+CMake/Scripts/WithMsvc.bat ctest --preset windows-msvc-tests
+CMake/Scripts/WithMsvc.bat cmake --preset windows-msvc-debug
+CMake/Scripts/WithMsvc.bat cmake --build --preset windows-msvc-debug
+```
+
+Expected: both configure/build paths exit `0`; CTest reports `100% tests passed`. Do not add or modify unit tests.
+
+Launch `VEngineWinEditor.exe` with `--dx12 --project "D:\github-desktop\VEngine\DemoProject"` and `--dx11 --project "D:\github-desktop\VEngine\DemoProject"`. Let each backend open the project and render, close the main window normally, and require exit code `0` with no error, assertion, or validation messages in `Logs/VEngine.log`.
+
+- [ ] **Step 7: Mark the task complete and commit**
+
+Mark Task 10 checkboxes complete, run `git diff --check`, and commit the implementation and documentation:
+
+```text
+git add Engine/Runtime/Render/RenderResourceLifetime.h Engine/Runtime/Render/FrameContext.h Engine/Runtime/Render/FrameContext.cpp Engine/Runtime/Render/RenderSystem.cpp Docs/ArchitectureOverview.md Docs/Superpowers/Plans/2026-08-10-frame-context-resource-management.md
+git commit -m "render: move frame-slot state into frame context"
+```
