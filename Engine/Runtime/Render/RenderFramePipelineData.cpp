@@ -11,12 +11,6 @@
 
 namespace ve
 {
-    void FrameRenderPipelineData::RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object) const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        frameContext->RetainInFlightGpuFrameObject(std::move(object));
-    }
-
     rhi::RhiCommandList& FrameRenderPipelineData::GetCommandList() const
     {
         VE_ASSERT(frameContext != nullptr);

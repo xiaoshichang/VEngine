@@ -1,7 +1,7 @@
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 
 #include "Engine/RHI/Common/RhiDevice.h"
-#include "Engine/Runtime/Render/FrameUniformAllocator.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
 
 namespace ve

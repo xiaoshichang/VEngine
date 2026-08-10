@@ -46,7 +46,6 @@ namespace ve
         const BuiltInShaderResources* builtInShaderResources = nullptr;
 
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
-        void RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object) const;
         [[nodiscard]] UniformBufferAllocation UploadTransientUniform(const void* data, UInt64 size, const char* debugName) const;
         void AdoptTransientRhiObject(std::shared_ptr<rhi::RhiObject> object) const;
         [[nodiscard]] UniformBufferAllocation GetSceneUniform(RTScene& scene) const;

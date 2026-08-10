@@ -4,7 +4,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Math.h"
-#include "Engine/Runtime/Render/RenderFrameUniformCache.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"

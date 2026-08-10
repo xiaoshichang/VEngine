@@ -35,7 +35,6 @@ function(ve_add_engine)
             Engine/Runtime/Profiling/ProfileSystem.cpp
             Engine/Runtime/Render/FrameContext.cpp
             Engine/Runtime/Render/FrameTransientResourcePool.cpp
-            Engine/Runtime/Render/FrameUniformAllocator.cpp
             Engine/Runtime/Render/RenderTarget.cpp
             Engine/Runtime/Render/RenderTexture.cpp
             Engine/Runtime/Render/RenderViewState.cpp
@@ -43,7 +42,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderCameraMath.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
             Engine/Runtime/Render/RenderFramePipelineData.cpp
-            Engine/Runtime/Render/RenderFrameUniformCache.cpp
             Engine/Runtime/Render/RenderPerformanceStatistics.cpp
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
@@ -168,7 +166,6 @@ function(ve_add_engine)
             Engine/Runtime/Profiling/ProfileSystem.h
             Engine/Runtime/Render/FrameContext.h
             Engine/Runtime/Render/FrameTransientResourcePool.h
-            Engine/Runtime/Render/FrameUniformAllocator.h
             Engine/Runtime/Render/RenderTarget.h
             Engine/Runtime/Render/RenderTexture.h
             Engine/Runtime/Render/RenderViewFamily.h
@@ -178,7 +175,6 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderDebugMode.h
             Engine/Runtime/Render/RenderFramePipeline.h
             Engine/Runtime/Render/RenderFrameConfig.h
-            Engine/Runtime/Render/RenderFrameUniformCache.h
             Engine/Runtime/Render/RenderPerformanceStatistics.h
             Engine/Runtime/Render/RenderResource.h
             Engine/Runtime/Render/RenderResourceLifetime.h

@@ -3,9 +3,6 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <limits>
-#include <utility>
-
 namespace ve
 {
     bool FrameContext::Initialize(rhi::RhiDevice& device, UInt32 contextIndex)
@@ -28,8 +25,6 @@ namespace ve
             return false;
         }
 
-        uniformAllocator_.Initialize(device);
-        uniformCache_.Initialize(uniformAllocator_);
         return true;
     }
 
@@ -44,9 +39,6 @@ namespace ve
             return false;
         }
 
-        inFlightGpuFrameObjects_.clear();
-        uniformCache_.Reset();
-        uniformAllocator_.Reset();
         submittedFenceValue_ = 0;
         return true;
     }
@@ -62,9 +54,6 @@ namespace ve
             return false;
         }
 
-        inFlightGpuFrameObjects_.clear();
-        uniformCache_.Reset();
-        uniformAllocator_.Reset();
         submittedFenceValue_ = 0;
         return true;
     }
@@ -82,8 +71,6 @@ namespace ve
             return false;
         }
 
-        uniformCache_.Shutdown();
-        uniformAllocator_.Shutdown();
         commandList_.reset();
         completionFence_.reset();
         nextFenceValue_ = 1;
@@ -93,13 +80,6 @@ namespace ve
     bool FrameContext::IsInitialized() const noexcept
     {
         return commandList_ != nullptr && completionFence_ != nullptr;
-    }
-
-    void FrameContext::RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object)
-    {
-        VE_ASSERT_RENDER_THREAD();
-        VE_ASSERT(object != nullptr);
-        inFlightGpuFrameObjects_.push_back(std::move(object));
     }
 
     ErrorCode FrameContext::Submit(SubmitCallback submit, void* submitContext) noexcept
@@ -116,26 +96,6 @@ namespace ve
         }
         MarkSubmitted(submissionFenceValue);
         return ErrorCode::None;
-    }
-
-    UniformBufferAllocation FrameContext::UploadUniform(const void* data, UInt64 size)
-    {
-        return uniformAllocator_.Upload(data, size);
-    }
-
-    UniformBufferAllocation FrameContext::GetFrameUniform(const RTScene& scene)
-    {
-        return uniformCache_.GetFrameUniform(scene);
-    }
-
-    UniformBufferAllocation FrameContext::GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent)
-    {
-        return uniformCache_.GetViewUniform(camera, targetExtent);
-    }
-
-    UniformBufferAllocation FrameContext::GetObjectUniform(const RTRenderItem& item)
-    {
-        return uniformCache_.GetObjectUniform(item);
     }
 
     rhi::RhiCommandList& FrameContext::GetCommandList() noexcept
