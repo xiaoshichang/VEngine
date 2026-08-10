@@ -332,15 +332,16 @@ namespace ve
         {
             FailOpaqueForwardPass("queued render item material requires an initialized shader resource.");
         }
-        if (materialResource->GetUniformBuffer() == nullptr || materialResource->GetUniformBufferSize() == 0)
+        const UniformBufferAllocation materialUniform = context.frameData.GetMaterialUniform(*materialResource);
+        if (materialUniform.buffer == nullptr || materialUniform.size == 0)
         {
             FailOpaqueForwardPass("queued render item material requires an initialized uniform buffer.");
         }
         context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment,
                                              3,
-                                             *materialResource->GetUniformBuffer(),
-                                             materialResource->GetUniformBufferOffset(),
-                                             materialResource->GetUniformBufferSize());
+                                             *materialUniform.buffer,
+                                             materialUniform.offset,
+                                             materialUniform.size);
     }
 
 } // namespace ve

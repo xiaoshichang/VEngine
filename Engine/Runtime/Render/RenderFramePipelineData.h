@@ -12,6 +12,7 @@ namespace ve
     class RHIPipelineManager;
     struct FrameGraphDebugFrameCapture;
     class RTCamera;
+    class RTMaterialResource;
     class RTRenderItem;
     class RTScene;
     struct BuiltInShaderResources;
@@ -49,5 +50,6 @@ namespace ve
         [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene) const;
         [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const;
         [[nodiscard]] UniformBufferAllocation GetObjectUniform(const RTRenderItem& item) const;
+        [[nodiscard]] UniformBufferAllocation GetMaterialUniform(RTMaterialResource& material) const;
     };
 } // namespace ve

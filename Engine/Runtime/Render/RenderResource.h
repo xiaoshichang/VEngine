@@ -4,7 +4,8 @@
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Render/MaterialUniformPool.h"
+#include "Engine/Runtime/Render/RenderResourceLifetime.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/Renderer/RenderQueue.h"
 #include "Engine/Runtime/Resource/ShaderPass.h"
 
@@ -57,10 +58,9 @@ namespace ve
         [[nodiscard]] UInt32 GetVertexStride() const noexcept;
         [[nodiscard]] UInt32 GetVertexCount() const noexcept;
         [[nodiscard]] UInt32 GetIndexCount() const noexcept;
-        void AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const;
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
         void InitRenderResource(rhi::RhiDevice& device, RTMeshResourceDesc desc);
-        void ResetRenderResource() noexcept;
 
     private:
         RTMeshResourceDesc desc_;
@@ -91,10 +91,9 @@ namespace ve
         [[nodiscard]] bool IsInitialized() const noexcept;
         [[nodiscard]] rhi::RhiTexture* GetTexture() noexcept;
         [[nodiscard]] const rhi::RhiTexture* GetTexture() const noexcept;
-        void AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const;
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
         void InitRenderResource(rhi::RhiDevice& device, RTTextureResourceDesc desc);
-        void ResetRenderResource() noexcept;
 
     private:
         RTTextureResourceDesc desc_;
@@ -142,6 +141,7 @@ namespace ve
         std::shared_ptr<rhi::RhiShaderModule>& VertexShader() noexcept { return vertexShader_; }
         std::shared_ptr<rhi::RhiShaderModule>& FragmentShader() noexcept { return fragmentShader_; }
         std::shared_ptr<rhi::RhiShaderModule>& ComputeShader() noexcept { return computeShader_; }
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
     private:
         ShaderPassType type_;
@@ -164,10 +164,9 @@ namespace ve
         [[nodiscard]] const RTShaderPass* GetPass(std::string_view name) const noexcept;
         [[nodiscard]] bool HasPass(ShaderPassType type) const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
-        void AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const;
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
         void InitRenderResource(rhi::RhiDevice& device, RTShaderResourceDesc desc);
-        void ResetRenderResource() noexcept;
 
     private:
         RTShaderResourceDesc desc_;
@@ -192,18 +191,15 @@ namespace ve
 
         [[nodiscard]] const RTMaterialResourceDesc& GetDesc() const noexcept;
         [[nodiscard]] bool IsInitialized() const noexcept;
-        [[nodiscard]] rhi::RhiBuffer* GetUniformBuffer() noexcept;
-        [[nodiscard]] const rhi::RhiBuffer* GetUniformBuffer() const noexcept;
-        [[nodiscard]] UInt64 GetUniformBufferOffset() const noexcept;
-        [[nodiscard]] UInt64 GetUniformBufferSize() const noexcept;
         [[nodiscard]] std::shared_ptr<RTShaderResource> GetShaderResource() const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
+        [[nodiscard]] UniformBufferAllocation GetUniformBuffer(rhi::RhiDevice& device, UInt32 frameSlotIndex);
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
-        void InitRenderResource(MaterialUniformPool& uniformPool, RTMaterialResourceDesc desc);
-        void ResetRenderResource(MaterialUniformPool& uniformPool);
+        void InitRenderResource(RTMaterialResourceDesc desc);
 
     private:
         RTMaterialResourceDesc desc_;
-        MaterialUniformAllocation uniformAllocation_;
+        RTDynamicUniformBuffer uniformBuffer_;
     };
 } // namespace ve

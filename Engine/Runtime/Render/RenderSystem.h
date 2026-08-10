@@ -199,6 +199,7 @@ namespace ve
         void InitRenderResource(std::shared_ptr<RTTextureResource> textureResource, RTTextureResourceDesc desc);
         void InitRenderResource(std::shared_ptr<RTShaderResource> shaderResource, RTShaderResourceDesc desc);
         void InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource, RTMaterialResourceDesc desc);
+        void ReleaseRenderResource(std::shared_ptr<RTRenderTexture> renderTexture);
         void ReleaseRenderResource(std::shared_ptr<RTMeshResource> meshResource);
         void ReleaseRenderResource(std::shared_ptr<RTTextureResource> textureResource);
         void ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource);

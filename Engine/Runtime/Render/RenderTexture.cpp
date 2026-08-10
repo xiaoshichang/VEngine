@@ -67,6 +67,23 @@ namespace ve
     {
     }
 
+    RenderTexture::~RenderTexture()
+    {
+        if (renderSystem_ == nullptr || rtRenderTexture_ == nullptr || !renderSystem_->IsInitialized())
+        {
+            return;
+        }
+
+        try
+        {
+            renderSystem_->ReleaseRenderResource(std::move(rtRenderTexture_));
+        }
+        catch (...)
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "RenderTexture failed to enqueue render resource release.");
+        }
+    }
+
     bool RenderTexture::IsValid() const noexcept
     {
         return desc_.extent.width != 0 && desc_.extent.height != 0;
@@ -98,6 +115,8 @@ namespace ve
         VE_ASSERT_MESSAGE(IsValid(), "RenderTexture::InitRenderResource requires a valid extent.");
 
         EnsureRenderThreadProxy();
+        VE_ASSERT_MESSAGE(renderSystem_ == nullptr || renderSystem_ == &renderSystem, "RenderTexture cannot migrate between RenderSystem instances.");
+        renderSystem_ = &renderSystem;
         renderSystem.InitRenderResource(rtRenderTexture_, BuildDesc());
     }
 
@@ -174,30 +193,33 @@ namespace ve
         return nativeSampledViewHandle_.load(std::memory_order_acquire);
     }
 
-    void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc)
+    bool RTRenderTexture::MatchesDesc(const RenderTextureDesc& desc) const noexcept
     {
-        VE_ASSERT_RENDER_THREAD();
-
         const bool textureMatchesDesc = texture_ != nullptr && texture_->GetWidth() == desc.extent.width && texture_->GetHeight() == desc.extent.height &&
                                         texture_->GetFormat() == desc.colorFormat;
         const bool depthTextureMatchesDesc = desc.createDepthTexture ? depthTexture_ != nullptr && depthTexture_->GetWidth() == desc.extent.width &&
                                                                            depthTexture_->GetHeight() == desc.extent.height &&
                                                                            depthTexture_->GetFormat() == rhi::RhiFormat::Depth32Float
                                                                      : depthTexture_ == nullptr;
+        return textureMatchesDesc && depthTextureMatchesDesc;
+    }
+
+    RhiObjectList RTRenderTexture::TakeRhiObjects() noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        RhiObjectList objects;
+        objects.reserve(2);
+        MoveRhiObject(objects, texture_);
+        MoveRhiObject(objects, depthTexture_);
+        nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
+        return objects;
+    }
+
+    void RTRenderTexture::InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc)
+    {
+        VE_ASSERT_RENDER_THREAD();
 
         desc_ = std::move(desc);
-        if (!textureMatchesDesc || !depthTextureMatchesDesc)
-        {
-            if (texture_ != nullptr)
-            {
-                texture_.reset();
-            }
-            if (depthTexture_ != nullptr)
-            {
-                depthTexture_.reset();
-            }
-            nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
-        }
 
         VE_ASSERT_MESSAGE(desc_.extent.width != 0 && desc_.extent.height != 0, "RTRenderTexture::InitRenderResource requires a valid extent.");
 
@@ -220,17 +242,4 @@ namespace ve
         }
     }
 
-    void RTRenderTexture::ResetRenderResource() noexcept
-    {
-        VE_ASSERT_RENDER_THREAD();
-        if (texture_ != nullptr)
-        {
-            texture_.reset();
-        }
-        if (depthTexture_ != nullptr)
-        {
-            depthTexture_.reset();
-        }
-        nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
-    }
 } // namespace ve

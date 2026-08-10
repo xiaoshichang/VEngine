@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <iterator>
 #include <limits>
 #include <utility>
 
@@ -82,23 +83,20 @@ namespace ve
         return static_cast<UInt32>(desc_.indices.size());
     }
 
-    void RTMeshResource::AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const
+    RhiObjectList RTMeshResource::TakeRhiObjects() noexcept
     {
-        if (vertexBuffer_ != nullptr)
-        {
-            objects.push_back(vertexBuffer_);
-        }
-        if (indexBuffer_ != nullptr)
-        {
-            objects.push_back(indexBuffer_);
-        }
+        VE_ASSERT_RENDER_THREAD();
+        RhiObjectList objects;
+        objects.reserve(2);
+        MoveRhiObject(objects, vertexBuffer_);
+        MoveRhiObject(objects, indexBuffer_);
+        return objects;
     }
 
     void RTMeshResource::InitRenderResource(rhi::RhiDevice& device, RTMeshResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource();
         desc_ = std::move(desc);
 
         if (desc_.vertices.empty())
@@ -118,13 +116,6 @@ namespace ve
         const UInt64 indexBufferSize = static_cast<UInt64>(desc_.indices.size() * sizeof(UInt32));
         indexBuffer_ = device.CreateBuffer(MakeBufferDesc(indexBufferSize, rhi::RhiBufferUsage::Index, desc_.indices.data(), "RTMeshResourceIndexBuffer"));
         VE_ASSERT_MESSAGE(indexBuffer_ != nullptr, "RTMeshResource failed to create index buffer.");
-    }
-
-    void RTMeshResource::ResetRenderResource() noexcept
-    {
-        VE_ASSERT_RENDER_THREAD();
-        indexBuffer_.reset();
-        vertexBuffer_.reset();
     }
 
     RTTextureResource::RTTextureResource(RTTextureResourceDesc desc)
@@ -152,19 +143,18 @@ namespace ve
         return texture_.get();
     }
 
-    void RTTextureResource::AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const
+    RhiObjectList RTTextureResource::TakeRhiObjects() noexcept
     {
-        if (texture_ != nullptr)
-        {
-            objects.push_back(texture_);
-        }
+        VE_ASSERT_RENDER_THREAD();
+        RhiObjectList objects;
+        MoveRhiObject(objects, texture_);
+        return objects;
     }
 
     void RTTextureResource::InitRenderResource(rhi::RhiDevice& device, RTTextureResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource();
         desc_ = std::move(desc);
         if (desc_.width == 0 || desc_.height == 0)
         {
@@ -189,12 +179,6 @@ namespace ve
 
         texture_ = device.CreateTexture(textureDesc);
         VE_ASSERT_MESSAGE(texture_ != nullptr, "RTTextureResource failed to create texture.");
-    }
-
-    void RTTextureResource::ResetRenderResource() noexcept
-    {
-        VE_ASSERT_RENDER_THREAD();
-        texture_.reset();
     }
 
     RTShaderResource::RTShaderResource(RTShaderResourceDesc desc)
@@ -258,30 +242,34 @@ namespace ve
         return revision_;
     }
 
-    void RTShaderResource::AppendRhiObjects(std::vector<std::shared_ptr<rhi::RhiObject>>& objects) const
+    RhiObjectList RTShaderPass::TakeRhiObjects() noexcept
     {
-        for (const std::unique_ptr<RTShaderPass>& pass : passes_)
+        VE_ASSERT_RENDER_THREAD();
+        RhiObjectList objects;
+        objects.reserve(3);
+        MoveRhiObject(objects, vertexShader_);
+        MoveRhiObject(objects, fragmentShader_);
+        MoveRhiObject(objects, computeShader_);
+        return objects;
+    }
+
+    RhiObjectList RTShaderResource::TakeRhiObjects() noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        RhiObjectList objects;
+        for (std::unique_ptr<RTShaderPass>& pass : passes_)
         {
-            if (pass->GetVertexShader() != nullptr)
-            {
-                objects.push_back(pass->GetVertexShaderShared());
-            }
-            if (pass->GetFragmentShader() != nullptr)
-            {
-                objects.push_back(pass->GetFragmentShaderShared());
-            }
-            if (pass->GetComputeShader() != nullptr)
-            {
-                objects.push_back(pass->GetComputeShaderShared());
-            }
+            RhiObjectList passObjects = pass->TakeRhiObjects();
+            objects.insert(objects.end(), std::make_move_iterator(passObjects.begin()), std::make_move_iterator(passObjects.end()));
         }
+        passes_.clear();
+        return objects;
     }
 
     void RTShaderResource::InitRenderResource(rhi::RhiDevice& device, RTShaderResourceDesc desc)
     {
         VE_ASSERT_RENDER_THREAD();
 
-        ResetRenderResource();
         desc_ = std::move(desc);
         bool createdArtifact = false;
 
@@ -341,12 +329,6 @@ namespace ve
         }
     }
 
-    void RTShaderResource::ResetRenderResource() noexcept
-    {
-        VE_ASSERT_RENDER_THREAD();
-        passes_.clear();
-    }
-
     RTMaterialResource::RTMaterialResource(RTMaterialResourceDesc desc)
         : desc_(std::move(desc))
     {
@@ -359,27 +341,7 @@ namespace ve
 
     bool RTMaterialResource::IsInitialized() const noexcept
     {
-        return uniformAllocation_.buffer != nullptr;
-    }
-
-    rhi::RhiBuffer* RTMaterialResource::GetUniformBuffer() noexcept
-    {
-        return uniformAllocation_.buffer;
-    }
-
-    const rhi::RhiBuffer* RTMaterialResource::GetUniformBuffer() const noexcept
-    {
-        return uniformAllocation_.buffer;
-    }
-
-    UInt64 RTMaterialResource::GetUniformBufferOffset() const noexcept
-    {
-        return uniformAllocation_.offset;
-    }
-
-    UInt64 RTMaterialResource::GetUniformBufferSize() const noexcept
-    {
-        return uniformAllocation_.size;
+        return desc_.shaderResource != nullptr;
     }
 
     std::shared_ptr<RTShaderResource> RTMaterialResource::GetShaderResource() const noexcept
@@ -392,39 +354,32 @@ namespace ve
         return desc_.revision;
     }
 
-    void RTMaterialResource::InitRenderResource(MaterialUniformPool& uniformPool, RTMaterialResourceDesc desc)
+    UniformBufferAllocation RTMaterialResource::GetUniformBuffer(rhi::RhiDevice& device, UInt32 frameSlotIndex)
     {
         VE_ASSERT_RENDER_THREAD();
-
-        if (desc.constantData.empty())
+        if (desc_.constantData.empty())
         {
-            ResetRenderResource(uniformPool);
-            desc_ = std::move(desc);
-            return;
+            return {};
         }
-
-        const UInt64 constantDataSize = static_cast<UInt64>(desc.constantData.size());
-        if (!uniformPool.IsValid(uniformAllocation_))
-        {
-            uniformAllocation_ = {};
-        }
-        if (uniformAllocation_.buffer == nullptr || uniformAllocation_.size != constantDataSize)
-        {
-            MaterialUniformAllocation newAllocation = uniformPool.Allocate(constantDataSize);
-            uniformPool.Update(newAllocation, desc.constantData.data(), constantDataSize);
-            uniformPool.Release(uniformAllocation_);
-            uniformAllocation_ = newAllocation;
-        }
-        else
-        {
-            uniformPool.Update(uniformAllocation_, desc.constantData.data(), constantDataSize);
-        }
-        desc_ = std::move(desc);
+        return uniformBuffer_.GetOrUpdate(device,
+                                          frameSlotIndex,
+                                          desc_.constantData.data(),
+                                          static_cast<UInt64>(desc_.constantData.size()),
+                                          desc_.revision,
+                                          "RTMaterialResourceUniform");
     }
 
-    void RTMaterialResource::ResetRenderResource(MaterialUniformPool& uniformPool)
+    RhiObjectList RTMaterialResource::TakeRhiObjects() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
-        uniformPool.Release(uniformAllocation_);
+        RhiObjectList objects = uniformBuffer_.TakeRhiObjects();
+        desc_ = {};
+        return objects;
+    }
+
+    void RTMaterialResource::InitRenderResource(RTMaterialResourceDesc desc)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        desc_ = std::move(desc);
     }
 } // namespace ve

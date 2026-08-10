@@ -3,9 +3,11 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Error.h"
+#include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Platform/Window.h"
 #include "Engine/Runtime/Render/RenderTarget.h"
+#include "Engine/Runtime/Render/RenderResourceLifetime.h"
 
 #include <atomic>
 #include <memory>
@@ -30,11 +32,12 @@ namespace ve
     /// RenderTexture binds together the CPU-side render target description, the Render Thread texture proxy, and the
     /// sampled-view handle used by editor UI or future material binding. RenderTarget stays a lightweight output
     /// description; RenderTexture owns the actual texture-backed render resource.
-    class RenderTexture
+    class RenderTexture final : public NonCopyable
     {
     public:
         RenderTexture();
         explicit RenderTexture(RenderTextureDesc desc);
+        ~RenderTexture();
 
         [[nodiscard]] bool IsValid() const noexcept;
 
@@ -55,6 +58,7 @@ namespace ve
         RenderTextureDesc desc_;
         RenderTarget renderTarget_;
         std::shared_ptr<RTRenderTexture> rtRenderTexture_;
+        RenderSystem* renderSystem_ = nullptr;
     };
 
     /// Render Thread proxy for a RenderTexture.
@@ -76,9 +80,10 @@ namespace ve
         [[nodiscard]] const rhi::RhiTexture* GetDepthTexture() const noexcept;
         [[nodiscard]] std::shared_ptr<rhi::RhiTexture> GetDepthTextureShared() const noexcept;
         [[nodiscard]] void* GetRenderResourceViewHandle() const noexcept;
+        [[nodiscard]] bool MatchesDesc(const RenderTextureDesc& desc) const noexcept;
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
         void InitRenderResource(rhi::RhiDevice& device, RenderTextureDesc desc);
-        void ResetRenderResource() noexcept;
 
     private:
         RenderTextureDesc desc_;

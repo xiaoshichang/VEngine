@@ -16,7 +16,6 @@
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/FrameContext.h"
 #include "Engine/Runtime/Render/FrameTransientResourcePool.h"
-#include "Engine/Runtime/Render/MaterialUniformPool.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderResourceLifetime.h"
@@ -74,7 +73,6 @@ namespace ve
         std::array<UInt64, RenderFrameContextCount> submittedFrameIndices{};
         RenderPerformanceStatisticsExchange performanceStatistics;
         Atomic<UInt64> recordedDrawCallCount{0};
-        MaterialUniformPool materialUniformPool;
         RHIShaderModuleManager shaderModuleManager;
         RHIPipelineManager pipelineManager;
         std::unique_ptr<VirtualShadowManager> virtualShadowManager;
@@ -585,8 +583,6 @@ namespace ve
             impl.shaderModuleManager.Clear();
             DestroyFrameResources(impl);
             impl.mainSwapchain.reset();
-            impl.materialUniformPool.Shutdown();
-
             if (impl.device != nullptr)
             {
                 impl.device.reset();
@@ -793,7 +789,6 @@ namespace ve
 
                                       impl_->device = std::move(device);
                                       impl_->virtualShadowManager = std::make_unique<VirtualShadowManager>();
-                                      impl_->materialUniformPool.Initialize(*impl_->device);
                                       impl_->backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
                                       VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
                                       return ErrorCode::None;
@@ -1020,7 +1015,13 @@ namespace ve
                        [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
+                           RhiObjectList retiredObjects;
+                           if (!renderTexture->MatchesDesc(desc))
+                           {
+                               retiredObjects = renderTexture->TakeRhiObjects();
+                           }
                            renderTexture->InitRenderResource(*impl_->device, std::move(desc));
+                           RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
 
@@ -1033,7 +1034,9 @@ namespace ve
                        [this, meshResource = std::move(meshResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
+                           RhiObjectList retiredObjects = meshResource->TakeRhiObjects();
                            meshResource->InitRenderResource(*impl_->device, std::move(desc));
+                           RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
 
@@ -1046,7 +1049,9 @@ namespace ve
                        [this, shaderResource = std::move(shaderResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
+                           RhiObjectList retiredObjects = shaderResource->TakeRhiObjects();
                            shaderResource->InitRenderResource(*impl_->device, std::move(desc));
+                           RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
 
@@ -1059,7 +1064,9 @@ namespace ve
                        [this, textureResource = std::move(textureResource), desc = std::move(desc)]() mutable
                        {
                            VE_ASSERT(impl_->device != nullptr);
+                           RhiObjectList retiredObjects = textureResource->TakeRhiObjects();
                            textureResource->InitRenderResource(*impl_->device, std::move(desc));
+                           RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
 
@@ -1071,17 +1078,18 @@ namespace ve
         EnqueueCommand("RenderSystemInitMaterialResource",
                        [this, materialResource = std::move(materialResource), desc = std::move(desc)]() mutable
                        {
-                           if (materialResource->IsInitialized())
-                           {
-                               const bool waitResult = WaitForAllFrameContexts(*impl_);
-                               VE_ASSERT_MESSAGE(waitResult, "Failed to wait for in-flight frames before updating a material uniform.");
-                               if (!waitResult)
-                               {
-                                   return;
-                               }
-                           }
-                           materialResource->InitRenderResource(impl_->materialUniformPool, std::move(desc));
+                           materialResource->InitRenderResource(std::move(desc));
                        });
+    }
+
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTRenderTexture> renderTexture)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(renderTexture != nullptr, "RenderSystem::ReleaseRenderResource requires a render texture.");
+
+        EnqueueCommand("RenderSystemReleaseRenderTexture",
+                       [this, renderTexture = std::move(renderTexture)]() mutable
+                       { RetireRhiObjects(*impl_, renderTexture->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTMaterialResource> materialResource)
@@ -1090,20 +1098,8 @@ namespace ve
         VE_ASSERT_MESSAGE(materialResource != nullptr, "RenderSystem::ReleaseRenderResource requires a material resource.");
 
         EnqueueCommand("RenderSystemReleaseMaterialResource",
-                       [this, materialResource = std::move(materialResource)]()
-                       {
-                           if (!materialResource->IsInitialized())
-                           {
-                               return;
-                           }
-
-                           const bool waitResult = WaitForAllFrameContexts(*impl_);
-                           VE_ASSERT_MESSAGE(waitResult, "Failed to wait for in-flight frames before releasing a material uniform.");
-                           if (waitResult)
-                           {
-                               materialResource->ResetRenderResource(impl_->materialUniformPool);
-                           }
-                       });
+                       [this, materialResource = std::move(materialResource)]() mutable
+                       { RetireRhiObjects(*impl_, materialResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTMeshResource> meshResource)
@@ -1112,7 +1108,8 @@ namespace ve
         VE_ASSERT_MESSAGE(meshResource != nullptr, "RenderSystem::ReleaseRenderResource requires a mesh resource.");
 
         EnqueueCommand("RenderSystemReleaseMeshResource",
-                       [meshResource = std::move(meshResource)]() { meshResource->ResetRenderResource(); });
+                       [this, meshResource = std::move(meshResource)]() mutable
+                       { RetireRhiObjects(*impl_, meshResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource)
@@ -1121,7 +1118,8 @@ namespace ve
         VE_ASSERT_MESSAGE(shaderResource != nullptr, "RenderSystem::ReleaseRenderResource requires a shader resource.");
 
         EnqueueCommand("RenderSystemReleaseShaderResource",
-                       [shaderResource = std::move(shaderResource)]() { shaderResource->ResetRenderResource(); });
+                       [this, shaderResource = std::move(shaderResource)]() mutable
+                       { RetireRhiObjects(*impl_, shaderResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTTextureResource> textureResource)
@@ -1130,7 +1128,8 @@ namespace ve
         VE_ASSERT_MESSAGE(textureResource != nullptr, "RenderSystem::ReleaseRenderResource requires a texture resource.");
 
         EnqueueCommand("RenderSystemReleaseTextureResource",
-                       [textureResource = std::move(textureResource)]() { textureResource->ResetRenderResource(); });
+                       [this, textureResource = std::move(textureResource)]() mutable
+                       { RetireRhiObjects(*impl_, textureResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline)

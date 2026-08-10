@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/FrameContext.h"
+#include "Engine/Runtime/Render/RenderResource.h"
 
 #include <utility>
 
@@ -41,5 +42,11 @@ namespace ve
     {
         VE_ASSERT(frameContext != nullptr);
         return frameContext->GetObjectUniform(item);
+    }
+
+    UniformBufferAllocation FrameRenderPipelineData::GetMaterialUniform(RTMaterialResource& material) const
+    {
+        VE_ASSERT(device != nullptr);
+        return material.GetUniformBuffer(*device, frameSlotIndex);
     }
 } // namespace ve

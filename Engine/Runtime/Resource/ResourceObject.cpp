@@ -500,7 +500,6 @@ namespace ve
 
         propertyValues_ = values.MoveValue();
         rtShaderResource_ = shaderResource->GetRTShaderResource();
-        rtMaterialResource_ = std::make_shared<RTMaterialResource>(BuildRenderDesc());
         MarkDirty();
         return Error();
     }
@@ -632,7 +631,6 @@ namespace ve
 
         materialLayout_ = materialLayout.MoveValue();
         renderResourceDesc_ = desc.MoveValue();
-        rtShaderResource_ = std::make_shared<RTShaderResource>(renderResourceDesc_);
         return Error();
     }
 
