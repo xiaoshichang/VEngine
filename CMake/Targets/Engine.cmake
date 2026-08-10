@@ -43,6 +43,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderCommandQueue.cpp
             Engine/Runtime/Render/RenderCameraMath.cpp
             Engine/Runtime/Render/RenderFramePipeline.cpp
+            Engine/Runtime/Render/RenderFramePipelineData.cpp
             Engine/Runtime/Render/RenderFrameUniformCache.cpp
             Engine/Runtime/Render/RenderPerformanceStatistics.cpp
             Engine/Runtime/Render/RenderResource.cpp

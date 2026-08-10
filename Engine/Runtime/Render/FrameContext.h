@@ -20,8 +20,7 @@ namespace ve
     public:
         using SubmitCallback = bool (*)(void* context, UInt64 fenceValue) noexcept;
 
-        /// The optional retention allocator must outlive this FrameContext.
-        explicit FrameContext(std::pmr::memory_resource* retentionMemoryResource = std::pmr::get_default_resource());
+        FrameContext() = default;
 
         [[nodiscard]] bool Initialize(rhi::RhiDevice& device, UInt32 contextIndex);
         [[nodiscard]] bool WaitForFrameStartAndReset(rhi::RhiSwapchain& swapchain);

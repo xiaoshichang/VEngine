@@ -1,7 +1,6 @@
 #include "Engine/Runtime/Render/FrameContext.h"
 
 #include "Engine/Runtime/Core/Assert.h"
-#include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <limits>
@@ -9,11 +8,6 @@
 
 namespace ve
 {
-    FrameContext::FrameContext(std::pmr::memory_resource* retentionMemoryResource)
-        : inFlightGpuFrameObjects_(retentionMemoryResource != nullptr ? retentionMemoryResource : std::pmr::get_default_resource())
-    {
-    }
-
     bool FrameContext::Initialize(rhi::RhiDevice& device, UInt32 contextIndex)
     {
         VE_ASSERT_RENDER_THREAD();
@@ -175,39 +169,4 @@ namespace ve
         ++nextFenceValue_;
     }
 
-    void FrameRenderPipelineData::RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object) const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        frameContext->RetainInFlightGpuFrameObject(std::move(object));
-    }
-
-    rhi::RhiCommandList& FrameRenderPipelineData::GetCommandList() const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetCommandList();
-    }
-
-    UniformBufferAllocation FrameRenderPipelineData::UploadUniform(const void* data, UInt64 size) const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->UploadUniform(data, size);
-    }
-
-    UniformBufferAllocation FrameRenderPipelineData::GetFrameUniform(const RTScene& scene) const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetFrameUniform(scene);
-    }
-
-    UniformBufferAllocation FrameRenderPipelineData::GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetViewUniform(camera, targetExtent);
-    }
-
-    UniformBufferAllocation FrameRenderPipelineData::GetObjectUniform(const RTRenderItem& item) const
-    {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetObjectUniform(item);
-    }
 } // namespace ve

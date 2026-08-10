@@ -2,20 +2,13 @@
 
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
-#include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 
 #include <memory>
 #include <vector>
 
 namespace ve
 {
-    struct UniformBufferAllocation
-    {
-        rhi::RhiBuffer* buffer = nullptr;
-        UInt64 offset = 0;
-        UInt64 size = 0;
-    };
-
     /// Reuses CPU-visible uniform-buffer pages for one in-flight frame context.
     class FrameUniformAllocator final : public NonCopyable
     {

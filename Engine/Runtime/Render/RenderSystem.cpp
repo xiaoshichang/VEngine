@@ -15,9 +15,11 @@
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/FrameContext.h"
+#include "Engine/Runtime/Render/FrameTransientResourcePool.h"
 #include "Engine/Runtime/Render/MaterialUniformPool.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
+#include "Engine/Runtime/Render/RenderResourceLifetime.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
 #include "Engine/Runtime/Render/RHIPipelineManager.h"
@@ -28,6 +30,8 @@
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <array>
+#include <algorithm>
+#include <deque>
 #include <exception>
 #include <optional>
 #include <string>
@@ -36,6 +40,18 @@
 
 namespace ve
 {
+    struct PendingDeleteRTResourceBatch
+    {
+        RhiObjectList resources;
+        UInt32 remainingFenceCount = 0;
+    };
+
+    struct PendingDeleteRTResourceEntry
+    {
+        UInt64 fenceValue = 0;
+        std::shared_ptr<PendingDeleteRTResourceBatch> batch;
+    };
+
     struct RenderSystemImpl
     {
         Thread thread;
@@ -53,6 +69,8 @@ namespace ve
         std::unique_ptr<rhi::RhiDevice> device;
         std::unique_ptr<rhi::RhiSwapchain> mainSwapchain;
         std::array<FrameContext, RenderFrameContextCount> frameContexts;
+        std::array<FrameTransientResourcePool, RenderFrameContextCount> transientResourcePools;
+        std::array<std::deque<PendingDeleteRTResourceEntry>, RenderFrameContextCount> pendingDeleteRTResourceQueues;
         std::array<UInt64, RenderFrameContextCount> submittedFrameIndices{};
         RenderPerformanceStatisticsExchange performanceStatistics;
         Atomic<UInt64> recordedDrawCallCount{0};
@@ -63,6 +81,9 @@ namespace ve
         FrameGraphDebugCaptureExchange frameGraphDebugCapture;
         Atomic<UInt64> pendingMainSwapchainExtent{0};
         AtomicBool mainSwapchainResizeCommandQueued{false};
+        bool recordingFrame = false;
+        UInt32 recordingFrameSlotIndex = 0;
+        UInt64 recordingSubmissionFenceValue = 0;
         UInt64 nextFrameIndex = 1;
     };
 
@@ -186,8 +207,95 @@ namespace ve
             return nullptr;
         }
 
+        void RetireRhiObjects(RenderSystemImpl& impl, RhiObjectList objects)
+        {
+            VE_ASSERT_RENDER_THREAD();
+            if (objects.empty())
+            {
+                return;
+            }
+
+            std::array<UInt64, RenderFrameContextCount> dependencies{};
+            for (UInt32 frameSlotIndex = 0; frameSlotIndex < RenderFrameContextCount; ++frameSlotIndex)
+            {
+                dependencies[frameSlotIndex] = impl.frameContexts[frameSlotIndex].GetSubmittedFenceValue();
+            }
+            if (impl.recordingFrame)
+            {
+                VE_ASSERT(impl.recordingFrameSlotIndex < RenderFrameContextCount);
+                dependencies[impl.recordingFrameSlotIndex] =
+                    std::max(dependencies[impl.recordingFrameSlotIndex], impl.recordingSubmissionFenceValue);
+            }
+
+            UInt32 dependencyCount = 0;
+            for (UInt64 fenceValue : dependencies)
+            {
+                dependencyCount += fenceValue != 0 ? 1u : 0u;
+            }
+            if (dependencyCount == 0)
+            {
+                return;
+            }
+
+            auto batch = std::make_shared<PendingDeleteRTResourceBatch>();
+            batch->resources = std::move(objects);
+            batch->remainingFenceCount = dependencyCount;
+            for (UInt32 frameSlotIndex = 0; frameSlotIndex < RenderFrameContextCount; ++frameSlotIndex)
+            {
+                const UInt64 fenceValue = dependencies[frameSlotIndex];
+                if (fenceValue == 0)
+                {
+                    continue;
+                }
+
+                std::deque<PendingDeleteRTResourceEntry>& queue = impl.pendingDeleteRTResourceQueues[frameSlotIndex];
+                const auto insertPosition = std::upper_bound(queue.begin(),
+                                                             queue.end(),
+                                                             fenceValue,
+                                                             [](UInt64 value, const PendingDeleteRTResourceEntry& entry) { return value < entry.fenceValue; });
+                queue.insert(insertPosition, PendingDeleteRTResourceEntry{fenceValue, batch});
+            }
+        }
+
+        void CollectRetiredRhiObjects(RenderSystemImpl& impl, UInt32 frameSlotIndex, UInt64 completedFenceValue)
+        {
+            VE_ASSERT_RENDER_THREAD();
+            VE_ASSERT(frameSlotIndex < RenderFrameContextCount);
+            std::deque<PendingDeleteRTResourceEntry>& queue = impl.pendingDeleteRTResourceQueues[frameSlotIndex];
+            while (!queue.empty() && queue.front().fenceValue <= completedFenceValue)
+            {
+                std::shared_ptr<PendingDeleteRTResourceBatch> batch = std::move(queue.front().batch);
+                queue.pop_front();
+                VE_ASSERT(batch != nullptr);
+                VE_ASSERT(batch->remainingFenceCount > 0);
+                --batch->remainingFenceCount;
+                if (batch->remainingFenceCount == 0)
+                {
+                    batch->resources.clear();
+                }
+            }
+        }
+
+        void ClearRetiredRhiObjectsAfterWaitIdle(RenderSystemImpl& impl) noexcept
+        {
+            VE_ASSERT_RENDER_THREAD();
+            for (std::deque<PendingDeleteRTResourceEntry>& queue : impl.pendingDeleteRTResourceQueues)
+            {
+                queue.clear();
+            }
+            impl.recordingFrame = false;
+            impl.recordingFrameSlotIndex = 0;
+            impl.recordingSubmissionFenceValue = 0;
+        }
+
         void DestroyFrameResources(RenderSystemImpl& impl)
         {
+            for (FrameTransientResourcePool& pool : impl.transientResourcePools)
+            {
+                RhiObjectList poolObjects = pool.Shutdown();
+                poolObjects.clear();
+            }
+            ClearRetiredRhiObjectsAfterWaitIdle(impl);
             for (FrameContext& frameContext : impl.frameContexts)
             {
                 const bool shutdown = frameContext.Shutdown();
@@ -197,11 +305,18 @@ namespace ve
 
         [[nodiscard]] bool WaitForAllFrameContexts(RenderSystemImpl& impl)
         {
-            for (FrameContext& frameContext : impl.frameContexts)
+            for (UInt32 frameSlotIndex = 0; frameSlotIndex < RenderFrameContextCount; ++frameSlotIndex)
             {
+                FrameContext& frameContext = impl.frameContexts[frameSlotIndex];
+                const UInt64 completedFenceValue = frameContext.GetSubmittedFenceValue();
                 if (frameContext.IsInitialized() && !frameContext.WaitAndReset())
                 {
                     return false;
+                }
+                if (frameContext.IsInitialized())
+                {
+                    CollectRetiredRhiObjects(impl, frameSlotIndex, completedFenceValue);
+                    impl.transientResourcePools[frameSlotIndex].BeginFrame();
                 }
             }
             return true;
@@ -220,6 +335,11 @@ namespace ve
                 }
             }
 
+            for (FrameTransientResourcePool& pool : impl.transientResourcePools)
+            {
+                pool.Initialize(*impl.device);
+            }
+
             return ErrorCode::None;
         }
 
@@ -236,10 +356,13 @@ namespace ve
             const UInt64 frameIndex = impl.nextFrameIndex++;
             const UInt32 frameSlotIndex = static_cast<UInt32>(frameIndex % RenderFrameContextCount);
             FrameContext& frameContext = impl.frameContexts[frameSlotIndex];
+            const UInt64 completedFenceTarget = frameContext.GetSubmittedFenceValue();
             if (!frameContext.WaitForFrameStartAndReset(*impl.mainSwapchain))
             {
                 return ErrorCode::PlatformError;
             }
+            CollectRetiredRhiObjects(impl, frameSlotIndex, completedFenceTarget);
+            impl.transientResourcePools[frameSlotIndex].BeginFrame();
             const UInt64 completedFrameIndex = impl.submittedFrameIndices[frameSlotIndex];
             impl.submittedFrameIndices[frameSlotIndex] = 0;
             if (completedFrameIndex != 0)
@@ -258,10 +381,12 @@ namespace ve
             }
 
             frameData.frameIndex = frameIndex;
+            frameData.frameSlotIndex = frameSlotIndex;
             frameData.device = impl.device.get();
             frameData.mainSwapchain = impl.mainSwapchain.get();
             frameData.pipelineManager = &impl.pipelineManager;
             frameData.frameContext = &frameContext;
+            frameData.transientResourcePool = &impl.transientResourcePools[frameSlotIndex];
             frameData.virtualShadowManager = impl.virtualShadowManager.get();
             return ErrorCode::None;
         }
@@ -354,6 +479,9 @@ namespace ve
             }
             frameData.builtInShaderResources = framePipeline->GetBuiltInShaderResources();
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
+            impl.recordingFrame = true;
+            impl.recordingFrameSlotIndex = frameData.frameSlotIndex;
+            impl.recordingSubmissionFenceValue = frameData.frameContext->GetNextSubmissionFenceValue();
             framePipeline->RenderFrame(frameData);
             impl.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);
             const UInt64 statisticsSceneIdentity =
@@ -366,6 +494,9 @@ namespace ve
             // Phase 3: submit the recorded work and bind its object lifetime to the selected FrameContext fence.
             const ErrorCode submitResult = SubmitMainSwapchainFrame(impl, frameData, framePipeline);
             RequireRenderSystemFrameSuccess(submitResult, "RenderSystem failed to submit the frame", impl.device.get());
+            impl.recordingFrame = false;
+            impl.recordingFrameSlotIndex = 0;
+            impl.recordingSubmissionFenceValue = 0;
             if (debugRequest.has_value())
             {
                 FrameGraphDebugCapturePublishResult completion = CompleteFrameGraphDebugCapture(
@@ -441,6 +572,7 @@ namespace ve
             if (impl.device != nullptr)
             {
                 impl.device->WaitIdle();
+                ClearRetiredRhiObjectsAfterWaitIdle(impl);
             }
 
             RetireFrameGraphDebugDataOnRenderThread(impl.frameGraphDebugCapture.Reset());
@@ -488,6 +620,7 @@ namespace ve
                         // Frame completion fences are queued before Present. Waiting for the device's internal fence
                         // here also covers presentation work that may still reference the old back buffers.
                         impl.device->WaitIdle();
+                        ClearRetiredRhiObjectsAfterWaitIdle(impl);
                     }
 
                     if (!WaitForAllFrameContexts(impl))
@@ -851,6 +984,7 @@ namespace ve
                                                   if (impl_->device != nullptr)
                                                   {
                                                       impl_->device->WaitIdle();
+                                                      ClearRetiredRhiObjectsAfterWaitIdle(*impl_);
                                                   }
 
                                                   DestroyFrameResources(*impl_);
@@ -1034,6 +1168,7 @@ namespace ve
                                                         if (impl_->device != nullptr)
                                                         {
                                                             impl_->device->WaitIdle();
+                                                            ClearRetiredRhiObjectsAfterWaitIdle(*impl_);
                                                         }
                                                         return ErrorCode::None;
                                                     });

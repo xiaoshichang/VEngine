@@ -8,6 +8,7 @@
 namespace ve
 {
     class FrameContext;
+    class FrameTransientResourcePool;
     class RHIPipelineManager;
     struct FrameGraphDebugFrameCapture;
     class RTCamera;
@@ -32,10 +33,12 @@ namespace ve
     struct FrameRenderPipelineData
     {
         UInt64 frameIndex = 0;
+        UInt32 frameSlotIndex = 0;
         rhi::RhiDevice* device = nullptr;
         rhi::RhiSwapchain* mainSwapchain = nullptr;
         RHIPipelineManager* pipelineManager = nullptr;
         FrameContext* frameContext = nullptr;
+        FrameTransientResourcePool* transientResourcePool = nullptr;
         VirtualShadowManager* virtualShadowManager = nullptr;
         FrameGraphDebugFrameCapture* frameGraphDebugCapture = nullptr;
         const BuiltInShaderResources* builtInShaderResources = nullptr;
