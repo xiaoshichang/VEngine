@@ -54,6 +54,58 @@ namespace ve
         AtomicBool resizeCommandQueued{false};
     };
 
+    struct RenderThreadControlState
+    {
+        Semaphore commandSemaphore{0};
+        RenderCommandQueue commandQueue;
+        RenderSystemLifetimeFlags lifetimeFlags;
+        AtomicSize activeSubmitCount{0};
+    };
+
+    struct RenderRhiState
+    {
+        Atomic<int> backendValue{-1};
+        std::unique_ptr<rhi::RhiDevice> device;
+        MainSwapchainState mainSwapchain;
+        RHIShaderModuleManager shaderModuleManager;
+        RHIPipelineManager pipelineManager;
+    };
+
+    struct ActiveFrameRecordingState
+    {
+        void Begin(UInt32 slotIndex, UInt64 fenceValue) noexcept
+        {
+            active = true;
+            frameSlotIndex = slotIndex;
+            submissionFenceValue = fenceValue;
+        }
+
+        void Reset() noexcept
+        {
+            active = false;
+            frameSlotIndex = 0;
+            submissionFenceValue = 0;
+        }
+
+        bool active = false;
+        UInt32 frameSlotIndex = 0;
+        UInt64 submissionFenceValue = 0;
+    };
+
+    struct RenderFrameSchedulingState
+    {
+        std::array<FrameContext, RenderFrameContextCount> frameContexts;
+        ActiveFrameRecordingState recording;
+        UInt64 nextFrameIndex = 1;
+    };
+
+    struct RenderDiagnosticsState
+    {
+        RenderPerformanceStatisticsExchange performanceStatistics;
+        Atomic<UInt64> recordedDrawCallCount{0};
+        FrameGraphDebugCaptureExchange frameGraphDebugCapture;
+    };
+
     struct RenderSystemImpl
     {
         Thread thread;
@@ -61,24 +113,11 @@ namespace ve
         // frame sync between scene thread
         SceneThreadRenderThreadFrameEndSync* sceneThreadRenderThreadFrameEndSync = nullptr;
 
-        Semaphore commandSemaphore{0};
-        RenderCommandQueue commandQueue;
-        RenderSystemLifetimeFlags lifetimeFlags;
-        AtomicSize activeSubmitCount{0};
-        Atomic<int> backendValue{-1};
-        std::unique_ptr<rhi::RhiDevice> device;
-        MainSwapchainState mainSwapchainState;
-        std::array<FrameContext, RenderFrameContextCount> frameContexts;
-        RenderPerformanceStatisticsExchange performanceStatistics;
-        Atomic<UInt64> recordedDrawCallCount{0};
-        RHIShaderModuleManager shaderModuleManager;
-        RHIPipelineManager pipelineManager;
+        RenderThreadControlState threadControl;
+        RenderRhiState rhi;
+        RenderFrameSchedulingState frameScheduling;
+        RenderDiagnosticsState diagnostics;
         std::unique_ptr<VirtualShadowManager> virtualShadowManager;
-        FrameGraphDebugCaptureExchange frameGraphDebugCapture;
-        bool recordingFrame = false;
-        UInt32 recordingFrameSlotIndex = 0;
-        UInt64 recordingSubmissionFenceValue = 0;
-        UInt64 nextFrameIndex = 1;
     };
 
     namespace
@@ -212,12 +251,13 @@ namespace ve
             std::array<UInt64, RenderFrameContextCount> dependencies{};
             for (UInt32 frameSlotIndex = 0; frameSlotIndex < RenderFrameContextCount; ++frameSlotIndex)
             {
-                dependencies[frameSlotIndex] = impl.frameContexts[frameSlotIndex].GetSubmittedFenceValue();
+                dependencies[frameSlotIndex] = impl.frameScheduling.frameContexts[frameSlotIndex].GetSubmittedFenceValue();
             }
-            if (impl.recordingFrame)
+            if (impl.frameScheduling.recording.active)
             {
-                VE_ASSERT(impl.recordingFrameSlotIndex < RenderFrameContextCount);
-                dependencies[impl.recordingFrameSlotIndex] = std::max(dependencies[impl.recordingFrameSlotIndex], impl.recordingSubmissionFenceValue);
+                VE_ASSERT(impl.frameScheduling.recording.frameSlotIndex < RenderFrameContextCount);
+                dependencies[impl.frameScheduling.recording.frameSlotIndex] =
+                    std::max(dependencies[impl.frameScheduling.recording.frameSlotIndex], impl.frameScheduling.recording.submissionFenceValue);
             }
 
             UInt32 dependencyCount = 0;
@@ -241,26 +281,24 @@ namespace ve
                     continue;
                 }
 
-                impl.frameContexts[frameSlotIndex].EnqueuePendingDeleteResource(fenceValue, batch);
+                impl.frameScheduling.frameContexts[frameSlotIndex].EnqueuePendingDeleteResource(fenceValue, batch);
             }
         }
 
         void ClearRetiredRhiObjectsAfterWaitIdle(RenderSystemImpl& impl) noexcept
         {
             VE_ASSERT_RENDER_THREAD();
-            for (FrameContext& frameContext : impl.frameContexts)
+            for (FrameContext& frameContext : impl.frameScheduling.frameContexts)
             {
                 frameContext.ClearRetiredRhiObjectsAfterWaitIdle();
             }
-            impl.recordingFrame = false;
-            impl.recordingFrameSlotIndex = 0;
-            impl.recordingSubmissionFenceValue = 0;
+            impl.frameScheduling.recording.Reset();
         }
 
         void DestroyFrameResources(RenderSystemImpl& impl)
         {
             ClearRetiredRhiObjectsAfterWaitIdle(impl);
-            for (FrameContext& frameContext : impl.frameContexts)
+            for (FrameContext& frameContext : impl.frameScheduling.frameContexts)
             {
                 const bool shutdown = frameContext.Shutdown();
                 VE_ASSERT_MESSAGE(shutdown, "Failed to shut down a render frame context.");
@@ -271,7 +309,7 @@ namespace ve
         {
             for (UInt32 frameSlotIndex = 0; frameSlotIndex < RenderFrameContextCount; ++frameSlotIndex)
             {
-                FrameContext& frameContext = impl.frameContexts[frameSlotIndex];
+                FrameContext& frameContext = impl.frameScheduling.frameContexts[frameSlotIndex];
                 if (frameContext.IsInitialized() && !frameContext.WaitAndReset())
                 {
                     return false;
@@ -282,11 +320,11 @@ namespace ve
 
         [[nodiscard]] ErrorCode CreateFrameResources(RenderSystemImpl& impl)
         {
-            VE_ASSERT_MESSAGE(impl.device != nullptr, "CreateFrameResources requires an initialized RHI device.");
+            VE_ASSERT_MESSAGE(impl.rhi.device != nullptr, "CreateFrameResources requires an initialized RHI device.");
 
             for (UInt32 contextIndex = 0; contextIndex < RenderFrameContextCount; ++contextIndex)
             {
-                if (!impl.frameContexts[contextIndex].Initialize(*impl.device, contextIndex))
+                if (!impl.frameScheduling.frameContexts[contextIndex].Initialize(*impl.rhi.device, contextIndex))
                 {
                     DestroyFrameResources(impl);
                     return ErrorCode::PlatformError;
@@ -300,16 +338,16 @@ namespace ve
         PrepareMainSwapchainFrame(RenderSystemImpl& impl, FrameRenderPipelineData& frameData, std::optional<RenderPerformanceStatistics>& completedStatistics)
         {
             VE_ASSERT_RENDER_THREAD();
-            VE_ASSERT(impl.device != nullptr);
-            VE_ASSERT(impl.mainSwapchainState.swapchain != nullptr);
+            VE_ASSERT(impl.rhi.device != nullptr);
+            VE_ASSERT(impl.rhi.mainSwapchain.swapchain != nullptr);
             completedStatistics.reset();
 
             // A FrameContext is a reusable in-flight GPU slot. Waiting here both makes its command resources reusable
             // and releases the pipeline and render proxies retained by its previous submission.
-            const UInt64 frameIndex = impl.nextFrameIndex++;
+            const UInt64 frameIndex = impl.frameScheduling.nextFrameIndex++;
             const UInt32 frameSlotIndex = static_cast<UInt32>(frameIndex % RenderFrameContextCount);
-            FrameContext& frameContext = impl.frameContexts[frameSlotIndex];
-            if (!frameContext.WaitForFrameStartAndReset(*impl.mainSwapchainState.swapchain))
+            FrameContext& frameContext = impl.frameScheduling.frameContexts[frameSlotIndex];
+            if (!frameContext.WaitForFrameStartAndReset(*impl.rhi.mainSwapchain.swapchain))
             {
                 return ErrorCode::PlatformError;
             }
@@ -320,20 +358,21 @@ namespace ve
                 // Publication remains deferred until the current frame reveals which scene is active.
                 if (impl.virtualShadowManager == nullptr)
                 {
-                    FailRenderSystemFrame("RenderSystem completed a VSM frame without a VSM manager", ErrorCode::InvalidState, impl.device.get());
+                    FailRenderSystemFrame("RenderSystem completed a VSM frame without a VSM manager", ErrorCode::InvalidState, impl.rhi.device.get());
                 }
-                completedStatistics = impl.virtualShadowManager->ConsumeCompletedFrameStatistics(*impl.device, completedFrameIndex);
+                completedStatistics = impl.virtualShadowManager->ConsumeCompletedFrameStatistics(*impl.rhi.device, completedFrameIndex);
                 if (!completedStatistics.has_value())
                 {
-                    FailRenderSystemFrame("RenderSystem completed a frame without its submitted VSM statistics", ErrorCode::InvalidState, impl.device.get());
+                    FailRenderSystemFrame(
+                        "RenderSystem completed a frame without its submitted VSM statistics", ErrorCode::InvalidState, impl.rhi.device.get());
                 }
             }
 
             frameData.frameIndex = frameIndex;
             frameData.frameSlotIndex = frameSlotIndex;
-            frameData.device = impl.device.get();
-            frameData.mainSwapchain = impl.mainSwapchainState.swapchain.get();
-            frameData.pipelineManager = &impl.pipelineManager;
+            frameData.device = impl.rhi.device.get();
+            frameData.mainSwapchain = impl.rhi.mainSwapchain.swapchain.get();
+            frameData.pipelineManager = &impl.rhi.pipelineManager;
             frameData.frameContext = &frameContext;
             frameData.transientResourcePool = &frameContext.GetTransientResourcePool();
             frameData.virtualShadowManager = impl.virtualShadowManager.get();
@@ -370,20 +409,20 @@ namespace ve
                                                          const std::shared_ptr<FrameRenderPipeline>& framePipeline) noexcept
         {
             VE_ASSERT_RENDER_THREAD();
-            VE_ASSERT(impl.device != nullptr);
+            VE_ASSERT(impl.rhi.device != nullptr);
             VE_ASSERT(frameData.frameContext != nullptr);
             VE_ASSERT(framePipeline != nullptr);
 
             FrameContext& frameContext = *frameData.frameContext;
-            MainSwapchainSubmitContext submitContext{impl.device.get(), &frameContext};
+            MainSwapchainSubmitContext submitContext{impl.rhi.device.get(), &frameContext};
             return frameContext.Submit(&SubmitMainSwapchainFrameCallback, &submitContext);
         }
 
         [[nodiscard]] ErrorCode PresentMainSwapchainFrame(RenderSystemImpl& impl)
         {
             VE_ASSERT_RENDER_THREAD();
-            VE_ASSERT(impl.mainSwapchainState.swapchain != nullptr);
-            return impl.mainSwapchainState.swapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
+            VE_ASSERT(impl.rhi.mainSwapchain.swapchain != nullptr);
+            return impl.rhi.mainSwapchain.swapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
         }
 
         void RetireFrameGraphDebugDataOnRenderThread(RenderSystemImpl& impl, std::shared_ptr<const FrameGraphDebugData> data)
@@ -413,7 +452,7 @@ namespace ve
             VE_ASSERT_RENDER_THREAD();
             VE_ASSERT(framePipeline != nullptr);
 
-            std::optional<FrameGraphDebugCaptureRequest> debugRequest = impl.frameGraphDebugCapture.ConsumeRequest();
+            std::optional<FrameGraphDebugCaptureRequest> debugRequest = impl.diagnostics.frameGraphDebugCapture.ConsumeRequest();
             FrameGraphDebugFrameCapture debugCapture;
             if (debugRequest.has_value())
             {
@@ -424,35 +463,31 @@ namespace ve
             FrameRenderPipelineData frameData = {};
             std::optional<RenderPerformanceStatistics> completedStatistics;
             const ErrorCode prepareResult = PrepareMainSwapchainFrame(impl, frameData, completedStatistics);
-            RequireRenderSystemFrameSuccess(prepareResult, "RenderSystem failed to prepare the frame", impl.device.get());
+            RequireRenderSystemFrameSuccess(prepareResult, "RenderSystem failed to prepare the frame", impl.rhi.device.get());
             if (debugRequest.has_value())
             {
                 frameData.frameGraphDebugCapture = &debugCapture;
             }
             frameData.builtInShaderResources = framePipeline->GetBuiltInShaderResources();
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
-            impl.recordingFrame = true;
-            impl.recordingFrameSlotIndex = frameData.frameSlotIndex;
-            impl.recordingSubmissionFenceValue = frameData.frameContext->GetNextSubmissionFenceValue();
+            impl.frameScheduling.recording.Begin(frameData.frameSlotIndex, frameData.frameContext->GetNextSubmissionFenceValue());
             framePipeline->RenderFrame(frameData);
-            impl.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);
+            impl.diagnostics.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);
             const UInt64 statisticsSceneIdentity =
                 frameData.virtualShadowManager != nullptr ? frameData.virtualShadowManager->GetRecordingSceneIdentity(frameData.frameIndex) : 0;
-            impl.performanceStatistics.ActivateScene(statisticsSceneIdentity, frameData.frameIndex);
+            impl.diagnostics.performanceStatistics.ActivateScene(statisticsSceneIdentity, frameData.frameIndex);
             if (completedStatistics.has_value())
             {
-                impl.performanceStatistics.Publish(*completedStatistics);
+                impl.diagnostics.performanceStatistics.Publish(*completedStatistics);
             }
             // Phase 3: submit the recorded work and bind its object lifetime to the selected FrameContext fence.
             const ErrorCode submitResult = SubmitMainSwapchainFrame(impl, frameData, framePipeline);
-            RequireRenderSystemFrameSuccess(submitResult, "RenderSystem failed to submit the frame", impl.device.get());
-            impl.recordingFrame = false;
-            impl.recordingFrameSlotIndex = 0;
-            impl.recordingSubmissionFenceValue = 0;
+            RequireRenderSystemFrameSuccess(submitResult, "RenderSystem failed to submit the frame", impl.rhi.device.get());
+            impl.frameScheduling.recording.Reset();
             if (debugRequest.has_value())
             {
                 FrameGraphDebugCapturePublishResult completion = CompleteFrameGraphDebugCapture(
-                    impl.frameGraphDebugCapture, submitResult, *debugRequest, std::move(debugCapture.data), std::move(debugCapture.failureMessage));
+                    impl.diagnostics.frameGraphDebugCapture, submitResult, *debugRequest, std::move(debugCapture.data), std::move(debugCapture.failureMessage));
                 RetireFrameGraphDebugDataOnRenderThread(impl, std::move(completion.dataToRetire));
             }
             if (frameData.virtualShadowManager != nullptr && statisticsSceneIdentity != 0)
@@ -465,7 +500,7 @@ namespace ve
             // Phase 4: presentation happens after a successful queue submission; the FrameContext now owns all data
             // that must remain alive even if Present reports a surface or device error.
             const ErrorCode presentResult = PresentMainSwapchainFrame(impl);
-            RequireRenderSystemFrameSuccess(presentResult, "RenderSystem failed to present the frame", impl.device.get());
+            RequireRenderSystemFrameSuccess(presentResult, "RenderSystem failed to present the frame", impl.rhi.device.get());
         }
 
         void ExecuteCommand(RenderCommand& command) noexcept
@@ -490,14 +525,14 @@ namespace ve
 
             for (;;)
             {
-                while (std::optional<RenderCommand> command = impl.commandQueue.TryPop())
+                while (std::optional<RenderCommand> command = impl.threadControl.commandQueue.TryPop())
                 {
                     ExecuteCommand(*command);
                 }
 
-                if (impl.lifetimeFlags.stopRequested.load(std::memory_order_acquire))
+                if (impl.threadControl.lifetimeFlags.stopRequested.load(std::memory_order_acquire))
                 {
-                    if (!impl.commandQueue.IsEmptyForConsumer())
+                    if (!impl.threadControl.commandQueue.IsEmptyForConsumer())
                     {
                         continue;
                     }
@@ -505,10 +540,10 @@ namespace ve
                     break;
                 }
 
-                impl.commandSemaphore.Acquire();
+                impl.threadControl.commandSemaphore.Acquire();
             }
 
-            while (std::optional<RenderCommand> command = impl.commandQueue.TryPop())
+            while (std::optional<RenderCommand> command = impl.threadControl.commandQueue.TryPop())
             {
                 ExecuteCommand(*command);
             }
@@ -520,34 +555,34 @@ namespace ve
         {
             VE_ASSERT_RENDER_THREAD();
 
-            if (impl.device != nullptr)
+            if (impl.rhi.device != nullptr)
             {
-                impl.device->WaitIdle();
+                impl.rhi.device->WaitIdle();
                 ClearRetiredRhiObjectsAfterWaitIdle(impl);
             }
 
-            RetireFrameGraphDebugDataOnRenderThread(impl, impl.frameGraphDebugCapture.Reset());
-            impl.performanceStatistics.Reset();
-            impl.mainSwapchainState.pendingResizeExtent.store(0, std::memory_order_release);
-            impl.mainSwapchainState.resizeCommandQueued.store(false, std::memory_order_release);
+            RetireFrameGraphDebugDataOnRenderThread(impl, impl.diagnostics.frameGraphDebugCapture.Reset());
+            impl.diagnostics.performanceStatistics.Reset();
+            impl.rhi.mainSwapchain.pendingResizeExtent.store(0, std::memory_order_release);
+            impl.rhi.mainSwapchain.resizeCommandQueued.store(false, std::memory_order_release);
             impl.virtualShadowManager.reset();
-            impl.pipelineManager.Clear();
-            impl.shaderModuleManager.Clear();
+            impl.rhi.pipelineManager.Clear();
+            impl.rhi.shaderModuleManager.Clear();
             DestroyFrameResources(impl);
-            impl.mainSwapchainState.swapchain.reset();
-            if (impl.device != nullptr)
+            impl.rhi.mainSwapchain.swapchain.reset();
+            if (impl.rhi.device != nullptr)
             {
-                impl.device.reset();
+                impl.rhi.device.reset();
             }
 
-            impl.backendValue.store(-1, std::memory_order_release);
+            impl.rhi.backendValue.store(-1, std::memory_order_release);
         }
 
         void EnqueueInternalCommand(RenderSystemImpl& impl, RenderCommand command) noexcept
         {
-            ErrorCode pushResult = impl.commandQueue.Push(std::move(command));
+            ErrorCode pushResult = impl.threadControl.commandQueue.Push(std::move(command));
             VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "RenderSystem failed to enqueue an internal render command.");
-            impl.commandSemaphore.Release();
+            impl.threadControl.commandSemaphore.Release();
         }
 
         void QueueMainSwapchainResizeCommand(RenderSystemImpl& impl);
@@ -556,18 +591,18 @@ namespace ve
         {
             VE_ASSERT_RENDER_THREAD();
 
-            UInt64 packedExtent = impl.mainSwapchainState.pendingResizeExtent.exchange(0, std::memory_order_acq_rel);
-            if (packedExtent != 0 && impl.mainSwapchainState.swapchain != nullptr)
+            UInt64 packedExtent = impl.rhi.mainSwapchain.pendingResizeExtent.exchange(0, std::memory_order_acq_rel);
+            if (packedExtent != 0 && impl.rhi.mainSwapchain.swapchain != nullptr)
             {
                 rhi::RhiExtent2D requestedExtent = UnpackExtent(packedExtent);
-                const rhi::RhiExtent2D currentExtent = impl.mainSwapchainState.swapchain->GetExtent();
+                const rhi::RhiExtent2D currentExtent = impl.rhi.mainSwapchain.swapchain->GetExtent();
                 if (requestedExtent.width != currentExtent.width || requestedExtent.height != currentExtent.height)
                 {
-                    if (impl.device != nullptr)
+                    if (impl.rhi.device != nullptr)
                     {
                         // Frame completion fences are queued before Present. Waiting for the device's internal fence
                         // here also covers presentation work that may still reference the old back buffers.
-                        impl.device->WaitIdle();
+                        impl.rhi.device->WaitIdle();
                         ClearRetiredRhiObjectsAfterWaitIdle(impl);
                     }
 
@@ -577,17 +612,17 @@ namespace ve
                     }
                     else
                     {
-                        const UInt64 newerPackedExtent = impl.mainSwapchainState.pendingResizeExtent.exchange(0, std::memory_order_acq_rel);
+                        const UInt64 newerPackedExtent = impl.rhi.mainSwapchain.pendingResizeExtent.exchange(0, std::memory_order_acq_rel);
                         if (newerPackedExtent != 0)
                         {
                             requestedExtent = UnpackExtent(newerPackedExtent);
                         }
 
-                        const rhi::RhiExtent2D resizedFromExtent = impl.mainSwapchainState.swapchain->GetExtent();
+                        const rhi::RhiExtent2D resizedFromExtent = impl.rhi.mainSwapchain.swapchain->GetExtent();
                         if ((requestedExtent.width != resizedFromExtent.width || requestedExtent.height != resizedFromExtent.height) &&
-                            !impl.mainSwapchainState.swapchain->Resize(requestedExtent))
+                            !impl.rhi.mainSwapchain.swapchain->Resize(requestedExtent))
                         {
-                            const char* backendError = impl.device != nullptr ? impl.device->GetLastErrorMessage() : nullptr;
+                            const char* backendError = impl.rhi.device != nullptr ? impl.rhi.device->GetLastErrorMessage() : nullptr;
                             VE_LOG_ERROR_CATEGORY("Render",
                                                   "Failed to resize the main swapchain to {}x{}. Backend error: {}",
                                                   requestedExtent.width,
@@ -598,15 +633,15 @@ namespace ve
                 }
             }
 
-            impl.mainSwapchainState.resizeCommandQueued.store(false, std::memory_order_release);
-            if (impl.mainSwapchainState.pendingResizeExtent.load(std::memory_order_acquire) == 0 ||
-                !impl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+            impl.rhi.mainSwapchain.resizeCommandQueued.store(false, std::memory_order_release);
+            if (impl.rhi.mainSwapchain.pendingResizeExtent.load(std::memory_order_acquire) == 0 ||
+                !impl.threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
             {
                 return;
             }
 
             bool expected = false;
-            if (impl.mainSwapchainState.resizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            if (impl.rhi.mainSwapchain.resizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
             {
                 QueueMainSwapchainResizeCommand(impl);
             }
@@ -619,9 +654,9 @@ namespace ve
 
         void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
         {
-            impl.lifetimeFlags.acceptingCommands.store(false, std::memory_order_release);
+            impl.threadControl.lifetimeFlags.acceptingCommands.store(false, std::memory_order_release);
 
-            while (impl.activeSubmitCount.load(std::memory_order_acquire) != 0)
+            while (impl.threadControl.activeSubmitCount.load(std::memory_order_acquire) != 0)
             {
                 YieldThread();
             }
@@ -636,8 +671,8 @@ namespace ve
                                                  }});
             rhiDestroyed->Wait();
 
-            impl.lifetimeFlags.stopRequested.store(true, std::memory_order_release);
-            impl.commandSemaphore.Release();
+            impl.threadControl.lifetimeFlags.stopRequested.store(true, std::memory_order_release);
+            impl.threadControl.commandSemaphore.Release();
 
             if (impl.thread.IsJoinable())
             {
@@ -645,10 +680,10 @@ namespace ve
                 VE_ASSERT_MESSAGE(joined, "RenderSystem failed to join its Render Thread during shutdown.");
             }
 
-            impl.commandQueue.ClearForConsumer();
+            impl.threadControl.commandQueue.ClearForConsumer();
             impl.renderThreadIdValue.store(0, std::memory_order_release);
-            impl.lifetimeFlags.stopRequested.store(false, std::memory_order_release);
-            impl.lifetimeFlags.initialized.store(false, std::memory_order_release);
+            impl.threadControl.lifetimeFlags.stopRequested.store(false, std::memory_order_release);
+            impl.threadControl.lifetimeFlags.initialized.store(false, std::memory_order_release);
         }
     } // namespace
 
@@ -664,13 +699,13 @@ namespace ve
 
     ErrorCode RenderSystem::Initialize(const RenderSystemInitParam& initParam)
     {
-        if (impl_->lifetimeFlags.initialized.load(std::memory_order_acquire))
+        if (impl_->threadControl.lifetimeFlags.initialized.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
 
-        impl_->lifetimeFlags.stopRequested.store(false, std::memory_order_release);
-        impl_->lifetimeFlags.acceptingCommands.store(true, std::memory_order_release);
+        impl_->threadControl.lifetimeFlags.stopRequested.store(false, std::memory_order_release);
+        impl_->threadControl.lifetimeFlags.acceptingCommands.store(true, std::memory_order_release);
         if (impl_->sceneThreadRenderThreadFrameEndSync != nullptr)
         {
             impl_->sceneThreadRenderThreadFrameEndSync->Reset();
@@ -681,19 +716,19 @@ namespace ve
 
         if (startResult != ErrorCode::None)
         {
-            impl_->lifetimeFlags.acceptingCommands.store(false, std::memory_order_release);
-            impl_->lifetimeFlags.stopRequested.store(false, std::memory_order_release);
-            impl_->commandQueue.ClearForConsumer();
+            impl_->threadControl.lifetimeFlags.acceptingCommands.store(false, std::memory_order_release);
+            impl_->threadControl.lifetimeFlags.stopRequested.store(false, std::memory_order_release);
+            impl_->threadControl.commandQueue.ClearForConsumer();
             return startResult;
         }
 
-        impl_->lifetimeFlags.initialized.store(true, std::memory_order_release);
+        impl_->threadControl.lifetimeFlags.initialized.store(true, std::memory_order_release);
         return ErrorCode::None;
     }
 
     void RenderSystem::Shutdown() noexcept
     {
-        if (!impl_->lifetimeFlags.initialized.load(std::memory_order_acquire))
+        if (!impl_->threadControl.lifetimeFlags.initialized.load(std::memory_order_acquire))
         {
             return;
         }
@@ -703,7 +738,7 @@ namespace ve
 
     bool RenderSystem::IsInitialized() const noexcept
     {
-        return impl_->lifetimeFlags.initialized.load(std::memory_order_acquire);
+        return impl_->threadControl.lifetimeFlags.initialized.load(std::memory_order_acquire);
     }
 
     ThreadId RenderSystem::GetRenderThreadId() const noexcept
@@ -713,7 +748,7 @@ namespace ve
 
     void RenderSystem::SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept
     {
-        VE_ASSERT_MESSAGE(!impl_->lifetimeFlags.initialized.load(std::memory_order_acquire),
+        VE_ASSERT_MESSAGE(!impl_->threadControl.lifetimeFlags.initialized.load(std::memory_order_acquire),
                           "SetSceneThreadRenderThreadFrameEndSync requires RenderSystem to be stopped.");
         impl_->sceneThreadRenderThreadFrameEndSync = sync;
     }
@@ -730,7 +765,7 @@ namespace ve
         return ExecuteSynchronous("RenderSystemInitializeDevice",
                                   [this, desc]()
                                   {
-                                      if (impl_->device != nullptr)
+                                      if (impl_->rhi.device != nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
@@ -741,9 +776,9 @@ namespace ve
                                           return ErrorCode::Unsupported;
                                       }
 
-                                      impl_->device = std::move(device);
+                                      impl_->rhi.device = std::move(device);
                                       impl_->virtualShadowManager = std::make_unique<VirtualShadowManager>();
-                                      impl_->backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
+                                      impl_->rhi.backendValue.store(static_cast<int>(desc.backend), std::memory_order_release);
                                       VE_LOG_INFO("RenderSystem initialized RHI backend: {}", ToString(desc.backend));
                                       return ErrorCode::None;
                                   });
@@ -754,21 +789,21 @@ namespace ve
         return ExecuteSynchronous("RenderSystemQueryNativeHandles",
                                   [this, &outHandles]()
                                   {
-                                      if (impl_->device == nullptr)
+                                      if (impl_->rhi.device == nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
 
-                                      outHandles.backend = static_cast<RenderBackend>(impl_->backendValue.load(std::memory_order_acquire));
-                                      outHandles.hasMainSwapchain = impl_->mainSwapchainState.swapchain != nullptr;
-                                      outHandles.device = impl_->device->GetNativeDeviceHandle();
-                                      outHandles.immediateContext = impl_->device->GetNativeImmediateContextHandle();
-                                      outHandles.graphicsQueue = impl_->device->GetNativeGraphicsQueueHandle();
-                                      outHandles.shaderResourceDescriptorAllocator = impl_->device->GetNativeShaderResourceDescriptorAllocator();
-                                      if (impl_->mainSwapchainState.swapchain != nullptr)
+                                      outHandles.backend = static_cast<RenderBackend>(impl_->rhi.backendValue.load(std::memory_order_acquire));
+                                      outHandles.hasMainSwapchain = impl_->rhi.mainSwapchain.swapchain != nullptr;
+                                      outHandles.device = impl_->rhi.device->GetNativeDeviceHandle();
+                                      outHandles.immediateContext = impl_->rhi.device->GetNativeImmediateContextHandle();
+                                      outHandles.graphicsQueue = impl_->rhi.device->GetNativeGraphicsQueueHandle();
+                                      outHandles.shaderResourceDescriptorAllocator = impl_->rhi.device->GetNativeShaderResourceDescriptorAllocator();
+                                      if (impl_->rhi.mainSwapchain.swapchain != nullptr)
                                       {
-                                          outHandles.mainSwapchainBufferCount = impl_->mainSwapchainState.swapchain->GetBufferCount();
-                                          outHandles.mainSwapchainColorFormat = impl_->mainSwapchainState.swapchain->GetColorFormat();
+                                          outHandles.mainSwapchainBufferCount = impl_->rhi.mainSwapchain.swapchain->GetBufferCount();
+                                          outHandles.mainSwapchainColorFormat = impl_->rhi.mainSwapchain.swapchain->GetColorFormat();
                                       }
                                       return ErrorCode::None;
                                   });
@@ -776,7 +811,7 @@ namespace ve
 
     void RenderSystem::ShutdownDevice() noexcept
     {
-        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -793,53 +828,53 @@ namespace ve
 
     RenderBackend RenderSystem::GetDeviceBackend() const noexcept
     {
-        const int backendValue = impl_->backendValue.load(std::memory_order_acquire);
+        const int backendValue = impl_->rhi.backendValue.load(std::memory_order_acquire);
         VE_ASSERT_MESSAGE(backendValue >= 0, "RenderSystem::GetDeviceBackend requires an initialized RHI device.");
         return static_cast<RenderBackend>(backendValue);
     }
 
     RenderPerformanceStatistics RenderSystem::GetPerformanceStatistics() const
     {
-        return impl_->performanceStatistics.GetLatest();
+        return impl_->diagnostics.performanceStatistics.GetLatest();
     }
 
     UInt64 RenderSystem::GetRecordedDrawCallCount() const noexcept
     {
-        if (impl_ == nullptr || !impl_->lifetimeFlags.initialized.load(std::memory_order_acquire))
+        if (impl_ == nullptr || !impl_->threadControl.lifetimeFlags.initialized.load(std::memory_order_acquire))
         {
             return 0;
         }
 
-        return impl_->recordedDrawCallCount.load(std::memory_order_acquire);
+        return impl_->diagnostics.recordedDrawCallCount.load(std::memory_order_acquire);
     }
 
     ErrorCode RenderSystem::RequestFrameGraphDebugCapture(Float32 previewScale)
     {
         VE_ASSERT_SCENE_THREAD();
-        impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
-        auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
+        impl_->threadControl.activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
+        auto submitCounterGuard = MakeScopeExit([this]() { impl_->threadControl.activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
-        return impl_->frameGraphDebugCapture.RequestCapture(previewScale);
+        return impl_->diagnostics.frameGraphDebugCapture.RequestCapture(previewScale);
     }
 
     FrameGraphDebugCaptureStatus RenderSystem::GetFrameGraphDebugCaptureStatus() const
     {
-        return impl_->frameGraphDebugCapture.GetStatus();
+        return impl_->diagnostics.frameGraphDebugCapture.GetStatus();
     }
 
     std::string RenderSystem::GetFrameGraphDebugCaptureFailure() const
     {
-        return impl_->frameGraphDebugCapture.GetFailureMessage();
+        return impl_->diagnostics.frameGraphDebugCapture.GetFailureMessage();
     }
 
     std::shared_ptr<const FrameGraphDebugData> RenderSystem::TakeFrameGraphDebugData()
     {
         VE_ASSERT_SCENE_THREAD();
-        return impl_->frameGraphDebugCapture.TakePublishedData();
+        return impl_->diagnostics.frameGraphDebugCapture.TakePublishedData();
     }
 
     std::shared_ptr<const FrameGraphDebugData> RenderSystem::RetireFrameGraphDebugData(std::shared_ptr<const FrameGraphDebugData> data)
@@ -850,10 +885,10 @@ namespace ve
             return nullptr;
         }
 
-        impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
-        auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
+        impl_->threadControl.activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
+        auto submitCounterGuard = MakeScopeExit([this]() { impl_->threadControl.activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return data;
         }
@@ -865,7 +900,7 @@ namespace ve
                 "RenderSystemRetireFrameGraphDebugData",
                 [this, queuedData = data]() mutable { RetireFrameGraphDebugDataOnRenderThread(*impl_, std::move(queuedData)); },
             };
-            pushResult = impl_->commandQueue.Push(std::move(retireCommand));
+            pushResult = impl_->threadControl.commandQueue.Push(std::move(retireCommand));
         }
         catch (...)
         {
@@ -877,7 +912,7 @@ namespace ve
             return data;
         }
 
-        impl_->commandSemaphore.Release();
+        impl_->threadControl.commandSemaphore.Release();
         return nullptr;
     }
 
@@ -892,27 +927,27 @@ namespace ve
         return ExecuteSynchronous("RenderSystemCreateMainSwapchain",
                                   [this, desc]()
                                   {
-                                      if (impl_->device == nullptr)
+                                      if (impl_->rhi.device == nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
 
-                                      if (impl_->mainSwapchainState.swapchain != nullptr)
+                                      if (impl_->rhi.mainSwapchain.swapchain != nullptr)
                                       {
                                           return ErrorCode::InvalidState;
                                       }
 
-                                      std::unique_ptr<rhi::RhiSwapchain> swapchain = impl_->device->CreateSwapchain(ToRhiSwapchainDesc(desc));
+                                      std::unique_ptr<rhi::RhiSwapchain> swapchain = impl_->rhi.device->CreateSwapchain(ToRhiSwapchainDesc(desc));
                                       if (swapchain == nullptr)
                                       {
                                           return ErrorCode::PlatformError;
                                       }
 
-                                      impl_->mainSwapchainState.swapchain = std::move(swapchain);
+                                      impl_->rhi.mainSwapchain.swapchain = std::move(swapchain);
                                       ErrorCode frameResourceResult = CreateFrameResources(*impl_);
                                       if (frameResourceResult != ErrorCode::None)
                                       {
-                                          impl_->mainSwapchainState.swapchain.reset();
+                                          impl_->rhi.mainSwapchain.swapchain.reset();
                                           return frameResourceResult;
                                       }
 
@@ -922,7 +957,7 @@ namespace ve
 
     void RenderSystem::DestroyMainSwapchain() noexcept
     {
-        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -930,14 +965,14 @@ namespace ve
         ErrorCode result = ExecuteSynchronous("RenderSystemDestroyMainSwapchain",
                                               [this]()
                                               {
-                                                  if (impl_->device != nullptr)
+                                                  if (impl_->rhi.device != nullptr)
                                                   {
-                                                      impl_->device->WaitIdle();
+                                                      impl_->rhi.device->WaitIdle();
                                                       ClearRetiredRhiObjectsAfterWaitIdle(*impl_);
                                                   }
 
                                                   DestroyFrameResources(*impl_);
-                                                  impl_->mainSwapchainState.swapchain.reset();
+                                                  impl_->rhi.mainSwapchain.swapchain.reset();
                                                   return ErrorCode::None;
                                               });
 
@@ -947,14 +982,14 @@ namespace ve
     void RenderSystem::RequestMainSwapchainResize(rhi::RhiExtent2D extent)
     {
         VE_ASSERT_SCENE_THREAD();
-        if (extent.width == 0 || extent.height == 0 || !impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+        if (extent.width == 0 || extent.height == 0 || !impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
 
-        impl_->mainSwapchainState.pendingResizeExtent.store(PackExtent(extent), std::memory_order_release);
+        impl_->rhi.mainSwapchain.pendingResizeExtent.store(PackExtent(extent), std::memory_order_release);
         bool expected = false;
-        if (impl_->mainSwapchainState.resizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        if (impl_->rhi.mainSwapchain.resizeCommandQueued.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
         {
             QueueMainSwapchainResizeCommand(*impl_);
         }
@@ -968,13 +1003,13 @@ namespace ve
         EnqueueCommand("RenderSystemInitRenderResource",
                        [this, renderTexture = std::move(renderTexture), desc = std::move(desc)]() mutable
                        {
-                           VE_ASSERT(impl_->device != nullptr);
+                           VE_ASSERT(impl_->rhi.device != nullptr);
                            RhiObjectList retiredObjects;
                            if (!renderTexture->MatchesDesc(desc))
                            {
                                retiredObjects = renderTexture->TakeRhiObjects();
                            }
-                           renderTexture->InitRenderResource(*impl_->device, std::move(desc));
+                           renderTexture->InitRenderResource(*impl_->rhi.device, std::move(desc));
                            RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
@@ -987,9 +1022,9 @@ namespace ve
         EnqueueCommand("RenderSystemInitMeshResource",
                        [this, meshResource = std::move(meshResource), desc = std::move(desc)]() mutable
                        {
-                           VE_ASSERT(impl_->device != nullptr);
+                           VE_ASSERT(impl_->rhi.device != nullptr);
                            RhiObjectList retiredObjects = meshResource->TakeRhiObjects();
-                           meshResource->InitRenderResource(*impl_->device, std::move(desc));
+                           meshResource->InitRenderResource(*impl_->rhi.device, std::move(desc));
                            RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
@@ -1002,9 +1037,9 @@ namespace ve
         EnqueueCommand("RenderSystemInitShaderResource",
                        [this, shaderResource = std::move(shaderResource), desc = std::move(desc)]() mutable
                        {
-                           VE_ASSERT(impl_->device != nullptr);
+                           VE_ASSERT(impl_->rhi.device != nullptr);
                            RhiObjectList retiredObjects = shaderResource->TakeRhiObjects();
-                           shaderResource->InitRenderResource(*impl_->device, std::move(desc));
+                           shaderResource->InitRenderResource(*impl_->rhi.device, std::move(desc));
                            RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
@@ -1017,9 +1052,9 @@ namespace ve
         EnqueueCommand("RenderSystemInitTextureResource",
                        [this, textureResource = std::move(textureResource), desc = std::move(desc)]() mutable
                        {
-                           VE_ASSERT(impl_->device != nullptr);
+                           VE_ASSERT(impl_->rhi.device != nullptr);
                            RhiObjectList retiredObjects = textureResource->TakeRhiObjects();
-                           textureResource->InitRenderResource(*impl_->device, std::move(desc));
+                           textureResource->InitRenderResource(*impl_->rhi.device, std::move(desc));
                            RetireRhiObjects(*impl_, std::move(retiredObjects));
                        });
     }
@@ -1117,7 +1152,7 @@ namespace ve
 
     void RenderSystem::Flush()
     {
-        VE_ASSERT_MESSAGE(impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire),
+        VE_ASSERT_MESSAGE(impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire),
                           "RenderSystem::Flush requires RenderSystem to accept commands.");
 
         auto completed = std::make_shared<ManualResetEvent>(false);
@@ -1127,7 +1162,7 @@ namespace ve
 
     void RenderSystem::WaitIdle()
     {
-        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -1135,9 +1170,9 @@ namespace ve
         const ErrorCode result = ExecuteSynchronous("RenderSystemWaitIdle",
                                                     [this]()
                                                     {
-                                                        if (impl_->device != nullptr)
+                                                        if (impl_->rhi.device != nullptr)
                                                         {
-                                                            impl_->device->WaitIdle();
+                                                            impl_->rhi.device->WaitIdle();
                                                             ClearRetiredRhiObjectsAfterWaitIdle(*impl_);
                                                         }
                                                         return ErrorCode::None;
@@ -1152,7 +1187,7 @@ namespace ve
             return ErrorCode::InvalidArgument;
         }
 
-        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
@@ -1175,15 +1210,15 @@ namespace ve
     {
         VE_ASSERT_MESSAGE(function != nullptr, "RenderSystem::EnqueueCommand requires a callable function.");
 
-        impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
-        auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
+        impl_->threadControl.activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
+        auto submitCounterGuard = MakeScopeExit([this]() { impl_->threadControl.activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        VE_ASSERT_MESSAGE(impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire),
+        VE_ASSERT_MESSAGE(impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire),
                           "RenderSystem::EnqueueCommand requires RenderSystem to accept commands.");
 
-        ErrorCode pushResult = impl_->commandQueue.Push(RenderCommand{std::move(debugName), std::move(function)});
+        ErrorCode pushResult = impl_->threadControl.commandQueue.Push(RenderCommand{std::move(debugName), std::move(function)});
         VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "RenderSystem failed to enqueue render command.");
 
-        impl_->commandSemaphore.Release();
+        impl_->threadControl.commandSemaphore.Release();
     }
 } // namespace ve
