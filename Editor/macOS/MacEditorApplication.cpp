@@ -7,9 +7,8 @@
 
 namespace ve::editor
 {
-    MacEditorApplication::MacEditorApplication(ve::ApplicationInitParam initParam, EditorStartupOptions startupOptions)
+    MacEditorApplication::MacEditorApplication(ve::ApplicationInitParam initParam)
         : ve::Application(std::move(initParam))
-        , startupOptions_(std::move(startupOptions))
     {
     }
 
@@ -35,7 +34,7 @@ namespace ve::editor
         }
 
         PlaceMacEditorStartupWindows(GetMainWindowNativeHandle());
-        QueueEditorStartupOptions(editor_, startupOptions_);
+        QueueEditorStartupProject(editor_, GetInitParam().startupProjectPath);
 
         return result;
     }

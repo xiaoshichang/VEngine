@@ -9,7 +9,7 @@ namespace ve::editor
     class WindowsEditorApplication : public ve::Application
     {
     public:
-        WindowsEditorApplication(ve::ApplicationInitParam initParam, EditorStartupOptions startupOptions);
+        explicit WindowsEditorApplication(ve::ApplicationInitParam initParam);
         ~WindowsEditorApplication() override;
 
         [[nodiscard]] int Init() override;
@@ -18,6 +18,5 @@ namespace ve::editor
 
     private:
         Editor editor_;
-        EditorStartupOptions startupOptions_;
     };
 } // namespace ve::editor

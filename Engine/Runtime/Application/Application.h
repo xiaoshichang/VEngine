@@ -14,6 +14,7 @@ namespace ve
     struct ApplicationInitParam
     {
         std::string name = "VEngine";
+        std::string startupProjectPath;
         WindowDesc mainWindow;
         EngineRuntimeInitParam runtime;
     };
@@ -32,6 +33,7 @@ namespace ve
         [[nodiscard]] bool TickMainLoopFrame();
 
         [[nodiscard]] const std::string& GetName() const noexcept;
+        [[nodiscard]] const ApplicationInitParam& GetInitParam() const noexcept;
         [[nodiscard]] int GetExitCode() const noexcept;
         [[nodiscard]] void* GetMainWindowNativeHandle() const noexcept;
         [[nodiscard]] void* GetMainWindowNativeLayer() const noexcept;

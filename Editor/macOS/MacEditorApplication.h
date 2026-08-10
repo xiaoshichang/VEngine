@@ -9,7 +9,7 @@ namespace ve::editor
     class MacEditorApplication : public ve::Application
     {
     public:
-        MacEditorApplication(ve::ApplicationInitParam initParam, EditorStartupOptions startupOptions);
+        explicit MacEditorApplication(ve::ApplicationInitParam initParam);
         ~MacEditorApplication() override;
 
         [[nodiscard]] int Init() override;
@@ -18,6 +18,5 @@ namespace ve::editor
 
     private:
         Editor editor_;
-        EditorStartupOptions startupOptions_;
     };
 } // namespace ve::editor

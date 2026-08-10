@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Engine/RHI/Common/RhiTypes.h"
-#include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
@@ -41,7 +40,7 @@ namespace ve
         RenderBackend backend = RenderBackend::D3D12;
 
         /// Enables backend debug validation where supported.
-        bool enableDebugDevice = VE_BUILD_DEBUG != 0;
+        bool enableDebugDevice = false;
     };
 
     /// Describes the main presentation surface used by Player or first-stage tests.

@@ -11,6 +11,7 @@ function(ve_add_engine)
         PRIVATE
             Engine/Runtime/Application/Application.cpp
             Engine/Runtime/Application/ApplicationCommandQueue.cpp
+            Engine/Runtime/Application/ApplicationInitParamOptionParser.cpp
             Engine/Runtime/Application/EngineRuntime.cpp
             Engine/Runtime/Core/Assert.cpp
             Engine/Runtime/Core/Error.cpp
@@ -121,6 +122,7 @@ function(ve_add_engine)
         PUBLIC
             Engine/Runtime/Application/Application.h
             Engine/Runtime/Application/ApplicationCommandQueue.h
+            Engine/Runtime/Application/ApplicationInitParamOptionParser.h
             Engine/Runtime/Application/EngineRuntime.h
             Engine/Runtime/Core/Assert.h
             Engine/Runtime/Core/BuildConfig.h
@@ -316,13 +318,11 @@ function(ve_add_engine)
             PRIVATE
                 Engine/Runtime/Platform/Windows/Win32DebugConsole.cpp
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.cpp
-                Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.cpp
                 Engine/Runtime/Platform/Windows/Win32Window.cpp
                 Engine/Runtime/Scripting/DotnetJITScriptingBackend.cpp
             PUBLIC
                 Engine/Runtime/Platform/Windows/Win32DebugConsoleBackend.h
                 Engine/Runtime/Platform/Windows/Win32MessageLoop.h
-                Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h
                 Engine/Runtime/Platform/Windows/Win32Window.h
                 Engine/Runtime/Scripting/DotnetJITScriptingBackend.h
         )

@@ -1,8 +1,8 @@
-#include "Engine/Runtime/Logging/Log.h"
+#include "Engine/Runtime/Application/ApplicationInitParamOptionParser.h"
 #include "Engine/Runtime/Core/BuildConfig.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
+#include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/DebugConsole.h"
-#include "Engine/Runtime/Platform/Windows/Win32RenderBackendSelection.h"
 #include "Player/Windows/VEnginePlayer.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -14,6 +14,11 @@
 #endif
 
 #include <Windows.h>
+
+#ifdef GetMessage
+#undef GetMessage
+#endif
+
 #include <utility>
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR commandLine, int showCommand)
@@ -23,6 +28,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     (void)commandLine;
     (void)showCommand;
 
+    ve::Result<ve::ApplicationInitParam> initParamResult = ve::ApplicationInitParamOptionParser::ParseCurrentProcessCommandLine();
+
     ve::InitializeDebugConsole();
 
     ve::ErrorCode loggingResult = ve::InitializeLogging();
@@ -31,7 +38,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
         return 1;
     }
 
-    ve::ApplicationInitParam initParam;
+    if (!initParamResult)
+    {
+        VE_LOG_ERROR_CATEGORY("Application", "Failed to parse command-line options: {}", initParamResult.GetError().GetMessage());
+        ve::ShutdownLogging();
+        return 1;
+    }
+
+    ve::ApplicationInitParam initParam = initParamResult.MoveValue();
     initParam.name = "VEngineWinPlayer";
     initParam.mainWindow.title = "VEngine Win Player";
     initParam.mainWindow.width = 1280;
@@ -40,7 +54,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previousInstance, PWSTR comman
     initParam.runtime.jobSystem.workerThreadNamePrefix = "VEngineWinPlayerJobWorker";
     initParam.runtime.ioSystem.threadName = "VEngineWinPlayerIOThread";
     initParam.runtime.renderSystem.threadName = "VEngineWinPlayerRenderThread";
-    initParam.runtime.renderSystem.device.backend = ve::SelectWin32RenderBackendFromCommandLine();
     initParam.runtime.enableProfileSystem = VE_BUILD_DEBUG != 0;
     initParam.runtime.scriptingSystem.scriptHostRoot = ve::FileSystem::GetExecutableDirectory() / "Managed" / "VEngine.ScriptHost";
     initParam.runtime.scriptingSystem.runtimeConfigPath = initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";

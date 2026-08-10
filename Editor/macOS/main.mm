@@ -1,6 +1,6 @@
-#include "Editor/Core/EditorStartup.h"
 #include "Editor/Panels/ConsolePanel/ConsolePanel.h"
 #include "Editor/macOS/MacEditorApplication.h"
+#include "Engine/Runtime/Application/ApplicationInitParamOptionParser.h"
 #include "Engine/Runtime/FileSystem/FileSystem.h"
 #include "Engine/Runtime/FileSystem/Path.h"
 #include "Engine/Runtime/Logging/Log.h"
@@ -8,16 +8,12 @@
 #import <AppKit/AppKit.h>
 #include <cstdlib>
 #include <filesystem>
-#include <string>
-#include <vector>
 
 int main(int argc, char* argv[])
 {
     @autoreleasepool
     {
-        [NSApplication sharedApplication];
-        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-        [NSApp finishLaunching];
+        ve::Result<ve::ApplicationInitParam> initParamResult = ve::ApplicationInitParamOptionParser::Parse(argc, argv);
 
         ve::LoggingConfig loggingConfig = ve::MakeDefaultLoggingConfig();
         loggingConfig.enableConsole = false;
@@ -33,13 +29,24 @@ int main(int argc, char* argv[])
         }
         ve::SetLogCallback(ve::editor::CaptureEditorLog);
 
-        ve::ApplicationInitParam initParam;
+        if (!initParamResult)
+        {
+            VE_LOG_ERROR_CATEGORY("Application", "Failed to parse command-line options: {}", initParamResult.GetError().GetMessage());
+            ve::SetLogCallback(nullptr);
+            ve::ShutdownLogging();
+            return 1;
+        }
+
+        [NSApplication sharedApplication];
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        [NSApp finishLaunching];
+
+        ve::ApplicationInitParam initParam = initParamResult.MoveValue();
         initParam.name = "VEngineEditor";
         initParam.mainWindow.title = "VEngine Editor";
         initParam.mainWindow.width = 1600;
         initParam.mainWindow.height = 1300;
         initParam.mainWindow.visible = true;
-        initParam.runtime.renderSystem.device.backend = ve::RenderBackend::Metal;
 
         const ve::Path executableDirectory = ve::FileSystem::GetExecutableDirectory();
         const ve::Path bundleContentsDirectory = executableDirectory.GetParentPath();
@@ -47,14 +54,7 @@ int main(int argc, char* argv[])
         initParam.runtime.scriptingSystem.runtimeConfigPath = initParam.runtime.scriptingSystem.scriptHostRoot / "VEngine.ScriptHost.runtimeconfig.json";
         initParam.runtime.scriptingSystem.dotNetRuntimeRoot = bundleContentsDirectory / "Resources" / "DotNet" / "osx-arm64" / "10.0.9";
 
-        std::vector<std::string> arguments;
-        arguments.reserve(static_cast<size_t>(argc));
-        for (int argumentIndex = 0; argumentIndex < argc; ++argumentIndex)
-        {
-            arguments.emplace_back(argv[argumentIndex] == nullptr ? "" : argv[argumentIndex]);
-        }
-        ve::editor::EditorStartupOptions startupOptions = ve::editor::ParseEditorStartupOptions(arguments);
-        ve::editor::MacEditorApplication application(std::move(initParam), std::move(startupOptions));
+        ve::editor::MacEditorApplication application(std::move(initParam));
         int exitCode = application.Init();
         if (exitCode == 0)
         {

@@ -340,6 +340,11 @@ namespace ve
         return initParam_.name;
     }
 
+    const ApplicationInitParam& Application::GetInitParam() const noexcept
+    {
+        return initParam_;
+    }
+
     int Application::GetExitCode() const noexcept
     {
         return exitCode_;
