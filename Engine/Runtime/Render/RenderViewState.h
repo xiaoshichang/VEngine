@@ -35,11 +35,8 @@ namespace ve
         [[nodiscard]] const VirtualShadowPageTableSlice& GetVirtualShadowPageTableSlice() const noexcept;
         [[nodiscard]] VirtualShadowViewCache& GetVirtualShadowViewCache() noexcept;
         [[nodiscard]] const VirtualShadowViewCache& GetVirtualShadowViewCache() const noexcept;
-        [[nodiscard]] UniformBufferAllocation GetViewUniform(rhi::RhiDevice& device,
-                                                             UInt32 frameSlotIndex,
-                                                             UInt64 frameIndex,
-                                                             const RTCamera* camera,
-                                                             rhi::RhiExtent2D targetExtent);
+        [[nodiscard]] UniformBufferAllocation
+        GetViewUniform(rhi::RhiDevice& device, UInt32 frameSlotIndex, UInt64 frameIndex, const RTCamera* camera, rhi::RhiExtent2D targetExtent);
         [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
     private:

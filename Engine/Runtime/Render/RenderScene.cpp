@@ -126,8 +126,7 @@ namespace ve
     {
         VE_ASSERT_RENDER_THREAD();
         const ObjectUniformData data = BuildObjectUniformData(*this);
-        return objectUniformBuffer_.GetOrUpdate(
-            device, frameSlotIndex, &data, sizeof(data), revision_, "RTRenderItemObjectUniform");
+        return objectUniformBuffer_.GetOrUpdate(device, frameSlotIndex, &data, sizeof(data), revision_, "RTRenderItemObjectUniform");
     }
 
     RhiObjectList RTRenderItem::TakeRhiObjects() noexcept

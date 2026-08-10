@@ -3,12 +3,12 @@
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Render/RenderUniformBuffer.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
@@ -126,17 +126,15 @@ namespace ve
                 passData.virtualShadowSampling = viewGraphData.virtualShadowSampling;
             },
             [this](const OpaqueForwardPassData& passData, const FrameGraphPassResources& resources, RenderPassContext& context)
-            {
-                Draw(resources, passData.virtualShadowAtlas, passData.virtualShadowPageTable, passData.virtualShadowSampling, passData.viewIndex, context);
-            });
+            { Draw(resources, passData.virtualShadowAtlas, passData.virtualShadowPageTable, passData.virtualShadowSampling, passData.viewIndex, context); });
     }
 
     void OpaqueForwardPass::Draw(const FrameGraphPassResources& resources,
-                                     FrameGraphTextureHandle virtualShadowAtlas,
-                                     FrameGraphBufferHandle virtualShadowPageTable,
-                                     const VirtualShadowSamplingSnapshot& virtualShadowSampling,
-                                     UInt32 viewIndex,
-                                     RenderPassContext& context)
+                                 FrameGraphTextureHandle virtualShadowAtlas,
+                                 FrameGraphBufferHandle virtualShadowPageTable,
+                                 const VirtualShadowSamplingSnapshot& virtualShadowSampling,
+                                 UInt32 viewIndex,
+                                 RenderPassContext& context)
     {
         VE_ASSERT_RENDER_THREAD();
         if (!virtualShadowAtlas.IsValid() || !virtualShadowPageTable.IsValid())
@@ -165,8 +163,8 @@ namespace ve
 
         const UniformBufferAllocation frameUniform = context.frameData.GetSceneUniform(*context.rendererData.scene);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
-            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(*viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         if (frameUniform.buffer == nullptr || viewUniform.buffer == nullptr)
         {
             FailOpaqueForwardPass("execution failed to allocate required frame or view uniforms.");
@@ -235,9 +233,7 @@ namespace ve
         }
     }
 
-    void OpaqueForwardPass::EnsurePipeline(RenderPassContext& context,
-                                               UInt32 viewIndex,
-                                               const std::shared_ptr<RTShaderResource>& shaderResource)
+    void OpaqueForwardPass::EnsurePipeline(RenderPassContext& context, UInt32 viewIndex, const std::shared_ptr<RTShaderResource>& shaderResource)
     {
         if (shaderResource == nullptr)
         {
@@ -338,11 +334,7 @@ namespace ve
         {
             FailOpaqueForwardPass("queued render item material requires an initialized uniform buffer.");
         }
-        context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment,
-                                             3,
-                                             *materialUniform.buffer,
-                                             materialUniform.offset,
-                                             materialUniform.size);
+        context.commandList.SetUniformBuffer(rhi::RhiShaderStage::Fragment, 3, *materialUniform.buffer, materialUniform.offset, materialUniform.size);
     }
 
 } // namespace ve

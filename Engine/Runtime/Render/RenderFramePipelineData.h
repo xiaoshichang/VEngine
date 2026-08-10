@@ -49,9 +49,7 @@ namespace ve
         [[nodiscard]] UniformBufferAllocation UploadTransientUniform(const void* data, UInt64 size, const char* debugName) const;
         void AdoptTransientRhiObject(std::shared_ptr<rhi::RhiObject> object) const;
         [[nodiscard]] UniformBufferAllocation GetSceneUniform(RTScene& scene) const;
-        [[nodiscard]] UniformBufferAllocation GetViewUniform(RTRenderViewState& viewState,
-                                                             const RTCamera* camera,
-                                                             rhi::RhiExtent2D targetExtent) const;
+        [[nodiscard]] UniformBufferAllocation GetViewUniform(RTRenderViewState& viewState, const RTCamera* camera, rhi::RhiExtent2D targetExtent) const;
         [[nodiscard]] UniformBufferAllocation GetObjectUniform(RTRenderItem& item) const;
         [[nodiscard]] UniformBufferAllocation GetMaterialUniform(RTMaterialResource& material) const;
     };

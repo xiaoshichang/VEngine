@@ -57,12 +57,8 @@ namespace ve
     class RTDynamicUniformBuffer final : public NonCopyable
     {
     public:
-        [[nodiscard]] UniformBufferAllocation GetOrUpdate(rhi::RhiDevice& device,
-                                                          UInt32 frameSlotIndex,
-                                                          const void* data,
-                                                          UInt64 size,
-                                                          UInt64 revision,
-                                                          const char* debugName);
+        [[nodiscard]] UniformBufferAllocation
+        GetOrUpdate(rhi::RhiDevice& device, UInt32 frameSlotIndex, const void* data, UInt64 size, UInt64 revision, const char* debugName);
         [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
     private:

@@ -16,6 +16,8 @@
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/FrameContext.h"
 #include "Engine/Runtime/Render/FrameTransientResourcePool.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
+#include "Engine/Runtime/Render/RHIShaderModuleManager.h"
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderResourceLifetime.h"
@@ -23,15 +25,13 @@
 #include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
-#include "Engine/Runtime/Render/RHIShaderModuleManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowManager.h"
 #include "Engine/Runtime/Threading/Atomic.h"
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <deque>
 #include <exception>
 #include <iterator>
@@ -224,8 +224,7 @@ namespace ve
             if (impl.recordingFrame)
             {
                 VE_ASSERT(impl.recordingFrameSlotIndex < RenderFrameContextCount);
-                dependencies[impl.recordingFrameSlotIndex] =
-                    std::max(dependencies[impl.recordingFrameSlotIndex], impl.recordingSubmissionFenceValue);
+                dependencies[impl.recordingFrameSlotIndex] = std::max(dependencies[impl.recordingFrameSlotIndex], impl.recordingSubmissionFenceValue);
             }
 
             UInt32 dependencyCount = 0;
@@ -250,10 +249,8 @@ namespace ve
                 }
 
                 std::deque<PendingDeleteRTResourceEntry>& queue = impl.pendingDeleteRTResourceQueues[frameSlotIndex];
-                const auto insertPosition = std::upper_bound(queue.begin(),
-                                                             queue.end(),
-                                                             fenceValue,
-                                                             [](UInt64 value, const PendingDeleteRTResourceEntry& entry) { return value < entry.fenceValue; });
+                const auto insertPosition = std::upper_bound(
+                    queue.begin(), queue.end(), fenceValue, [](UInt64 value, const PendingDeleteRTResourceEntry& entry) { return value < entry.fenceValue; });
                 queue.insert(insertPosition, PendingDeleteRTResourceEntry{fenceValue, batch});
             }
         }
@@ -451,9 +448,7 @@ namespace ve
             for (const std::shared_ptr<FrameGraphDebugPreviewTexture>& previewTexture : previewTextures)
             {
                 RhiObjectList previewObjects = previewTexture->TakeRhiObjects();
-                retiredObjects.insert(retiredObjects.end(),
-                                      std::make_move_iterator(previewObjects.begin()),
-                                      std::make_move_iterator(previewObjects.end()));
+                retiredObjects.insert(retiredObjects.end(), std::make_move_iterator(previewObjects.begin()), std::make_move_iterator(previewObjects.end()));
             }
             RetireRhiObjects(impl, std::move(retiredObjects));
 
@@ -1085,9 +1080,7 @@ namespace ve
 
         EnqueueCommand("RenderSystemInitMaterialResource",
                        [this, materialResource = std::move(materialResource), desc = std::move(desc)]() mutable
-                       {
-                           materialResource->InitRenderResource(std::move(desc));
-                       });
+                       { materialResource->InitRenderResource(std::move(desc)); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTRenderTexture> renderTexture)
@@ -1096,16 +1089,14 @@ namespace ve
         VE_ASSERT_MESSAGE(renderTexture != nullptr, "RenderSystem::ReleaseRenderResource requires a render texture.");
 
         EnqueueCommand("RenderSystemReleaseRenderTexture",
-                       [this, renderTexture = std::move(renderTexture)]() mutable
-                       { RetireRhiObjects(*impl_, renderTexture->TakeRhiObjects()); });
+                       [this, renderTexture = std::move(renderTexture)]() mutable { RetireRhiObjects(*impl_, renderTexture->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTScene> scene)
     {
         VE_ASSERT_SCENE_THREAD();
         VE_ASSERT_MESSAGE(scene != nullptr, "RenderSystem::ReleaseRenderResource requires a render scene.");
-        EnqueueCommand("RenderSystemReleaseSceneResource",
-                       [this, scene = std::move(scene)]() mutable { RetireRhiObjects(*impl_, scene->TakeRhiObjects()); });
+        EnqueueCommand("RenderSystemReleaseSceneResource", [this, scene = std::move(scene)]() mutable { RetireRhiObjects(*impl_, scene->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTRenderViewState> viewState)
@@ -1130,8 +1121,7 @@ namespace ve
         VE_ASSERT_MESSAGE(materialResource != nullptr, "RenderSystem::ReleaseRenderResource requires a material resource.");
 
         EnqueueCommand("RenderSystemReleaseMaterialResource",
-                       [this, materialResource = std::move(materialResource)]() mutable
-                       { RetireRhiObjects(*impl_, materialResource->TakeRhiObjects()); });
+                       [this, materialResource = std::move(materialResource)]() mutable { RetireRhiObjects(*impl_, materialResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTMeshResource> meshResource)
@@ -1140,8 +1130,7 @@ namespace ve
         VE_ASSERT_MESSAGE(meshResource != nullptr, "RenderSystem::ReleaseRenderResource requires a mesh resource.");
 
         EnqueueCommand("RenderSystemReleaseMeshResource",
-                       [this, meshResource = std::move(meshResource)]() mutable
-                       { RetireRhiObjects(*impl_, meshResource->TakeRhiObjects()); });
+                       [this, meshResource = std::move(meshResource)]() mutable { RetireRhiObjects(*impl_, meshResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource)
@@ -1150,8 +1139,7 @@ namespace ve
         VE_ASSERT_MESSAGE(shaderResource != nullptr, "RenderSystem::ReleaseRenderResource requires a shader resource.");
 
         EnqueueCommand("RenderSystemReleaseShaderResource",
-                       [this, shaderResource = std::move(shaderResource)]() mutable
-                       { RetireRhiObjects(*impl_, shaderResource->TakeRhiObjects()); });
+                       [this, shaderResource = std::move(shaderResource)]() mutable { RetireRhiObjects(*impl_, shaderResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTTextureResource> textureResource)
@@ -1160,8 +1148,7 @@ namespace ve
         VE_ASSERT_MESSAGE(textureResource != nullptr, "RenderSystem::ReleaseRenderResource requires a texture resource.");
 
         EnqueueCommand("RenderSystemReleaseTextureResource",
-                       [this, textureResource = std::move(textureResource)]() mutable
-                       { RetireRhiObjects(*impl_, textureResource->TakeRhiObjects()); });
+                       [this, textureResource = std::move(textureResource)]() mutable { RetireRhiObjects(*impl_, textureResource->TakeRhiObjects()); });
     }
 
     void RenderSystem::RenderFrame(std::shared_ptr<FrameRenderPipeline> framePipeline)

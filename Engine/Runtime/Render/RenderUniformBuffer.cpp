@@ -26,12 +26,8 @@ namespace ve
         }
     } // namespace
 
-    UniformBufferAllocation RTDynamicUniformBuffer::GetOrUpdate(rhi::RhiDevice& device,
-                                                                 UInt32 frameSlotIndex,
-                                                                 const void* data,
-                                                                 UInt64 size,
-                                                                 UInt64 revision,
-                                                                 const char* debugName)
+    UniformBufferAllocation
+    RTDynamicUniformBuffer::GetOrUpdate(rhi::RhiDevice& device, UInt32 frameSlotIndex, const void* data, UInt64 size, UInt64 revision, const char* debugName)
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(frameSlotIndex < RenderFrameContextCount);

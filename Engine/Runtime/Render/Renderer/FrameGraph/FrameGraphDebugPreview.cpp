@@ -4,10 +4,10 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
-#include "Engine/Runtime/Render/RenderResource.h"
-#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Render/RHIPipelineManager.h"
+#include "Engine/Runtime/Render/RenderResource.h"
+#include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -170,8 +170,9 @@ namespace ve
             return FailPreviewConversion(ErrorCode::InvalidState, "the frame RHIPipelineManager is unavailable.");
         }
 
-        const std::string passName =
-            mode == FrameGraphDebugPreviewMode::Color ? "Color" : mode == FrameGraphDebugPreviewMode::Depth ? "Depth" : "UnsignedInteger";
+        const std::string passName = mode == FrameGraphDebugPreviewMode::Color   ? "Color"
+                                     : mode == FrameGraphDebugPreviewMode::Depth ? "Depth"
+                                                                                 : "UnsignedInteger";
         if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->frameGraphDebugPreview == nullptr)
         {
             return FailPreviewConversion(ErrorCode::InvalidState, "the frame graph preview shader resource is unavailable.");

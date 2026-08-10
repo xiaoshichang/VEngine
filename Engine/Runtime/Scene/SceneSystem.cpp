@@ -1,11 +1,11 @@
 #include "Engine/Runtime/Scene/SceneSystem.h"
 
+#include "Engine/Render/PBR/HdrColorPipeline.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Physics/PhysicsSystem.h"
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
-#include "Engine/Render/PBR/HdrColorPipeline.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Scene/CameraComponent.h"

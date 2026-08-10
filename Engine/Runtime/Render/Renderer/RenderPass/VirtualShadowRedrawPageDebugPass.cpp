@@ -3,15 +3,15 @@
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Render/RenderUniformBuffer.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <exception>
@@ -67,8 +67,7 @@ namespace ve
                 FailDebugPass("VSM page-table binding does not cover one valid logical page-table slice.");
             }
 
-            const UInt64 requiredPhysicalPageSize =
-                static_cast<UInt64>(sampling.constants.physicalPageCapacity) * sizeof(VirtualShadowGpuPhysicalPage);
+            const UInt64 requiredPhysicalPageSize = static_cast<UInt64>(sampling.constants.physicalPageCapacity) * sizeof(VirtualShadowGpuPhysicalPage);
             if (sampling.constants.physicalPageCapacity == 0 || requiredPhysicalPageSize > physicalPages.buffer->GetSize())
             {
                 FailDebugPass("VSM physical-page binding does not cover the declared physical-page capacity.");
@@ -156,8 +155,8 @@ namespace ve
 
         const UniformBufferAllocation frameUniform = context.frameData.GetSceneUniform(*context.rendererData.scene);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
-            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(*viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         const VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
         const UniformBufferAllocation virtualShadowUniform =
             context.frameData.UploadTransientUniform(&virtualShadowConstants, sizeof(virtualShadowConstants), "VirtualShadowSamplingUniform");

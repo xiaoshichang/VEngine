@@ -3,15 +3,15 @@
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Render/RenderUniformBuffer.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowRenderer.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowTypes.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <exception>
@@ -107,14 +107,7 @@ namespace ve
                 passData.virtualShadowSampling = viewData.virtualShadowSampling;
             },
             [this](const DebugPassData& passData, const FrameGraphPassResources& resources, RenderPassContext& context)
-            {
-                Draw(resources,
-                     passData.virtualShadowAtlas,
-                     passData.virtualShadowPageTable,
-                     passData.virtualShadowSampling,
-                     passData.viewIndex,
-                     context);
-            });
+            { Draw(resources, passData.virtualShadowAtlas, passData.virtualShadowPageTable, passData.virtualShadowSampling, passData.viewIndex, context); });
     }
 
     void ShadowCasterDirtyDebugPass::Draw(const FrameGraphPassResources& resources,
@@ -148,8 +141,8 @@ namespace ve
 
         const UniformBufferAllocation frameUniform = context.frameData.GetSceneUniform(*context.rendererData.scene);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
-            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(*viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         const VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
         const UniformBufferAllocation virtualShadowUniform =
             context.frameData.UploadTransientUniform(&virtualShadowConstants, sizeof(virtualShadowConstants), "VirtualShadowSamplingUniform");

@@ -200,7 +200,8 @@ namespace ve
     {
         for (const auto& pass : passes_)
         {
-            if (pass->GetType() == type) return pass.get();
+            if (pass->GetType() == type)
+                return pass.get();
         }
         return nullptr;
     }
@@ -209,7 +210,8 @@ namespace ve
     {
         for (const auto& pass : passes_)
         {
-            if (pass->GetType() == type) return pass.get();
+            if (pass->GetType() == type)
+                return pass.get();
         }
         return nullptr;
     }
@@ -218,7 +220,8 @@ namespace ve
     {
         for (const auto& pass : passes_)
         {
-            if (pass->GetName() == name) return pass.get();
+            if (pass->GetName() == name)
+                return pass.get();
         }
         return nullptr;
     }
@@ -227,7 +230,8 @@ namespace ve
     {
         for (const auto& pass : passes_)
         {
-            if (pass->GetName() == name) return pass.get();
+            if (pass->GetName() == name)
+                return pass.get();
         }
         return nullptr;
     }
@@ -285,22 +289,22 @@ namespace ve
 
                 const rhi::RhiBackend backend = device.GetBackend();
                 if (backend == rhi::RhiBackend::D3D11 && !stageDesc.d3d11Bytecode.empty())
-            {
-                shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
-                shaderDesc.bytecode = stageDesc.d3d11Bytecode.data();
-                shaderDesc.bytecodeSize = static_cast<UInt64>(stageDesc.d3d11Bytecode.size());
-            }
-            else if (backend == rhi::RhiBackend::D3D12 && !stageDesc.d3d12Bytecode.empty())
-            {
-                shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
-                shaderDesc.bytecode = stageDesc.d3d12Bytecode.data();
-                shaderDesc.bytecodeSize = static_cast<UInt64>(stageDesc.d3d12Bytecode.size());
-            }
-            else if (backend == rhi::RhiBackend::Metal && !stageDesc.metalSource.empty())
-            {
-                shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Source;
-                shaderDesc.source = stageDesc.metalSource.c_str();
-            }
+                {
+                    shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
+                    shaderDesc.bytecode = stageDesc.d3d11Bytecode.data();
+                    shaderDesc.bytecodeSize = static_cast<UInt64>(stageDesc.d3d11Bytecode.size());
+                }
+                else if (backend == rhi::RhiBackend::D3D12 && !stageDesc.d3d12Bytecode.empty())
+                {
+                    shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Bytecode;
+                    shaderDesc.bytecode = stageDesc.d3d12Bytecode.data();
+                    shaderDesc.bytecodeSize = static_cast<UInt64>(stageDesc.d3d12Bytecode.size());
+                }
+                else if (backend == rhi::RhiBackend::Metal && !stageDesc.metalSource.empty())
+                {
+                    shaderDesc.codeFormat = rhi::RhiShaderCodeFormat::Source;
+                    shaderDesc.source = stageDesc.metalSource.c_str();
+                }
                 else
                 {
                     VE_ASSERT_ALWAYS_MESSAGE(false, "RTShaderResource does not have an artifact for the active backend.");
@@ -309,11 +313,15 @@ namespace ve
 
                 std::shared_ptr<rhi::RhiShaderModule> shader = device.CreateShaderModule(shaderDesc);
                 VE_ASSERT_MESSAGE(shader != nullptr, "RTShaderResource failed to create shader module.");
-                if (shader == nullptr) continue;
+                if (shader == nullptr)
+                    continue;
 
-                if (stageDesc.stage == rhi::RhiShaderStage::Vertex) pass->VertexShader() = std::move(shader);
-                else if (stageDesc.stage == rhi::RhiShaderStage::Fragment) pass->FragmentShader() = std::move(shader);
-                else if (stageDesc.stage == rhi::RhiShaderStage::Compute) pass->ComputeShader() = std::move(shader);
+                if (stageDesc.stage == rhi::RhiShaderStage::Vertex)
+                    pass->VertexShader() = std::move(shader);
+                else if (stageDesc.stage == rhi::RhiShaderStage::Fragment)
+                    pass->FragmentShader() = std::move(shader);
+                else if (stageDesc.stage == rhi::RhiShaderStage::Compute)
+                    pass->ComputeShader() = std::move(shader);
                 createdArtifact = true;
             }
             passes_.push_back(std::move(pass));
@@ -361,12 +369,8 @@ namespace ve
         {
             return {};
         }
-        return uniformBuffer_.GetOrUpdate(device,
-                                          frameSlotIndex,
-                                          desc_.constantData.data(),
-                                          static_cast<UInt64>(desc_.constantData.size()),
-                                          desc_.revision,
-                                          "RTMaterialResourceUniform");
+        return uniformBuffer_.GetOrUpdate(
+            device, frameSlotIndex, desc_.constantData.data(), static_cast<UInt64>(desc_.constantData.size()), desc_.revision, "RTMaterialResourceUniform");
     }
 
     RhiObjectList RTMaterialResource::TakeRhiObjects() noexcept

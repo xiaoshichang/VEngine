@@ -282,7 +282,6 @@ namespace ve
         {
             FailRenderer("Renderer family frame graph execution failed.");
         }
-
     }
 
     const std::vector<FrameGraphPassDiagnostics>& BaseRenderer::GetLastFrameGraphPassDiagnostics() const noexcept

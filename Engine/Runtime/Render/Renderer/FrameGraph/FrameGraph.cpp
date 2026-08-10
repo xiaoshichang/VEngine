@@ -1315,8 +1315,7 @@ namespace ve
             }
 
             VE_ASSERT(context.frameData.transientResourcePool != nullptr);
-            transientBacking->texture =
-                context.frameData.transientResourcePool->AcquireTexture(BuildRhiTextureDesc(resource.desc, resource.name.c_str()));
+            transientBacking->texture = context.frameData.transientResourcePool->AcquireTexture(BuildRhiTextureDesc(resource.desc, resource.name.c_str()));
             if (transientBacking->texture == nullptr)
             {
                 if (resource.internal && resource.debugPreview != nullptr)

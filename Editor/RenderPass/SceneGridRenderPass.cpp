@@ -4,13 +4,13 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Math.h"
-#include "Engine/Runtime/Render/RenderUniformBuffer.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -139,10 +139,7 @@ namespace ve
                     passData.depth = builder.ReadDepthAttachment(viewGraphData.depth);
                 }
             },
-            [this](const GridPassData& passData, RenderPassContext& context)
-            {
-                Execute(context, passData.viewIndex);
-            });
+            [this](const GridPassData& passData, RenderPassContext& context) { Execute(context, passData.viewIndex); });
     }
 
     void SceneGridRenderPass::Execute(RenderPassContext& context, UInt32 viewIndex)
@@ -165,11 +162,10 @@ namespace ve
             FailSceneGridPass("execution requires initialized pipeline and vertex-buffer resources.");
         }
         const SceneGridUniformData gridUniformData = BuildUniformData(initParam_);
-        const UniformBufferAllocation gridUniform =
-            context.frameData.UploadTransientUniform(&gridUniformData, sizeof(gridUniformData), "SceneGridUniform");
+        const UniformBufferAllocation gridUniform = context.frameData.UploadTransientUniform(&gridUniformData, sizeof(gridUniformData), "SceneGridUniform");
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
-            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(*viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         if (gridUniform.buffer == nullptr || viewUniform.buffer == nullptr)
         {
             FailSceneGridPass("execution failed to allocate required grid or view uniforms.");

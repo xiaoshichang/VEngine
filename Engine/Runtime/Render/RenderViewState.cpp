@@ -67,11 +67,8 @@ namespace ve
         return *virtualShadowViewCache_;
     }
 
-    UniformBufferAllocation RTRenderViewState::GetViewUniform(rhi::RhiDevice& device,
-                                                              UInt32 frameSlotIndex,
-                                                              UInt64 frameIndex,
-                                                              const RTCamera* camera,
-                                                              rhi::RhiExtent2D targetExtent)
+    UniformBufferAllocation
+    RTRenderViewState::GetViewUniform(rhi::RhiDevice& device, UInt32 frameSlotIndex, UInt64 frameIndex, const RTCamera* camera, rhi::RhiExtent2D targetExtent)
     {
         VE_ASSERT_RENDER_THREAD();
         if (lastUniformFrameIndex_ == frameIndex)

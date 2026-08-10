@@ -4,12 +4,12 @@
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Render/RenderUniformBuffer.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -101,10 +101,7 @@ namespace ve
                 passData.color = builder.WriteColorAttachment(viewGraphData.color, rhi::RhiLoadAction::Load);
                 viewGraphData.color = passData.color;
             },
-            [this](const GizmoPassData& passData, RenderPassContext& context)
-            {
-                Execute(context, passData.viewIndex);
-            });
+            [this](const GizmoPassData& passData, RenderPassContext& context) { Execute(context, passData.viewIndex); });
     }
 
     void EditorGizmoRenderPass::Execute(RenderPassContext& context, UInt32 viewIndex)
@@ -144,8 +141,8 @@ namespace ve
         }
         UploadFrameResources(context);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
-            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(*viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         if (viewUniform.buffer == nullptr)
         {
             FailEditorGizmoPass("execution failed to allocate the required view uniform.");
@@ -352,8 +349,7 @@ namespace ve
             if (resources.lineVertexBuffers_[frameSlot] == nullptr || resources.lineVertexBufferCapacities_[frameSlot] < requiredSize)
             {
                 const UInt64 capacity = GrowBufferCapacity(resources.lineVertexBufferCapacities_[frameSlot], requiredSize);
-                resources.lineVertexBuffers_[frameSlot] =
-                    context.device.CreateBuffer(MakeDynamicVertexBufferDesc(capacity, "EditorGizmoLineVertexBuffer"));
+                resources.lineVertexBuffers_[frameSlot] = context.device.CreateBuffer(MakeDynamicVertexBufferDesc(capacity, "EditorGizmoLineVertexBuffer"));
                 if (resources.lineVertexBuffers_[frameSlot] == nullptr)
                 {
                     FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the line vertex buffer."));
@@ -361,8 +357,7 @@ namespace ve
                 resources.lineVertexBufferCapacities_[frameSlot] = capacity;
             }
             lineVertexBuffer_ = resources.lineVertexBuffers_[frameSlot].get();
-            context.device.UpdateBuffer(
-                *lineVertexBuffer_, 0, initParam_.drawList->lines.data(), requiredSize, rhi::RhiBufferUpdateMode::Discard);
+            context.device.UpdateBuffer(*lineVertexBuffer_, 0, initParam_.drawList->lines.data(), requiredSize, rhi::RhiBufferUpdateMode::Discard);
         }
 
         if (uploadedIconVertexCount_ > 0)
@@ -371,8 +366,7 @@ namespace ve
             if (resources.iconVertexBuffers_[frameSlot] == nullptr || resources.iconVertexBufferCapacities_[frameSlot] < requiredSize)
             {
                 const UInt64 capacity = GrowBufferCapacity(resources.iconVertexBufferCapacities_[frameSlot], requiredSize);
-                resources.iconVertexBuffers_[frameSlot] =
-                    context.device.CreateBuffer(MakeDynamicVertexBufferDesc(capacity, "EditorGizmoIconVertexBuffer"));
+                resources.iconVertexBuffers_[frameSlot] = context.device.CreateBuffer(MakeDynamicVertexBufferDesc(capacity, "EditorGizmoIconVertexBuffer"));
                 if (resources.iconVertexBuffers_[frameSlot] == nullptr)
                 {
                     FailEditorGizmoPass(BuildDeviceFailureMessage(context.device, "failed to create the icon vertex buffer."));
@@ -380,8 +374,7 @@ namespace ve
                 resources.iconVertexBufferCapacities_[frameSlot] = capacity;
             }
             iconVertexBuffer_ = resources.iconVertexBuffers_[frameSlot].get();
-            context.device.UpdateBuffer(
-                *iconVertexBuffer_, 0, initParam_.drawList->icons.data(), requiredSize, rhi::RhiBufferUpdateMode::Discard);
+            context.device.UpdateBuffer(*iconVertexBuffer_, 0, initParam_.drawList->icons.data(), requiredSize, rhi::RhiBufferUpdateMode::Discard);
         }
     }
 

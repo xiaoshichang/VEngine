@@ -3,12 +3,12 @@
 #include "Engine/RHI/Common/RhiStaticStates.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Logging/Log.h"
-#include "Engine/Runtime/Render/RenderUniformBuffer.h"
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <cstdint>
@@ -57,9 +57,7 @@ namespace ve
             return name;
         }
 
-        [[nodiscard]] rhi::RhiGraphicsPipelineState* GetDepthPipeline(RenderPassContext& context,
-                                                                      RTShaderResource& shaderResource,
-                                                                      rhi::RhiFillMode fillMode)
+        [[nodiscard]] rhi::RhiGraphicsPipelineState* GetDepthPipeline(RenderPassContext& context, RTShaderResource& shaderResource, rhi::RhiFillMode fillMode)
         {
             RTShaderPass* shaderPass = shaderResource.GetPass(ShaderPassType::DepthOnly);
             rhi::RhiShaderModule* vertexShader = shaderPass != nullptr ? shaderPass->GetVertexShader() : nullptr;
@@ -68,8 +66,8 @@ namespace ve
                 return nullptr;
             }
 
-            const rhi::RhiVertexAttributeDesc attributes[] = { {"POSITION", 0, rhi::RhiFormat::Rgb32Float, 0},
-                                                                {"NORMAL", 0, rhi::RhiFormat::Rgb32Float, sizeof(Float32) * 3} };
+            const rhi::RhiVertexAttributeDesc attributes[] = {{"POSITION", 0, rhi::RhiFormat::Rgb32Float, 0},
+                                                              {"NORMAL", 0, rhi::RhiFormat::Rgb32Float, sizeof(Float32) * 3}};
             const rhi::RhiPipelineResourceBindingDesc bindings[] = {
                 {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 1},
                 {rhi::RhiPipelineResourceKind::UniformBuffer, rhi::RhiShaderStage::Vertex, 2},
@@ -88,9 +86,7 @@ namespace ve
             pipelineDesc.depthFormat = rhi::RhiFormat::Depth32Float;
             pipelineDesc.debugName = DepthPrePassName;
             return context.frameData.pipelineManager->GetOrCreateGraphicsPipeline(
-                context.device,
-                GraphicsPipelineID{BuildPipelineName(shaderResource, *vertexShader), BuildPipelineVariant(fillMode)},
-                pipelineDesc);
+                context.device, GraphicsPipelineID{BuildPipelineName(shaderResource, *vertexShader), BuildPipelineVariant(fillMode)}, pipelineDesc);
         }
     } // namespace
 
@@ -110,10 +106,7 @@ namespace ve
                 passData.depth = builder.WriteDepthAttachment(viewGraphData.depth, rhi::RhiLoadAction::Clear);
                 viewGraphData.depth = passData.depth;
             },
-            [this](const DepthPrePassData& passData, RenderPassContext& context)
-            {
-                Draw(passData.viewIndex, context);
-            });
+            [this](const DepthPrePassData& passData, RenderPassContext& context) { Draw(passData.viewIndex, context); });
     }
 
     void DepthPrePass::Draw(UInt32 viewIndex, RenderPassContext& context)
@@ -132,8 +125,8 @@ namespace ve
         }
 
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
-            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform =
+            context.frameData.GetViewUniform(*viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         if (viewUniform.buffer == nullptr)
         {
             FailDepthPrePass("failed to allocate the required view uniform.");

@@ -611,10 +611,10 @@ render work is assembled for the Render Thread.
 Renderer-owned code lives under `Engine/Runtime/Render/Renderer`. `StandaloneRenderer` is selected for Windows and
 macOS host products, while `MobileRenderer` owns the iOS topology. Both build scene work through typed, versioned Frame
 Graph texture handles; opaque and transparent passes consume only their preclassified queue lists. Each in-flight
-`FrameContext` owns its command list and completion fence for one reusable GPU frame slot. It also retains exactly the
-`shared_ptr<rhi::RhiObject>` instances referenced by that submission. Those references are cleared only after the slot's
-completion fence has finished. Frame Graph transient textures are allocated and reused within one graph execution, then
-transferred to the current FrameContext's generic in-flight GPU object list; FrameContext has no Frame Graph dependency.
+`FrameContext` owns only its command list, completion fence, and submission values for one reusable GPU frame slot.
+`RenderSystem` owns one RHI-oriented transient resource pool per slot. Frame Graph textures, pass-frequency uniform
+buffers, and other short-lived pass objects return to that pool and become reusable only after the slot fence completes.
+Frame Graph imports persistent resources as borrowed references to their RT owners.
 
 Render-facing resource ownership follows an Unreal-style split between the Scene Thread and Render Thread:
 
@@ -627,6 +627,9 @@ Render-facing resource ownership follows an Unreal-style split between the Scene
 - Objects with RT proxies must not call RHI directly from the Scene Thread. They initialize or update render-side state
   through an `InitRenderResource`-style API that submits work through the `RenderSystem` render command queue.
 - RT proxy objects are the only side that creates, mutates, or destroys live RHI resources.
+- Persistent uniform buffers follow the same owner split: scene data belongs to `RTScene`, view data to
+  `RTRenderViewState`, object data to `RTRenderItem`, and material data to `RTMaterialResource`. Each owner keeps one
+  dynamic uniform buffer per reusable frame slot and updates a slot only after its fence is complete.
 
 Example:
 
@@ -656,9 +659,10 @@ Render Thread:
 
 This model lets Scene Thread code keep ordinary CPU descriptions while Render Thread code owns the backend-specific
 objects and timing-sensitive destruction. `RenderTexture` can be destroyed on the Scene Thread while `RTRenderTexture`
-survives through queued render commands and the completion fence of the last submitted frame that references it.
-Texture-backed editor panels replace their `RenderTexture` when their extent changes instead of mutating the existing
-object, so old RHI resources are destroyed on the Render Thread when the retaining `FrameContext` is reset.
+survives through queued render commands. Resource replacement or deletion extracts the old RHI objects from the RT
+owner into a RenderSystem retirement batch. The batch records every submitted or actively recording fence that may
+reference those objects and releases them on the Render Thread only after all dependencies complete. This avoids both
+global GPU-idle waits for ordinary resource changes and per-frame scans of live scene resources.
 
 The render layer should avoid directly depending on live `GameObject` instances on the Render Thread. It should consume
 render proxies, snapshots, or render commands produced by the Scene Thread.

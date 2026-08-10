@@ -1,12 +1,12 @@
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPassCommon.h"
 
+#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
-#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
-#include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
+#include "Engine/Runtime/Resource/BuiltInShaderLibrary.h"
 
 namespace ve::virtual_shadow_detail
 {
@@ -38,8 +38,7 @@ namespace ve::virtual_shadow_detail
 
     UniformBufferAllocation UploadVirtualShadowPassConstants(const FrameRenderPipelineData& frameData, const VirtualShadowGpuConstants& constants)
     {
-        const UniformBufferAllocation allocation =
-            frameData.UploadTransientUniform(&constants, sizeof(constants), "VirtualShadowPassUniform");
+        const UniformBufferAllocation allocation = frameData.UploadTransientUniform(&constants, sizeof(constants), "VirtualShadowPassUniform");
         if (allocation.buffer == nullptr)
         {
             FailVirtualShadow("VSM pass failed to upload its frame constants.");

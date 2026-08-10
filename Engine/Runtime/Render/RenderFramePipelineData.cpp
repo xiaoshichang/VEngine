@@ -35,9 +35,7 @@ namespace ve
         return scene.GetSceneUniform(*device, frameSlotIndex, frameIndex);
     }
 
-    UniformBufferAllocation FrameRenderPipelineData::GetViewUniform(RTRenderViewState& viewState,
-                                                                    const RTCamera* camera,
-                                                                    rhi::RhiExtent2D targetExtent) const
+    UniformBufferAllocation FrameRenderPipelineData::GetViewUniform(RTRenderViewState& viewState, const RTCamera* camera, rhi::RhiExtent2D targetExtent) const
     {
         VE_ASSERT(device != nullptr);
         return viewState.GetViewUniform(*device, frameSlotIndex, frameIndex, camera, targetExtent);

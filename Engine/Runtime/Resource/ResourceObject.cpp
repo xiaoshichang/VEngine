@@ -153,7 +153,8 @@ namespace ve
 
             for (const boost::json::value& passValue : passesValue->as_array())
             {
-                if (!passValue.is_object()) continue;
+                if (!passValue.is_object())
+                    continue;
                 const boost::json::object& passObject = passValue.as_object();
                 const boost::json::value* stagesValue = passObject.if_contains("stages");
                 if (stagesValue == nullptr || !stagesValue->is_array())
@@ -161,52 +162,55 @@ namespace ve
                     continue;
                 }
                 Result<ShaderPassType> passType = ParseShaderPassType(ReadString(passObject, "type"));
-                if (!passType) return Result<RTShaderResourceDesc>::Failure(passType.GetError());
+                if (!passType)
+                    return Result<RTShaderResourceDesc>::Failure(passType.GetError());
                 RTShaderPassResourceDesc passDesc;
                 passDesc.type = passType.GetValue();
                 passDesc.name = ReadString(passObject, "name", ToString(passDesc.type));
 
                 for (const boost::json::value& stageValue : stagesValue->as_array())
                 {
-                    if (!stageValue.is_object()) continue;
+                    if (!stageValue.is_object())
+                        continue;
                     const boost::json::object& stageObject = stageValue.as_object();
                     const boost::json::value* artifactsValue = stageObject.if_contains("artifacts");
-                    if (artifactsValue == nullptr || !artifactsValue->is_object()) continue;
+                    if (artifactsValue == nullptr || !artifactsValue->is_object())
+                        continue;
                     const boost::json::object& artifacts = artifactsValue->as_object();
                     RTShaderStageResourceDesc stageDesc;
                     stageDesc.stage = ParseShaderStage(ReadString(stageObject, "stage"));
-                    const char* defaultEntryPoint = stageDesc.stage == rhi::RhiShaderStage::Vertex
-                                                        ? "VSMain"
-                                                        : stageDesc.stage == rhi::RhiShaderStage::Fragment ? "PSMain" : "CSMain";
-                    const char* stageSuffix = stageDesc.stage == rhi::RhiShaderStage::Vertex
-                                                  ? ".Vertex"
-                                                  : stageDesc.stage == rhi::RhiShaderStage::Fragment ? ".Fragment" : ".Compute";
+                    const char* defaultEntryPoint = stageDesc.stage == rhi::RhiShaderStage::Vertex     ? "VSMain"
+                                                    : stageDesc.stage == rhi::RhiShaderStage::Fragment ? "PSMain"
+                                                                                                       : "CSMain";
+                    const char* stageSuffix = stageDesc.stage == rhi::RhiShaderStage::Vertex     ? ".Vertex"
+                                              : stageDesc.stage == rhi::RhiShaderStage::Fragment ? ".Fragment"
+                                                                                                 : ".Compute";
                     stageDesc.entryPoint = ReadString(stageObject, "entry", defaultEntryPoint);
                     stageDesc.debugName = desc.name + "." + passDesc.name + stageSuffix;
 
- #if VE_PLATFORM_WINDOWS
-                Result<std::vector<std::byte>> d3d11Bytes = ReadShaderBinaryArtifact(artifacts, "d3d11", "D3D11", record, projectRoot);
-                if (!d3d11Bytes)
-                {
-                    return Result<RTShaderResourceDesc>::Failure(d3d11Bytes.GetError());
-                }
-                stageDesc.d3d11Bytecode = d3d11Bytes.MoveValue();
+#if VE_PLATFORM_WINDOWS
+                    Result<std::vector<std::byte>> d3d11Bytes = ReadShaderBinaryArtifact(artifacts, "d3d11", "D3D11", record, projectRoot);
+                    if (!d3d11Bytes)
+                    {
+                        return Result<RTShaderResourceDesc>::Failure(d3d11Bytes.GetError());
+                    }
+                    stageDesc.d3d11Bytecode = d3d11Bytes.MoveValue();
 
-                Result<std::vector<std::byte>> d3d12Bytes = ReadShaderBinaryArtifact(artifacts, "d3d12", "D3D12", record, projectRoot);
-                if (!d3d12Bytes)
-                {
-                    return Result<RTShaderResourceDesc>::Failure(d3d12Bytes.GetError());
-                }
-                stageDesc.d3d12Bytecode = d3d12Bytes.MoveValue();
+                    Result<std::vector<std::byte>> d3d12Bytes = ReadShaderBinaryArtifact(artifacts, "d3d12", "D3D12", record, projectRoot);
+                    if (!d3d12Bytes)
+                    {
+                        return Result<RTShaderResourceDesc>::Failure(d3d12Bytes.GetError());
+                    }
+                    stageDesc.d3d12Bytecode = d3d12Bytes.MoveValue();
 #elif VE_PLATFORM_MACOS || VE_PLATFORM_IOS
-                Result<std::string> metalSource = ReadShaderTextArtifact(artifacts, "metal", "Metal", record, projectRoot);
-                if (!metalSource)
-                {
-                    return Result<RTShaderResourceDesc>::Failure(metalSource.GetError());
-                }
-                stageDesc.metalSource = metalSource.MoveValue();
+                    Result<std::string> metalSource = ReadShaderTextArtifact(artifacts, "metal", "Metal", record, projectRoot);
+                    if (!metalSource)
+                    {
+                        return Result<RTShaderResourceDesc>::Failure(metalSource.GetError());
+                    }
+                    stageDesc.metalSource = metalSource.MoveValue();
 #else
-                return Result<RTShaderResourceDesc>::Failure(Error(ErrorCode::Unsupported, "Unsupported platform for shader artifact loading."));
+                    return Result<RTShaderResourceDesc>::Failure(Error(ErrorCode::Unsupported, "Unsupported platform for shader artifact loading."));
 #endif
                     passDesc.stages.push_back(std::move(stageDesc));
                 }

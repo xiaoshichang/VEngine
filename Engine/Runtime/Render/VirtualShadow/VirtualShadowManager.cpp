@@ -3,8 +3,8 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Bounds.h"
-#include "Engine/Runtime/Render/RenderFrameConfig.h"
 #include "Engine/Runtime/Render/RenderCameraMath.h"
+#include "Engine/Runtime/Render/RenderFrameConfig.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
@@ -13,10 +13,10 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 #include "Engine/Runtime/Render/Renderer/RenderQueue.h"
-#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowFrameGraph.h"
-#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowPasses.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowError.h"
+#include "Engine/Runtime/Render/VirtualShadow/VirtualShadowInvalidationTracker.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
@@ -525,11 +525,8 @@ namespace ve
                 candidate.result.pageTableSize = VirtualShadowLogicalPageBufferSize;
 
                 diagnostics.viewDraws.push_back({candidate.result.packet.viewID, 0});
-                preparedFamily.views.push_back({candidate.viewIndex,
-                                                candidate.result.packet,
-                                                candidate.slice,
-                                                graphData.views[candidate.viewIndex].depth,
-                                                &diagnostics.viewDraws.back()});
+                preparedFamily.views.push_back(
+                    {candidate.viewIndex, candidate.result.packet, candidate.slice, graphData.views[candidate.viewIndex].depth, &diagnostics.viewDraws.back()});
                 rendererData.views[candidate.viewIndex].virtualShadowSampling = BuildVirtualShadowSamplingSnapshot(candidate.result);
             }
 
@@ -624,8 +621,7 @@ namespace ve
                                                RendererData& rendererData,
                                                RendererFrameGraphData& graphData)
     {
-        VirtualShadowSchedulingDiagnostics& schedulingDiagnostics =
-            impl_->BeginFrameGraphScheduling(frameData.frameIndex, rendererData.views.size());
+        VirtualShadowSchedulingDiagnostics& schedulingDiagnostics = impl_->BeginFrameGraphScheduling(frameData.frameIndex, rendererData.views.size());
         ValidateVirtualShadowFrameGraphInputs(frameData, rendererData, graphData);
         const std::shared_ptr<RTLight> selectedLight = GetRequiredShadowDirectionalLight(rendererData.scene);
         const VirtualShadowLightInput light = BuildRequiredVirtualShadowLightInput(selectedLight);

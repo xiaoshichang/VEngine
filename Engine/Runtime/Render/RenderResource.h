@@ -126,21 +126,67 @@ namespace ve
     class RTShaderPass final : public NonCopyable
     {
     public:
-        RTShaderPass(ShaderPassType type, std::string name) : type_(type), name_(std::move(name)) {}
-        [[nodiscard]] ShaderPassType GetType() const noexcept { return type_; }
-        [[nodiscard]] const std::string& GetName() const noexcept { return name_; }
-        [[nodiscard]] rhi::RhiShaderModule* GetVertexShader() noexcept { return vertexShader_.get(); }
-        [[nodiscard]] rhi::RhiShaderModule* GetFragmentShader() noexcept { return fragmentShader_.get(); }
-        [[nodiscard]] rhi::RhiShaderModule* GetComputeShader() noexcept { return computeShader_.get(); }
-        [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept { return vertexShader_.get(); }
-        [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept { return fragmentShader_.get(); }
-        [[nodiscard]] const rhi::RhiShaderModule* GetComputeShader() const noexcept { return computeShader_.get(); }
-        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetVertexShaderShared() const noexcept { return vertexShader_; }
-        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetFragmentShaderShared() const noexcept { return fragmentShader_; }
-        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetComputeShaderShared() const noexcept { return computeShader_; }
-        std::shared_ptr<rhi::RhiShaderModule>& VertexShader() noexcept { return vertexShader_; }
-        std::shared_ptr<rhi::RhiShaderModule>& FragmentShader() noexcept { return fragmentShader_; }
-        std::shared_ptr<rhi::RhiShaderModule>& ComputeShader() noexcept { return computeShader_; }
+        RTShaderPass(ShaderPassType type, std::string name)
+            : type_(type)
+            , name_(std::move(name))
+        {
+        }
+        [[nodiscard]] ShaderPassType GetType() const noexcept
+        {
+            return type_;
+        }
+        [[nodiscard]] const std::string& GetName() const noexcept
+        {
+            return name_;
+        }
+        [[nodiscard]] rhi::RhiShaderModule* GetVertexShader() noexcept
+        {
+            return vertexShader_.get();
+        }
+        [[nodiscard]] rhi::RhiShaderModule* GetFragmentShader() noexcept
+        {
+            return fragmentShader_.get();
+        }
+        [[nodiscard]] rhi::RhiShaderModule* GetComputeShader() noexcept
+        {
+            return computeShader_.get();
+        }
+        [[nodiscard]] const rhi::RhiShaderModule* GetVertexShader() const noexcept
+        {
+            return vertexShader_.get();
+        }
+        [[nodiscard]] const rhi::RhiShaderModule* GetFragmentShader() const noexcept
+        {
+            return fragmentShader_.get();
+        }
+        [[nodiscard]] const rhi::RhiShaderModule* GetComputeShader() const noexcept
+        {
+            return computeShader_.get();
+        }
+        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetVertexShaderShared() const noexcept
+        {
+            return vertexShader_;
+        }
+        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetFragmentShaderShared() const noexcept
+        {
+            return fragmentShader_;
+        }
+        [[nodiscard]] std::shared_ptr<rhi::RhiShaderModule> GetComputeShaderShared() const noexcept
+        {
+            return computeShader_;
+        }
+        std::shared_ptr<rhi::RhiShaderModule>& VertexShader() noexcept
+        {
+            return vertexShader_;
+        }
+        std::shared_ptr<rhi::RhiShaderModule>& FragmentShader() noexcept
+        {
+            return fragmentShader_;
+        }
+        std::shared_ptr<rhi::RhiShaderModule>& ComputeShader() noexcept
+        {
+            return computeShader_;
+        }
         [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
     private:
