@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
 #include "Engine/Runtime/Render/FrameUniformAllocator.h"
+#include "Engine/Runtime/Render/RenderFrameConfig.h"
 #include "Engine/Runtime/Render/RenderFrameUniformCache.h"
 
 #include <memory>
@@ -13,9 +14,6 @@
 
 namespace ve
 {
-    // Keep the reusable GPU frame-slot count aligned with RenderSurfaceDesc::bufferCount.
-    inline constexpr UInt32 RenderFrameContextCount = 2;
-
     /// Owns resources that may be reused only after one submitted frame completes on the GPU.
     class FrameContext final : public NonCopyable
     {

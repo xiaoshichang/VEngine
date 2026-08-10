@@ -3,7 +3,7 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Math/Bounds.h"
-#include "Engine/Runtime/Render/FrameContext.h"
+#include "Engine/Runtime/Render/RenderFrameConfig.h"
 #include "Engine/Runtime/Render/RenderCameraMath.h"
 #include "Engine/Runtime/Render/RenderFramePipelineData.h"
 #include "Engine/Runtime/Render/RenderResource.h"

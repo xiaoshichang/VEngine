@@ -3,7 +3,7 @@
 #include "Engine/RHI/Common/RhiDevice.h"
 #include "Engine/RHI/Common/RhiTypes.h"
 #include "Engine/Runtime/Core/Types.h"
-#include "Engine/Runtime/Render/FrameContext.h"
+#include "Engine/Runtime/Render/RenderFrameConfig.h"
 #include "Engine/Runtime/Render/Renderer/RenderPass/RenderPass.h"
 
 #include <array>

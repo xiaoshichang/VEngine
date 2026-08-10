@@ -34,6 +34,7 @@ function(ve_add_engine)
             Engine/Runtime/Physics/PhysicsSystemBackendJolt.cpp
             Engine/Runtime/Profiling/ProfileSystem.cpp
             Engine/Runtime/Render/FrameContext.cpp
+            Engine/Runtime/Render/FrameTransientResourcePool.cpp
             Engine/Runtime/Render/FrameUniformAllocator.cpp
             Engine/Runtime/Render/MaterialUniformPool.cpp
             Engine/Runtime/Render/RenderTarget.cpp
@@ -47,6 +48,7 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderResource.cpp
             Engine/Runtime/Render/RenderScene.cpp
             Engine/Runtime/Render/RenderSystem.cpp
+            Engine/Runtime/Render/RenderUniformBuffer.cpp
             Engine/Runtime/Render/Renderer/BaseRenderer.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.cpp
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.cpp
@@ -165,6 +167,7 @@ function(ve_add_engine)
             Engine/Runtime/Physics/PhysicsTypes.h
             Engine/Runtime/Profiling/ProfileSystem.h
             Engine/Runtime/Render/FrameContext.h
+            Engine/Runtime/Render/FrameTransientResourcePool.h
             Engine/Runtime/Render/FrameUniformAllocator.h
             Engine/Runtime/Render/MaterialUniformPool.h
             Engine/Runtime/Render/RenderTarget.h
@@ -175,12 +178,15 @@ function(ve_add_engine)
             Engine/Runtime/Render/RenderCameraMath.h
             Engine/Runtime/Render/RenderDebugMode.h
             Engine/Runtime/Render/RenderFramePipeline.h
+            Engine/Runtime/Render/RenderFrameConfig.h
             Engine/Runtime/Render/RenderFrameUniformCache.h
             Engine/Runtime/Render/RenderPerformanceStatistics.h
             Engine/Runtime/Render/RenderResource.h
+            Engine/Runtime/Render/RenderResourceLifetime.h
             Engine/Runtime/Render/RenderScene.h
             Engine/Runtime/Render/RenderShaderIDs.h
             Engine/Runtime/Render/RenderSystem.h
+            Engine/Runtime/Render/RenderUniformBuffer.h
             Engine/Runtime/Render/Renderer/BaseRenderer.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h
             Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h
