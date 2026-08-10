@@ -283,6 +283,25 @@ resource change:
 
 The work becomes proportional to changed resources, stale uniform owners actually rendered, transient resources actually requested, and retirement entries that complete. There is no generic scan of every live or visible RHI object for lifetime purposes.
 
+## Main Swapchain State
+
+`RhiSwapchain` is an `RhiObject`, but resize remains a presentation-lifecycle operation rather than ordinary FrameContext retirement. D3D11 and D3D12 resize the existing native swapchain in place after presentation and frame work are quiescent. The Scene Thread still needs a latest-value mailbox and a queued-command guard to coalesce rapid window resize events.
+
+Keep those three related values in one RenderSystem-owned state object:
+
+```cpp
+struct MainSwapchainState
+{
+    std::unique_ptr<rhi::RhiSwapchain> swapchain;
+    Atomic<UInt64> pendingResizeExtent{0};
+    AtomicBool resizeCommandQueued{false};
+};
+```
+
+`RenderSystemImpl` owns one `MainSwapchainState mainSwapchainState`. All creation, destruction, native-handle queries, frame preparation, presentation, and resize processing access the swapchain through this state. The existing acquire/release memory ordering, latest-extent coalescing, reset-and-recheck lost-wakeup protection, `WaitIdle()`, `WaitForAllFrameContexts()`, and in-place `RhiSwapchain::Resize()` behavior remain unchanged.
+
+The state object is not moved into `FrameContext`: resize requests are cross-thread presentation control state, while FrameContext retirement tracks resources referenced by one reusable GPU submission slot.
+
 ## Shutdown
 
 Shutdown uses this order on the Render Thread:
