@@ -3,6 +3,7 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Scene/GameObject.h"
 #include "Engine/Runtime/Scene/Scene.h"
+#include "Engine/Runtime/Scene/SceneSystem.h"
 #include "Engine/Runtime/Scene/TransformComponent.h"
 
 #include <atomic>
@@ -58,6 +59,13 @@ namespace ve
     {
         UnregisterTransformChangedCallback();
         UnregisterRenderItemFromRenderThread();
+        Scene* scene = GetScene();
+        if (scene != nullptr && rtRenderItem_ != nullptr)
+        {
+            SceneSystem* sceneSystem = scene->GetSceneSystem();
+            VE_ASSERT(sceneSystem != nullptr);
+            sceneSystem->ReleaseRenderResource(std::move(rtRenderItem_));
+        }
     }
 
     const AssetRef<MeshResource>& MeshRenderComponent::GetMesh() const noexcept

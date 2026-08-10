@@ -19,6 +19,8 @@
 #include "Engine/Runtime/Render/RenderCommandQueue.h"
 #include "Engine/Runtime/Render/RenderFramePipeline.h"
 #include "Engine/Runtime/Render/RenderResourceLifetime.h"
+#include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 #include "Engine/Runtime/Render/Renderer/BaseRenderer.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
 #include "Engine/Runtime/Render/RHIPipelineManager.h"
@@ -1090,6 +1092,30 @@ namespace ve
         EnqueueCommand("RenderSystemReleaseRenderTexture",
                        [this, renderTexture = std::move(renderTexture)]() mutable
                        { RetireRhiObjects(*impl_, renderTexture->TakeRhiObjects()); });
+    }
+
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTScene> scene)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(scene != nullptr, "RenderSystem::ReleaseRenderResource requires a render scene.");
+        EnqueueCommand("RenderSystemReleaseSceneResource",
+                       [this, scene = std::move(scene)]() mutable { RetireRhiObjects(*impl_, scene->TakeRhiObjects()); });
+    }
+
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTRenderViewState> viewState)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(viewState != nullptr, "RenderSystem::ReleaseRenderResource requires a render view state.");
+        EnqueueCommand("RenderSystemReleaseViewStateResource",
+                       [this, viewState = std::move(viewState)]() mutable { RetireRhiObjects(*impl_, viewState->TakeRhiObjects()); });
+    }
+
+    void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTRenderItem> renderItem)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT_MESSAGE(renderItem != nullptr, "RenderSystem::ReleaseRenderResource requires a render item.");
+        EnqueueCommand("RenderSystemReleaseRenderItemResource",
+                       [this, renderItem = std::move(renderItem)]() mutable { RetireRhiObjects(*impl_, renderItem->TakeRhiObjects()); });
     }
 
     void RenderSystem::ReleaseRenderResource(std::shared_ptr<RTMaterialResource> materialResource)

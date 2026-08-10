@@ -26,6 +26,7 @@ namespace ve
     Scene::~Scene()
     {
         Clear();
+        sceneSystem_.ReleaseRenderResource(std::move(rtScene_));
     }
 
     const std::string& Scene::GetName() const noexcept

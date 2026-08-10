@@ -142,6 +142,8 @@ namespace ve
         void SetRuntimeOSEventCallback(std::function<void(const OSEvent& event)> callback) noexcept;
         void SetBuiltInShaderResources(std::shared_ptr<const BuiltInShaderResources> resources) noexcept;
         [[nodiscard]] std::shared_ptr<const BuiltInShaderResources> GetBuiltInShaderResources() const noexcept;
+        void ReleaseRenderResource(std::shared_ptr<RTScene> scene);
+        void ReleaseRenderResource(std::shared_ptr<RTRenderItem> renderItem);
 
         /// notify scene thread to start main loop.
         void StartLoop() noexcept;

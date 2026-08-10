@@ -7,6 +7,7 @@
 #include "Engine/Runtime/Scene/CameraComponent.h"
 #include "Engine/Runtime/Scene/Scene.h"
 #include "Engine/Runtime/Scene/SceneSystem.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <algorithm>
 #include <imgui.h>
@@ -30,13 +31,17 @@ namespace ve::editor
     GameViewPanel::GameViewPanel()
         : gameViewHdrTexture_(nullptr)
         , gameViewPreviewTexture_(nullptr)
-        , gameViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorGameView"}))
+        , gameViewState_(nullptr)
     {
     }
 
     void GameViewPanel::Init(Editor& editor)
     {
         editor_ = &editor;
+        if (gameViewState_ == nullptr)
+        {
+            gameViewState_ = std::make_shared<RenderViewState>(editor.GetRenderSystem(), RenderViewStateDesc{"EditorGameView"});
+        }
         if (gameViewHdrTexture_ == nullptr)
         {
             gameViewHdrTexture_ = std::make_shared<RenderTexture>(pbr::BuildHdrSceneColorDesc({}, GameViewHdrTextureName));
@@ -49,6 +54,15 @@ namespace ve::editor
             desc.createDepthTexture = false;
             gameViewPreviewTexture_ = std::make_shared<RenderTexture>(std::move(desc));
         }
+    }
+
+    void GameViewPanel::Shutdown() noexcept
+    {
+        VE_ASSERT_SCENE_THREAD();
+        gameViewHdrTexture_.reset();
+        gameViewPreviewTexture_.reset();
+        gameViewState_.reset();
+        editor_ = nullptr;
     }
 
     const RenderTexture& GameViewPanel::GetGameViewHdrTexture() const noexcept

@@ -77,6 +77,8 @@ namespace ve::editor
             return false;
         }
 
+        sceneViewPanel_.Shutdown();
+        gameViewPanel_.Shutdown();
         initialized_ = false;
         return true;
     }

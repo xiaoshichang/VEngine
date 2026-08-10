@@ -19,6 +19,7 @@ namespace ve::editor
         GameViewPanel();
 
         void Init(Editor& editor) override;
+        void Shutdown() noexcept;
 
         [[nodiscard]] const RenderTexture& GetGameViewHdrTexture() const noexcept;
         [[nodiscard]] const RenderTexture& GetGameViewPreviewTexture() const noexcept;

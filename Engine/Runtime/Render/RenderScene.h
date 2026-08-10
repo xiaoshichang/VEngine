@@ -6,6 +6,7 @@
 #include "Engine/Runtime/Math/Matrix44.h"
 #include "Engine/Runtime/Math/Vector3.h"
 #include "Engine/Runtime/Render/RenderResource.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 
 #include <memory>
 #include <string>
@@ -198,6 +199,8 @@ namespace ve
         [[nodiscard]] bool CastShadows() const noexcept;
         [[nodiscard]] bool ReceiveShadows() const noexcept;
         [[nodiscard]] UInt64 GetRevision() const noexcept;
+        [[nodiscard]] UniformBufferAllocation GetObjectUniform(rhi::RhiDevice& device, UInt32 frameSlotIndex);
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
     private:
         std::shared_ptr<RTResource> meshResource_;
@@ -209,6 +212,7 @@ namespace ve
         bool castShadows_ = true;
         bool receiveShadows_ = true;
         UInt64 revision_ = 1;
+        RTDynamicUniformBuffer objectUniformBuffer_;
     };
 
     /// Render-thread representation of one CameraComponent.
@@ -310,9 +314,12 @@ namespace ve
         [[nodiscard]] std::shared_ptr<RTRenderItem> GetRenderItem(SizeT index) const noexcept;
         [[nodiscard]] SizeT GetLightCount() const noexcept;
         [[nodiscard]] std::shared_ptr<RTLight> GetLight(SizeT index) const noexcept;
+        [[nodiscard]] UniformBufferAllocation GetSceneUniform(rhi::RhiDevice& device, UInt32 frameSlotIndex, UInt64 frameIndex);
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
     private:
         std::vector<std::shared_ptr<RTRenderItem>> renderItems_;
         std::vector<std::shared_ptr<RTLight>> lights_;
+        RTDynamicUniformBuffer sceneUniformBuffer_;
     };
 } // namespace ve

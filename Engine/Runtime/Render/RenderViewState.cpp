@@ -1,6 +1,9 @@
 #include "Engine/Runtime/Render/RenderViewState.h"
 
+#include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Render/RenderSystem.h"
 #include "Engine/Runtime/Render/VirtualShadow/VirtualShadowViewCache.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
 
 #include <utility>
 
@@ -64,9 +67,60 @@ namespace ve
         return *virtualShadowViewCache_;
     }
 
-    RenderViewState::RenderViewState(RenderViewStateDesc desc)
-        : rtViewState_(std::make_shared<RTRenderViewState>(std::move(desc)))
+    UniformBufferAllocation RTRenderViewState::GetViewUniform(rhi::RhiDevice& device,
+                                                              UInt32 frameSlotIndex,
+                                                              UInt64 frameIndex,
+                                                              const RTCamera* camera,
+                                                              rhi::RhiExtent2D targetExtent)
     {
+        VE_ASSERT_RENDER_THREAD();
+        if (lastUniformFrameIndex_ == frameIndex)
+        {
+            VE_ASSERT_MESSAGE(lastUniformCamera_ == camera && lastUniformTargetExtent_.width == targetExtent.width &&
+                                  lastUniformTargetExtent_.height == targetExtent.height,
+                              "One RTRenderViewState cannot use different camera or extent values in the same frame.");
+        }
+        else
+        {
+            lastUniformFrameIndex_ = frameIndex;
+            lastUniformCamera_ = camera;
+            lastUniformTargetExtent_ = targetExtent;
+        }
+
+        const ViewUniformData data = BuildViewUniformData(camera, targetExtent);
+        return viewUniformBuffer_.GetOrUpdate(device, frameSlotIndex, &data, sizeof(data), frameIndex, "RTRenderViewStateUniform");
+    }
+
+    RhiObjectList RTRenderViewState::TakeRhiObjects() noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        lastUniformFrameIndex_ = 0;
+        lastUniformCamera_ = nullptr;
+        lastUniformTargetExtent_ = {};
+        return viewUniformBuffer_.TakeRhiObjects();
+    }
+
+    RenderViewState::RenderViewState(RenderSystem& renderSystem, RenderViewStateDesc desc)
+        : rtViewState_(std::make_shared<RTRenderViewState>(std::move(desc)))
+        , renderSystem_(&renderSystem)
+    {
+    }
+
+    RenderViewState::~RenderViewState()
+    {
+        if (renderSystem_ == nullptr || rtViewState_ == nullptr || !renderSystem_->IsInitialized())
+        {
+            return;
+        }
+
+        try
+        {
+            renderSystem_->ReleaseRenderResource(std::move(rtViewState_));
+        }
+        catch (...)
+        {
+            VE_ASSERT_ALWAYS_MESSAGE(false, "RenderViewState failed to enqueue render resource release.");
+        }
     }
 
     std::shared_ptr<RTRenderViewState> RenderViewState::GetRTRenderViewState() const noexcept

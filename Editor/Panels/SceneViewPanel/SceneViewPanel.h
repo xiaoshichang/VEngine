@@ -21,6 +21,7 @@ namespace ve::editor
         SceneViewPanel();
 
         void Init(Editor& editor) override;
+        void Shutdown() noexcept;
 
         [[nodiscard]] const RenderTexture& GetSceneViewHdrTexture() const noexcept;
         [[nodiscard]] const RenderTexture& GetSceneViewPreviewTexture() const noexcept;

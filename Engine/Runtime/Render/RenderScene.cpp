@@ -1,6 +1,10 @@
 #include "Engine/Runtime/Render/RenderScene.h"
 
+#include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Threading/ThreadEnsure.h"
+
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace ve
@@ -20,6 +24,7 @@ namespace ve
 
     void RTRenderItem::ApplyUpdateParam(RTRenderItemUpdateParam updateParam)
     {
+        const UInt64 previousRevision = revision_;
         if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::MeshResource))
         {
             meshResource_ = std::move(updateParam.meshResource);
@@ -50,7 +55,15 @@ namespace ve
         if (HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Revision))
         {
             renderItemID_ = updateParam.renderItemID;
-            revision_ = updateParam.revision;
+            revision_ = std::max(revision_, updateParam.revision);
+        }
+
+        const bool uniformDirty = HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Transform) ||
+                                  HasRTRenderItemDirtyFlag(updateParam.dirtyFlags, RTRenderItemDirtyFlags::Shadows);
+        if (uniformDirty && revision_ == previousRevision)
+        {
+            VE_ASSERT_MESSAGE(revision_ != std::numeric_limits<UInt64>::max(), "RTRenderItem uniform revision overflow.");
+            ++revision_;
         }
     }
 
@@ -107,6 +120,20 @@ namespace ve
     UInt64 RTRenderItem::GetRevision() const noexcept
     {
         return revision_;
+    }
+
+    UniformBufferAllocation RTRenderItem::GetObjectUniform(rhi::RhiDevice& device, UInt32 frameSlotIndex)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        const ObjectUniformData data = BuildObjectUniformData(*this);
+        return objectUniformBuffer_.GetOrUpdate(
+            device, frameSlotIndex, &data, sizeof(data), revision_, "RTRenderItemObjectUniform");
+    }
+
+    RhiObjectList RTRenderItem::TakeRhiObjects() noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        return objectUniformBuffer_.TakeRhiObjects();
     }
 
     RTCamera::RTCamera(RTCameraInitParam initParam)
@@ -412,5 +439,18 @@ namespace ve
         }
 
         return lights_[index];
+    }
+
+    UniformBufferAllocation RTScene::GetSceneUniform(rhi::RhiDevice& device, UInt32 frameSlotIndex, UInt64 frameIndex)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        const SceneUniformData data = BuildSceneUniformData(*this);
+        return sceneUniformBuffer_.GetOrUpdate(device, frameSlotIndex, &data, sizeof(data), frameIndex, "RTSceneUniform");
+    }
+
+    RhiObjectList RTScene::TakeRhiObjects() noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        return sceneUniformBuffer_.TakeRhiObjects();
     }
 } // namespace ve

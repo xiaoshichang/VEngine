@@ -97,7 +97,7 @@ namespace ve::editor
         : sceneViewHdrTexture_(nullptr)
         , sceneViewPreviewTexture_(nullptr)
         , sceneViewCamera_(nullptr)
-        , sceneViewState_(std::make_shared<RenderViewState>(RenderViewStateDesc{"EditorSceneView"}))
+        , sceneViewState_(nullptr)
     {
         sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
     }
@@ -105,6 +105,10 @@ namespace ve::editor
     void SceneViewPanel::Init(Editor& editor)
     {
         editor_ = &editor;
+        if (sceneViewState_ == nullptr)
+        {
+            sceneViewState_ = std::make_shared<RenderViewState>(editor.GetRenderSystem(), RenderViewStateDesc{"EditorSceneView"});
+        }
         if (sceneViewCamera_ == nullptr)
         {
             sceneViewCamera_ = std::make_shared<RTCamera>(BuildCameraInitParam());
@@ -124,6 +128,16 @@ namespace ve::editor
         }
 
         UpdateSceneViewCamera();
+    }
+
+    void SceneViewPanel::Shutdown() noexcept
+    {
+        VE_ASSERT_SCENE_THREAD();
+        sceneViewHdrTexture_.reset();
+        sceneViewPreviewTexture_.reset();
+        sceneViewState_.reset();
+        sceneViewCamera_.reset();
+        editor_ = nullptr;
     }
 
     const RenderTexture& SceneViewPanel::GetSceneViewHdrTexture() const noexcept

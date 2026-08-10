@@ -24,6 +24,9 @@
 namespace ve
 {
     struct RenderSystemImpl;
+    class RTRenderItem;
+    class RTRenderViewState;
+    class RTScene;
 
     /// Selects the graphics backend owned by RenderSystem.
     enum class RenderBackend
@@ -200,6 +203,9 @@ namespace ve
         void InitRenderResource(std::shared_ptr<RTShaderResource> shaderResource, RTShaderResourceDesc desc);
         void InitRenderResource(std::shared_ptr<RTMaterialResource> materialResource, RTMaterialResourceDesc desc);
         void ReleaseRenderResource(std::shared_ptr<RTRenderTexture> renderTexture);
+        void ReleaseRenderResource(std::shared_ptr<RTScene> scene);
+        void ReleaseRenderResource(std::shared_ptr<RTRenderViewState> viewState);
+        void ReleaseRenderResource(std::shared_ptr<RTRenderItem> renderItem);
         void ReleaseRenderResource(std::shared_ptr<RTMeshResource> meshResource);
         void ReleaseRenderResource(std::shared_ptr<RTTextureResource> textureResource);
         void ReleaseRenderResource(std::shared_ptr<RTShaderResource> shaderResource);

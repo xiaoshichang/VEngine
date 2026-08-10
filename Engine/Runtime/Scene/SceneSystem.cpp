@@ -294,6 +294,8 @@ namespace ve
             {
                 impl.editorCallback.onShutdown();
             }
+            impl.playerSceneColorTexture.reset();
+            impl.playerViewState.reset();
             impl.renderSystem->Flush();
 
             impl.sceneThreadIdValue.store(0, std::memory_order_release);
@@ -511,7 +513,7 @@ namespace ve
         impl_->inputSystem = &inputSystem;
         impl_->renderSystem = &renderSystem;
         impl_->physicsSystem = &physicsSystem;
-        impl_->playerViewState = std::make_shared<RenderViewState>(RenderViewStateDesc{"PlayerView"});
+        impl_->playerViewState = std::make_shared<RenderViewState>(renderSystem, RenderViewStateDesc{"PlayerView"});
         impl_->stopRequested.store(false, std::memory_order_release);
         impl_->startLoopEvent.Reset();
 
@@ -687,6 +689,20 @@ namespace ve
     {
         VE_ASSERT(impl_->renderSystem != nullptr && impl_->renderSystem->IsInitialized());
         impl_->renderSystem->EnqueueCommand(std::move(command));
+    }
+
+    void SceneSystem::ReleaseRenderResource(std::shared_ptr<RTScene> scene)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT(impl_->renderSystem != nullptr);
+        impl_->renderSystem->ReleaseRenderResource(std::move(scene));
+    }
+
+    void SceneSystem::ReleaseRenderResource(std::shared_ptr<RTRenderItem> renderItem)
+    {
+        VE_ASSERT_SCENE_THREAD();
+        VE_ASSERT(impl_->renderSystem != nullptr);
+        impl_->renderSystem->ReleaseRenderResource(std::move(renderItem));
     }
 
     void SceneSystem::NotifyMainThreadFrameEnd()
