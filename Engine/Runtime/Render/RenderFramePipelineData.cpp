@@ -2,6 +2,7 @@
 
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/FrameContext.h"
+#include "Engine/Runtime/Render/FrameTransientResourcePool.h"
 #include "Engine/Runtime/Render/RenderResource.h"
 #include "Engine/Runtime/Render/RenderScene.h"
 #include "Engine/Runtime/Render/RenderViewState.h"
@@ -22,10 +23,16 @@ namespace ve
         return frameContext->GetCommandList();
     }
 
-    UniformBufferAllocation FrameRenderPipelineData::UploadUniform(const void* data, UInt64 size) const
+    UniformBufferAllocation FrameRenderPipelineData::UploadTransientUniform(const void* data, UInt64 size, const char* debugName) const
     {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->UploadUniform(data, size);
+        VE_ASSERT(transientResourcePool != nullptr);
+        return transientResourcePool->UploadUniform(data, size, debugName);
+    }
+
+    void FrameRenderPipelineData::AdoptTransientRhiObject(std::shared_ptr<rhi::RhiObject> object) const
+    {
+        VE_ASSERT(transientResourcePool != nullptr);
+        transientResourcePool->Adopt(std::move(object));
     }
 
     UniformBufferAllocation FrameRenderPipelineData::GetSceneUniform(RTScene& scene) const

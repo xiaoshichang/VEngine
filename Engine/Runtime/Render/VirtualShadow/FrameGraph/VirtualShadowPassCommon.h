@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Engine/Runtime/Render/FrameUniformAllocator.h"
 #include "Engine/Runtime/FileSystem/Path.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/VirtualShadow/FrameGraph/VirtualShadowFrameGraph.h"
 
 #include <memory>

@@ -159,7 +159,8 @@ namespace ve
         const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
             *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         const VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
-        const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
+        const UniformBufferAllocation virtualShadowUniform =
+            context.frameData.UploadTransientUniform(&virtualShadowConstants, sizeof(virtualShadowConstants), "VirtualShadowSamplingUniform");
         if (frameUniform.buffer == nullptr || viewUniform.buffer == nullptr ||
             !virtual_shadow_detail::IsValidVirtualShadowUniformAllocation(virtualShadowUniform))
         {

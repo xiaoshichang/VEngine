@@ -151,7 +151,8 @@ namespace ve
         const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
             *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         const VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
-        const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
+        const UniformBufferAllocation virtualShadowUniform =
+            context.frameData.UploadTransientUniform(&virtualShadowConstants, sizeof(virtualShadowConstants), "VirtualShadowSamplingUniform");
         if (frameUniform.buffer == nullptr || viewUniform.buffer == nullptr ||
             !virtual_shadow_detail::IsValidVirtualShadowUniformAllocation(virtualShadowUniform))
         {
@@ -192,7 +193,8 @@ namespace ve
             const DebugObjectConstants debugValues{
                 context.rendererData.virtualShadowDirtyCasterIDs.contains(item->GetRenderItemID()) ? 1u : 0u,
             };
-            const UniformBufferAllocation debugUniform = context.frameData.UploadUniform(&debugValues, sizeof(debugValues));
+            const UniformBufferAllocation debugUniform =
+                context.frameData.UploadTransientUniform(&debugValues, sizeof(debugValues), "ShadowCasterDirtyDebugUniform");
             if (objectUniform.buffer == nullptr || debugUniform.buffer == nullptr)
             {
                 FailDebugItem(itemIndex, "failed to allocate its object or debug uniform.");

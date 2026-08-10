@@ -165,7 +165,8 @@ namespace ve
             FailSceneGridPass("execution requires initialized pipeline and vertex-buffer resources.");
         }
         const SceneGridUniformData gridUniformData = BuildUniformData(initParam_);
-        const UniformBufferAllocation gridUniform = context.frameData.UploadUniform(&gridUniformData, sizeof(gridUniformData));
+        const UniformBufferAllocation gridUniform =
+            context.frameData.UploadTransientUniform(&gridUniformData, sizeof(gridUniformData), "SceneGridUniform");
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
         const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
             *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
@@ -181,7 +182,7 @@ namespace ve
         commandList.SetVertexBuffer(0, *vertexBuffer_, sizeof(RTMeshVertex), 0);
         commandList.Draw(12, 0);
 
-        context.frameData.RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject>(std::move(vertexBuffer_)));
+        context.frameData.AdoptTransientRhiObject(std::shared_ptr<rhi::RhiObject>(std::move(vertexBuffer_)));
     }
 
     void SceneGridRenderPass::EnsureResources(RenderPassContext& context)

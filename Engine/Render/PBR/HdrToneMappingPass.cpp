@@ -4,7 +4,7 @@
 #include "Engine/Render/PBR/HdrColorPipeline.h"
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Math/Vector4.h"
-#include "Engine/Runtime/Render/FrameUniformAllocator.h"
+#include "Engine/Runtime/Render/RenderUniformBuffer.h"
 #include "Engine/Runtime/Render/RHIPipelineManager.h"
 #include "Engine/Runtime/Render/RenderTexture.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
@@ -62,7 +62,8 @@ namespace ve::pbr
             }
 
             const Vector4 hdrSettings(settings.exposure, static_cast<Float32>(settings.toneMapping), settings.whitePoint, 0.0f);
-            const UniformBufferAllocation constants = context.frameData.UploadUniform(&hdrSettings, sizeof(hdrSettings));
+            const UniformBufferAllocation constants =
+                context.frameData.UploadTransientUniform(&hdrSettings, sizeof(hdrSettings), "HdrToneMappingUniform");
             if (constants.buffer == nullptr)
             {
                 FailToneMapping("HDR tone mapping constant upload failed.");
@@ -72,6 +73,7 @@ namespace ve::pbr
             context.commandList.SetTexture(rhi::RhiShaderStage::Fragment, 0, source);
             context.commandList.SetSampler(rhi::RhiShaderStage::Fragment, 0, *sampler_);
             context.commandList.Draw(3, 0);
+            context.frameData.AdoptTransientRhiObject(std::shared_ptr<rhi::RhiObject>(std::move(sampler_)));
         }
 
     private:

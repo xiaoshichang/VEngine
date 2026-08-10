@@ -172,7 +172,8 @@ namespace ve
             FailOpaqueForwardPass("execution failed to allocate required frame or view uniforms.");
         }
         const VirtualShadowGpuConstants virtualShadowConstants = virtualShadowSampling.constants;
-        const UniformBufferAllocation virtualShadowUniform = context.frameData.UploadUniform(&virtualShadowConstants, sizeof(virtualShadowConstants));
+        const UniformBufferAllocation virtualShadowUniform =
+            context.frameData.UploadTransientUniform(&virtualShadowConstants, sizeof(virtualShadowConstants), "VirtualShadowSamplingUniform");
         if (!virtual_shadow_detail::IsValidVirtualShadowUniformAllocation(virtualShadowUniform))
         {
             FailOpaqueForwardPass("execution failed to allocate the required VSM uniform.");

@@ -38,7 +38,8 @@ namespace ve::virtual_shadow_detail
 
     UniformBufferAllocation UploadVirtualShadowPassConstants(const FrameRenderPipelineData& frameData, const VirtualShadowGpuConstants& constants)
     {
-        const UniformBufferAllocation allocation = frameData.UploadUniform(&constants, sizeof(constants));
+        const UniformBufferAllocation allocation =
+            frameData.UploadTransientUniform(&constants, sizeof(constants), "VirtualShadowPassUniform");
         if (allocation.buffer == nullptr)
         {
             FailVirtualShadow("VSM pass failed to upload its frame constants.");
