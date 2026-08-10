@@ -36,7 +36,7 @@ namespace ve
         void MarkSubmitted(UInt64 fenceValue) noexcept;
 
         [[nodiscard]] FrameTransientResourcePool& GetTransientResourcePool() noexcept;
-        void EnqueuePendingDeleteResource(UInt64 fenceValue, const std::shared_ptr<PendingDeleteRTResourceBatch>& batch);
+        void EnqueuePendingDeleteResource(UInt64 fenceValue, RhiObjectList resources);
         void ClearRetiredRhiObjectsAfterWaitIdle() noexcept;
         void SetSubmittedFrameIndex(UInt64 frameIndex) noexcept;
         [[nodiscard]] UInt64 TakeSubmittedFrameIndex() noexcept;

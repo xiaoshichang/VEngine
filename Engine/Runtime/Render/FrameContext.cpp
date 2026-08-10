@@ -3,8 +3,6 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <algorithm>
-
 namespace ve
 {
     bool FrameContext::Initialize(rhi::RhiDevice& device, UInt32 contextIndex)
@@ -145,17 +143,14 @@ namespace ve
         return transientResourcePool_;
     }
 
-    void FrameContext::EnqueuePendingDeleteResource(UInt64 fenceValue, const std::shared_ptr<PendingDeleteRTResourceBatch>& batch)
+    void FrameContext::EnqueuePendingDeleteResource(UInt64 fenceValue, RhiObjectList resources)
     {
         VE_ASSERT_RENDER_THREAD();
         VE_ASSERT(fenceValue != 0);
-        VE_ASSERT(batch != nullptr);
+        VE_ASSERT(!resources.empty());
+        VE_ASSERT(pendingDeleteRTResourceQueue_.empty() || pendingDeleteRTResourceQueue_.back().fenceValue <= fenceValue);
 
-        const auto insertPosition = std::upper_bound(pendingDeleteRTResourceQueue_.begin(),
-                                                     pendingDeleteRTResourceQueue_.end(),
-                                                     fenceValue,
-                                                     [](UInt64 value, const PendingDeleteRTResourceEntry& entry) { return value < entry.fenceValue; });
-        pendingDeleteRTResourceQueue_.insert(insertPosition, PendingDeleteRTResourceEntry{fenceValue, batch});
+        pendingDeleteRTResourceQueue_.push_back(PendingDeleteRTResourceEntry{fenceValue, std::move(resources)});
     }
 
     void FrameContext::ClearRetiredRhiObjectsAfterWaitIdle() noexcept
@@ -191,15 +186,7 @@ namespace ve
         VE_ASSERT_RENDER_THREAD();
         while (!pendingDeleteRTResourceQueue_.empty() && pendingDeleteRTResourceQueue_.front().fenceValue <= completedFenceValue)
         {
-            std::shared_ptr<PendingDeleteRTResourceBatch> batch = std::move(pendingDeleteRTResourceQueue_.front().batch);
             pendingDeleteRTResourceQueue_.pop_front();
-            VE_ASSERT(batch != nullptr);
-            VE_ASSERT(batch->remainingFenceCount > 0);
-            --batch->remainingFenceCount;
-            if (batch->remainingFenceCount == 0)
-            {
-                batch->resources.clear();
-            }
         }
     }
 

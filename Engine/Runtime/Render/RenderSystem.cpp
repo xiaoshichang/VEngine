@@ -11,7 +11,6 @@
 #endif
 
 #include "Engine/Runtime/Core/Assert.h"
-#include "Engine/Runtime/Core/ScopeExit.h"
 #include "Engine/Runtime/Logging/Log.h"
 #include "Engine/Runtime/Platform/AutoreleasePool.h"
 #include "Engine/Runtime/Render/FrameContext.h"
@@ -29,7 +28,6 @@
 #include "Engine/Runtime/Threading/Synchronization.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
-#include <algorithm>
 #include <array>
 #include <exception>
 #include <iterator>
@@ -59,7 +57,6 @@ namespace ve
         Semaphore commandSemaphore{0};
         RenderCommandQueue commandQueue;
         RenderSystemLifetimeFlags lifetimeFlags;
-        AtomicSize activeSubmitCount{0};
     };
 
     struct RenderRhiState
@@ -71,31 +68,9 @@ namespace ve
         RHIPipelineManager pipelineManager;
     };
 
-    struct ActiveFrameRecordingState
-    {
-        void Begin(UInt32 slotIndex, UInt64 fenceValue) noexcept
-        {
-            active = true;
-            frameSlotIndex = slotIndex;
-            submissionFenceValue = fenceValue;
-        }
-
-        void Reset() noexcept
-        {
-            active = false;
-            frameSlotIndex = 0;
-            submissionFenceValue = 0;
-        }
-
-        bool active = false;
-        UInt32 frameSlotIndex = 0;
-        UInt64 submissionFenceValue = 0;
-    };
-
     struct RenderFrameSchedulingState
     {
         std::array<FrameContext, RenderFrameContextCount> frameContexts;
-        ActiveFrameRecordingState recording;
         UInt64 nextFrameIndex = 1;
     };
 
@@ -248,41 +223,23 @@ namespace ve
                 return;
             }
 
-            std::array<UInt64, RenderFrameContextCount> dependencies{};
-            for (UInt32 frameSlotIndex = 0; frameSlotIndex < RenderFrameContextCount; ++frameSlotIndex)
-            {
-                dependencies[frameSlotIndex] = impl.frameScheduling.frameContexts[frameSlotIndex].GetSubmittedFenceValue();
-            }
-            if (impl.frameScheduling.recording.active)
-            {
-                VE_ASSERT(impl.frameScheduling.recording.frameSlotIndex < RenderFrameContextCount);
-                dependencies[impl.frameScheduling.recording.frameSlotIndex] =
-                    std::max(dependencies[impl.frameScheduling.recording.frameSlotIndex], impl.frameScheduling.recording.submissionFenceValue);
-            }
-
-            UInt32 dependencyCount = 0;
-            for (UInt64 fenceValue : dependencies)
-            {
-                dependencyCount += fenceValue != 0 ? 1u : 0u;
-            }
-            if (dependencyCount == 0)
+            if (impl.frameScheduling.nextFrameIndex <= 1)
             {
                 return;
             }
 
-            auto batch = std::make_shared<PendingDeleteRTResourceBatch>();
-            batch->resources = std::move(objects);
-            batch->remainingFenceCount = dependencyCount;
-            for (UInt32 frameSlotIndex = 0; frameSlotIndex < RenderFrameContextCount; ++frameSlotIndex)
+            const UInt64 lastSubmittedFrameIndex = impl.frameScheduling.nextFrameIndex - 1;
+            const UInt32 frameSlotIndex = static_cast<UInt32>(lastSubmittedFrameIndex % RenderFrameContextCount);
+            FrameContext& frameContext = impl.frameScheduling.frameContexts[frameSlotIndex];
+            const UInt64 fenceValue = frameContext.GetSubmittedFenceValue();
+            if (fenceValue == 0)
             {
-                const UInt64 fenceValue = dependencies[frameSlotIndex];
-                if (fenceValue == 0)
-                {
-                    continue;
-                }
-
-                impl.frameScheduling.frameContexts[frameSlotIndex].EnqueuePendingDeleteResource(fenceValue, batch);
+                return;
             }
+
+            // Main-swapchain frames are submitted to one ordered graphics queue. Completion of the newest relevant
+            // frame submission therefore also guarantees completion of every earlier frame that could reference these objects.
+            frameContext.EnqueuePendingDeleteResource(fenceValue, std::move(objects));
         }
 
         void ClearRetiredRhiObjectsAfterWaitIdle(RenderSystemImpl& impl) noexcept
@@ -292,7 +249,6 @@ namespace ve
             {
                 frameContext.ClearRetiredRhiObjectsAfterWaitIdle();
             }
-            impl.frameScheduling.recording.Reset();
         }
 
         void DestroyFrameResources(RenderSystemImpl& impl)
@@ -470,7 +426,6 @@ namespace ve
             }
             frameData.builtInShaderResources = framePipeline->GetBuiltInShaderResources();
             // Phase 2: let the product-specific pipeline record scene, overlay, and copy work into the frame command list.
-            impl.frameScheduling.recording.Begin(frameData.frameSlotIndex, frameData.frameContext->GetNextSubmissionFenceValue());
             framePipeline->RenderFrame(frameData);
             impl.diagnostics.recordedDrawCallCount.store(frameData.GetCommandList().GetRecordedDrawCallCount(), std::memory_order_release);
             const UInt64 statisticsSceneIdentity =
@@ -483,7 +438,6 @@ namespace ve
             // Phase 3: submit the recorded work and bind its object lifetime to the selected FrameContext fence.
             const ErrorCode submitResult = SubmitMainSwapchainFrame(impl, frameData, framePipeline);
             RequireRenderSystemFrameSuccess(submitResult, "RenderSystem failed to submit the frame", impl.rhi.device.get());
-            impl.frameScheduling.recording.Reset();
             if (debugRequest.has_value())
             {
                 FrameGraphDebugCapturePublishResult completion = CompleteFrameGraphDebugCapture(
@@ -655,11 +609,6 @@ namespace ve
         void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
         {
             impl.threadControl.lifetimeFlags.acceptingCommands.store(false, std::memory_order_release);
-
-            while (impl.threadControl.activeSubmitCount.load(std::memory_order_acquire) != 0)
-            {
-                YieldThread();
-            }
 
             auto rhiDestroyed = std::make_shared<ManualResetEvent>(false);
             EnqueueInternalCommand(impl,
@@ -851,9 +800,6 @@ namespace ve
     ErrorCode RenderSystem::RequestFrameGraphDebugCapture(Float32 previewScale)
     {
         VE_ASSERT_SCENE_THREAD();
-        impl_->threadControl.activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
-        auto submitCounterGuard = MakeScopeExit([this]() { impl_->threadControl.activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
-
         if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
@@ -884,9 +830,6 @@ namespace ve
         {
             return nullptr;
         }
-
-        impl_->threadControl.activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
-        auto submitCounterGuard = MakeScopeExit([this]() { impl_->threadControl.activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
         if (!impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
@@ -1209,9 +1152,6 @@ namespace ve
     void RenderSystem::EnqueueCommand(std::string debugName, RenderCommandFunction function)
     {
         VE_ASSERT_MESSAGE(function != nullptr, "RenderSystem::EnqueueCommand requires a callable function.");
-
-        impl_->threadControl.activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
-        auto submitCounterGuard = MakeScopeExit([this]() { impl_->threadControl.activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
         VE_ASSERT_MESSAGE(impl_->threadControl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire),
                           "RenderSystem::EnqueueCommand requires RenderSystem to accept commands.");

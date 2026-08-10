@@ -11,16 +11,10 @@ namespace ve
 {
     using RhiObjectList = std::vector<std::shared_ptr<rhi::RhiObject>>;
 
-    struct PendingDeleteRTResourceBatch
-    {
-        RhiObjectList resources;
-        UInt32 remainingFenceCount = 0;
-    };
-
     struct PendingDeleteRTResourceEntry
     {
         UInt64 fenceValue = 0;
-        std::shared_ptr<PendingDeleteRTResourceBatch> batch;
+        RhiObjectList resources;
     };
 
     template<typename TObject>
