@@ -40,6 +40,13 @@
 
 namespace ve
 {
+    struct RenderSystemLifetimeFlags
+    {
+        AtomicBool acceptingCommands{false};
+        AtomicBool stopRequested{false};
+        AtomicBool initialized{false};
+    };
+
     struct MainSwapchainState
     {
         std::unique_ptr<rhi::RhiSwapchain> swapchain;
@@ -56,9 +63,7 @@ namespace ve
 
         Semaphore commandSemaphore{0};
         RenderCommandQueue commandQueue;
-        AtomicBool acceptingCommands{false};
-        AtomicBool stopRequested{false};
-        AtomicBool initialized{false};
+        RenderSystemLifetimeFlags lifetimeFlags;
         AtomicSize activeSubmitCount{0};
         Atomic<int> backendValue{-1};
         std::unique_ptr<rhi::RhiDevice> device;
@@ -490,7 +495,7 @@ namespace ve
                     ExecuteCommand(*command);
                 }
 
-                if (impl.stopRequested.load(std::memory_order_acquire))
+                if (impl.lifetimeFlags.stopRequested.load(std::memory_order_acquire))
                 {
                     if (!impl.commandQueue.IsEmptyForConsumer())
                     {
@@ -594,7 +599,8 @@ namespace ve
             }
 
             impl.mainSwapchainState.resizeCommandQueued.store(false, std::memory_order_release);
-            if (impl.mainSwapchainState.pendingResizeExtent.load(std::memory_order_acquire) == 0 || !impl.acceptingCommands.load(std::memory_order_acquire))
+            if (impl.mainSwapchainState.pendingResizeExtent.load(std::memory_order_acquire) == 0 ||
+                !impl.lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
             {
                 return;
             }
@@ -613,7 +619,7 @@ namespace ve
 
         void StopAndJoinRenderThread(RenderSystemImpl& impl) noexcept
         {
-            impl.acceptingCommands.store(false, std::memory_order_release);
+            impl.lifetimeFlags.acceptingCommands.store(false, std::memory_order_release);
 
             while (impl.activeSubmitCount.load(std::memory_order_acquire) != 0)
             {
@@ -630,7 +636,7 @@ namespace ve
                                                  }});
             rhiDestroyed->Wait();
 
-            impl.stopRequested.store(true, std::memory_order_release);
+            impl.lifetimeFlags.stopRequested.store(true, std::memory_order_release);
             impl.commandSemaphore.Release();
 
             if (impl.thread.IsJoinable())
@@ -641,8 +647,8 @@ namespace ve
 
             impl.commandQueue.ClearForConsumer();
             impl.renderThreadIdValue.store(0, std::memory_order_release);
-            impl.stopRequested.store(false, std::memory_order_release);
-            impl.initialized.store(false, std::memory_order_release);
+            impl.lifetimeFlags.stopRequested.store(false, std::memory_order_release);
+            impl.lifetimeFlags.initialized.store(false, std::memory_order_release);
         }
     } // namespace
 
@@ -658,13 +664,13 @@ namespace ve
 
     ErrorCode RenderSystem::Initialize(const RenderSystemInitParam& initParam)
     {
-        if (impl_->initialized.load(std::memory_order_acquire))
+        if (impl_->lifetimeFlags.initialized.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
 
-        impl_->stopRequested.store(false, std::memory_order_release);
-        impl_->acceptingCommands.store(true, std::memory_order_release);
+        impl_->lifetimeFlags.stopRequested.store(false, std::memory_order_release);
+        impl_->lifetimeFlags.acceptingCommands.store(true, std::memory_order_release);
         if (impl_->sceneThreadRenderThreadFrameEndSync != nullptr)
         {
             impl_->sceneThreadRenderThreadFrameEndSync->Reset();
@@ -675,19 +681,19 @@ namespace ve
 
         if (startResult != ErrorCode::None)
         {
-            impl_->acceptingCommands.store(false, std::memory_order_release);
-            impl_->stopRequested.store(false, std::memory_order_release);
+            impl_->lifetimeFlags.acceptingCommands.store(false, std::memory_order_release);
+            impl_->lifetimeFlags.stopRequested.store(false, std::memory_order_release);
             impl_->commandQueue.ClearForConsumer();
             return startResult;
         }
 
-        impl_->initialized.store(true, std::memory_order_release);
+        impl_->lifetimeFlags.initialized.store(true, std::memory_order_release);
         return ErrorCode::None;
     }
 
     void RenderSystem::Shutdown() noexcept
     {
-        if (!impl_->initialized.load(std::memory_order_acquire))
+        if (!impl_->lifetimeFlags.initialized.load(std::memory_order_acquire))
         {
             return;
         }
@@ -697,7 +703,7 @@ namespace ve
 
     bool RenderSystem::IsInitialized() const noexcept
     {
-        return impl_->initialized.load(std::memory_order_acquire);
+        return impl_->lifetimeFlags.initialized.load(std::memory_order_acquire);
     }
 
     ThreadId RenderSystem::GetRenderThreadId() const noexcept
@@ -707,7 +713,8 @@ namespace ve
 
     void RenderSystem::SetSceneThreadRenderThreadFrameEndSync(SceneThreadRenderThreadFrameEndSync* sync) noexcept
     {
-        VE_ASSERT_MESSAGE(!impl_->initialized.load(std::memory_order_acquire), "SetSceneThreadRenderThreadFrameEndSync requires RenderSystem to be stopped.");
+        VE_ASSERT_MESSAGE(!impl_->lifetimeFlags.initialized.load(std::memory_order_acquire),
+                          "SetSceneThreadRenderThreadFrameEndSync requires RenderSystem to be stopped.");
         impl_->sceneThreadRenderThreadFrameEndSync = sync;
     }
 
@@ -769,7 +776,7 @@ namespace ve
 
     void RenderSystem::ShutdownDevice() noexcept
     {
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -798,7 +805,7 @@ namespace ve
 
     UInt64 RenderSystem::GetRecordedDrawCallCount() const noexcept
     {
-        if (impl_ == nullptr || !impl_->initialized.load(std::memory_order_acquire))
+        if (impl_ == nullptr || !impl_->lifetimeFlags.initialized.load(std::memory_order_acquire))
         {
             return 0;
         }
@@ -812,7 +819,7 @@ namespace ve
         impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
         auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
@@ -846,7 +853,7 @@ namespace ve
         impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
         auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return data;
         }
@@ -915,7 +922,7 @@ namespace ve
 
     void RenderSystem::DestroyMainSwapchain() noexcept
     {
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -940,7 +947,7 @@ namespace ve
     void RenderSystem::RequestMainSwapchainResize(rhi::RhiExtent2D extent)
     {
         VE_ASSERT_SCENE_THREAD();
-        if (extent.width == 0 || extent.height == 0 || !impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (extent.width == 0 || extent.height == 0 || !impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -1110,7 +1117,8 @@ namespace ve
 
     void RenderSystem::Flush()
     {
-        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire), "RenderSystem::Flush requires RenderSystem to accept commands.");
+        VE_ASSERT_MESSAGE(impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire),
+                          "RenderSystem::Flush requires RenderSystem to accept commands.");
 
         auto completed = std::make_shared<ManualResetEvent>(false);
         EnqueueCommand("RenderSystemFlush", [completed]() { completed->Set(); });
@@ -1119,7 +1127,7 @@ namespace ve
 
     void RenderSystem::WaitIdle()
     {
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return;
         }
@@ -1144,7 +1152,7 @@ namespace ve
             return ErrorCode::InvalidArgument;
         }
 
-        if (!impl_->acceptingCommands.load(std::memory_order_acquire))
+        if (!impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire))
         {
             return ErrorCode::InvalidState;
         }
@@ -1170,7 +1178,8 @@ namespace ve
         impl_->activeSubmitCount.fetch_add(1, std::memory_order_acq_rel);
         auto submitCounterGuard = MakeScopeExit([this]() { impl_->activeSubmitCount.fetch_sub(1, std::memory_order_acq_rel); });
 
-        VE_ASSERT_MESSAGE(impl_->acceptingCommands.load(std::memory_order_acquire), "RenderSystem::EnqueueCommand requires RenderSystem to accept commands.");
+        VE_ASSERT_MESSAGE(impl_->lifetimeFlags.acceptingCommands.load(std::memory_order_acquire),
+                          "RenderSystem::EnqueueCommand requires RenderSystem to accept commands.");
 
         ErrorCode pushResult = impl_->commandQueue.Push(RenderCommand{std::move(debugName), std::move(function)});
         VE_ASSERT_MESSAGE(pushResult == ErrorCode::None, "RenderSystem failed to enqueue render command.");
