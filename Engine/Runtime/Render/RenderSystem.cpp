@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <deque>
 #include <exception>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -437,7 +438,7 @@ namespace ve
             return impl.mainSwapchain->Present() ? ErrorCode::None : ErrorCode::PlatformError;
         }
 
-        void RetireFrameGraphDebugDataOnRenderThread(std::shared_ptr<const FrameGraphDebugData> data)
+        void RetireFrameGraphDebugDataOnRenderThread(RenderSystemImpl& impl, std::shared_ptr<const FrameGraphDebugData> data)
         {
             VE_ASSERT_RENDER_THREAD();
             if (data == nullptr)
@@ -446,10 +447,15 @@ namespace ve
             }
 
             std::vector<std::shared_ptr<FrameGraphDebugPreviewTexture>> previewTextures = CollectFrameGraphDebugPreviewTextures(*data);
+            RhiObjectList retiredObjects;
             for (const std::shared_ptr<FrameGraphDebugPreviewTexture>& previewTexture : previewTextures)
             {
-                previewTexture->Reset();
+                RhiObjectList previewObjects = previewTexture->TakeRhiObjects();
+                retiredObjects.insert(retiredObjects.end(),
+                                      std::make_move_iterator(previewObjects.begin()),
+                                      std::make_move_iterator(previewObjects.end()));
             }
+            RetireRhiObjects(impl, std::move(retiredObjects));
 
             // Both the immutable snapshot and the temporary owner list are released on the Render Thread. Every
             // preview owner is empty after Reset, so its destructor cannot release a live RHI object on another thread.
@@ -501,7 +507,7 @@ namespace ve
             {
                 FrameGraphDebugCapturePublishResult completion = CompleteFrameGraphDebugCapture(
                     impl.frameGraphDebugCapture, submitResult, *debugRequest, std::move(debugCapture.data), std::move(debugCapture.failureMessage));
-                RetireFrameGraphDebugDataOnRenderThread(std::move(completion.dataToRetire));
+                RetireFrameGraphDebugDataOnRenderThread(impl, std::move(completion.dataToRetire));
             }
             if (frameData.virtualShadowManager != nullptr && statisticsSceneIdentity != 0)
             {
@@ -575,7 +581,7 @@ namespace ve
                 ClearRetiredRhiObjectsAfterWaitIdle(impl);
             }
 
-            RetireFrameGraphDebugDataOnRenderThread(impl.frameGraphDebugCapture.Reset());
+            RetireFrameGraphDebugDataOnRenderThread(impl, impl.frameGraphDebugCapture.Reset());
             impl.submittedFrameIndices.fill(0);
             impl.performanceStatistics.Reset();
             impl.pendingMainSwapchainExtent.store(0, std::memory_order_release);
@@ -911,7 +917,7 @@ namespace ve
         {
             RenderCommand retireCommand{
                 "RenderSystemRetireFrameGraphDebugData",
-                [queuedData = data]() mutable { RetireFrameGraphDebugDataOnRenderThread(std::move(queuedData)); },
+                [this, queuedData = data]() mutable { RetireFrameGraphDebugDataOnRenderThread(*impl_, std::move(queuedData)); },
             };
             pushResult = impl_->commandQueue.Push(std::move(retireCommand));
         }

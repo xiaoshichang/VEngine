@@ -247,7 +247,6 @@ namespace ve::pbr
                 {
                     FailToneMapping("HDR view tone mapping source and destination extents must match.");
                 }
-                context.frameData.RetainInFlightGpuFrameObject(destination_->GetTextureShared());
                 if (context.frameData.builtInShaderResources == nullptr || context.frameData.builtInShaderResources->hdrToneMapping == nullptr)
                 {
                     return;

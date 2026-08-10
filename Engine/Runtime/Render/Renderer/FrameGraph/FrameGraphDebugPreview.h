@@ -5,6 +5,7 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Render/RenderResourceLifetime.h"
 
 #include <atomic>
 #include <memory>
@@ -31,8 +32,8 @@ namespace ve
 
     /// Render-thread owner for one persistent RGBA debugger preview texture.
     ///
-    /// The owner may be shared with Editor data, but the live RHI texture must be released through Reset on the Render
-    /// Thread before final destruction. Destroying an owner that still contains a texture is a fatal lifetime error.
+    /// The owner may be shared with Editor data, but the live RHI texture must be extracted on the Render Thread before
+    /// final destruction. Destroying an owner that still contains a texture is a fatal lifetime error.
     class FrameGraphDebugPreviewTexture final : public NonCopyable
     {
     public:
@@ -44,7 +45,7 @@ namespace ve
         [[nodiscard]] const rhi::RhiTexture* GetTexture() const noexcept;
         [[nodiscard]] std::shared_ptr<rhi::RhiTexture> GetTextureShared() const noexcept;
         [[nodiscard]] void* GetNativeSampledViewHandle() const noexcept;
-        void Reset();
+        [[nodiscard]] RhiObjectList TakeRhiObjects() noexcept;
 
     private:
         std::shared_ptr<rhi::RhiTexture> texture_;

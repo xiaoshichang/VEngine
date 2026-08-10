@@ -1,6 +1,7 @@
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraph.h"
 
 #include "Engine/Runtime/Core/Assert.h"
+#include "Engine/Runtime/Render/FrameTransientResourcePool.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphBuilder.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebug.h"
 #include "Engine/Runtime/Render/Renderer/FrameGraph/FrameGraphDebugPreview.h"
@@ -11,7 +12,6 @@
 #include <optional>
 #include <queue>
 #include <sstream>
-#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 #include <vector>
@@ -212,7 +212,6 @@ namespace ve
         [[nodiscard]] RenderPassExecutionInfo BuildRenderPassExecutionInfo(const PassNode& pass) const;
         void ReleasePassTextures(UInt32 orderIndex);
         void ReleaseAllTextures();
-        void RetainReleasedTextures();
 
         FrameGraphExecuteContext context;
         std::vector<TextureResourceNode> textures;
@@ -225,10 +224,6 @@ namespace ve
         std::vector<std::unordered_set<UInt32>> reverseDependencies;
         std::vector<UInt32> compiledPassOrder;
         std::vector<std::string> lastExecutionPassNames;
-        std::unordered_map<FrameGraphTextureDesc,
-                           std::vector<std::shared_ptr<rhi::RhiTexture>>,
-                           FrameGraphTextureDescHash>
-            availableTransientTextures;
         FrameGraphStage stage = FrameGraphStage::Initial;
     };
 
@@ -1319,16 +1314,9 @@ namespace ve
                 continue;
             }
 
-            auto availableIt = availableTransientTextures.find(resource.desc);
-            if (availableIt != availableTransientTextures.end() && !availableIt->second.empty())
-            {
-                transientBacking->texture = std::move(availableIt->second.back());
-                availableIt->second.pop_back();
-            }
-            else
-            {
-                transientBacking->texture = context.frameData.device->CreateTexture(BuildRhiTextureDesc(resource.desc, resource.name.c_str()));
-            }
+            VE_ASSERT(context.frameData.transientResourcePool != nullptr);
+            transientBacking->texture =
+                context.frameData.transientResourcePool->AcquireTexture(BuildRhiTextureDesc(resource.desc, resource.name.c_str()));
             if (transientBacking->texture == nullptr)
             {
                 if (resource.internal && resource.debugPreview != nullptr)
@@ -1400,7 +1388,8 @@ namespace ve
             TransientTextureBacking* transientBacking = resource.GetTransientBacking();
             if (transientBacking != nullptr && resource.lastUse == orderIndex && transientBacking->texture != nullptr)
             {
-                availableTransientTextures[resource.desc].push_back(std::move(transientBacking->texture));
+                context.frameData.transientResourcePool->ReleaseTexture(BuildRhiTextureDesc(resource.desc, resource.name.c_str()),
+                                                                        std::move(transientBacking->texture));
             }
         }
     }
@@ -1412,22 +1401,10 @@ namespace ve
             TransientTextureBacking* transientBacking = resource.GetTransientBacking();
             if (transientBacking != nullptr && transientBacking->texture != nullptr)
             {
-                availableTransientTextures[resource.desc].push_back(std::move(transientBacking->texture));
+                context.frameData.transientResourcePool->ReleaseTexture(BuildRhiTextureDesc(resource.desc, resource.name.c_str()),
+                                                                        std::move(transientBacking->texture));
             }
         }
-    }
-
-    void FrameGraph::Impl::RetainReleasedTextures()
-    {
-        for (auto& [desc, texturesForDesc] : availableTransientTextures)
-        {
-            static_cast<void>(desc);
-            for (std::shared_ptr<rhi::RhiTexture>& texture : texturesForDesc)
-            {
-                context.frameData.RetainInFlightGpuFrameObject(std::move(texture));
-            }
-        }
-        availableTransientTextures.clear();
     }
 
     Error FrameGraph::PrepareDebugCapture(FrameGraphDebugFrameCapture& capture)
@@ -1611,7 +1588,6 @@ namespace ve
             previewDesc.format = rhi::RhiFormat::Rgba8Unorm;
             previewDesc.usage = addUsage(rhi::RhiTextureUsage::Sampled, rhi::RhiTextureUsage::RenderTarget);
             const FrameGraphTextureHandle previewTarget = ImportTexture(previewName, previewDesc, ImportedFrameGraphTexture{previewOwner->GetTexture(), false});
-            impl_->context.frameData.RetainInFlightGpuFrameObject(previewOwner->GetTextureShared());
             impl_->textures[previewTarget.index].internal = true;
             impl_->textures[previewTarget.index].debugPreview = &preview;
 
@@ -1789,7 +1765,6 @@ namespace ve
             if (acquireResult != ErrorCode::None)
             {
                 impl_->ReleaseAllTextures();
-                impl_->RetainReleasedTextures();
                 impl_->stage = FrameGraphStage::Failed;
                 return acquireResult;
             }
@@ -1862,7 +1837,6 @@ namespace ve
                     continue;
                 }
                 impl_->ReleaseAllTextures();
-                impl_->RetainReleasedTextures();
                 impl_->stage = FrameGraphStage::Failed;
                 return ErrorCode::PlatformError;
             }
@@ -1888,7 +1862,6 @@ namespace ve
             impl_->ReleasePassTextures(orderIndex);
         }
 
-        impl_->RetainReleasedTextures();
         impl_->stage = FrameGraphStage::Executed;
         return ErrorCode::None;
     }

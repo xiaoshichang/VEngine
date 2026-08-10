@@ -336,7 +336,6 @@ namespace ve
             graphData.color = frameGraph.ImportTexture(BuildIndexedResourceName("RendererColor", viewIndex),
                                                        MakeTextureDesc(*colorTexture, MakeColorTargetUsage()),
                                                        ImportedFrameGraphTexture{colorTexture, false});
-            frameRenderData_->RetainInFlightGpuFrameObject(target.colorTexture->GetTextureShared());
 
             rhi::RhiTexture* depthTexture = target.colorTexture->GetDepthTexture();
             if (depthTexture != nullptr)
@@ -344,7 +343,6 @@ namespace ve
                 graphData.depth = frameGraph.ImportTexture(BuildIndexedResourceName("RendererDepth", viewIndex),
                                                            MakeTextureDesc(*depthTexture, MakeSampledDepthUsage()),
                                                            ImportedFrameGraphTexture{depthTexture, false});
-                frameRenderData_->RetainInFlightGpuFrameObject(target.colorTexture->GetDepthTextureShared());
             }
             else
             {

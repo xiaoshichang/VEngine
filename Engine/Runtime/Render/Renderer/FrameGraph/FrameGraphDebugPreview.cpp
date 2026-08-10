@@ -68,7 +68,7 @@ namespace ve
     {
         if (texture_ != nullptr)
         {
-            constexpr const char* message = "FrameGraphDebugPreviewTexture must be Reset on the Render Thread before its final destruction.";
+            constexpr const char* message = "FrameGraphDebugPreviewTexture RHI objects must be extracted on the Render Thread before final destruction.";
             VE_LOG_FATAL("{}", message);
             VE_ASSERT_ALWAYS_MESSAGE(false, message);
             std::terminate();
@@ -134,14 +134,13 @@ namespace ve
         return nativeSampledViewHandle_.load(std::memory_order_acquire);
     }
 
-    void FrameGraphDebugPreviewTexture::Reset()
+    RhiObjectList FrameGraphDebugPreviewTexture::TakeRhiObjects() noexcept
     {
         VE_ASSERT_RENDER_THREAD();
         nativeSampledViewHandle_.store(nullptr, std::memory_order_release);
-        if (texture_ != nullptr)
-        {
-            texture_.reset();
-        }
+        RhiObjectList objects;
+        MoveRhiObject(objects, texture_);
+        return objects;
     }
 
     ErrorCode RecordFrameGraphDebugPreviewConversion(const rhi::RhiTexture& source, FrameGraphDebugPreviewMode mode, RenderPassContext& context)
