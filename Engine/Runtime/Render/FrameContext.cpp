@@ -3,6 +3,8 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Threading/ThreadEnsure.h"
 
+#include <algorithm>
+
 namespace ve
 {
     bool FrameContext::Initialize(rhi::RhiDevice& device, UInt32 contextIndex)
@@ -25,6 +27,7 @@ namespace ve
             return false;
         }
 
+        transientResourcePool_.Initialize(device);
         return true;
     }
 
@@ -34,12 +37,14 @@ namespace ve
         VE_ASSERT(commandList_ != nullptr);
         VE_ASSERT(completionFence_ != nullptr);
 
-        if (submittedFenceValue_ != 0 && !completionFence_->Wait(submittedFenceValue_))
+        const UInt64 completedFenceValue = submittedFenceValue_;
+        if (completedFenceValue != 0 && !completionFence_->Wait(completedFenceValue))
         {
             return false;
         }
 
         submittedFenceValue_ = 0;
+        PrepareForReuse(completedFenceValue);
         return true;
     }
 
@@ -49,12 +54,14 @@ namespace ve
         VE_ASSERT(commandList_ != nullptr);
         VE_ASSERT(completionFence_ != nullptr);
 
-        if (!swapchain.WaitForFrameStart(*completionFence_, submittedFenceValue_))
+        const UInt64 completedFenceValue = submittedFenceValue_;
+        if (!swapchain.WaitForFrameStart(*completionFence_, completedFenceValue))
         {
             return false;
         }
 
         submittedFenceValue_ = 0;
+        PrepareForReuse(completedFenceValue);
         return true;
     }
 
@@ -71,6 +78,10 @@ namespace ve
             return false;
         }
 
+        RhiObjectList transientObjects = transientResourcePool_.Shutdown();
+        transientObjects.clear();
+        pendingDeleteRTResourceQueue_.clear();
+        submittedFrameIndex_ = 0;
         commandList_.reset();
         completionFence_.reset();
         nextFenceValue_ = 1;
@@ -127,6 +138,69 @@ namespace ve
         VE_ASSERT(fenceValue == nextFenceValue_);
         submittedFenceValue_ = fenceValue;
         ++nextFenceValue_;
+    }
+
+    FrameTransientResourcePool& FrameContext::GetTransientResourcePool() noexcept
+    {
+        return transientResourcePool_;
+    }
+
+    void FrameContext::EnqueuePendingDeleteResource(UInt64 fenceValue, const std::shared_ptr<PendingDeleteRTResourceBatch>& batch)
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(fenceValue != 0);
+        VE_ASSERT(batch != nullptr);
+
+        const auto insertPosition = std::upper_bound(pendingDeleteRTResourceQueue_.begin(),
+                                                     pendingDeleteRTResourceQueue_.end(),
+                                                     fenceValue,
+                                                     [](UInt64 value, const PendingDeleteRTResourceEntry& entry) { return value < entry.fenceValue; });
+        pendingDeleteRTResourceQueue_.insert(insertPosition, PendingDeleteRTResourceEntry{fenceValue, batch});
+    }
+
+    void FrameContext::ClearRetiredRhiObjectsAfterWaitIdle() noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        pendingDeleteRTResourceQueue_.clear();
+    }
+
+    void FrameContext::SetSubmittedFrameIndex(UInt64 frameIndex) noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        VE_ASSERT(frameIndex != 0);
+        VE_ASSERT(submittedFrameIndex_ == 0);
+        submittedFrameIndex_ = frameIndex;
+    }
+
+    UInt64 FrameContext::TakeSubmittedFrameIndex() noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        const UInt64 frameIndex = submittedFrameIndex_;
+        submittedFrameIndex_ = 0;
+        return frameIndex;
+    }
+
+    void FrameContext::PrepareForReuse(UInt64 completedFenceValue) noexcept
+    {
+        CollectRetiredRhiObjects(completedFenceValue);
+        transientResourcePool_.BeginFrame();
+    }
+
+    void FrameContext::CollectRetiredRhiObjects(UInt64 completedFenceValue) noexcept
+    {
+        VE_ASSERT_RENDER_THREAD();
+        while (!pendingDeleteRTResourceQueue_.empty() && pendingDeleteRTResourceQueue_.front().fenceValue <= completedFenceValue)
+        {
+            std::shared_ptr<PendingDeleteRTResourceBatch> batch = std::move(pendingDeleteRTResourceQueue_.front().batch);
+            pendingDeleteRTResourceQueue_.pop_front();
+            VE_ASSERT(batch != nullptr);
+            VE_ASSERT(batch->remainingFenceCount > 0);
+            --batch->remainingFenceCount;
+            if (batch->remainingFenceCount == 0)
+            {
+                batch->resources.clear();
+            }
+        }
     }
 
 } // namespace ve

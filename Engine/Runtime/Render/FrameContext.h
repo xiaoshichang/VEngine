@@ -4,8 +4,11 @@
 #include "Engine/Runtime/Core/Error.h"
 #include "Engine/Runtime/Core/NonCopyable.h"
 #include "Engine/Runtime/Core/Types.h"
+#include "Engine/Runtime/Render/FrameTransientResourcePool.h"
 #include "Engine/Runtime/Render/RenderFrameConfig.h"
+#include "Engine/Runtime/Render/RenderResourceLifetime.h"
 
+#include <deque>
 #include <memory>
 
 namespace ve
@@ -32,10 +35,22 @@ namespace ve
         [[nodiscard]] UInt64 GetSubmittedFenceValue() const noexcept;
         void MarkSubmitted(UInt64 fenceValue) noexcept;
 
+        [[nodiscard]] FrameTransientResourcePool& GetTransientResourcePool() noexcept;
+        void EnqueuePendingDeleteResource(UInt64 fenceValue, const std::shared_ptr<PendingDeleteRTResourceBatch>& batch);
+        void ClearRetiredRhiObjectsAfterWaitIdle() noexcept;
+        void SetSubmittedFrameIndex(UInt64 frameIndex) noexcept;
+        [[nodiscard]] UInt64 TakeSubmittedFrameIndex() noexcept;
+
     private:
+        void PrepareForReuse(UInt64 completedFenceValue) noexcept;
+        void CollectRetiredRhiObjects(UInt64 completedFenceValue) noexcept;
+
         std::unique_ptr<rhi::RhiCommandList> commandList_;
         std::unique_ptr<rhi::RhiFence> completionFence_;
+        FrameTransientResourcePool transientResourcePool_;
+        std::deque<PendingDeleteRTResourceEntry> pendingDeleteRTResourceQueue_;
         UInt64 submittedFenceValue_ = 0;
         UInt64 nextFenceValue_ = 1;
+        UInt64 submittedFrameIndex_ = 0;
     };
 } // namespace ve

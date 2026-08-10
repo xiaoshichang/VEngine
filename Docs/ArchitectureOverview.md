@@ -611,10 +611,11 @@ render work is assembled for the Render Thread.
 Renderer-owned code lives under `Engine/Runtime/Render/Renderer`. `StandaloneRenderer` is selected for Windows and
 macOS host products, while `MobileRenderer` owns the iOS topology. Both build scene work through typed, versioned Frame
 Graph texture handles; opaque and transparent passes consume only their preclassified queue lists. Each in-flight
-`FrameContext` owns only its command list, completion fence, and submission values for one reusable GPU frame slot.
-`RenderSystem` owns one RHI-oriented transient resource pool per slot. Frame Graph textures, pass-frequency uniform
-buffers, and other short-lived pass objects return to that pool and become reusable only after the slot fence completes.
-Frame Graph imports persistent resources as borrowed references to their RT owners.
+`FrameContext` owns the command list, completion fence, submission values, transient RHI resource pool, ordered
+retirement queue, and submitted frame index for one reusable GPU frame slot. Frame Graph textures, pass-frequency
+uniform buffers, and other short-lived pass objects return to that context's pool and become reusable only after its
+slot fence completes. `RenderSystem` owns cross-slot dependency discovery, active-recording state, and shared retirement
+batches. Frame Graph imports persistent resources as borrowed references to their RT owners.
 
 Render-facing resource ownership follows an Unreal-style split between the Scene Thread and Render Thread:
 

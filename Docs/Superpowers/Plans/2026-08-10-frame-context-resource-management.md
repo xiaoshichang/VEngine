@@ -846,7 +846,7 @@ If `Docs/ArchitectureOverview.md` requires no edit and checkbox-only plan update
 - Modify: `Docs/Superpowers/Plans/2026-08-10-frame-context-resource-management.md`
 - Test: existing Windows configure, build, CTest, and Editor smoke paths
 
-- [ ] **Step 1: Move shared retirement entry types into the lifetime header**
+- [x] **Step 1: Move shared retirement entry types into the lifetime header**
 
 Add these definitions after `RhiObjectList` in `RenderResourceLifetime.h` so both `FrameContext` and `RenderSystem` use one complete type:
 
@@ -866,7 +866,7 @@ struct PendingDeleteRTResourceEntry
 
 Include `Engine/Runtime/Core/Types.h` explicitly. Remove the duplicate local struct definitions from `RenderSystem.cpp`.
 
-- [ ] **Step 2: Give FrameContext private ownership of its single-slot state**
+- [x] **Step 2: Give FrameContext private ownership of its single-slot state**
 
 Add the pool, ordered queue, and submitted frame index to `FrameContext` as singular members:
 
@@ -906,7 +906,7 @@ void FrameContext::PrepareForReuse(UInt64 completedFenceValue) noexcept
 
 Move the existing ordered insertion and completed-prefix collection code from `RenderSystem.cpp` into `EnqueuePendingDeleteResource()` and `CollectRetiredRhiObjects()`. `Shutdown()` waits for the slot, shuts down and clears the transient pool objects, clears the retirement queue, resets `submittedFrameIndex_`, then destroys the command list and fence.
 
-- [ ] **Step 3: Remove the three parallel arrays from RenderSystemImpl**
+- [x] **Step 3: Remove the three parallel arrays from RenderSystemImpl**
 
 Delete:
 
@@ -927,7 +927,7 @@ frameData.frameContext->SetSubmittedFrameIndex(frameData.frameIndex);
 
 Delete the RenderSystem-local collection helper and the separate pool initialize/shutdown/begin-frame loops. `WaitForAllFrameContexts()` only calls `WaitAndReset()`, because successful waits now prepare the slot internally. `ClearRetiredRhiObjectsAfterWaitIdle()` iterates `frameContexts` and calls the matching FrameContext method. Remove the obsolete `<deque>` and direct `FrameTransientResourcePool.h` includes from `RenderSystem.cpp` when no longer used.
 
-- [ ] **Step 4: Format and run ownership scans**
+- [x] **Step 4: Format and run ownership scans**
 
 Format the changed `.h` and `.cpp` files with the repository `.clang-format`, then run:
 
@@ -940,11 +940,11 @@ rg -n "inFlightGpuFrameObjects_|FrameUniformAllocator|RenderFrameUniformCache|Re
 
 Expected: `git diff --check` has no errors; the old parallel-array names and removed legacy resource managers have no results; all three singular fields appear in `FrameContext.h`.
 
-- [ ] **Step 5: Update the architecture overview**
+- [x] **Step 5: Update the architecture overview**
 
 Change the rendering ownership paragraph to state that each `FrameContext` owns its slot's transient pool and ordered retirement queue. Preserve the distinction that `RenderSystem` owns cross-slot dependency discovery, active-recording state, and shared retirement batches. Do not reintroduce generic in-flight resource retention.
 
-- [ ] **Step 6: Run existing regression verification**
+- [x] **Step 6: Run existing regression verification**
 
 Run through the MSVC environment wrapper:
 
@@ -960,7 +960,7 @@ Expected: both configure/build paths exit `0`; CTest reports `100% tests passed`
 
 Launch `VEngineWinEditor.exe` with `--dx12 --project "D:\github-desktop\VEngine\DemoProject"` and `--dx11 --project "D:\github-desktop\VEngine\DemoProject"`. Let each backend open the project and render, close the main window normally, and require exit code `0` with no error, assertion, or validation messages in `Logs/VEngine.log`.
 
-- [ ] **Step 7: Mark the task complete and commit**
+- [x] **Step 7: Mark the task complete and commit**
 
 Mark Task 10 checkboxes complete, run `git diff --check`, and commit the implementation and documentation:
 
