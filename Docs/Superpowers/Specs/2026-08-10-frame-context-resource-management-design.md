@@ -12,7 +12,7 @@ FrameUniformAllocator uniformAllocator_;
 RenderFrameUniformCache uniformCache_;
 ```
 
-Persistent GPU resources are owned by their Render Thread proxies. Transient resources are owned by a fence-aware frame-slot pool. Replaced and deleted RHI objects are retired through `RenderSystem` and released only after every GPU submission that may reference them has completed.
+Persistent GPU resources are owned by their Render Thread proxies. Each `FrameContext` owns the fence-aware transient pool and retirement queue for its reusable GPU submission slot. Replaced and deleted RHI objects are retired through `RenderSystem` and released only after every GPU submission that may reference them has completed.
 
 The implementation is performed on `codex/frame-context-resource-management` in the current checkout. It does not use a worktree or subagents and does not add unit tests.
 
@@ -43,7 +43,7 @@ The design follows the ownership boundaries used by larger threaded renderers wh
 
 ```text
 Persistent resource     -> long-lived RT owner
-Transient resource      -> per-frame-slot resource pool
+Transient resource      -> current FrameContext's resource pool
 Replaced/dead resource  -> fence retirement queue
 FrameGraph              -> describes and borrows resources; it does not extend persistent lifetime
 Scene Thread            -> submits immutable change payloads; it never mutates live RHI state
@@ -72,7 +72,7 @@ using RhiObjectList = std::vector<std::shared_ptr<rhi::RhiObject>>;
 
 The concrete API may use typed helpers or append into a caller-owned output list when that avoids allocations, but its semantic requirement is ownership transfer: after extraction the previous RT owner no longer exposes the retired objects as live state.
 
-The requested `AppendingDeleteRTResources` concept is represented by `pendingDeleteRTResourceQueues_`, which follows the repository's member naming style and describes the state more precisely.
+The requested `AppendingDeleteRTResources` concept is represented by the `pendingDeleteRTResourceQueue_` owned by each `FrameContext`. This follows the repository's member naming style and keeps each queue next to the fence that governs it.
 
 ## Fence-Based Deferred Deletion
 
@@ -93,8 +93,12 @@ struct PendingDeleteRTResourceEntry
     std::shared_ptr<PendingDeleteRTResourceBatch> batch;
 };
 
-std::array<std::deque<PendingDeleteRTResourceEntry>, RenderFrameContextCount>
-    pendingDeleteRTResourceQueues_;
+class FrameContext
+{
+    FrameTransientResourcePool transientResourcePool_;
+    std::deque<PendingDeleteRTResourceEntry> pendingDeleteRTResourceQueue_;
+    UInt64 submittedFrameIndex_ = 0;
+};
 ```
 
 When an RT owner retires RHI objects, `RenderSystemImpl` snapshots the submitted fence value of every frame slot that can still reference them:
@@ -107,7 +111,7 @@ When an RT owner retires RHI objects, `RenderSystemImpl` snapshots the submitted
 
 `RenderSystemImpl` therefore tracks whether a main-swapchain frame is actively recording, its frame-slot index, and the fence value that `FrameContext::Submit()` will signal. Submission failure remains fatal under the existing rendering policy, so the design does not add rollback for a retirement dependency targeting the active submission.
 
-When a frame slot becomes reusable, `RenderSystem` drains only that slot's ordered queue entries whose target value is no greater than the completed value. Each drained entry decrements its batch dependency count. The last completed dependency releases the batch's RHI objects.
+When a frame slot becomes reusable, `RenderSystem` asks that `FrameContext` to drain only its ordered queue entries whose target value is no greater than the completed value. Each drained entry decrements its batch dependency count. The last completed dependency releases the batch's RHI objects.
 
 The completed target is captured before `FrameContext::WaitForFrameStartAndReset()` clears its submitted value. After the wait succeeds, `RenderSystem` uses that captured target to collect the slot queue. A frame slot has at most one outstanding submission because it is never reused before its previous fence completes.
 
@@ -139,9 +143,16 @@ After the refactor, `FrameContext` owns only state that is intrinsically tied to
 - Command list.
 - Completion fence.
 - Submitted and next fence values.
+- The slot's transient RHI resource pool.
+- The slot's ordered pending-deletion queue.
+- The frame index associated with the slot's outstanding submission, for completed statistics publication.
 - True frame-global uniform data, if such data is required by the current pipeline.
 
 `FrameContext` no longer owns a generic vector of arbitrary referenced RHI objects, a page allocator, or maps keyed by scenes, cameras, and render items.
+
+The three slot-local members are singular. `RenderSystemImpl` continues to own `std::array<FrameContext, RenderFrameContextCount>`; a `FrameContext` does not contain another array indexed by frame slot. Cross-slot dependency discovery and the shared retirement batch remain `RenderSystem` responsibilities.
+
+`PendingDeleteRTResourceBatch` and `PendingDeleteRTResourceEntry` are shared lifetime vocabulary and live in `RenderResourceLifetime.h`. The slot-local members remain private. `FrameContext` exposes narrow operations to initialize and shut down its transient pool, enqueue and collect retirement entries, clear retirement state after `WaitIdle()`, get the transient pool for frame-pipeline setup, and set or take the submitted frame index. `RenderSystem` does not receive a mutable deque reference.
 
 A frame-slot resource may be updated only after `WaitForFrameStartAndReset()` or `WaitAndReset()` confirms that slot's prior submission is complete.
 
@@ -215,7 +226,7 @@ This closes the lifetime gap left by removing `FrameUniformAllocator`; pass-loca
 
 ## FrameGraph Transient Resources
 
-FrameGraph-created transient textures and buffers use a RenderSystem-owned per-frame-slot pool. The pool is separate from `FrameContext` but indexed by the same frame slot.
+FrameGraph-created transient textures and buffers use the pool owned by the selected `FrameContext`. `RenderSystem` selects the slot and passes that pool to the frame pipeline; it does not maintain a parallel pool array.
 
 For a selected slot:
 
@@ -280,8 +291,7 @@ Shutdown uses this order on the Render Thread:
 stop accepting new frame work
   -> drain accepted render commands
   -> wait for the RHI device to become idle
-  -> clear transient frame-slot pools
-  -> clear pending deletion queues
+  -> clear each FrameContext's transient pool and pending deletion queue
   -> release remaining RT-owner RHI objects
   -> destroy FrameContext command lists and fences
   -> destroy the RHI device
