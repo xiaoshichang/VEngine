@@ -167,8 +167,8 @@ namespace ve
         const SceneGridUniformData gridUniformData = BuildUniformData(initParam_);
         const UniformBufferAllocation gridUniform = context.frameData.UploadUniform(&gridUniformData, sizeof(gridUniformData));
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform =
-            context.frameData.GetViewUniform(viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
+            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         if (gridUniform.buffer == nullptr || viewUniform.buffer == nullptr)
         {
             FailSceneGridPass("execution failed to allocate required grid or view uniforms.");

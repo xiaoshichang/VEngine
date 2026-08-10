@@ -154,10 +154,10 @@ namespace ve
 
         rhi::RhiCommandList& commandList = context.commandList;
 
-        const UniformBufferAllocation frameUniform = context.frameData.GetFrameUniform(*context.rendererData.scene);
+        const UniformBufferAllocation frameUniform = context.frameData.GetSceneUniform(*context.rendererData.scene);
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform =
-            context.frameData.GetViewUniform(viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
+            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         if (frameUniform.buffer == nullptr || viewUniform.buffer == nullptr)
         {
             FailTransparentScenePass("execution failed to allocate required frame or view uniforms.");

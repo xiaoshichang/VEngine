@@ -132,8 +132,8 @@ namespace ve
         }
 
         const rhi::RhiRenderArea& renderArea = context.executionInfo.renderArea;
-        const UniformBufferAllocation viewUniform =
-            context.frameData.GetViewUniform(viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
+        const UniformBufferAllocation viewUniform = context.frameData.GetViewUniform(
+            *viewData.view.viewState, viewData.view.camera.get(), rhi::RhiExtent2D{renderArea.width, renderArea.height});
         if (viewUniform.buffer == nullptr)
         {
             FailDepthPrePass("failed to allocate the required view uniform.");

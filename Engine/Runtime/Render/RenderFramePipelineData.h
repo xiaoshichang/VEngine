@@ -14,6 +14,7 @@ namespace ve
     class RTCamera;
     class RTMaterialResource;
     class RTRenderItem;
+    class RTRenderViewState;
     class RTScene;
     struct BuiltInShaderResources;
     class VirtualShadowManager;
@@ -47,9 +48,11 @@ namespace ve
         [[nodiscard]] rhi::RhiCommandList& GetCommandList() const;
         void RetainInFlightGpuFrameObject(std::shared_ptr<rhi::RhiObject> object) const;
         [[nodiscard]] UniformBufferAllocation UploadUniform(const void* data, UInt64 size) const;
-        [[nodiscard]] UniformBufferAllocation GetFrameUniform(const RTScene& scene) const;
-        [[nodiscard]] UniformBufferAllocation GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const;
-        [[nodiscard]] UniformBufferAllocation GetObjectUniform(const RTRenderItem& item) const;
+        [[nodiscard]] UniformBufferAllocation GetSceneUniform(RTScene& scene) const;
+        [[nodiscard]] UniformBufferAllocation GetViewUniform(RTRenderViewState& viewState,
+                                                             const RTCamera* camera,
+                                                             rhi::RhiExtent2D targetExtent) const;
+        [[nodiscard]] UniformBufferAllocation GetObjectUniform(RTRenderItem& item) const;
         [[nodiscard]] UniformBufferAllocation GetMaterialUniform(RTMaterialResource& material) const;
     };
 } // namespace ve

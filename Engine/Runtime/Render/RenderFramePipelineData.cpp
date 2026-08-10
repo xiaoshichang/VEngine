@@ -3,6 +3,8 @@
 #include "Engine/Runtime/Core/Assert.h"
 #include "Engine/Runtime/Render/FrameContext.h"
 #include "Engine/Runtime/Render/RenderResource.h"
+#include "Engine/Runtime/Render/RenderScene.h"
+#include "Engine/Runtime/Render/RenderViewState.h"
 
 #include <utility>
 
@@ -26,22 +28,24 @@ namespace ve
         return frameContext->UploadUniform(data, size);
     }
 
-    UniformBufferAllocation FrameRenderPipelineData::GetFrameUniform(const RTScene& scene) const
+    UniformBufferAllocation FrameRenderPipelineData::GetSceneUniform(RTScene& scene) const
     {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetFrameUniform(scene);
+        VE_ASSERT(device != nullptr);
+        return scene.GetSceneUniform(*device, frameSlotIndex, frameIndex);
     }
 
-    UniformBufferAllocation FrameRenderPipelineData::GetViewUniform(const RTCamera* camera, rhi::RhiExtent2D targetExtent) const
+    UniformBufferAllocation FrameRenderPipelineData::GetViewUniform(RTRenderViewState& viewState,
+                                                                    const RTCamera* camera,
+                                                                    rhi::RhiExtent2D targetExtent) const
     {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetViewUniform(camera, targetExtent);
+        VE_ASSERT(device != nullptr);
+        return viewState.GetViewUniform(*device, frameSlotIndex, frameIndex, camera, targetExtent);
     }
 
-    UniformBufferAllocation FrameRenderPipelineData::GetObjectUniform(const RTRenderItem& item) const
+    UniformBufferAllocation FrameRenderPipelineData::GetObjectUniform(RTRenderItem& item) const
     {
-        VE_ASSERT(frameContext != nullptr);
-        return frameContext->GetObjectUniform(item);
+        VE_ASSERT(device != nullptr);
+        return item.GetObjectUniform(*device, frameSlotIndex);
     }
 
     UniformBufferAllocation FrameRenderPipelineData::GetMaterialUniform(RTMaterialResource& material) const
